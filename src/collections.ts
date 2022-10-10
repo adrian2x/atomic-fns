@@ -1,4 +1,7 @@
 /// <reference path='globals.d.ts'/>
+
+import { NotImplementedError } from './globals'
+
 /**
  * Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,36 +48,6 @@ export interface Comparable {
 }
 
 /**
- * A custom error class that inherits from the Error object.
- *
- * @export
- * @class CustomError
- * @extends {Error}
- */
-export class CustomError extends Error {
-  /**
-   * Returns a new CustomError with the specified message.
-   * @param message
-   * @constructor
-   */
-  constructor(message?) {
-    super(message)
-    this.name = this.constructor.name
-    if (typeof Error.captureStackTrace === 'function') {
-      Error.captureStackTrace(this, this.constructor)
-    } else {
-      this.stack = new Error(message).stack
-    }
-  }
-}
-
-/**
- * Custom error to signal an invalid operation.
- * @extends {CustomError}
- */
-export class NotImplemented extends CustomError {}
-
-/**
  * A Collection is an iterable container type.
  * This is an abstract base class for user-defined collection types.
  *
@@ -115,7 +88,7 @@ export abstract class Collection implements Container {
    * Returns the total number of elements in the container.
    */
   size(): number {
-    throw new NotImplemented()
+    throw new NotImplementedError()
   }
 
   /**
@@ -160,7 +133,7 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
    * @memberof Sequence
    */
   getitem(key): T | undefined {
-    throw new NotImplemented()
+    throw new NotImplementedError()
   }
 
   /**
@@ -171,7 +144,7 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
    * @memberof Sequence
    */
   setitem(key, val: T) {
-    throw new NotImplemented()
+    throw new NotImplementedError()
   }
 
   /**
@@ -182,7 +155,7 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
    * @memberof Sequence
    */
   delitem(key) {
-    throw new NotImplemented()
+    throw new NotImplementedError()
   }
 
   /**
@@ -209,7 +182,7 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
    * @memberof Sequence
    */
   index(item: T): number | undefined {
-    throw new NotImplemented()
+    throw new NotImplementedError()
   }
 
   size() {
@@ -217,6 +190,6 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
   }
 
   reversed(): Iterator<T> {
-    throw new NotImplemented()
+    throw new NotImplementedError()
   }
 }

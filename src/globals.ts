@@ -17,6 +17,67 @@ export const True = () => true
 export const False = () => false
 
 /**
+ * A custom error class that inherits from the Error object.
+ *
+ * @export
+ * @class CustomError
+ * @extends {Error}
+ */
+export class CustomError extends Error {
+  /**
+   * Returns a new CustomError with the specified message.
+   * @param message
+   * @constructor
+   */
+  constructor(message?) {
+    super(message)
+    this.name = this.constructor.name
+    if (typeof Error.captureStackTrace === 'function') {
+      Error.captureStackTrace(this, this.constructor)
+    } else {
+      this.stack = new Error(message).stack
+    }
+  }
+}
+
+/**
+ * Custom error to signal an invalid index access.
+ * @extends {CustomError}
+ */
+export class IndexError extends CustomError {}
+
+/**
+ * Raised when a system function returns an I/O failure such as "file not found"
+ * or "disk full".
+ * @extends {CustomError}
+ */
+export class IOError extends CustomError {}
+
+/**
+ * Custom error to signal an invalid key access.
+ * @extends {CustomError}
+ */
+export class KeyError extends CustomError {}
+
+/**
+ * Custom error to signal an invalid operation.
+ * @extends {CustomError}
+ */
+export class NotImplementedError extends CustomError {}
+
+/**
+ * Custom error to signal an invalid value.
+ * @extends {CustomError}
+ */
+export class ValueError extends CustomError {}
+
+/**
+ * Raised when the second argument of a division or modulo operation is zero.
+ * @extends {CustomError}
+ */
+export class ZeroDivisionError extends CustomError {}
+
+/**
  * Returns the true type of any value with correct detection for null, Array,
  * Object, Promise, Symbol, and NaN.
  *
