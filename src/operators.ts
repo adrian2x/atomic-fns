@@ -242,15 +242,3 @@ export function cloneArray(arr, deep = false) {
 export const bind = (fn, self, ...args) => fn.bind(self, ...args)
 
 export const partial = (fn, ...args) => bind(fn, {}, ...args)
-
-export const getattr = (x, attr) => x[attr]
-
-export function setattr(x, attr, value) {
-  x[attr] = value
-  return x
-}
-
-export function delattr(x, attr) {
-  delete x[attr]
-  return x
-}

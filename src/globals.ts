@@ -246,13 +246,67 @@ export function* enumerate<T = unknown>(iter: Iterable<T>) {
   }
 }
 
-const HASH_KEY = Symbol('__hash__')
+export const getattr = (x, attr) => {
+  try {
+    return x[attr]
+  } catch (error) {
+    return undefined
+  }
+}
+
+export function delattr(x, attr) {
+  delete x[attr]
+  return x
+}
+
+export function setattr(
+  self: any,
+  attr: PropertyKey,
+  value,
+  writable = false,
+  enumerable = false
+) {
+  return Object.defineProperty(self, attr, {
+    value,
+    enumerable,
+    writable
+  })
+}
+
+export const HASH_KEY = Symbol('__hash__')
 
 export function hash(obj) {
-  if (!obj[HASH_KEY]) {
-    obj[HASH_KEY] = UID()
+  const prev = getattr(obj, HASH_KEY)
+  if (prev !== undefined) return prev
+
+  if (typeof obj === 'string') {
+    setattr(obj, HASH_KEY, hashCode(obj))
+    return obj[HASH_KEY]
   }
-  return obj[HASH_KEY]
+
+  if (typeof obj === 'object') {
+    setattr(obj, HASH_KEY, UID())
+    return obj[HASH_KEY]
+  }
+
+  return obj
+}
+
+/**
+ * A hash value generator for strings
+ * @export
+ * @param {string} str
+ * @return {number}
+ * @see http://isthe.com/chongo/tech/comp/fnv/
+ */
+export function hashCode(str: string) {
+  const FNV1_32A_INIT = 0x811c9dc5
+  let hval = FNV1_32A_INIT
+  for (let i = 0; i < str.length; ++i) {
+    hval ^= str.charCodeAt(i)
+    hval += (hval << 1) + (hval << 4) + (hval << 7) + (hval << 8) + (hval << 24)
+  }
+  return hval >>> 0
 }
 
 export const hex = (n: number) => n.toString(16)
