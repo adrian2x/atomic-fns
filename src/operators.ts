@@ -147,10 +147,10 @@ export function comp(x, y) {
   return 0
 }
 
-const compKey
-  = (cmp = comp, key = ident) =>
-    (x, y) =>
-      cmp(key(x), key(y))
+const compKey =
+  (cmp = comp, key = ident) =>
+  (x, y) =>
+    cmp(key(x), key(y))
 
 export function sorted(args: any[], key = ident, reverse = false, cmp = comp) {
   if (isObject(args)) args = Object.keys(args)
@@ -221,15 +221,15 @@ export function clone(obj, deep = false) {
     if (isFunc(obj.clone)) {
       return obj.clone()
     }
-    const copyObj = {}
-    for (let key of Object.getOwnPropertyNames(obj)) {
+    const copy = {}
+    for (const key of keys(obj)) {
       if (deep) {
-        copyObj[key] = clone(obj[key], deep)
+        copy[key] = clone(obj[key], deep)
       } else {
-        copyObj[key] = obj[key]
+        copy[key] = obj[key]
       }
     }
-    return copyObj
+    return copy
   }
   return obj
 }

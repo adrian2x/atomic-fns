@@ -1,11 +1,9 @@
-const goodparts = require('goodparts').rules
-
 module.exports = {
   env: {
     browser: true,
     es2021: true
   },
-  extends: 'standard-with-typescript',
+  extends: ['standard-with-typescript', 'plugin:prettier/recommended'],
   overrides: [
     {
       files: ['*.ts', '*.tsx'],
@@ -17,8 +15,6 @@ module.exports = {
     sourceType: 'module'
   },
   rules: {
-    ...goodparts,
-    semi: [1, 'never'],
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/no-dynamic-delete': 'off',
     '@typescript-eslint/no-unused-vars': 'off',
@@ -26,12 +22,5 @@ module.exports = {
     '@typescript-eslint/space-before-function-paren': 'off',
     '@typescript-eslint/strict-boolean-expressions': 'off',
     '@typescript-eslint/triple-slash-reference': 'off',
-    'consistent-return': 'off',
-    'no-empty-function': 'off',
-    'no-param-reassign': 'off',
-    'no-unused-vars': 'off',
-    'space-before-function-paren': 'off',
-    'spaced-comment': 'off',
-    'complexity': 'warn',
   }
 }

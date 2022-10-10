@@ -142,7 +142,7 @@ export const chr = (x: number) => String.fromCodePoint(x)
 
 export const ord = (x: string) => x.codePointAt(0)?.toString(16)
 
-export const keys = (x) => Object.getOwnPropertyNames(x)
+export const keys = (x) => Object.keys(x)
 
 export const values = (x) => Object.values(x)
 
@@ -157,20 +157,31 @@ export function divmod(x: number, y: number) {
   return [Math.floor(x / y), x % y]
 }
 
-export let log2 = (x) => (x > 0 ? Math.log(x) * 1.442695 : Number.NaN)
+export function log2(x) {
+  if (x > 0) {
+    return Math.log(x) * 1.442695
+  }
+  return Number.NaN
+}
 
-export let logBase = (x, y) =>
-  y > 0 && x > 0 ? Math.log(y) / Math.log(x) : Number.NaN
+export function logBase(x, y) {
+  if (x > 0 && y > 0) {
+    return Math.log(y) / Math.log(x)
+  }
+  return Number.NaN
+}
 
 /**
  * Yields elements like [index, item] from an iterable.
+ *
  * @export
- * @param {*} iter
+ * @template T
+ * @param {Iterable<T>} iter
  */
-export function* enumerate(iter) {
+export function* enumerate<T = unknown>(iter: Iterable<T>) {
   let i = 0
-  for (let item of iter) {
-    yield [i, item]
+  for (const item of iter) {
+    yield [i++, item]
   }
 }
 

@@ -14,7 +14,7 @@
 
 // Random number generator functions
 
-export let randomInt = (min = 0, max = 2) =>
+export const randomInt = (min = 0, max = 2) =>
   Math.floor(Math.random() * (max - min) + min)
 
-export let randomBit = (p = 0.5) => Math.random() < p
+export const randomBit = (p = 0.5) => Math.random() < p
