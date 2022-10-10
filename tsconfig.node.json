@@ -1,0 +1,18 @@
+{
+  "include": [
+    "src"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "allowSyntheticDefaultImports": true,
+    "lib": [
+      "ESNext"
+    ],
+    "target": "ESNext"
+  },
+  "exclude": [
+    "build"
+  ]
+}
