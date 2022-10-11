@@ -21,10 +21,11 @@ import {
   isString,
   keys,
   list,
+  NotImplementedError,
   notNull
 } from './globals'
 
-export const ident = (x) => x
+export const id = (x) => x
 
 export const bool = (x) => Boolean(x)
 
@@ -121,13 +122,38 @@ export function mod(x, y) {
 export function pow(x, y) {
   const op = call('pow', x, y)
   if (notNull(op)) return op
-  return Math.pow(x, y)
+  return x ** y
 }
 
 export function abs(x: number) {
   const op = call('abs', x)
   if (notNull(op)) return op
   return Math.abs(x)
+}
+
+/**
+ * Returns a tuple like (x / y, x % y)
+ * @export
+ * @param {number} x
+ * @param {number} y
+ * @return {number[]}
+ */
+export function divmod(x: number, y: number) {
+  return [Math.floor(x / y), x % y]
+}
+
+export function log2(x) {
+  if (x > 0) {
+    return Math.log(x) * 1.442695
+  }
+  return Number.NaN
+}
+
+export function logBase(x, y) {
+  if (x > 0 && y > 0) {
+    return Math.log(y) / Math.log(x)
+  }
+  return Number.NaN
 }
 
 export function contains(arr, y) {
@@ -148,11 +174,11 @@ export function comp(x, y) {
 }
 
 const compKey =
-  (cmp = comp, key = ident) =>
+  (cmp = comp, key = id) =>
   (x, y) =>
     cmp(key(x), key(y))
 
-export function sorted(args: any[], key = ident, reverse = false, cmp = comp) {
+export function sorted(args: any[], key = id, reverse = false, cmp = comp) {
   if (isObject(args)) args = Object.keys(args)
   const compareFn = compKey(cmp, key)
   args.sort(compareFn)
@@ -182,6 +208,14 @@ export function max(...args) {
   }
   args.sort(cmp)
   return args[args.length - 1]
+}
+
+export function sum(...args) {
+  let total = 0
+  for (const x of args) {
+    total += x
+  }
+  return total
 }
 
 export function len(x) {
@@ -242,3 +276,35 @@ export function cloneArray(arr, deep = false) {
 export const bind = (fn, self, ...args) => fn.bind(self, ...args)
 
 export const partial = (fn, ...args) => bind(fn, {}, ...args)
+
+export function* range(...args: number[]) {
+  if (args.length === 1) {
+    const stop = args[0]
+    for (let i = 0; i < stop; i++) {
+      yield i
+    }
+  } else if (args.length === 2) {
+    let start = args[0]
+    const stop = args[1]
+    for (; start < stop; start++) {
+      yield start
+    }
+  } else {
+    let start = args[0]
+    const stop = args[1]
+    const step = args[2]
+    for (; start < stop; start += step) {
+      yield start
+    }
+  }
+}
+
+export function reversed(iterable: Iterable<any>) {
+  let arr = Array.from(iterable)
+  arr.reverse()
+  return arr
+}
+
+export function zip() {
+  throw new NotImplementedError('Not Implemented')
+}

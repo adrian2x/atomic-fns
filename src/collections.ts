@@ -193,3 +193,29 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
     throw new NotImplementedError()
   }
 }
+
+export class FrozenSet<T = any> extends Set<T> {
+  add() {
+    throw TypeError('A frozenset cannot be modified after created.')
+    return this
+  }
+  delete() {
+    throw TypeError('A frozenset cannot be modified after created.')
+    return false
+  }
+  clear() {
+    throw TypeError('A frozenset cannot be modified after created.')
+    return this
+  }
+  freeze() {
+    return Object.freeze(this)
+  }
+}
+
+export function frozenset<T = any>(iterable: Iterable<any>) {
+  return new FrozenSet<T>(iterable)
+}
+
+export function namedtuple(...fields: string[]) {
+  return (...args) => fields.map((f, i) => [f, args[i]])
+}

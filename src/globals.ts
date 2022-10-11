@@ -152,84 +152,109 @@ export function type(value) {
   return result
 }
 
-/**
- * Equivalent to Object.toString()
- */
-export const str = (x): string => Object.prototype.toString.call(x)
+/** Same as calling toString() */
+export const str = (x): string => {
+  if (isNull(x)) return ''
+  return x.toString?.() ?? String(x)
+}
 
+/** Check if value is a boolean type */
 export const isBool = (x) => type(x) === 'boolean'
 
+/** Check if value is an object type */
 export const isObject = (x) => type(x) === 'object'
 
+/** Check if value is a string type */
 export const isString = (x) => type(x) === 'string'
 
+/** Check if value is an Array type */
 export const isArray = (x) => type(x) === 'array'
 
+/** Check if value is Array-like type.
+ * A value is considered array-like if it's not a function and has a
+ * `.length` number property.
+ */
 export const isArrayLike = (x) => {
   const T = type(x)
   return T === 'array' || (T === 'object' && isNumber(x.length))
 }
 
+/** Check if value is a function type */
 export const isFunc = (x) => type(x) === 'function'
 
+/** Check if value is a number type */
 export const isNumber = (x) => type(x) === 'number'
 
+/** Check if value is a Bigint type */
 export const isBigint = (x) => type(x) === 'bigint'
 
+/** Check if value is NaN based on `Number.isNaN` */
 export const isNaN = (x) => Number.isNaN(x)
 
+/** Check if value is a Promise type */
 export const isPromise = (x) => type(x) === 'promise'
 
-export const isAsync = (x) => str(x) === '[object AsyncFunction]'
+/** Check if value is an async function type */
+export const isAsync = (x) => x?.constructor.name === 'AsyncFunction'
 
-export const isNull = (x) => x === null
+/** Check if value is a generator function type */
+export const isGenerator = (x) =>
+  x?.constructor.constructor.name === 'GeneratorFunction'
 
+/** Check if value is null or undefined */
+export const isNull = (x) => x == null
+
+/** Check if value is not null or undefined */
 export const notNull = (x) => !isNull(x)
 
+/** Check if value is a Symbol type */
 export const isSymbol = (x) => type(x) === 'symbol'
 
 /**
- * Unique id generator function (pseudo-random)
+ * Generates a unique ID using random numbers.
+ * If prefix is given, the ID is appended to it
  */
-export const UID = () => (Math.random() * 1e10) >>> 0
+export const uniqueId = (pre: string | number = 0) =>
+  // @ts-expect-error
+  pre + ((Math.random() * 1e10) >>> 0)
 
-export function call(key, obj, ...args) {
+/**
+ * Checks if `obj.key` is a function, and calls it with any `args`.
+ *
+ * @export
+ * @param {PropertyKey} key
+ * @param {*} obj
+ * @param {...any[]} args
+ * @return `obj.key(...args)`
+ */
+export function call(key: PropertyKey, obj: any, ...args: any[]) {
   if (!isNull(obj) && isFunc(obj[key])) {
     return obj[key](...args)
   }
 }
 
+/** Convert number to unicode character */
 export const chr = (x: number) => String.fromCodePoint(x)
 
-export const ord = (x: string) => x.codePointAt(0)?.toString(16)
+/** Convert character to Unicode code point */
+export const ord = (x: string) => x.charCodeAt(0)
 
+/** `Object.keys(x)` */
 export const keys = (x) => Object.keys(x)
 
+/** `Object.values(x)` */
 export const values = (x) => Object.values(x)
 
 /**
- * Returns a tuple like (x / y, x % y)
+ * Round `x` to the number of digits after the decimal point. If `digits` is
+ * omitted, it returns the nearest integer to x.
  * @export
  * @param {number} x
- * @param {number} y
- * @return {number[]}
+ * @param {number} [digits=0]
  */
-export function divmod(x: number, y: number) {
-  return [Math.floor(x / y), x % y]
-}
-
-export function log2(x) {
-  if (x > 0) {
-    return Math.log(x) * 1.442695
-  }
-  return Number.NaN
-}
-
-export function logBase(x, y) {
-  if (x > 0 && y > 0) {
-    return Math.log(y) / Math.log(x)
-  }
-  return Number.NaN
+export function round(x: number, digits = 0) {
+  const base = 10 ** digits
+  return Math.round(x * base) / base
 }
 
 /**
@@ -237,20 +262,33 @@ export function logBase(x, y) {
  *
  * @export
  * @template T
- * @param {Iterable<T>} iter
+ * @param {Iterable<T>} iterable
  */
-export function* enumerate<T = unknown>(iter: Iterable<T>) {
+export function* enumerate<T = unknown>(iterable: Iterable<T>) {
   let i = 0
-  for (const item of iter) {
+  for (const item of iterable) {
     yield [i++, item]
   }
 }
 
-export const getattr = (x, attr) => {
+export function hasattr(obj, attr: PropertyKey) {
+  return notNull(obj) && attr in obj
+}
+
+/**
+ * Check if the attribute is present in the object, or return optional default.
+ *
+ * @export
+ * @param {*} obj
+ * @param {PropertyKey} attr
+ * @param {*} [value=undefined]
+ * @return The property value or default value
+ */
+export function getattr(obj: any, attr: PropertyKey, value: any = undefined) {
   try {
-    return x[attr]
+    return obj[attr] ?? value
   } catch (error) {
-    return undefined
+    return value
   }
 }
 
@@ -273,19 +311,18 @@ export function setattr(
   })
 }
 
-export const HASH_KEY = Symbol('__hash__')
+export const HASH_KEY = (Symbol['HASH_KEY'] = Symbol('__hash__'))
 
 export function hash(obj) {
   const prev = getattr(obj, HASH_KEY)
   if (prev !== undefined) return prev
 
   if (typeof obj === 'string') {
-    setattr(obj, HASH_KEY, hashCode(obj))
-    return obj[HASH_KEY]
+    return hashCode(obj)
   }
 
   if (typeof obj === 'object') {
-    setattr(obj, HASH_KEY, UID())
+    setattr(obj, HASH_KEY, uniqueId())
     return obj[HASH_KEY]
   }
 
@@ -309,14 +346,16 @@ export function hashCode(str: string) {
   return hval >>> 0
 }
 
+export const bin = (n: number) => n.toString(2)
+
 export const hex = (n: number) => n.toString(16)
 
 export const oct = (n: number) => n.toString(8)
 
-export const int = (x, base) => parseInt(x, base)
-
 export const float = (x) => parseFloat(x)
+
+export const int = (x, base) => parseInt(x, base)
 
 export const list = (arr) => Array.from(arr)
 
-export const next = (iterator: Iterator<unknown>) => iterator.next()
+export const next = (iter: Iterator<unknown>) => iter.next().value
