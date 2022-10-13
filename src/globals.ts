@@ -198,14 +198,29 @@ export const isPromise = (x) => type(x) === 'promise'
 export const isAsync = (x) => x?.constructor.name === 'AsyncFunction'
 
 /** Check if value is a generator function type */
-export const isGenerator = (x) =>
-  x?.constructor.constructor.name === 'GeneratorFunction'
+export const isGenerator = (x) => {
+  return x?.constructor.constructor?.name === 'GeneratorFunction'
+}
 
 /** Check if value is null or undefined */
 export const isNull = (x) => x == null
 
 /** Check if value is not null or undefined */
 export const notNull = (x) => !isNull(x)
+
+export function len(x) {
+  if (isNumber(x?.length)) {
+    return x.length
+  }
+  if (isFunc(x?.size)) {
+    return x.size()
+  }
+  if (isObject(x)) {
+    return Object.keys(x).length
+  }
+}
+
+export const isEmpty = (x) => !len(x)
 
 /** Check if value is a Symbol type */
 export const isSymbol = (x) => type(x) === 'symbol'
@@ -228,7 +243,7 @@ export const uniqueId = (pre: string | number = 0) =>
  * @return `obj.key(...args)`
  */
 export function call(key: PropertyKey, obj: any, ...args: any[]) {
-  if (!isNull(obj) && isFunc(obj[key])) {
+  if (isFunc(get(key, obj))) {
     return obj[key](...args)
   }
 }
@@ -257,6 +272,10 @@ export function round(x: number, digits = 0) {
   return Math.round(x * base) / base
 }
 
+export const floor = (x: number) => Math.floor(x)
+
+export const ceil = (x: number) => Math.ceil(x)
+
 /**
  * Yields elements like [index, item] from an iterable.
  *
@@ -279,25 +298,42 @@ export function hasattr(obj, attr: PropertyKey) {
  * Check if the attribute is present in the object, or return optional default.
  *
  * @export
- * @param {*} obj
  * @param {PropertyKey} attr
+ * @param {*} obj
  * @param {*} [value=undefined]
  * @return The property value or default value
  */
-export function getattr(obj: any, attr: PropertyKey, value: any = undefined) {
+export function get(
+  attr: PropertyKey | PropertyKey[],
+  obj: any,
+  value: any = undefined
+) {
+  if (obj == null) {
+    return value ?? obj
+  }
+
+  let paths = Array.isArray(attr) ? attr : [attr]
+  if (typeof attr === 'string') {
+    paths = attr.split('.')
+  }
+
   try {
-    return obj[attr] ?? value
+    let result = obj
+    for (const prop of paths) {
+      result = result[prop]
+    }
+    return result ?? value
   } catch (error) {
     return value
   }
 }
 
-export function delattr(x, attr) {
+export function del(x, attr) {
   delete x[attr]
   return x
 }
 
-export function setattr(
+export function set(
   self: any,
   attr: PropertyKey,
   value,
@@ -311,18 +347,17 @@ export function setattr(
   })
 }
 
-export const HASH_KEY = (Symbol['HASH_KEY'] = Symbol('__hash__'))
+export const HASH_KEY = Symbol.for('HASH_KEY')
 
 export function hash(obj) {
-  const prev = getattr(obj, HASH_KEY)
-  if (prev !== undefined) return prev
-
   if (typeof obj === 'string') {
     return hashCode(obj)
   }
 
   if (typeof obj === 'object') {
-    setattr(obj, HASH_KEY, uniqueId())
+    if (obj[HASH_KEY] == null) {
+      set(obj, HASH_KEY, uniqueId())
+    }
     return obj[HASH_KEY]
   }
 
@@ -354,8 +389,8 @@ export const oct = (n: number) => n.toString(8)
 
 export const float = (x) => parseFloat(x)
 
-export const int = (x, base) => parseInt(x, base)
+export const int = (x, base = 10) => parseInt(x, base)
 
-export const list = (arr) => Array.from(arr)
+export const list = (arr?) => (arr ? Array.from(arr) : [])
 
 export const next = (iter: Iterator<unknown>) => iter.next().value

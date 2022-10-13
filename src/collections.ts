@@ -1,7 +1,4 @@
 /// <reference path='globals.d.ts'/>
-
-import { NotImplementedError } from './globals'
-
 /**
  * Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +12,22 @@ import { NotImplementedError } from './globals'
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+import {
+  call,
+  isArray,
+  isBool,
+  isEmpty,
+  isFunc,
+  isNull,
+  isNumber,
+  isObject,
+  isString,
+  keys,
+  list,
+  NotImplementedError
+} from './globals.js'
+import { comp, eq, id } from './operators.js'
 
 /**
  * A container type that provides contains().
@@ -132,7 +145,7 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
    * @param {*} key
    * @memberof Sequence
    */
-  getitem(key): T | undefined {
+  get(key): T | undefined {
     throw new NotImplementedError()
   }
 
@@ -143,7 +156,7 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
    * @param {T} val
    * @memberof Sequence
    */
-  setitem(key, val: T) {
+  set(key, val: T) {
     throw new NotImplementedError()
   }
 
@@ -154,7 +167,7 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
    * @param {*} key
    * @memberof Sequence
    */
-  delitem(key) {
+  delete(key) {
     throw new NotImplementedError()
   }
 
@@ -195,27 +208,234 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
 }
 
 export class FrozenSet<T = any> extends Set<T> {
+  constructor(iterable: Iterable<T>) {
+    super(iterable)
+    return this.freeze()
+  }
+
   add() {
-    throw TypeError('A frozenset cannot be modified after created.')
-    return this
+    throw TypeError('FrozenSet cannot be modified.')
+    return this // eslint-disable-line
   }
+
   delete() {
-    throw TypeError('A frozenset cannot be modified after created.')
-    return false
+    throw TypeError('FrozenSet cannot be modified.')
+    return false // eslint-disable-line
   }
+
   clear() {
-    throw TypeError('A frozenset cannot be modified after created.')
-    return this
+    throw TypeError('FrozenSet cannot be modified.')
+    return this // eslint-disable-line
   }
+
   freeze() {
     return Object.freeze(this)
   }
 }
 
-export function frozenset<T = any>(iterable: Iterable<any>) {
-  return new FrozenSet<T>(iterable)
-}
-
 export function namedtuple(...fields: string[]) {
   return (...args) => fields.map((f, i) => [f, args[i]])
+}
+
+export type Iteratee = (value: any, index?: PropertyKey, arr?: any[]) => any
+
+export const filter = (fn: any, arr) => {
+  if (Array.isArray(arr)) {
+    if (isFunc(fn)) return arr.filter(fn)
+    if (isString(fn)) return arr.filter((x) => x?.[fn])
+    if (isObject(fn)) return arr.filter(matches(fn))
+  }
+}
+
+export const find = (fn: any, arr) => {
+  if (Array.isArray(arr)) {
+    if (isFunc(fn)) return arr.find(fn)
+    if (isString(fn)) return arr.find((x) => x?.[fn])
+    if (isObject(fn)) return arr.find(matches(fn))
+  }
+}
+
+export const findRight = (fn: any, arr) => {
+  if (Array.isArray(arr)) {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const x = arr[i]
+      if (isFunc(fn)) {
+        if (fn(x)) return x
+      } else if (isString(fn)) {
+        if (x?.[fn]) return x
+      } else if (isObject(fn)) {
+        if (matches(fn)(x)) return x
+      }
+    }
+  }
+}
+
+export const matches = (o) => (x) => {
+  for (const key in o) {
+    if (!eq(x?.[key], o[key])) return false
+  }
+  return true
+}
+
+export function forEach(fn: Iteratee, arr) {
+  if (Array.isArray(arr)) return arr.forEach(fn)
+  if (isObject(arr)) {
+    return Object.keys(arr).forEach((key) => fn(arr[key], key, arr))
+  }
+}
+
+export function flatten(arr, depth: boolean | number = 1) {
+  if (!depth) return arr
+  if (Array.isArray(arr)) return flattenArray(arr, depth)
+  if (isObject(arr)) return flattenObj(arr)
+  return arr
+}
+
+export function flattenArray(arr: any[], depth: boolean | number = 1) {
+  if (!depth) return arr
+  for (let i = 0; i < arr.length; i++) {
+    let value = arr[i]
+    if (Array.isArray(value)) {
+      value = flatten(value, typeof depth === 'number' ? depth - 1 : depth)
+      arr.splice(i, 1, ...value)
+    }
+  }
+  return arr
+}
+
+export function flattenObj(o: any, prefix = '', result = {}, keepNull = false) {
+  if (isString(o) || isNumber(o) || isBool(o) || (keepNull && isNull(o))) {
+    result[prefix] = o
+    return result
+  }
+
+  if (isArray(o) || isObject(o)) {
+    for (const i in o) {
+      let pref = prefix
+      if (isArray(o)) {
+        pref = pref + `[${i}]`
+      } else {
+        if (isEmpty(prefix)) {
+          pref = i
+        } else {
+          pref = prefix + '.' + i
+        }
+      }
+      flattenObj(o[i], pref, result, keepNull)
+    }
+    return result
+  }
+  return result
+}
+
+export const map = (fn: any, arr) => {
+  if (Array.isArray(arr)) {
+    return arr.map((x, i) => {
+      if (typeof fn === 'string') return x[fn]
+      return fn(x, i, arr)
+    })
+  }
+  if (isObject(arr)) {
+    return Object.keys(arr).map((key) => fn(arr[key], key, arr))
+  }
+}
+
+export function pick(obj, paths: Iteratee | string[]) {
+  if (obj == null) {
+    return {}
+  }
+  const result = {}
+  if (Array.isArray(paths)) {
+    for (const key of paths) {
+      result[key] = obj[key]
+    }
+    return result
+  } else if (typeof paths === 'function') {
+    for (const key in obj) {
+      const value = obj[key]
+      if (paths(value, key)) result[key] = value
+    }
+  }
+  return result
+}
+
+export function omit(obj, paths: Iteratee | string[]) {
+  const result = {}
+  for (const key in obj) {
+    const value = obj[key]
+    if (Array.isArray(paths) && !paths.includes(key)) {
+      result[key] = value
+    } else if (typeof paths === 'function' && !paths(value, key)) {
+      result[key] = value
+    }
+  }
+  return result
+}
+
+export function contains(arr, y) {
+  const op = call('contains', arr, y)
+  if (op != null) return op
+  return index(arr, y) >= 0
+}
+
+export function index(obj, x, start = 0) {
+  let op = call('indexOf', obj, x)
+  if (op != null) return op
+  op = call('index', obj, x)
+  if (op != null) return op
+  const length = obj.length
+  if (start < 0) {
+    start = Math.max(start + length, 0)
+  }
+  if (isString(obj)) {
+    if (start >= length) return -1
+    return obj.indexOf(x, start)
+  }
+  for (; start < length; start++) {
+    if (eq(x, obj[start])) return start
+  }
+  return -1
+}
+
+export function clone(obj, deep = false) {
+  if (isArray(obj)) {
+    return cloneArray(obj, deep)
+  }
+  if (isObject(obj)) {
+    if (isFunc(obj.clone)) {
+      return obj.clone()
+    }
+    const copy = {}
+    for (const key of keys(obj)) {
+      if (deep) {
+        copy[key] = clone(obj[key], deep)
+      } else {
+        copy[key] = obj[key]
+      }
+    }
+    return copy
+  }
+  return obj
+}
+
+export function cloneArray(arr, deep = false) {
+  if (!deep) return list(arr)
+  return arr.map((item) => clone(item, deep))
+}
+export function uniq(arr, fn: string | Iteratee = id) {
+  const keys = {}
+  for (const x of arr) {
+    if (typeof fn === 'function') {
+      keys[x] = fn(x)
+    } else {
+      keys[x] = x[fn]
+    }
+  }
+  return Object.values(keys)
+}
+
+export function sortedUniq(arr, fn: string | Iteratee = id) {
+  const lst = uniq(arr, fn)
+  lst.sort(comp)
+  return lst
 }

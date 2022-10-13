@@ -34,8 +34,10 @@ import {
   hex,
   oct,
   list,
-  next
-} from '../src/globals.js' // .js for ts-node imports
+  next,
+  get
+} from '../build/globals.js'
+import { isEmpty } from '../src/globals.js'
 
 function cb() {}
 
@@ -202,5 +204,28 @@ describe('globals', () => {
   it('list', () => {
     const arr = [1, 2, 3]
     assert.deepEqual(list(arr), arr)
+    assert.deepEqual(list(), [])
+  })
+
+  it('get', () => {
+    const arr = [1, 2, 3]
+    assert(get('2', arr) === 3)
+    assert(get('3', arr, false) === false)
+    assert(get('3', arr, false) === false)
+    let obj = { foo: { bar: true } }
+    let h = hash(obj)
+    assert(get('foo.bar', obj))
+    assert(get(['foo', 'bar'], obj))
+    assert(get(HASH_KEY, obj) === h)
+    assert(get([HASH_KEY], obj) === h)
+  })
+
+  it('isEmpty', () => {
+    assert(isEmpty([]))
+    assert(isEmpty(''))
+    assert(isEmpty({}))
+    assert(isEmpty(null))
+    assert(isEmpty(undefined))
+    assert(isEmpty(1))
   })
 })
