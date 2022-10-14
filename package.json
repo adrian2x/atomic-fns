@@ -1,7 +1,7 @@
 {
-  "name": "es-next",
-  "description": "A general-purpose and forward looking toolbox for evergreen JS code.",
-  "version": "0.1.1",
+  "name": "ecmascript",
+  "description": "A general-purpose and forward looking toolbox for evergreen JS code standards.",
+  "version": "0.1.0",
   "main": "build/index.js",
   "type": "module",
   "devDependencies": {

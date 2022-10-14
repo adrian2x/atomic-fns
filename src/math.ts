@@ -2,7 +2,7 @@ import { call, isFunc } from './globals.js'
 import { comp } from './operators.js'
 
 export function abs(x: number) {
-  const op = call('abs', x)
+  const op = call(x, 'abs')
   if (op != null) return op
   return Math.abs(x)
 }

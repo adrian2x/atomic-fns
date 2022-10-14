@@ -13,10 +13,11 @@ import {
   omit,
   uniq,
   sortedUniq,
-  merge
+  merge,
+  difference,
+  intersection,
+  union
 } from '../src/collections.js'
-
-function cb() {}
 
 describe('collections', () => {
   it('contains', () => {
@@ -29,6 +30,24 @@ describe('collections', () => {
     assert.deepEqual(clone(arr), arr)
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(clone(target), target)
+  })
+
+  it('difference', () => {
+    let a = [1, 2, 5]
+    let b = [3, 4, 5]
+    assert.deepEqual(sortedUniq(difference(a, b)), [1, 2, 3, 4])
+  })
+
+  it('intersection', () => {
+    let a = [1, 2, 5]
+    let b = [3, 4, 5]
+    assert.deepEqual([...intersection(a, b)], [5])
+  })
+
+  it('union', () => {
+    let a = [1, 2, 5]
+    let b = [3, 4, 5]
+    assert.deepEqual(sortedUniq(union(a, b)), [1, 2, 3, 4, 5])
   })
 
   it('filter', () => {
@@ -123,7 +142,7 @@ describe('collections', () => {
   it('map', () => {
     let target = { user: 'fred', age: 40, active: false }
     let getEntries = (value, key) => [key, value]
-    assert.deepEqual(map(getEntries, target), Object.entries(target))
+    assert.deepEqual(map(target, getEntries), Object.entries(target))
   })
 
   it('merge', () => {

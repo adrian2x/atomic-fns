@@ -1,3 +1,9 @@
+export type Comp = (x, y) => number
+
+export type Function = (...args) => any
+
+export type Iteratee = (value, key?, arr?) => any
+
 export const True = () => true
 
 export const False = () => false
@@ -148,7 +154,7 @@ export const str = (x): string => {
 export const isBool = (x) => type(x) === 'boolean'
 
 /** Check if value is an object type */
-export const isObject = (x) => type(x) === 'object'
+export const isObject = (x) => typeof x === 'object' && type(x) === 'object'
 
 /** Check if value is a string type */
 export const isString = (x) => type(x) === 'string'

@@ -1,4 +1,4 @@
-import { call, isNumber } from './globals.js'
+import { call, isNumber, isObject } from './globals.js'
 
 export const id = (x) => x
 
@@ -8,90 +8,105 @@ export const not = (x) => !x
 
 export const isinstance = (x, y) => x instanceof y
 
-export const all = (...args) => args.every((x) => bool(x))
+export const all = (arr: any[], fn = bool) => arr.every(fn)
 
-export const any = (...args) => args.some((x) => bool(x))
+export const any = (arr: any[], fn = bool) => arr.some(fn)
 
-export const and = (...args) => all(...args)
+export const and = all
 
-export const or = (...args) => any(...args)
+export const or = any
 
 export function comp(x, y) {
-  let op = call('compare', x, y)
+  const op = call(x, 'compare', y)
   if (isNumber(op)) return op
-  op = le(x, y)
-  if (op) return -1
-  op = ge(x, y)
-  if (op) return 1
+  if (eq(x, y)) return 0
+  if (le(x, y)) return -1
+  if (ge(x, y)) return 1
   return 0
 }
 
+export function eq(x, y) {
+  const op = call(x, 'eq', y)
+  if (op != null) return op
+  return x === y
+}
+
+export function shallowEqual(x, y) {
+  if (!x || !y) return x === y
+  if (Array.isArray(x)) {
+    for (let i = 0; i < x.length; i++) {
+      if (!eq(x[i], y[i])) return false
+    }
+    return true
+  }
+  if (isObject(x)) {
+    if (eq(x, y)) return true
+    for (const key in x) {
+      if (!eq(x[key], y[key])) return false
+    }
+    return true
+  }
+  return eq(x, y)
+}
+
 export function lt(x, y) {
-  const op = call('lt', x, y)
+  const op = call(x, 'lt', y)
   if (op != null) return op
   return x < y
 }
 
 export function le(x, y) {
-  let op = call('le', x, y)
+  let op = call(x, 'le', y)
   if (op != null) return op
-  op = call('eq', x, y)
+  op = call(x, 'eq', y)
   if (op === true) return op
-  op = call('lt', x, y)
+  op = call(x, 'lt', y)
   if (op != null) return op
   return x <= y
 }
 
-export function eq(x, y) {
-  const op = call('eq', x, y)
-  if (op != null) return op
-  return x === y
-}
-
-const ne = (x, y) => !eq(x, y)
-
 export function gt(x, y) {
-  const op = call('gt', x, y)
+  const op = call(x, 'gt', y)
   if (op != null) return op
   return x > y
 }
 
 export function ge(x, y) {
-  let op = call('ge', x, y)
+  let op = call(x, 'ge', y)
   if (op != null) return op
-  op = call('eq', x, y)
+  op = call(x, 'eq', y)
   if (op === true) return op
-  op = call('gt', x, y)
+  op = call(x, 'gt', y)
   if (op != null) return op
   return x >= y
 }
 
 export function add(x, y) {
-  const op = call('add', x, y)
+  const op = call(x, 'add', y)
   if (op != null) return op
   return x + y
 }
 
 export function sub(x, y) {
-  const op = call('sub', x, y)
+  const op = call(x, 'sub', y)
   if (op != null) return op
   return x - y
 }
 
 export function mult(x, y) {
-  const op = call('mult', x, y)
+  const op = call(x, 'mult', y)
   if (op != null) return op
   return x * y
 }
 
 export function div(x, y) {
-  const op = call('div', x, y)
+  const op = call(x, 'div', y)
   if (op != null) return op
   return x / y
 }
 
 export function mod(x, y) {
-  const op = call('mod', x, y)
+  const op = call(x, 'mod', y)
   if (op != null) return op
   return x % y
 }
@@ -105,7 +120,7 @@ export function mod(x, y) {
  * @return `x` raised to the power `y`
  */
 export function pow(x, y) {
-  const op = call('pow', x, y)
+  const op = call(x, 'pow', y)
   if (op != null) return op
   return x ** y
 }

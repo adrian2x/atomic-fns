@@ -1,7 +1,5 @@
-import { isObject, len } from './globals.js'
+import { Comp, Function, isObject, len } from './globals.js'
 import { comp, id } from './operators.js'
-
-export type Comp = (x: any, y: any) => number
 
 const compKey = (cmp: Comp, key) => (x, y) => cmp(key(x), key(y))
 
@@ -29,12 +27,11 @@ export function reversed(iterable: Iterable<any>) {
   return Array.from(iterable).reverse()
 }
 
-export type Func = (x: any) => any
 export function sorted(args: any[]): any[]
 export function sorted(args: any[], reverse: boolean): any[]
 export function sorted(args: any[], reverse: boolean, comp: Comp): any[]
-export function sorted(args: any[], key: Func): any[]
-export function sorted(args: any[], key: Func, reverse: boolean): any[]
+export function sorted(args: any[], key: Function): any[]
+export function sorted(args: any[], key: Function, reverse: boolean): any[]
 
 /**
  * Creates a new list from `args` and sorts it. This can be called many ways:
@@ -44,21 +41,16 @@ export function sorted(args: any[], key: Func, reverse: boolean): any[]
  *   - sorted([...], false, (x, y) => number) => using custom compare
  *   - sorted([...], fn = (x) => any, true, (x, y) => number) => custom key, reverse and compare
  *
- * If `args` is an object, returns the sorted keys.
+ * If `args` is an Object, returns the sorted keys.
  *
  * @export
- * @param {any[]} args
- * @param {(boolean | Func)} [key]
+ * @param {(Array | Object)} args
+ * @param {(boolean | Function)} [key]
  * @param {(boolean | Comp)} [reverse]
  * @param {Comp} [compareFn]
  * @return
  */
-export function sorted(
-  args: any[],
-  key?: boolean | Func,
-  reverse?: boolean | Comp,
-  compareFn?: Comp
-) {
+export function sorted(args, key?: boolean | Function, reverse?: boolean | Comp, compareFn?: Comp) {
   if (isObject(args)) args = Object.keys(args)
   if (typeof key === 'boolean') {
     if (typeof reverse === 'function') {

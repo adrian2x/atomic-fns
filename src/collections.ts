@@ -1,6 +1,7 @@
 /// <reference path='globals.d.ts'/>
 import {
   call,
+  Function,
   get,
   isArray,
   isArrayLike,
@@ -11,6 +12,7 @@ import {
   isNumber,
   isObject,
   isString,
+  Iteratee,
   keys,
   NotImplementedError
 } from './globals.js'
@@ -181,7 +183,7 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
    * @return {(number | undefined)}
    * @memberof Sequence
    */
-  index(item: T): number | undefined {
+  indexOf(item: T): number | undefined {
     throw new NotImplementedError()
   }
 
@@ -220,35 +222,37 @@ export class FrozenSet<T = any> extends Set<T> {
   }
 }
 
+export const compact = (...arr) => arr.filter((x) => !isEmpty(x))
+
 export function namedtuple(...fields: string[]) {
   return (...args) => fields.map((f, i) => [f, args[i]])
 }
 
-export type Iteratee = (value: any, key?: PropertyKey, arr?: any[]) => any
-
-export function filter(arr, fn: any = isNull) {
+export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
   if (Array.isArray(arr)) {
-    if (isFunc(fn)) return arr.filter(fn)
-    if (isString(fn)) return arr.filter((x) => x?.[fn])
+    // @ts-expect-error function is not compatible?
+    if (typeof fn === 'function') return arr.filter(fn)
+    if (typeof fn === 'string') return arr.filter((x) => x?.[fn])
     if (isObject(fn)) return arr.filter(matches(fn))
   }
 }
 
-export function find(arr, fn: any) {
+export function find(arr, fn: Iteratee | PropertyKey | Object) {
   if (Array.isArray(arr)) {
-    if (isFunc(fn)) return arr.find(fn)
-    if (isString(fn)) return arr.find((x) => x?.[fn])
+    // @ts-expect-error function is not compatible?
+    if (typeof fn === 'function') return arr.find(fn)
+    if (typeof fn === 'string') return arr.find((x) => x?.[fn])
     if (isObject(fn)) return arr.find(matches(fn))
   }
 }
 
-export function findRight(arr, fn: any) {
+export function findRight(arr, fn: Iteratee | PropertyKey | Object) {
   if (Array.isArray(arr)) {
     for (let i = arr.length - 1; i >= 0; i--) {
       const x = arr[i]
-      if (isFunc(fn)) {
+      if (typeof fn === 'function') {
         if (fn(x)) return x
-      } else if (isString(fn)) {
+      } else if (typeof fn === 'string') {
         if (x?.[fn]) return x
       } else if (isObject(fn)) {
         if (matches(fn)(x)) return x
@@ -265,7 +269,7 @@ export const matches = (o) => (x) => {
 }
 
 export function forEach(arr: any[], fn: Iteratee)
-export function forEach(arr: object, fn: Iteratee)
+export function forEach(arr: Object, fn: Iteratee)
 export function forEach(arr: any, fn: any) {
   if (Array.isArray(arr)) return arr.forEach(fn)
   if (isObject(arr)) {
@@ -316,7 +320,7 @@ export function flattenObj(o: any, prefix = '', result = {}, keepNull = false) {
   return result
 }
 
-export const map = (fn: any, arr) => {
+export const map = (arr, fn: Function | string) => {
   if (Array.isArray(arr)) {
     return arr.map((x, i) => {
       if (typeof fn === 'string') return x[fn]
@@ -324,7 +328,10 @@ export const map = (fn: any, arr) => {
     })
   }
   if (isObject(arr)) {
-    return Object.keys(arr).map((key) => fn(arr[key], key, arr))
+    return Object.keys(arr).map((key) => {
+      if (typeof fn === 'string') return arr[key]?.[fn]
+      return fn(arr[key], key, arr)
+    })
   }
 }
 
@@ -361,25 +368,32 @@ export function omit(obj, paths: Iteratee | string[]) {
 }
 
 export function contains(arr, y) {
-  const op = call('contains', arr, y)
+  const op = call(arr, 'contains', y)
   if (op != null) return op
-  return index(arr, y) >= 0
+  return indexOf(arr, y) >= 0
 }
 
-export function index(obj, x, start = 0) {
-  let op = call('indexOf', obj, x)
+export function indexOf(obj, x, start = 0) {
+  const op = call(obj, 'indexOf', x, start)
   if (op != null) return op
-  op = call('index', obj, x)
-  if (op != null) return op
-  const length = obj.length
-  if (start < 0) {
+  const length = obj?.length
+  if (!length || start >= length) return -1
+  if (length && start < 0) {
     start = Math.max(start + length, 0)
   }
-  if (isString(obj)) {
-    if (start >= length) return -1
-    return obj.indexOf(x, start)
-  }
   for (; start < length; start++) {
+    if (eq(x, obj[start])) return start
+  }
+  return -1
+}
+
+export function lastIndexOf(obj, x, start?) {
+  const op = call(obj, 'lastIndexOf', x, start)
+  if (op != null) return op
+  const length = obj?.length
+  if (!length) return -1
+  if (start == null) start = length - 1
+  for (; start >= 0; start--) {
     if (eq(x, obj[start])) return start
   }
   return -1
@@ -460,10 +474,10 @@ function baseMergeDeep(obj, source, key, stack) {
     return
   }
 
-  let newValue: any = undefined
+  let newValue: any
   let isCommon = newValue === undefined
-  let isArray = Array.isArray(srcValue)
-  let isTyped = ArrayBuffer.isView(srcValue)
+  const isArray = Array.isArray(srcValue)
+  const isTyped = ArrayBuffer.isView(srcValue)
 
   if (isArray || isTyped) {
     if (Array.isArray(objValue)) {
@@ -495,8 +509,8 @@ function baseMergeDeep(obj, source, key, stack) {
 function baseMerge(obj, source, stack?) {
   if (obj === source) return obj
   for (const key in source) {
-    let srcValue = source[key]
-    let objValue = obj[key]
+    const srcValue = source[key]
+    const objValue = obj[key]
     if (typeof srcValue === 'object' && srcValue !== null) {
       baseMergeDeep(obj, source, key, stack ?? new WeakMap())
     } else {
@@ -515,11 +529,86 @@ function baseMerge(obj, source, stack?) {
  * @export
  * @param {Object} obj
  * @param {...Object} sources
- * @return The destination object.
+ * @return {Object} The destination object.
  */
-export function merge(obj, ...sources) {
+export function merge(obj, ...sources): Object {
   for (const source of sources) {
     baseMerge(obj, source)
   }
   return obj
+}
+
+export function* difference(...args) {
+  const sets = args.map((arr) => new Set(arr))
+  const setA = sets[0]
+
+  for (let i = 1; i < sets.length; i++) {
+    for (const x of sets[i].values()) {
+      if (!setA.delete(x)) setA.add(x)
+    }
+  }
+
+  for (const x of setA.values()) {
+    yield x
+  }
+}
+
+export function* intersection(...args) {
+  const sets = args.map((arr) => new Set(arr))
+  // build a counter map to find items in all
+  const results = new Map()
+  const total = sets.length
+
+  for (let i = 0; i < total; i++) {
+    for (const x of sets[i].values()) {
+      const count = results.get(x) || 0
+      results.set(x, count + 1)
+    }
+  }
+
+  for (const [key, value] of results.entries()) {
+    if (value === total) yield key
+  }
+}
+
+export function* union(...args) {
+  const results = new Set()
+  for (const arr of args) {
+    for (const item of arr) {
+      results.add(item)
+    }
+  }
+  for (const item of results.values()) {
+    yield item
+  }
+}
+
+/**
+ * Creates an object composed of keys generated from the results of running each element of `arr` thru `func`. The order of grouped values is determined by the order they occur in `arr`. The corresponding value of each key is an array of elements responsible for generating the key.
+ *
+ * @export
+ * @param {(any[] | Object)} arr The collection to iterate over.
+ * @param {(Iteratee | PropertyKey)} [func=id] The iteratee to transform keys.
+ * @return {Object} Returns the composed aggregate object.
+ */
+export function groupBy(arr: any[] | Object, func: Iteratee | PropertyKey = id): Object {
+  const results = {}
+  if (Array.isArray(arr)) {
+    for (let i = 0; i < arr.length; i++) {
+      const item = arr[i]
+      const groupKey = typeof func === 'function' ? func(item, i) : get(item, func)
+      const values = results[groupKey] || []
+      values.push(item)
+      results[groupKey] = values
+    }
+  } else {
+    for (const k in arr) {
+      const item = arr[k]
+      const groupKey = typeof func === 'function' ? func(item, k) : get(item, func)
+      const values = results[groupKey]
+      values.push(item)
+      results[groupKey] = values
+    }
+  }
+  return results
 }
