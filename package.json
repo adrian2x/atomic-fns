@@ -36,7 +36,7 @@
   },
   "husky": {
     "hooks": {
-      "precommit": "lint-staged && pretty-quick --staged"
+      "precommit": "npm test && lint-staged && pretty-quick --staged"
     }
   },
   "repository": {
@@ -63,7 +63,7 @@
     "fp"
   ],
   "author": "Adrian Cruz <adrian2x>",
-  "license": "Apache License v2.0",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/adrian2x/es-next/issues"
   },
