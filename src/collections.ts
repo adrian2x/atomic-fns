@@ -1,21 +1,9 @@
 /// <reference path='globals.d.ts'/>
-/**
- * Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
-
- *     http://www.apache.org/licenses/LICENSE-2.0
-
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 import {
   call,
+  get,
   isArray,
+  isArrayLike,
   isBool,
   isEmpty,
   isFunc,
@@ -24,7 +12,6 @@ import {
   isObject,
   isString,
   keys,
-  list,
   NotImplementedError
 } from './globals.js'
 import { comp, eq, id } from './operators.js'
@@ -237,9 +224,9 @@ export function namedtuple(...fields: string[]) {
   return (...args) => fields.map((f, i) => [f, args[i]])
 }
 
-export type Iteratee = (value: any, index?: PropertyKey, arr?: any[]) => any
+export type Iteratee = (value: any, key?: PropertyKey, arr?: any[]) => any
 
-export const filter = (fn: any, arr) => {
+export function filter(arr, fn: any = isNull) {
   if (Array.isArray(arr)) {
     if (isFunc(fn)) return arr.filter(fn)
     if (isString(fn)) return arr.filter((x) => x?.[fn])
@@ -247,7 +234,7 @@ export const filter = (fn: any, arr) => {
   }
 }
 
-export const find = (fn: any, arr) => {
+export function find(arr, fn: any) {
   if (Array.isArray(arr)) {
     if (isFunc(fn)) return arr.find(fn)
     if (isString(fn)) return arr.find((x) => x?.[fn])
@@ -255,7 +242,7 @@ export const find = (fn: any, arr) => {
   }
 }
 
-export const findRight = (fn: any, arr) => {
+export function findRight(arr, fn: any) {
   if (Array.isArray(arr)) {
     for (let i = arr.length - 1; i >= 0; i--) {
       const x = arr[i]
@@ -277,30 +264,31 @@ export const matches = (o) => (x) => {
   return true
 }
 
-export function forEach(fn: Iteratee, arr) {
+export function forEach(arr: any[], fn: Iteratee)
+export function forEach(arr: object, fn: Iteratee)
+export function forEach(arr: any, fn: any) {
   if (Array.isArray(arr)) return arr.forEach(fn)
   if (isObject(arr)) {
-    return Object.keys(arr).forEach((key) => fn(arr[key], key, arr))
+    return Object.keys(arr).forEach((key) => fn(get(arr, key), key, arr))
   }
 }
 
 export function flatten(arr, depth: boolean | number = 1) {
   if (!depth) return arr
-  if (Array.isArray(arr)) return flattenArray(arr, depth)
+  if (Array.isArray(arr)) return flattenArray(arr, depth, [])
   if (isObject(arr)) return flattenObj(arr)
   return arr
 }
 
-export function flattenArray(arr: any[], depth: boolean | number = 1) {
-  if (!depth) return arr
-  for (let i = 0; i < arr.length; i++) {
-    let value = arr[i]
-    if (Array.isArray(value)) {
-      value = flatten(value, typeof depth === 'number' ? depth - 1 : depth)
-      arr.splice(i, 1, ...value)
+export function flattenArray(arr: any[], depth: boolean | number = 1, result: any[] = []) {
+  for (const value of arr) {
+    if (depth && Array.isArray(value)) {
+      flattenArray(value, typeof depth === 'number' ? depth - 1 : depth, result)
+    } else {
+      result.push(value)
     }
   }
-  return arr
+  return result
 }
 
 export function flattenObj(o: any, prefix = '', result = {}, keepNull = false) {
@@ -397,8 +385,19 @@ export function index(obj, x, start = 0) {
   return -1
 }
 
+/**
+ * Creates a clone of the given `obj`. If `deep` is `true` it will clone it recursively.
+ *
+ * @export
+ * @param {*} obj
+ * @param {boolean} [deep=false]
+ * @return The clone value
+ */
 export function clone(obj, deep = false) {
-  if (isArray(obj)) {
+  if (ArrayBuffer.isView(obj)) {
+    return cloneTypedArray(obj, deep)
+  }
+  if (isArray(obj) || isArrayLike(obj)) {
     return cloneArray(obj, deep)
   }
   if (isObject(obj)) {
@@ -419,23 +418,108 @@ export function clone(obj, deep = false) {
 }
 
 export function cloneArray(arr, deep = false) {
-  if (!deep) return list(arr)
+  if (!deep) return Array.from(arr)
   return arr.map((item) => clone(item, deep))
 }
-export function uniq(arr, fn: string | Iteratee = id) {
-  const keys = {}
+
+export function cloneArrayBuffer(arrayBuffer) {
+  const result = new arrayBuffer.constructor(arrayBuffer.byteLength)
+  new Uint8Array(result).set(new Uint8Array(arrayBuffer))
+  return result
+}
+
+export function cloneTypedArray(typedArray, isDeep) {
+  const buffer = isDeep ? cloneArrayBuffer(typedArray.buffer) : typedArray.buffer
+  return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length)
+}
+
+export function uniq<T = any>(arr: T[], fn: string | Iteratee = id) {
+  const keys = new Set<T>()
   for (const x of arr) {
     if (typeof fn === 'function') {
-      keys[x] = fn(x)
+      keys.add(fn(x))
     } else {
-      keys[x] = x[fn]
+      keys.add(get(x, fn))
     }
   }
-  return Object.values(keys)
+  return Array.from(keys.values())
 }
 
 export function sortedUniq(arr, fn: string | Iteratee = id) {
   const lst = uniq(arr, fn)
   lst.sort(comp)
   return lst
+}
+
+function baseMergeDeep(obj, source, key, stack) {
+  const objValue = obj[key]
+  const srcValue = source[key]
+  const stacked = stack.get(srcValue)
+  if (stacked && (objValue !== stacked || !(key in obj))) {
+    obj[key] = stacked
+    return
+  }
+
+  let newValue: any = undefined
+  let isCommon = newValue === undefined
+  let isArray = Array.isArray(srcValue)
+  let isTyped = ArrayBuffer.isView(srcValue)
+
+  if (isArray || isTyped) {
+    if (Array.isArray(objValue)) {
+      newValue = objValue
+    } else if (isArrayLike(objValue)) {
+      newValue = Array.from(objValue)
+    } else if (isTyped) {
+      isCommon = false
+      newValue = cloneTypedArray(srcValue, true)
+    } else {
+      newValue = []
+    }
+  } else if (isObject(srcValue)) {
+    newValue = objValue
+    if (!isObject(objValue)) {
+      newValue = srcValue
+    }
+  } else {
+    isCommon = false
+  }
+  if (isCommon) {
+    stack.set(srcValue, newValue)
+    baseMerge(newValue, srcValue, stack)
+    stack.delete(srcValue)
+  }
+  obj[key] = newValue
+}
+
+function baseMerge(obj, source, stack?) {
+  if (obj === source) return obj
+  for (const key in source) {
+    let srcValue = source[key]
+    let objValue = obj[key]
+    if (typeof srcValue === 'object' && srcValue !== null) {
+      baseMergeDeep(obj, source, key, stack ?? new WeakMap())
+    } else {
+      if (objValue !== srcValue) {
+        obj[key] = srcValue
+      }
+    }
+  }
+}
+
+/**
+ * Recursively merges own and inherited enumerable string keyed properties of source objects into the destination object. Source properties that resolve to `undefined` are skipped if a destination value exists. Array and plain object properties are merged recursively. Other objects and value types are overridden by assignment. Source objects are applied from left to right. Subsequent sources overwrite property assignments of previous sources.
+ *
+ * Note: this method mutates `obj`
+ *
+ * @export
+ * @param {Object} obj
+ * @param {...Object} sources
+ * @return The destination object.
+ */
+export function merge(obj, ...sources) {
+  for (const source of sources) {
+    baseMerge(obj, source)
+  }
+  return obj
 }

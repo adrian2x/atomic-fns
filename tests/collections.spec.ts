@@ -12,12 +12,13 @@ import {
   pick,
   omit,
   uniq,
-  sortedUniq
+  sortedUniq,
+  merge
 } from '../src/collections.js'
 
 function cb() {}
 
-describe('operators', () => {
+describe('collections', () => {
   it('contains', () => {
     assert(contains([4, 7, 1, 9], 1))
     assert(!contains([4, 7, 1, 9], NaN))
@@ -31,16 +32,17 @@ describe('operators', () => {
   })
 
   it('filter', () => {
+    assert(filter(null) == undefined)
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
-    assert.deepEqual(filter({ age: 36 }, users), [users[0]])
+    assert.deepEqual(filter(users, { age: 36 }), [users[0]])
     assert.deepEqual(
-      filter((o) => o.active, users),
+      filter(users, (o) => o.active),
       [users[0]]
     )
-    assert.deepEqual(filter('active', users), [users[0]])
+    assert.deepEqual(filter(users, 'active'), [users[0]])
   })
 
   it('find', () => {
@@ -48,9 +50,9 @@ describe('operators', () => {
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
-    assert(find({ age: 36 }, users) === users[0])
-    assert(find((o) => o.active, users) === users[0])
-    assert(find('active', users) === users[0])
+    assert(find(users, { age: 36 }) === users[0])
+    assert(find(users, (o) => o.active) === users[0])
+    assert(find(users, 'active') === users[0])
   })
 
   it('findRight', () => {
@@ -59,9 +61,9 @@ describe('operators', () => {
       { user: 'fred', age: 40, active: false },
       { user: 'barney', age: 36, active: true }
     ]
-    assert(findRight({ age: 36 }, users) === users[2])
-    assert(findRight((o) => o.active, users) === users[2])
-    assert(findRight('active', users) === users[2])
+    assert(findRight(users, { age: 36 }) === users[2])
+    assert(findRight(users, (o) => o.active) === users[2])
+    assert(findRight(users, 'active') === users[2])
   })
 
   it('forEach', () => {
@@ -70,9 +72,7 @@ describe('operators', () => {
       { user: 'fred', age: 40, active: false }
     ]
     let result = [] as any[]
-    forEach((value, key) => {
-      result.push([key, value])
-    }, users)
+    forEach(users, (value, key) => result.push([key, value]))
     assert.deepEqual(
       result,
       users.map((x, i) => [i, x])
@@ -82,9 +82,7 @@ describe('operators', () => {
   it('forEach object key', () => {
     let target = { user: 'fred', age: 40, active: false }
     let objs = [] as any[]
-    forEach((value, key) => {
-      objs.push([key, value])
-    }, target)
+    forEach(target, (value, key) => objs.push([key, value]))
     assert.deepEqual(objs, Object.entries(target))
   })
 
@@ -128,6 +126,26 @@ describe('operators', () => {
     assert.deepEqual(map(getEntries, target), Object.entries(target))
   })
 
+  it('merge', () => {
+    let object = {
+      a: [{ b: 2 }, { d: 4 }]
+    }
+    let other = {
+      a: [{ c: 3 }, { e: 5 }],
+      foo: null,
+      bar: true,
+      noop: undefined
+    }
+    assert.deepEqual(merge(object, other), {
+      a: [
+        { b: 2, c: 3 },
+        { d: 4, e: 5 }
+      ],
+      foo: null,
+      bar: true
+    })
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })
@@ -154,9 +172,9 @@ describe('operators', () => {
 
   it('uniq', () => {
     let arr = [4, 7, 1, 1, 9, 4, 7]
-    let sort = uniq(arr)
-    assert.deepEqual(sort, [1, 4, 7, 9])
-    sort = uniq(arr, (x) => x * 2)
-    assert.deepEqual(sort, [2, 8, 14, 18])
+    let distinct = uniq(arr)
+    assert.deepEqual(distinct, [4, 7, 1, 9])
+    distinct = uniq(arr, (x) => x * 2)
+    assert.deepEqual(distinct, [8, 14, 2, 18])
   })
 })

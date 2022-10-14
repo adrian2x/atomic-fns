@@ -128,7 +128,7 @@ describe('globals', () => {
         return 42
       }
     }
-    assert(call('foo', obj) === 42)
+    assert(call(obj, 'foo') === 42)
   })
 
   it('chr', () => {
@@ -209,23 +209,24 @@ describe('globals', () => {
 
   it('get', () => {
     const arr = [1, 2, 3]
-    assert(get('2', arr) === 3)
-    assert(get('3', arr, false) === false)
-    assert(get('3', arr, false) === false)
+    assert(get(arr, '2') === 3)
+    assert(get(arr, '3', false) === false)
+    assert(get(arr, '3', false) === false)
     let obj = { foo: { bar: true } }
     let h = hash(obj)
-    assert(get('foo.bar', obj))
-    assert(get(['foo', 'bar'], obj))
-    assert(get(HASH_KEY, obj) === h)
-    assert(get([HASH_KEY], obj) === h)
+    assert(get(obj, 'foo.bar'))
+    assert(get(obj, ['foo', 'bar']))
+    assert(get(obj, HASH_KEY) === h)
+    assert(get(obj, [HASH_KEY]) === h)
   })
 
   it('isEmpty', () => {
+    assert(isEmpty(null))
+    assert(isEmpty(undefined))
     assert(isEmpty([]))
     assert(isEmpty(''))
     assert(isEmpty({}))
-    assert(isEmpty(null))
-    assert(isEmpty(undefined))
-    assert(isEmpty(1))
+    assert(isEmpty(0))
+    assert(!isEmpty(1))
   })
 })

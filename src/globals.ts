@@ -1,17 +1,3 @@
-/**
- * Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
-
- *     http://www.apache.org/licenses/LICENSE-2.0
-
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 export const True = () => true
 
 export const False = () => false
@@ -206,7 +192,7 @@ export const isGenerator = (x) => {
 export const isNull = (x) => x == null
 
 /** Check if value is not null or undefined */
-export const notNull = (x) => !isNull(x)
+export const notNull = (x) => x != null
 
 export function len(x) {
   if (isNumber(x?.length)) {
@@ -220,7 +206,8 @@ export function len(x) {
   }
 }
 
-export const isEmpty = (x) => !len(x)
+/** Returns true for objects without length or falsey values. */
+export const isEmpty = (x) => (len(x) === 0 ? true : !x)
 
 /** Check if value is a Symbol type */
 export const isSymbol = (x) => type(x) === 'symbol'
@@ -229,21 +216,21 @@ export const isSymbol = (x) => type(x) === 'symbol'
  * Generates a unique ID using random numbers.
  * If prefix is given, the ID is appended to it
  */
-export const uniqueId = (pre: string | number = 0) =>
+export const uniqueId = (pre: string = '') =>
   // @ts-expect-error
-  pre + ((Math.random() * 1e10) >>> 0)
+  (pre || 0) + ((Math.random() * 1e10) >>> 0)
 
 /**
  * Checks if `obj.key` is a function, and calls it with any `args`.
  *
  * @export
- * @param {PropertyKey} key
  * @param {*} obj
+ * @param {PropertyKey} key
  * @param {...any[]} args
  * @return `obj.key(...args)`
  */
-export function call(key: PropertyKey, obj: any, ...args: any[]) {
-  if (isFunc(get(key, obj))) {
+export function call(obj: any, key: PropertyKey, ...args: any[]) {
+  if (isFunc(get(obj, key))) {
     return obj[key](...args)
   }
 }
@@ -290,37 +277,31 @@ export function* enumerate<T = unknown>(iterable: Iterable<T>) {
   }
 }
 
-export function hasattr(obj, attr: PropertyKey) {
-  return notNull(obj) && attr in obj
-}
+export const has = (obj, attr: PropertyKey) => obj && attr in obj
 
 /**
  * Check if the attribute is present in the object, or return optional default.
  *
  * @export
- * @param {PropertyKey} attr
  * @param {*} obj
+ * @param {PropertyKey} key
  * @param {*} [value=undefined]
  * @return The property value or default value
  */
-export function get(
-  attr: PropertyKey | PropertyKey[],
-  obj: any,
-  value: any = undefined
-) {
+export function get(obj: any, key: PropertyKey | PropertyKey[], value: any = undefined) {
   if (obj == null) {
     return value ?? obj
   }
 
-  let paths = Array.isArray(attr) ? attr : [attr]
-  if (typeof attr === 'string') {
-    paths = attr.split('.')
+  let paths = Array.isArray(key) ? key : [key]
+  if (typeof key === 'string') {
+    paths = key.split('.')
   }
 
   try {
     let result = obj
-    for (const prop of paths) {
-      result = result[prop]
+    for (const k of paths) {
+      result = result[k]
     }
     return result ?? value
   } catch (error) {
@@ -329,17 +310,11 @@ export function get(
 }
 
 export function del(x, attr) {
-  delete x[attr]
+  if (x != null) delete x[attr]
   return x
 }
 
-export function set(
-  self: any,
-  attr: PropertyKey,
-  value,
-  writable = false,
-  enumerable = false
-) {
+export function set(self: any, attr: PropertyKey, value, writable = false, enumerable = false) {
   return Object.defineProperty(self, attr, {
     value,
     enumerable,
