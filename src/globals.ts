@@ -1,3 +1,7 @@
+/**
+ * Globals
+ * @module
+ */
 export type Comp = (x, y) => number
 
 export type Function = (...args) => any
@@ -18,10 +22,10 @@ export const False = () => false
 export class CustomError extends Error {
   /**
    * Returns a new CustomError with the specified message.
-   * @param message
+   * @param {string} message
    * @constructor
    */
-  constructor(message?) {
+  constructor(message?: string) {
     super(message)
     this.name = this.constructor.name
     if (typeof Error.captureStackTrace === 'function') {
@@ -169,7 +173,7 @@ export const isArrayLike = (x) => {
 }
 
 /** Check if value is a function type */
-export const isFunc = (x) => type(x) === 'function'
+export const isFunc = (x) => x?.constructor === Function
 
 /** Check if value is a number type */
 export const isNumber = (x) => type(x) === 'number'
@@ -268,7 +272,7 @@ export const floor = (x: number) => Math.floor(x)
 export const ceil = (x: number) => Math.ceil(x)
 
 /**
- * Yields elements like [index, item] from an iterable.
+ * Yields elements like `[index, item]` from an iterable.
  *
  *
  * @template T

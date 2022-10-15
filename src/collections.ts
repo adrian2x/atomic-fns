@@ -1,3 +1,7 @@
+/**
+ * Collections
+ * @module
+ */
 import {
   call,
   Function,
@@ -261,7 +265,7 @@ export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
 export function find(arr, fn: Iteratee | PropertyKey | Object) {
   if (Array.isArray(arr)) {
     if (typeof fn === 'function') return arr.find(fn as Iteratee)
-    if (typeof fn === 'string') return arr.find((x) => x && x[fn])
+    if (typeof fn === 'string') return arr.find((x) => x?.[fn])
     if (isObject(fn)) return arr.find(matches(fn))
   }
 }
@@ -273,7 +277,7 @@ export function findRight(arr, fn: Iteratee | PropertyKey | Object) {
       if (typeof fn === 'function') {
         if (fn(x)) return x
       } else if (typeof fn === 'string') {
-        if (x && x[fn]) return x
+        if (x?.[fn]) return x
       } else if (isObject(fn)) {
         if (matches(fn)(x)) return x
       }

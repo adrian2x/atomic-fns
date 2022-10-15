@@ -3,6 +3,14 @@ import { isEmpty } from '../src/globals.js'
 import { bool, id, isinstance, not, all, any, comp, shallowEqual } from '../src/operators.js'
 
 describe('operators', () => {
+  it('id', () => {
+    assert(id(true) === true)
+    assert(id(false) === false)
+    assert(id(3.0) === 3.0)
+    assert(id('') === '')
+    assert(id(Object) === Object)
+  })
+
   it('all', () => {
     assert(all([1, true, [], 'test', {}]))
     assert(!all([[], {}, '']))
@@ -27,11 +35,6 @@ describe('operators', () => {
     assert(comp(1, 1) === 0)
     assert(comp(2, 3) === -1)
     assert(comp(4, 3) === 1)
-  })
-
-  it('id', () => {
-    let x = Math.random()
-    assert(id(x) === x)
   })
 
   it('isinstance', () => {

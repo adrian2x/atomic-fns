@@ -1,3 +1,7 @@
+/**
+ * Globals
+ * @module
+ */
 export declare type Comp = (x: any, y: any) => number;
 export declare type Function = (...args: any[]) => any;
 export declare type Iteratee = (value: any, key?: any, arr?: any) => any;
@@ -13,10 +17,10 @@ export declare const False: () => boolean;
 export declare class CustomError extends Error {
     /**
      * Returns a new CustomError with the specified message.
-     * @param message
+     * @param {string} message
      * @constructor
      */
-    constructor(message?: any);
+    constructor(message?: string);
 }
 /**
  * Custom error to signal an invalid index access.
@@ -136,7 +140,7 @@ export declare function round(x: number, digits?: number): number;
 export declare const floor: (x: number) => number;
 export declare const ceil: (x: number) => number;
 /**
- * Yields elements like [index, item] from an iterable.
+ * Yields elements like `[index, item]` from an iterable.
  *
  *
  * @template T

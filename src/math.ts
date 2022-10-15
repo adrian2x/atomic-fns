@@ -1,3 +1,7 @@
+/**
+ * Math
+ * @module
+ */
 import { call, isFunc } from './globals.js'
 import { comp } from './operators.js'
 

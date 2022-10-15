@@ -1,3 +1,7 @@
+/**
+ * Iterators
+ * @module
+ */
 import { Comp, Function } from './globals.js';
 export declare function range(...args: number[]): Generator<number, void, unknown>;
 /** Creates a new list with the elements from the iterable in reverse order. */

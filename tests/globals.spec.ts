@@ -47,9 +47,11 @@ describe('globals', () => {
     assert.equal(err.message, 'custom')
   })
 
+  it('True', () => assert(True() === true))
+
+  it('False', () => assert(False() === false))
+
   it('type', () => {
-    assert(True())
-    assert(!False())
     assert(type(null) === 'null')
     assert(type(undefined) === 'undefined')
     assert(type(true) === 'boolean')
@@ -70,35 +72,71 @@ describe('globals', () => {
     assert(type(type) === 'function')
     assert(type(Symbol()) === 'symbol')
     assert(type(new Promise(cb)) === 'promise')
+  })
+
+  it('isBool', () => {
     assert(isBool(true))
     assert(isBool(Boolean()))
     assert(!isBool(''))
     assert(!isBool({}))
     assert(!isBool(undefined))
+  })
+
+  it('isObject', () => {
     assert(isObject({}))
     assert(!isObject(''))
     assert(!isObject([]))
+  })
+
+  it('isString', () => {
     assert(isString(''))
     assert(!isString([]))
+  })
+
+  it('isArray', () => {
     assert(isArray([]))
     assert(isArrayLike([]))
     assert(!isArray(''))
     assert(!isArrayLike(''))
+  })
+
+  it('isFunc', () => {
     assert(isFunc(cb))
     assert(!isFunc([]))
+  })
+
+  it('isAsync', () => {
     assert(isAsync(async function () {}))
     assert(isAsync(async () => {}))
     assert(!isAsync(cb))
+  })
+
+  it('isNaN', () => {
     assert(isNaN(NaN))
+  })
+
+  it('isNumber', () => {
     assert(!isNumber(NaN))
     assert(isNumber(42))
     assert(isNumber(Number(42)))
     assert(isNumber(Number('42')))
     assert(isNumber(parseFloat('42.0')))
+  })
+
+  it('isBigInt', () => {
     assert(isBigint(42n))
     assert(isBigint(BigInt('42')))
+  })
+
+  it('isPromise', () => {
     assert(isPromise(new Promise(cb)))
+  })
+
+  it('isSymbol', () => {
     assert(isSymbol(Symbol()))
+  })
+
+  it('isNull', () => {
     assert(isNull(null))
     assert(isNull(undefined))
     assert(!isNull(''))

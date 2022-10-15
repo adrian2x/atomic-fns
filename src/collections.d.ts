@@ -1,3 +1,7 @@
+/**
+ * Collections
+ * @module
+ */
 import { Function, Iteratee } from './globals.js';
 /**
  * A container type that provides contains().

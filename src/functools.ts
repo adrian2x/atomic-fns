@@ -1,3 +1,7 @@
+/**
+ * FP
+ * @module
+ */
 import { Function } from './globals.js'
 
 export const bind = (fn, self, ...args) => fn.bind(self, ...args)

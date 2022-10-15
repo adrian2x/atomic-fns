@@ -1,4 +1,8 @@
-import { isObject, round } from './globals'
+/**
+ * Random
+ * @module
+ */
+import { isObject } from './globals'
 
 /** Returns a random float between a [min, max) value (max exclusive). */
 export const random = (min = 0, max = 1) => Math.random() * (max - min) + min

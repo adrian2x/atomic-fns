@@ -15,17 +15,21 @@ describe('operators', () => {
   it('sort', () => {
     let arr = [3, 2, 1]
     assert.deepEqual(sort(arr), [1, 2, 3])
-    arr = [3, 1, 2]
+  })
+
+  it('sort reversed', () => {
+    let arr = [3, 1, 2]
     assert.deepEqual(sort(arr, true), [3, 2, 1])
   })
 
   it('sorted', () => {
     let arr = [3, 2, 1]
-    let sort = sorted(arr)
-    arr.sort()
-    assert.deepEqual(sort, arr)
-    // reversed order
+    assert.deepEqual(sorted(arr), arr.sort())
+    // sorted in reverse
     assert.deepEqual(sorted([3, 1, 2], true), [3, 2, 1])
+  })
+
+  it('sorted by key', () => {
     let users = [
       { user: 'fred', age: 40 },
       { user: 'barney', age: 36 }
@@ -46,7 +50,13 @@ describe('operators', () => {
         { user: 'barney', age: 36 }
       ]
     )
-    // using custom compare
+  })
+
+  it('sorted with custom compare', () => {
+    let users = [
+      { user: 'fred', age: 40 },
+      { user: 'barney', age: 36 }
+    ]
     assert.deepEqual(
       sorted(users, false, (x, y) => (x.user <= y.user ? -1 : 1)),
       [
@@ -71,10 +81,7 @@ describe('operators', () => {
       { user: 'barney', age: 36 }
     ]
 
-    let results = [] as any
-    for (const t of zip(users1, users2)) {
-      results.push(t)
-    }
+    let results = [...zip(users1, users2)]
 
     let [first1, first2] = results[0]
     assert(first1 === users1[0])

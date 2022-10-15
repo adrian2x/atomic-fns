@@ -1,3 +1,7 @@
+/**
+ * Iterators
+ * @module
+ */
 import { Comp, Function, isObject, len } from './globals.js'
 import { comp, id } from './operators.js'
 

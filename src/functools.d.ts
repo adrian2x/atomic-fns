@@ -1,3 +1,7 @@
+/**
+ * FP
+ * @module
+ */
 import { Function } from './globals.js';
 export declare const bind: (fn: any, self: any, ...args: any[]) => any;
 export declare const partial: (fn: any, ...args: any[]) => any;

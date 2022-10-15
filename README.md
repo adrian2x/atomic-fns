@@ -2,13 +2,15 @@
 
 ## Like Lodash, but for ESNext and with types.
 
-Stop shipping code built for browsers from 2015. Really though, look at the [issues](https://github.com/lodash/lodash/issues/2930#issuecomment-370295020).
+Stop shipping code built for browsers from 2015. Really though, look at the [issues](https://github.com/lodash/lodash/issues/2930).
+
+You may prefer this because it's:
 
 * **Modular**: Pick what you need. Works with all bundlers and also supports tree-shaking.
 * **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
 * **Lazy**: Leverage generators, iterators, and functional composition.
 * **Fluent**: Pure functions and abstract classes. Include only what you need.
-* **TypeScript & docs**: Includes both type declaration files and js with JSDocs for best in class experience.
+* **TypeScript & docs**: Includes type declaration files and js with JSDocs for best in class experience.
 
 ## Get Started
 
@@ -20,18 +22,15 @@ npm install atomic-fns
 
 ## How to use
 ```typescript
-import { id, reversed, sorted, times, uniqueId } from 'atomic-fns'
+import { reversed, sorted, times, uniqueId } from 'atomic-fns'
 
-reverse([1, 2, 3, 4])
+reversed([1, 2, 3, 4])
 // -> [4, 3, 2, 1]
 
 sorted([4, 3, 2, 1])
 // -> [1, 2, 3, 4]
 
-times(5, id)
-// -> [0, 1, 2, 3, 4]
-
-times(5, id)
+times(5, (i) => i)
 // -> [0, 1, 2, 3, 4]
 
 uniqueId('user_')
@@ -40,7 +39,7 @@ uniqueId('user_')
 
 ## Docs
 
-🚢 Coming soon at [atomic-fns.dev](https://atomic-fns.dev).
+🚢 Coming soon at [atomic-fns.dev](https://atomic-fns.dev)
 
 💡 See the `src` directory for comments.
 

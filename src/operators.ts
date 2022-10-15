@@ -1,3 +1,7 @@
+/**
+ * Operators
+ * @module
+ */
 import { call, isNumber, isObject } from './globals.js'
 
 export const id = (x) => x
