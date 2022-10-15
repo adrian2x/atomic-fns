@@ -1,5 +1,5 @@
 {
-  "name": "ecmascript",
+  "name": "atomic-fns",
   "description": "A general-purpose and forward looking toolbox for evergreen JS code standards.",
   "version": "0.1.0",
   "main": "build/index.js",
