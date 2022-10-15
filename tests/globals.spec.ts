@@ -119,7 +119,9 @@ describe('globals', () => {
   it('uniqueId', () => {
     const uid = uniqueId()
     assert(isNumber(uid))
-    assert.match(uniqueId('contact_'), /^contact_\d+/)
+    let prefix = 'user_'
+    const userId = uniqueId('user_')
+    assert(userId.startsWith('user_'))
   })
 
   it('call', () => {

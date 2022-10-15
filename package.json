@@ -1,7 +1,7 @@
 {
   "name": "atomic-fns",
   "description": "A general-purpose and forward looking toolbox for evergreen JS code standards.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "build/index.js",
   "type": "module",
   "devDependencies": {
@@ -41,7 +41,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/adrian2x/es-next.git"
+    "url": "git+https://github.com/adrian2x/atomic-fns.git"
   },
   "keywords": [
     "es-next",
