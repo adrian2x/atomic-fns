@@ -1,4 +1,3 @@
-/// <reference path='globals.d.ts'/>
 import {
   call,
   Function,
@@ -14,14 +13,15 @@ import {
   isString,
   Iteratee,
   keys,
-  NotImplementedError
+  NotImplementedError,
+  set
 } from './globals.js'
 import { comp, eq, id } from './operators.js'
 
 /**
  * A container type that provides contains().
  *
- * @export
+ *
  * @interface Container
  */
 export interface Container {
@@ -29,9 +29,9 @@ export interface Container {
 }
 
 /**
- * These are the "rich comparison" methods, as in Python.
+ * These are the "rich comparison" methods, inspired by Python operators.
  *
- * @export
+ *
  * @interface Comparable
  */
 export interface Comparable {
@@ -53,7 +53,7 @@ export interface Comparable {
  * A Collection is an iterable container type.
  * This is an abstract base class for user-defined collection types.
  *
- * @export
+ *
  * @abstract
  * @class Collection
  * @implements {Container}
@@ -122,7 +122,7 @@ export interface Reversible<T = unknown> {
 /**
  * A sequence is an iterable type with efficient index-based access.
  *
- * @export
+ *
  * @abstract
  * @class Sequence
  * @extends {Collection}
@@ -196,6 +196,14 @@ export abstract class Sequence<T> extends Collection implements Reversible<T> {
   }
 }
 
+/**
+ * Returns a new immutable Set object with elements from `iterable`. Its contents cannot be altered after it's created.
+ *
+ *
+ * @class FrozenSet
+ * @extends {Set<T>}
+ * @template T
+ */
 export class FrozenSet<T = any> extends Set<T> {
   constructor(iterable: Iterable<T>) {
     super(iterable)
@@ -224,24 +232,36 @@ export class FrozenSet<T = any> extends Set<T> {
 
 export const compact = (...arr) => arr.filter((x) => !isEmpty(x))
 
+/**
+ * Creates a function that can be used to create named tuple-like objects.
+ * @example
+ * ```
+ * let Point = namedtuple('x', 'y', 'z')
+ * let userObj = User(0, 0, 0)
+ * // -> {x: 0, y: 0, z: 0}
+ * ```
+ *
+ *
+ * @param {...string[]} fields
+ * @return
+ */
 export function namedtuple(...fields: string[]) {
-  return (...args) => fields.map((f, i) => [f, args[i]])
+  return (...args) => fields.reduce((prev, f, i) => set(prev, f, args[i], false, true), {})
 }
 
 export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
   if (Array.isArray(arr)) {
     // @ts-expect-error function is not compatible?
     if (typeof fn === 'function') return arr.filter(fn)
-    if (typeof fn === 'string') return arr.filter((x) => x?.[fn])
+    if (typeof fn === 'string') return arr.filter((x) => get(x, fn))
     if (isObject(fn)) return arr.filter(matches(fn))
   }
 }
 
 export function find(arr, fn: Iteratee | PropertyKey | Object) {
   if (Array.isArray(arr)) {
-    // @ts-expect-error function is not compatible?
-    if (typeof fn === 'function') return arr.find(fn)
-    if (typeof fn === 'string') return arr.find((x) => x?.[fn])
+    if (typeof fn === 'function') return arr.find(fn as Iteratee)
+    if (typeof fn === 'string') return arr.find((x) => x && x[fn])
     if (isObject(fn)) return arr.find(matches(fn))
   }
 }
@@ -253,7 +273,7 @@ export function findRight(arr, fn: Iteratee | PropertyKey | Object) {
       if (typeof fn === 'function') {
         if (fn(x)) return x
       } else if (typeof fn === 'string') {
-        if (x?.[fn]) return x
+        if (x && x[fn]) return x
       } else if (isObject(fn)) {
         if (matches(fn)(x)) return x
       }
@@ -262,8 +282,9 @@ export function findRight(arr, fn: Iteratee | PropertyKey | Object) {
 }
 
 export const matches = (o) => (x) => {
+  if (!o || !x) return false
   for (const key in o) {
-    if (!eq(x?.[key], o[key])) return false
+    if (!eq(x[key], o[key])) return false
   }
   return true
 }
@@ -329,7 +350,7 @@ export const map = (arr, fn: Function | string) => {
   }
   if (isObject(arr)) {
     return Object.keys(arr).map((key) => {
-      if (typeof fn === 'string') return arr[key]?.[fn]
+      if (typeof fn === 'string') return get(arr[key], fn)
       return fn(arr[key], key, arr)
     })
   }
@@ -374,13 +395,14 @@ export function contains(arr, y) {
 }
 
 export function indexOf(obj, x, start = 0) {
+  if (obj == null) return
   const op = call(obj, 'indexOf', x, start)
   if (op != null) return op
-  const length = obj?.length
-  if (!length || start >= length) return -1
+  const length = obj.length
   if (length && start < 0) {
     start = Math.max(start + length, 0)
   }
+  if (!length || start >= length) return -1
   for (; start < length; start++) {
     if (eq(x, obj[start])) return start
   }
@@ -388,11 +410,12 @@ export function indexOf(obj, x, start = 0) {
 }
 
 export function lastIndexOf(obj, x, start?) {
+  if (obj == null) return
   const op = call(obj, 'lastIndexOf', x, start)
   if (op != null) return op
-  const length = obj?.length
-  if (!length) return -1
+  const length = obj.length
   if (start == null) start = length - 1
+  if (!length || start < 0) return -1
   for (; start >= 0; start--) {
     if (eq(x, obj[start])) return start
   }
@@ -402,7 +425,7 @@ export function lastIndexOf(obj, x, start?) {
 /**
  * Creates a clone of the given `obj`. If `deep` is `true` it will clone it recursively.
  *
- * @export
+ *
  * @param {*} obj
  * @param {boolean} [deep=false]
  * @return The clone value
@@ -512,7 +535,7 @@ function baseMerge(obj, source, stack?) {
     const srcValue = source[key]
     const objValue = obj[key]
     if (typeof srcValue === 'object' && srcValue !== null) {
-      baseMergeDeep(obj, source, key, stack ?? new WeakMap())
+      baseMergeDeep(obj, source, key, stack || new WeakMap())
     } else {
       if (objValue !== srcValue) {
         obj[key] = srcValue
@@ -526,7 +549,7 @@ function baseMerge(obj, source, stack?) {
  *
  * Note: this method mutates `obj`
  *
- * @export
+ *
  * @param {Object} obj
  * @param {...Object} sources
  * @return {Object} The destination object.
@@ -586,7 +609,7 @@ export function* union(...args) {
 /**
  * Creates an object composed of keys generated from the results of running each element of `arr` thru `func`. The order of grouped values is determined by the order they occur in `arr`. The corresponding value of each key is an array of elements responsible for generating the key.
  *
- * @export
+ *
  * @param {(any[] | Object)} arr The collection to iterate over.
  * @param {(Iteratee | PropertyKey)} [func=id] The iteratee to transform keys.
  * @return {Object} Returns the composed aggregate object.

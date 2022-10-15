@@ -26,6 +26,7 @@ import {
   values,
   round,
   enumerate,
+  isEmpty,
   isGenerator,
   hash,
   hashCode,
@@ -36,8 +37,7 @@ import {
   list,
   next,
   get
-} from '../build/globals.js'
-import { isEmpty } from '../src/globals.js'
+} from '../src/globals.js'
 
 function cb() {}
 
@@ -109,6 +109,8 @@ describe('globals', () => {
   it('str', () => {
     assert(str(undefined) === '')
     assert(str(null) === '')
+    assert(str(true) === 'true')
+    assert(str(false) === 'false')
     assert(str(NaN) === 'NaN')
     assert(str(42) === '42')
     assert(str([]) === '')

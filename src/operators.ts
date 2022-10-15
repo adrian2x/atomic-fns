@@ -114,7 +114,7 @@ export function mod(x, y) {
 /**
  * Calculates `x` to the power of `y`. If `x` implements a custom `pow` operator
  * it will return `x.pow(y)`.
- * @export
+ *
  * @param {*} x
  * @param {*} y
  * @return `x` raised to the power `y`

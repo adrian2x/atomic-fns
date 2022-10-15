@@ -9,7 +9,7 @@ export function abs(x: number) {
 
 /**
  * Returns a tuple like (x / y, x % y)
- * @export
+ *
  * @param {number} x
  * @param {number} y
  * @return {number[]}

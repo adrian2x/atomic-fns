@@ -1,12 +1,14 @@
 {
   "name": "atomic-fns",
-  "description": "A general-purpose and forward looking toolbox for evergreen JS code standards.",
-  "version": "0.1.1",
-  "main": "build/index.js",
+  "description": "Like Lodash, but for ESNext and with types. Stop shipping code built for browsers from 2015.",
+  "version": "0.2.0",
+  "main": "src/index.js",
   "type": "module",
   "devDependencies": {
     "@types/jasmine": "^4.3.0",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
+    "esdoc": "^1.1.0",
+    "esdoc-standard-plugin": "^1.0.0",
     "eslint": "^8.25.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-config-standard-with-typescript": "^23.0.0",
@@ -24,12 +26,13 @@
     "typescript": "^4.8.4"
   },
   "scripts": {
-    "postinstall": "npm run tsc",
+    "prepublishOnly": "npm test && npm run tsc",
     "test": "NODE_OPTIONS=--loader=ts-node/esm jasmine --config=jasmine.json",
     "tsc": "tsc -p ./tsconfig.xo.json --declaration",
     "lint": "eslint src/**",
     "lint:fix": "eslint src/** --fix",
-    "format": "prettier --write src/**"
+    "format": "prettier --write src/**",
+    "docs": "npm run tsc && esdoc"
   },
   "lint-staged": {
     "*.ts": "eslint"
@@ -41,12 +44,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/adrian2x/atomic-fns.git"
+    "url": "https://github.com/adrian2x/atomic-fns.git"
   },
   "keywords": [
-    "es-next",
+    "atomic",
+    "atomicfns",
+    "atomic-fns",
     "esnext",
-    "ecmascript",
+    "es-next",
     "@esnext",
     "@es-next",
     "es6",
@@ -56,16 +61,21 @@
     "es2017",
     "es2019",
     "es2020",
+    "es2021",
+    "es2022",
+    "es2023",
+    "lodash",
+    "lazy",
     "modules",
     "stdlib",
     "core-js",
     "util",
     "fp"
   ],
-  "author": "Adrian Cruz <adrian2x>",
+  "author": "Adrian Cruz <kangoonie@gmail.com>",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/adrian2x/es-next/issues"
+    "url": "https://github.com/adrian2x/atomic-fns/issues"
   },
-  "homepage": "https://github.com/adrian2x/es-next#readme"
+  "homepage": "https://github.com/adrian2x/atomic-fns#readme"
 }

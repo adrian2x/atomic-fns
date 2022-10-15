@@ -11,7 +11,7 @@ export const False = () => false
 /**
  * A custom error class that inherits from the Error object.
  *
- * @export
+ *
  * @class CustomError
  * @extends {Error}
  */
@@ -73,7 +73,7 @@ export class ZeroDivisionError extends CustomError {}
  * Returns the true type of any value with correct detection for null, Array,
  * Object, Promise, Symbol, and NaN.
  *
- * @export
+ *
  * @param {*} value
  * @return
  */
@@ -144,11 +144,8 @@ export function type(value) {
   return result
 }
 
-/** Same as calling toString() */
-export const str = (x): string => {
-  if (isNull(x)) return ''
-  return x.toString?.() ?? String(x)
-}
+/** Same as `x.toString()`. Returns `''` when x is null or undefined */
+export const str = (x) => (x != null ? x.toString() : '')
 
 /** Check if value is a boolean type */
 export const isBool = (x) => type(x) === 'boolean'
@@ -187,11 +184,11 @@ export const isNaN = (x) => Number.isNaN(x)
 export const isPromise = (x) => type(x) === 'promise'
 
 /** Check if value is an async function type */
-export const isAsync = (x) => x?.constructor.name === 'AsyncFunction'
+export const isAsync = (x) => get(x, 'constructor.name') === 'AsyncFunction'
 
 /** Check if value is a generator function type */
 export const isGenerator = (x) => {
-  return x?.constructor.constructor?.name === 'GeneratorFunction'
+  return get(x, 'constructor.constructor.name') === 'GeneratorFunction'
 }
 
 /** Check if value is null or undefined */
@@ -201,10 +198,11 @@ export const isNull = (x) => x == null
 export const notNull = (x) => x != null
 
 export function len(x) {
-  if (isNumber(x?.length)) {
+  if (x == null) return
+  if (x.length !== undefined) {
     return x.length
   }
-  if (isFunc(x?.size)) {
+  if (isFunc(x.size)) {
     return x.size()
   }
   if (isObject(x)) {
@@ -229,7 +227,7 @@ export const uniqueId = (pre: string = '') =>
 /**
  * Checks if `obj.key` is a function, and calls it with any `args`.
  *
- * @export
+ *
  * @param {*} obj
  * @param {PropertyKey} key
  * @param {...any[]} args
@@ -256,7 +254,7 @@ export const values = (x) => Object.values(x)
 /**
  * Round `x` to the number of digits after the decimal point. If `digits` is
  * omitted, it returns the nearest integer to x.
- * @export
+ *
  * @param {number} x
  * @param {number} [digits=0]
  */
@@ -272,7 +270,7 @@ export const ceil = (x: number) => Math.ceil(x)
 /**
  * Yields elements like [index, item] from an iterable.
  *
- * @export
+ *
  * @template T
  * @param {Iterable<T>} iterable
  */
@@ -288,16 +286,14 @@ export const has = (obj, attr: PropertyKey) => obj && attr in obj
 /**
  * Check if the attribute is present in the object, or return optional default.
  *
- * @export
+ *
  * @param {*} obj
  * @param {PropertyKey} key
  * @param {*} [value=undefined]
  * @return The property value or default value
  */
 export function get(obj: any, key: PropertyKey | PropertyKey[], value: any = undefined) {
-  if (obj == null) {
-    return value ?? obj
-  }
+  if (obj == null) return value
 
   let paths = Array.isArray(key) ? key : [key]
   if (typeof key === 'string') {
@@ -309,7 +305,7 @@ export function get(obj: any, key: PropertyKey | PropertyKey[], value: any = und
     for (const k of paths) {
       result = result[k]
     }
-    return result ?? value
+    return result === undefined ? value : result
   } catch (error) {
     return value
   }
@@ -347,7 +343,7 @@ export function hash(obj) {
 
 /**
  * A hash value generator for strings
- * @export
+ *
  * @param {string} str
  * @return {number}
  * @see http://isthe.com/chongo/tech/comp/fnv/

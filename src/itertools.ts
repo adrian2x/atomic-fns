@@ -43,7 +43,7 @@ export function sorted(args: any[], key: Function, reverse: boolean): any[]
  *
  * If `args` is an Object, returns the sorted keys.
  *
- * @export
+ *
  * @param {(Array | Object)} args
  * @param {(boolean | Function)} [key]
  * @param {(boolean | Comp)} [reverse]
@@ -62,7 +62,7 @@ export function sorted(args, key?: boolean | Function, reverse?: boolean | Comp,
     key = id
   }
   const copy = Array.from(args)
-  const _compare = compKey(compareFn ?? comp, key ?? id)
+  const _compare = compKey(compareFn || comp, key || id)
   copy.sort(_compare)
   if (reverse) copy.reverse()
   return copy
@@ -78,19 +78,18 @@ export function sort(args: any[], reverse: boolean, compareFn: Comp): any[]
  *   - sort([...], true) => reverse order
  *   - sort([...], (x, y) => number) => using custom compare
  *   - sort([...], true, (x, y) => number) => reverse and using custom compare
- * @export
+ *
  * @param {any[]} args
  * @param {(boolean | Comp)} [reverse]
  * @param {Comp} [compareFn]
  * @return
  */
 export function sort(args: any[], reverse?: boolean | Comp, compareFn?: Comp) {
-  compareFn ??= comp
   if (typeof reverse === 'function') {
     compareFn = reverse
     reverse = false
   }
-  args.sort(compareFn)
+  args.sort(compareFn || comp)
   if (reverse === true) args.reverse()
   return args
 }

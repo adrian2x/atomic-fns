@@ -5,14 +5,16 @@
 Stop shipping code built for browsers from 2015. Really though, look at the [issues](https://github.com/lodash/lodash/issues/2930#issuecomment-370295020).
 
 * **Modular**: Pick what you need. Works with all bundlers and also supports tree-shaking.
-* **Native**: Uses newer data structures and control flow techniques.
-* **Lazy**: Leverages generators, iterators and functional composition.
+* **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
+* **Lazy**: Leverage generators, iterators, and functional composition.
 * **Fluent**: Pure functions and abstract classes. Include only what you need.
-* **TypeScript & JSDoc**: Supports both TypeScript and latest JS spec. JSDoc for best in class experience.
+* **TypeScript & docs**: Includes both type declaration files and js with JSDocs for best in class experience.
+
+## Get Started
 
 This library is available as an npm package. To install the package just run:
 
-```
+```bash
 npm install atomic-fns
 ```
 
@@ -21,24 +23,24 @@ npm install atomic-fns
 import { id, reversed, sorted, times, uniqueId } from 'atomic-fns'
 
 reverse([1, 2, 3, 4])
-// => [4, 3, 2, 1]
+// -> [4, 3, 2, 1]
 
 sorted([4, 3, 2, 1])
-// => [1, 2, 3, 4]
+// -> [1, 2, 3, 4]
 
 times(5, id)
-// => [0, 1, 2, 3, 4]
+// -> [0, 1, 2, 3, 4]
 
 times(5, id)
-// => [0, 1, 2, 3, 4]
+// -> [0, 1, 2, 3, 4]
 
 uniqueId('user_')
-// => 'user_101225005'
+// -> 'user_101225005'
 ```
 
 ## Docs
 
-🛠 Under construction.
+🚢 Coming soon at [atomic-fns.dev](https://atomic-fns.dev).
 
 💡 See the `src` directory for comments.
 
