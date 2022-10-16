@@ -1,6 +1,6 @@
 import assert from 'assert'
-import { list } from '../src/globals.js'
-import { reversed, sort, sorted, times, zip } from '../src/itertools.js'
+import { list } from '../src/globals/index.js'
+import { reversed, sort, sorted, times, zip } from '../src/itertools/index.js'
 
 function cb() {}
 

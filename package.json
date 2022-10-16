@@ -30,10 +30,11 @@
     "prepublishOnly": "npm test",
     "test": "NODE_OPTIONS=--loader=ts-node/esm jasmine --config=jasmine.json",
     "tsc": "tsc -p ./tsconfig.xo.json --declaration",
+    "tsc:w": "tsc -p ./tsconfig.xo.json --declaration --watch",
     "lint": "eslint src/**",
     "lint:fix": "eslint src/** --fix",
-    "build": "npm run tsc && npm run lint:fix",
-    "docs": "typedoc --mode modules"
+    "build": "npm run tsc && npm run docs",
+    "docs": "typedoc"
   },
   "lint-staged": {
     "*.ts": "eslint"

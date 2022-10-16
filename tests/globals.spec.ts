@@ -37,7 +37,7 @@ import {
   list,
   next,
   get
-} from '../src/globals.js'
+} from '../src/globals/index.js'
 
 function cb() {}
 
@@ -71,7 +71,22 @@ describe('globals', () => {
     assert(type({}) === 'object')
     assert(type(type) === 'function')
     assert(type(Symbol()) === 'symbol')
-    assert(type(new Promise(cb)) === 'promise')
+    assert(type(new Map()) === 'Map')
+    assert(type(new WeakMap()) === 'WeakMap')
+    assert(type(new Set()) === 'Set')
+    assert(type(new WeakSet()) === 'WeakSet')
+    assert(type(new Promise(cb)) === 'Promise')
+    assert(type(new Int8Array()) === 'Int8Array')
+    assert(type(new Uint8Array()) === 'Uint8Array')
+    assert(type(new Uint8ClampedArray()) === 'Uint8ClampedArray')
+    assert(type(new Int16Array()) === 'Int16Array')
+    assert(type(new Uint16Array()) === 'Uint16Array')
+    assert(type(new Int32Array()) === 'Int32Array')
+    assert(type(new Uint32Array()) === 'Uint32Array')
+    assert(type(new Float32Array()) === 'Float32Array')
+    assert(type(new Float64Array()) === 'Float64Array')
+    assert(type(new ArrayBuffer(8)) === 'ArrayBuffer')
+    assert(type(new DataView(new ArrayBuffer(8))) === 'DataView')
   })
 
   it('isBool', () => {
@@ -251,15 +266,15 @@ describe('globals', () => {
 
   it('get', () => {
     const arr = [1, 2, 3]
-    assert(get(arr, '2') === 3)
-    assert(get(arr, '3', false) === false)
-    assert(get(arr, '3', false) === false)
+    assert(get('2', arr) === 3)
+    assert(get('3', arr, false) === false)
+    assert(get('3', arr, false) === false)
     let obj = { foo: { bar: true } }
     let h = hash(obj)
-    assert(get(obj, 'foo.bar'))
-    assert(get(obj, ['foo', 'bar']))
-    assert(get(obj, HASH_KEY) === h)
-    assert(get(obj, [HASH_KEY]) === h)
+    assert(get('foo.bar', obj))
+    assert(get(['foo', 'bar'], obj))
+    assert(get(HASH_KEY, obj) === h)
+    assert(get([HASH_KEY], obj) === h)
   })
 
   it('isEmpty', () => {
@@ -269,6 +284,7 @@ describe('globals', () => {
     assert(isEmpty(''))
     assert(isEmpty({}))
     assert(isEmpty(0))
+    assert(isEmpty(false))
     assert(!isEmpty(1))
   })
 })

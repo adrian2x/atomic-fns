@@ -1,13 +1,13 @@
 import assert from 'assert'
 import {
+  compact,
+  contains,
   filter,
   find,
   forEach,
   findRight,
   flatten,
   map,
-  contains,
-  flattenObj,
   clone,
   pick,
   omit,
@@ -16,10 +16,17 @@ import {
   merge,
   difference,
   intersection,
-  union
-} from '../src/collections.js'
+  union,
+  groupBy
+} from '../src/collections/index.js'
+import { floor } from '../src/globals/index.js'
 
 describe('collections', () => {
+  it('compact', () => {
+    let filtered = compact([0, 1, false, 2, '', 3])
+    assert.deepEqual(filtered, [1, 2, 3])
+  })
+
   it('contains', () => {
     assert(contains([4, 7, 1, 9], 1))
     assert(!contains([4, 7, 1, 9], NaN))
@@ -158,17 +165,17 @@ describe('collections', () => {
     assert.deepEqual(objs, Object.entries(target))
   })
 
-  it('flatten', () => {
+  it('flatten Array', () => {
     let data = flatten([1, 2, [3, 4], 5])
     assert.deepEqual(data, [1, 2, 3, 4, 5])
   })
 
-  it('flattenDeep', () => {
+  it('flatten Array deep', () => {
     let data = flatten([1, 2, [3, [4]], [5]], true)
     assert.deepEqual(data, [1, 2, 3, 4, 5])
   })
 
-  it('flattenObj', () => {
+  it('flatten Object', () => {
     const data = {
       dates: {
         expiry_date: '30 sep 2018',
@@ -185,7 +192,7 @@ describe('collections', () => {
         value: 1500
       }
     }
-    assert.deepEqual(flattenObj(data), {
+    assert.deepEqual(flatten(data), {
       'dates.expiry_date': '30 sep 2018',
       'dates.available': '30 sep 2017',
       'dates.min_contract_period[0].id': 1,
@@ -195,10 +202,8 @@ describe('collections', () => {
     })
   })
 
-  it('map', () => {
-    let target = { user: 'fred', age: 40, active: false }
-    let getEntries = (value, key) => [key, value]
-    assert.deepEqual(map(target, getEntries), Object.entries(target))
+  it('groupBy', () => {
+    assert.deepEqual(groupBy([6.1, 4.2, 6.3], floor), { '4': [4.2], '6': [6.1, 6.3] })
   })
 
   it('merge', () => {
