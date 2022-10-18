@@ -18,6 +18,7 @@ import {
   isObject,
   isString,
   Iteratee,
+  keys,
   NotImplementedError,
   set
 } from '../globals/index.js'
@@ -245,17 +246,27 @@ export class FrozenSet<T = any> extends Set<T> {
  * @param arr The array to compact
  * @returns A new array with the filtered values.
  * @example
-```
+```js
 compact([0, 1, false, 2, '', 3])
 // => [1, 2, 3]
 ```
  */
-export const compact = (arr: any[]) => arr.filter((x) => !isEmpty(x))
+export const compact = (arr: any[] | Object) => {
+  if (arr == null) return
+  if (Array.isArray(arr)) return arr.filter((x) => !isEmpty(x))
+  const result = {}
+  for (const key of Object.keys(arr)) {
+    if (!isEmpty(arr[key])) {
+      result[key] = arr[key]
+    }
+  }
+  return result
+}
 
 /**
  * Creates a function that can be used to create named tuple-like objects.
  * @example
-```
+```js
  * let Point = namedtuple('x', 'y', 'z')
  * let userObj = User(0, 0, 0)
  * // => {x: 0, y: 0, z: 0}
@@ -273,7 +284,7 @@ export function namedtuple(...fields: string[]) {
  * The predicate is invoked with three arguments: `(value, index|key, arr)`.
  *
  * @example
-```
+```js
  * let users = [
   { 'user': 'barney', 'age': 36, 'active': true },
   { 'user': 'fred',   'age': 40, 'active': false }
@@ -305,7 +316,7 @@ export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
 /**
  * Iterates over elements of collection, returning the first element where predicate returns truthy value. The predicate is invoked with three arguments: `(value, index|key, collection)`.
  * @example
-```
+```js
  let users = [
   { 'user': 'barney',  'age': 36, 'active': true },
   { 'user': 'fred',    'age': 40, 'active': false },
@@ -338,7 +349,7 @@ export function find(arr, fn: Iteratee | PropertyKey | Object) {
 /**
  * This method is like {@link find} except that it iterates from right to left.
  * @example
-```
+```js
 findRight([1, 2, 3, 4], (n) => n % 2 === 1)
 //  => 3
 ```
@@ -365,7 +376,7 @@ export function findRight(arr, fn: Iteratee | PropertyKey | Object) {
 /**
  * Creates a function that performs a partial deep comparison between a given object and `shape`, returning `true` if the given object has equivalent property values, else `false`.
  * @example
-```
+```js
 let objects = [
   { a: 1, b: 2, c: 3 },
   { a: 4, b: 5, c: 6 }
@@ -380,7 +391,7 @@ filter(objects, matches({ a: 4, c: 6 }))
 export const matches = (shape) => (obj) => {
   if (!shape || !obj) return false
   for (const key in shape) {
-    if (!eq(obj[key], shape[key])) return false
+    if (obj[key] !== shape[key]) return false
   }
   return true
 }
@@ -388,7 +399,7 @@ export const matches = (shape) => (obj) => {
 /**
  * Iterates over elements of collection and invokes `iteratee` for each element. The iteratee is invoked with three arguments: `(value, index|key, collection)`. Iteratee functions may exit iteration early by explicitly returning `false`.
  * @example
-```
+```js
 forEach([1, 2], (value) => {
   console.log(value)
 })
@@ -407,20 +418,9 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
  * @see {@link map}
  */
 export function forEach(collection: any[] | Object, fn: Iteratee) {
-  if (Array.isArray(collection)) {
-    for (let i = 0; i < collection.length; i++) {
-      const value = collection[i]
-      const res = fn(value, i, collection)
-      if (res === false) return collection
-    }
-  } else if (isObject(collection)) {
-    const keys = Object.keys(collection)
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i]
-      const value = collection[key]
-      const res = fn(value, key, collection)
-      if (res === false) return collection
-    }
+  for (const key of keys(collection)) {
+    const res = fn(collection[key], key, collection)
+    if (res === false) return collection
   }
 }
 
@@ -428,7 +428,7 @@ export function forEach(collection: any[] | Object, fn: Iteratee) {
  * This method is like {@link forEach} except that it iterates over the collection from right to left.
 
  * @example
-```
+```js
 forEachRight([1, 2], (value) => {
   console.log(value)
 })
@@ -463,7 +463,7 @@ export function forEachRight(collection: any[] | Object, fn: Iteratee) {
 /**
  * Flattens an array or object. Arrays will be flattened recursively up to `depth` times. Objects will be flattened recursively.
  * @example
-```
+```js
 flatten([1, [2, [3, [4]], 5]])
 // => [1, 2, [3, [4]], 5]
 
@@ -515,35 +515,36 @@ function flattenArray(arr: any[], depth: boolean | number = 1, result: any[] = [
   return result
 }
 
-function flattenObj(o: any, prefix = '', result = {}, keepNull = false) {
-  if (isString(o) || isNumber(o) || isBool(o) || (keepNull && isNull(o))) {
-    result[prefix] = o
+function flattenObj(obj, prefix = '', result = {}, keepNull = false) {
+  if (isString(obj) || isNumber(obj) || isBool(obj) || (keepNull && isNull(obj))) {
+    result[prefix] = obj
     return result
   }
 
-  if (isArray(o) || isObject(o)) {
-    for (const i in o) {
+  if (isArray(obj) || isObject(obj)) {
+    for (const i of Object.keys(obj)) {
       let pref = prefix
-      if (isArray(o)) {
-        pref = pref + `[${i}]`
+      if (isArray(obj)) {
+        pref = `${pref}[${i}]`
       } else {
-        if (isEmpty(prefix)) {
-          pref = i
+        if (prefix) {
+          pref = `${prefix}.${i}`
         } else {
-          pref = prefix + '.' + i
+          pref = i
         }
       }
-      flattenObj(o[i], pref, result, keepNull)
+      flattenObj(obj[i], pref, result, keepNull)
     }
     return result
   }
+
   return result
 }
 
 /**
  * Creates an array of values by running each element in collection thru iteratee. The iteratee is invoked with three arguments: `(value, index|key, collection)`.
  * @example
-```
+```js
 function square(n) {
   return n * n
 }
@@ -589,7 +590,7 @@ export function map(arr, fn: Iteratee | PropertyKey) {
  * @param {Iteratee|PropertyKey[]} paths The properties to pick. If `paths` is a function, it will be invoked per property with two values `(value, key)`.
  * @returns A new object with the properties.
  * @example
-```
+```js
 let object = { a: 1, b: '2', c: 3 }
 
 pick(object, ['a', 'c'])
@@ -607,9 +608,10 @@ export function pick(obj: Object, paths: Iteratee | PropertyKey[]) {
   const result = {}
 
   if (typeof paths === 'function') {
-    for (const key in obj) {
-      const value = obj[key]
-      if (paths(value, key)) result[key] = value
+    for (const key of Object.keys(obj)) {
+      if (paths(obj[key], key)) {
+        result[key] = obj[key]
+      }
     }
     return result
   }
@@ -623,7 +625,7 @@ export function pick(obj: Object, paths: Iteratee | PropertyKey[]) {
 /**
  * The opposite of {@link pick} - this method creates an object composed of the own and inherited enumerable property paths of `object` that are not omitted.
  * @example
-```
+```js
 let object = { 'a': 1, 'b': '2', 'c': 3 }
 
 omit(object, ['a', 'c'])
@@ -643,7 +645,7 @@ export function omit(obj: Object, paths: Iteratee | PropertyKey[]) {
   const result = {}
 
   if (typeof paths === 'function') {
-    for (const key in obj) {
+    for (const key of Object.keys(obj)) {
       if (!paths(obj[key], key)) {
         result[key] = obj[key]
       }
@@ -651,43 +653,11 @@ export function omit(obj: Object, paths: Iteratee | PropertyKey[]) {
     return result
   }
 
-  const pathset = new Set(paths)
-  for (const key in obj) {
-    if (!pathset.has(key)) {
-      result[key] = obj[key]
-    }
+  Object.assign(result, obj)
+  for (const key of paths) {
+    delete result[key]
   }
   return result
-}
-
-/**
- * Checks if the `value` is in `collection`.
- * @param {string|Array|Object} collection The collection to inspect.
- * @param value The value to search for.
- * @returns {boolean} Returns `true` if value is found, else `false`.
- * @example
-```
-contains([1, 2, 3], 1)
-// => true
-
-contains([1, 2, 3], 1, 2)
-// => false
-
-contains({ 'a': 1, 'b': 2 }, 1)
-// => true
-
-contains('abcd', 'bc')
-// => true
-```
- *
- * @see {@link find}
- * @see {@link indexOf}
- */
-export function contains(collection: string | any[] | Object, value) {
-  if (!collection) return false
-  if (typeof collection === 'string') return collection.includes(value)
-  if (Array.isArray(collection)) return collection.includes(value)
-  return Object.values(collection).includes(value)
 }
 
 /**
@@ -697,7 +667,7 @@ export function contains(collection: string | any[] | Object, value) {
  * @param {number} [start=0] The index to search from.
  * @returns {number} The index of the found value, else -1
  * @example
-```
+```js
 let users = [
   { 'user': 'barney',  'active': false },
   { 'user': 'fred',    'active': false },
@@ -742,11 +712,11 @@ export function index(obj, fn: Iteratee | string | Object, start = 0) {
 /**
  * This method is like {@link index} except that it searches for a given value directly, instead of using a predicate function.
  * @param {Array} obj The array to inspect.
- * @param {*} x The value to find
+ * @param {*} value The value to find
  * @param {number} [start=0] The index to search from.
  * @returns {number} The index of the found value, else -1
  * @example
-```
+```js
 indexOf([1, 2, 1, 2], 2)
 // => 1
 
@@ -757,9 +727,9 @@ indexOf([1, 2, 1, 2], 2, 2)
  * @see {@link index}
  * @see {@link lastIndexOf}
  */
-export function indexOf(obj, x, start = 0) {
+export function indexOf(obj, value, start = 0) {
   if (obj == null) return
-  const op = call(obj, 'indexOf', x, start)
+  const op = call(obj, 'indexOf', value, start)
   if (op != null) return op
   const length = obj.length
   if (length && start < 0) {
@@ -767,7 +737,7 @@ export function indexOf(obj, x, start = 0) {
   }
   if (!length || start >= length) return -1
   for (; start < length; start++) {
-    if (eq(x, obj[start])) return start
+    if (eq(value, obj[start])) return start
   }
   return -1
 }
@@ -779,7 +749,7 @@ export function indexOf(obj, x, start = 0) {
  * @param {number} [start] The index to search from.
  * @returns {number} The index of the found value, else -1
  * @example
-```
+```js
 let users = [
   { 'user': 'barney',  'active': true },
   { 'user': 'fred',    'active': false },
@@ -820,11 +790,11 @@ export function lastIndex(obj: any[], fn: string | Iteratee | Object, start?) {
 /**
  * This method is like {@link indexOf} except that it iterates the collection from right to left.
  * @param {Array} obj The array to inspect.
- * @param {*} x The value to find
+ * @param {*} value The value to find
  * @param {number} [start] The index to search from.
  * @returns {number} The index of the found value, else -1
  * @example
-```
+```js
 lastIndexOf([1, 2, 1, 2], 2)
 // => 3
 
@@ -835,15 +805,15 @@ lastIndexOf([1, 2, 1, 2], 2, 2)
  * @see {@link lastIndex}
  * @see {@link indexOf}
  */
-export function lastIndexOf(obj: any[], x, start?) {
+export function lastIndexOf(obj: any[], value, start?) {
   if (obj == null) return
-  const op = call(obj, 'lastIndexOf', x, start)
+  const op = call(obj, 'lastIndexOf', value, start)
   if (op != null) return op
   const length = obj.length
   if (start == null) start = length - 1
   if (!length || start < 0) return -1
   for (; start >= 0; start--) {
-    if (eq(x, obj[start])) return start
+    if (eq(value, obj[start])) return start
   }
   return -1
 }
@@ -910,7 +880,7 @@ export function cloneTypedArray(typedArray, isDeep) {
  * @param fn The iteratee invoked per element.
  * @returns Returns the new duplicate free array.
  * @example
-```
+```js
 uniq([2, 1, 2])
 // => [2, 1]
 
@@ -922,7 +892,7 @@ uniq([2.1, 1.2, 2.3], Math.floor)
  */
 export function uniq<T = any>(arr: T[], fn: PropertyKey | Iteratee = id) {
   const keys = new Set<T>()
-  let mapper = typeof fn === 'function' ? fn : (x) => x?.[fn]
+  const mapper = typeof fn === 'function' ? fn : (x) => x?.[fn]
   for (const x of arr) {
     keys.add(mapper(x))
   }
@@ -935,7 +905,7 @@ export function uniq<T = any>(arr: T[], fn: PropertyKey | Iteratee = id) {
  * @param fn The iteratee invoked per element.
  * @returns Returns the new duplicate free array
  * @example
-```
+```js
 uniq([2, 1, 2])
 // => [1, 2]
 ```
@@ -990,7 +960,7 @@ function baseMergeDeep(obj, source, key, stack) {
 
 function baseMerge(obj, source, stack?) {
   if (obj === source) return obj
-  for (const key in source) {
+  for (const key of Object.keys(source)) {
     const srcValue = source[key]
     const objValue = obj[key]
     if (typeof srcValue === 'object' && srcValue !== null) {
@@ -1014,7 +984,7 @@ function baseMerge(obj, source, stack?) {
  * @returns Returns `object`.
  *
  * @example
-```
+```js
 let object = {
   'a': [{ 'b': 2 }, { 'd': 4 }]
 }
@@ -1038,14 +1008,14 @@ export function merge(object, ...sources): Object {
  * Returns a generator of array values not included in the other given arrays using a `Set` for equality comparisons. The order and references of result values are not guaranteed.
  * @param args The initial arrays
  * @example
-```
+```js
 [...difference([2, 1], [2, 3])]
 // => [1]
 ```
  * @see {@link union}
  * @see {@link intersection}
  */
-export function* difference(...args: Iterable<any>[]) {
+export function* difference(...args: Array<Iterable<any>>) {
   const sets = args.map((arr) => new Set(arr))
   const setA = sets[0]
 
@@ -1064,14 +1034,14 @@ export function* difference(...args: Iterable<any>[]) {
  * Creates a generator of unique values that are included in all given arrays.
  * @param args The arrays to inspect
  * @example
-```
+```js
 [...intersection([2, 1], [2, 3])]
 // => [2]
 ```
 * @see {@link difference}
  * @see {@link union}
  */
-export function* intersection(...args: Iterable<any>[]) {
+export function* intersection(...args: Array<Iterable<any>>) {
   const sets = args.map((arr) => new Set(arr))
   // build a counter map to find items in all
   const results = new Map()
@@ -1093,14 +1063,14 @@ export function* intersection(...args: Iterable<any>[]) {
  * Creates a generator of unique values from all given arrays using `Set` for equality comparisons.
  * @param args The arrays to perform union on.
  * @example
-```
+```js
 [...union([2], [1, 2])]
 // => [2, 1]
 ```
  * @see {@link difference}
  * @see {@link intersection}
  */
-export function* union(...args: Iterable<any>[]) {
+export function* union(...args: Array<Iterable<any>>) {
   const results = new Set()
   for (const arr of args) {
     for (const item of arr) {
@@ -1120,7 +1090,7 @@ export function* union(...args: Iterable<any>[]) {
  * @returns Returns the composed aggregate object.
  *
  * @example
-```
+```js
 groupBy([6.1, 4.2, 6.3], Math.floor)
 // => { '4': [4.2], '6': [6.1, 6.3] }
 
@@ -1131,21 +1101,12 @@ groupBy(['one', 'two', 'three'], 'length')
  */
 export function groupBy(arr: any[] | Object, func: Iteratee | PropertyKey = id): Object {
   const results = {}
-  let useKey = typeof func === 'function' ? func : partial(get, func)
-  if (Array.isArray(arr)) {
-    for (let i = 0; i < arr.length; i++) {
-      const groupKey = useKey(arr[i])
-      const values = results[groupKey] || []
-      values.push(arr[i])
-      results[groupKey] = values
-    }
-  } else {
-    for (const k in arr) {
-      const groupKey = useKey(arr[k])
-      const values = results[groupKey] || []
-      values.push(arr[k])
-      results[groupKey] = values
-    }
-  }
+  const useKey = typeof func === 'function' ? func : partial(get, func)
+  forEach(arr, (value) => {
+    const groupKey = useKey(value)
+    const values = results[groupKey] || []
+    values.push(value)
+    results[groupKey] = values
+  })
   return results
 }

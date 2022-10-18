@@ -7,14 +7,8 @@ export declare const id: (x: any) => any;
 export declare const bool: (x: any) => boolean;
 export declare const not: (x: any) => boolean;
 export declare const isinstance: (x: any, y: any) => boolean;
-export declare const all: (arr: any[], fn?: (x: any) => boolean) => boolean;
-export declare const any: (arr: any[], fn?: (x: any) => boolean) => boolean;
-export declare const and: (arr: any[], fn?: (x: any) => boolean) => boolean;
-export declare const or: (arr: any[], fn?: (x: any) => boolean) => boolean;
 export declare function comp(x: any, y: any): any;
 export declare function eq(x: any, y: any): any;
-export declare function shallowEqual(x: any, y: any): any;
-export declare function deepEqual(x: any, y: any): boolean;
 export declare function lt(x: any, y: any): any;
 export declare function le(x: any, y: any): any;
 export declare function gt(x: any, y: any): any;
@@ -33,3 +27,5 @@ export declare function mod(x: any, y: any): any;
  * @return `x` raised to the power `y`
  */
 export declare function pow(x: any, y: any): any;
+export declare function shallowEqual(obj: any, other: any): boolean;
+export declare function deepEqual(obj: any, other: any, checker?: typeof eq): boolean;

@@ -153,6 +153,12 @@ export function type(value) {
 export const str = (obj) => (obj != null ? obj.toString() : '');
 /** Check if value is a boolean type. */
 export const isBool = (x) => type(x) === 'boolean';
+/** Check if value is an iterable type. */
+export const isIterable = (x) => {
+    if (x == null)
+        return false;
+    return typeof x[Symbol.iterator] === 'function';
+};
 /** Check if value is an object type. */
 export const isObject = (x) => typeof x === 'object' && type(x) === 'object';
 /** Check if value is a string type. */
@@ -278,18 +284,6 @@ export const floor = (x) => Math.floor(x);
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
  */
 export const ceil = (x) => Math.ceil(x);
-/**
- * Yields elements like `[index, item]` from an iterable.
- * @template T
- * @param {Iterable<T>} iterable
- * @returns A generator with tuples like `[index, item]`.
- */
-export function* enumerate(iterable) {
-    let i = 0;
-    for (const item of iterable) {
-        yield [i++, item];
-    }
-}
 /**
  * Check if a given property is present in a given object.
  * @param obj The object to check.

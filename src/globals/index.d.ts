@@ -25,7 +25,8 @@ export declare type Function = (...args: any[]) => any;
  * @see {@link sortedUniq}
  * @see {@link groupBy}
  */
-export declare type Iteratee = (value: any, key?: any, arr?: any) => any;
+export declare type Iteratee<T = any> = (value: T, key?: any, arr?: any) => any;
+export declare type Predicate<T = any> = (value: T) => any;
 /** A function that always returns `true`. */
 export declare const True: () => boolean;
 /** A function that always returns `false`. */
@@ -96,6 +97,8 @@ export declare function type(value: any): any;
 export declare const str: (obj: any) => any;
 /** Check if value is a boolean type. */
 export declare const isBool: (x: any) => boolean;
+/** Check if value is an iterable type. */
+export declare const isIterable: (x: any) => boolean;
 /** Check if value is an object type. */
 export declare const isObject: (x: any) => boolean;
 /** Check if value is a string type. */
@@ -161,7 +164,7 @@ export declare const ord: (x: string) => number;
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
  */
-export declare const keys: (object: any) => string[];
+export declare const keys: (object: Object) => string[];
 /**
  * Returns an array of the own enumerable property values of `object`.
  * @param object The given object.
@@ -195,13 +198,6 @@ export declare const floor: (x: number) => number;
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
  */
 export declare const ceil: (x: number) => number;
-/**
- * Yields elements like `[index, item]` from an iterable.
- * @template T
- * @param {Iterable<T>} iterable
- * @returns A generator with tuples like `[index, item]`.
- */
-export declare function enumerate<T = unknown>(iterable: Iterable<T>): Generator<(number | T)[], void, unknown>;
 /**
  * Check if a given property is present in a given object.
  * @param obj The object to check.

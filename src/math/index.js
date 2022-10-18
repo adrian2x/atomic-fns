@@ -3,8 +3,12 @@
  *
  * @module Math
  */
-import { call, isFunc } from '../globals/index.js';
-import { comp } from '../operators/index.js';
+import { call } from '../globals/index.js';
+/**
+ * Returns the absolute value of a number. The argument may be a number or an object implementing the `abs()`.
+ * @param x The value.
+ * @returns The absolute value.
+ */
 export function abs(x) {
     const op = call(x, 'abs');
     if (op != null)
@@ -12,11 +16,11 @@ export function abs(x) {
     return Math.abs(x);
 }
 /**
- * Returns a tuple like (x / y, x % y)
+ * Returns a tuple like `[x / y, x % y]`.
  *
- * @param {number} x
- * @param {number} y
- * @return {number[]}
+ * @param x
+ * @param y
+ * @returns
  */
 export function divmod(x, y) {
     return [Math.floor(x / y), x % y];
@@ -32,41 +36,4 @@ export function logBase(x, y) {
         return Math.log(y) / Math.log(x);
     }
     return Number.NaN;
-}
-/** First argument can be a comparer func */
-export function min(args) {
-    // Uses `le` by default
-    let cmp = comp;
-    if (isFunc(args[0])) {
-        cmp = args.shift();
-    }
-    let res = args[0];
-    for (const x of args) {
-        if (cmp(x, res) === -1) {
-            res = x;
-        }
-    }
-    return res;
-}
-/** First argument can be a comparer func */
-export function max(args) {
-    // Uses ge by default
-    let cmp = comp;
-    if (isFunc(args[0])) {
-        cmp = args.shift();
-    }
-    let res = args[0];
-    for (const x of args) {
-        if (cmp(x, res) === 1) {
-            res = x;
-        }
-    }
-    return res;
-}
-export function sum(args) {
-    let total = 0;
-    for (const x of args) {
-        total += x;
-    }
-    return total;
 }

@@ -28,7 +28,9 @@ export type Function = (...args) => any
  * @see {@link sortedUniq}
  * @see {@link groupBy}
  */
-export type Iteratee = (value, key?, arr?) => any
+export type Iteratee<T = any> = (value: T, key?, arr?) => any
+
+export type Predicate<T = any> = (value: T) => any
 
 /** A function that always returns `true`. */
 export const True = () => true
@@ -292,7 +294,7 @@ export const ord = (x: string) => x.charCodeAt(0)
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
  */
-export const keys = (object) => Object.keys(object)
+export const keys = (object: Object) => Object.keys(object)
 
 /**
  * Returns an array of the own enumerable property values of `object`.
@@ -333,19 +335,6 @@ export const floor = (x: number) => Math.floor(x)
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
  */
 export const ceil = (x: number) => Math.ceil(x)
-
-/**
- * Yields elements like `[index, item]` from an iterable.
- * @template T
- * @param {Iterable<T>} iterable
- * @returns A generator with tuples like `[index, item]`.
- */
-export function* enumerate<T = unknown>(iterable: Iterable<T>) {
-  let i = 0
-  for (const item of iterable) {
-    yield [i++, item]
-  }
-}
 
 /**
  * Check if a given property is present in a given object.

@@ -168,16 +168,16 @@ export declare class FrozenSet<T = any> extends Set<T> {
  * @param arr The array to compact
  * @returns A new array with the filtered values.
  * @example
-```
+```js
 compact([0, 1, false, 2, '', 3])
 // => [1, 2, 3]
 ```
  */
-export declare const compact: (arr: any[]) => any[];
+export declare const compact: (arr: any[] | Object) => {} | undefined;
 /**
  * Creates a function that can be used to create named tuple-like objects.
  * @example
-```
+```js
  * let Point = namedtuple('x', 'y', 'z')
  * let userObj = User(0, 0, 0)
  * // => {x: 0, y: 0, z: 0}
@@ -192,7 +192,7 @@ export declare function namedtuple(...fields: string[]): (...args: any[]) => {};
  * The predicate is invoked with three arguments: `(value, index|key, arr)`.
  *
  * @example
-```
+```js
  * let users = [
   { 'user': 'barney', 'age': 36, 'active': true },
   { 'user': 'fred',   'age': 40, 'active': false }
@@ -217,7 +217,7 @@ export declare function filter(arr: any, fn?: Iteratee | PropertyKey | Object): 
 /**
  * Iterates over elements of collection, returning the first element where predicate returns truthy value. The predicate is invoked with three arguments: `(value, index|key, collection)`.
  * @example
-```
+```js
  let users = [
   { 'user': 'barney',  'age': 36, 'active': true },
   { 'user': 'fred',    'age': 40, 'active': false },
@@ -244,7 +244,7 @@ export declare function find(arr: any, fn: Iteratee | PropertyKey | Object): any
 /**
  * This method is like {@link find} except that it iterates from right to left.
  * @example
-```
+```js
 findRight([1, 2, 3, 4], (n) => n % 2 === 1)
 //  => 3
 ```
@@ -257,7 +257,7 @@ export declare function findRight(arr: any, fn: Iteratee | PropertyKey | Object)
 /**
  * Creates a function that performs a partial deep comparison between a given object and `shape`, returning `true` if the given object has equivalent property values, else `false`.
  * @example
-```
+```js
 let objects = [
   { a: 1, b: 2, c: 3 },
   { a: 4, b: 5, c: 6 }
@@ -273,7 +273,7 @@ export declare const matches: (shape: any) => (obj: any) => boolean;
 /**
  * Iterates over elements of collection and invokes `iteratee` for each element. The iteratee is invoked with three arguments: `(value, index|key, collection)`. Iteratee functions may exit iteration early by explicitly returning `false`.
  * @example
-```
+```js
 forEach([1, 2], (value) => {
   console.log(value)
 })
@@ -296,7 +296,7 @@ export declare function forEach(collection: any[] | Object, fn: Iteratee): Objec
  * This method is like {@link forEach} except that it iterates over the collection from right to left.
 
  * @example
-```
+```js
 forEachRight([1, 2], (value) => {
   console.log(value)
 })
@@ -313,7 +313,7 @@ export declare function forEachRight(collection: any[] | Object, fn: Iteratee): 
 /**
  * Flattens an array or object. Arrays will be flattened recursively up to `depth` times. Objects will be flattened recursively.
  * @example
-```
+```js
 flatten([1, [2, [3, [4]], 5]])
 // => [1, 2, [3, [4]], 5]
 
@@ -351,7 +351,7 @@ export declare function flatten(arr: any[] | Object, depth?: boolean | number): 
 /**
  * Creates an array of values by running each element in collection thru iteratee. The iteratee is invoked with three arguments: `(value, index|key, collection)`.
  * @example
-```
+```js
 function square(n) {
   return n * n
 }
@@ -383,7 +383,7 @@ export declare function map(arr: any, fn: Iteratee | PropertyKey): any[] | undef
  * @param {Iteratee|PropertyKey[]} paths The properties to pick. If `paths` is a function, it will be invoked per property with two values `(value, key)`.
  * @returns A new object with the properties.
  * @example
-```
+```js
 let object = { a: 1, b: '2', c: 3 }
 
 pick(object, ['a', 'c'])
@@ -399,7 +399,7 @@ export declare function pick(obj: Object, paths: Iteratee | PropertyKey[]): {};
 /**
  * The opposite of {@link pick} - this method creates an object composed of the own and inherited enumerable property paths of `object` that are not omitted.
  * @example
-```
+```js
 let object = { 'a': 1, 'b': '2', 'c': 3 }
 
 omit(object, ['a', 'c'])
@@ -415,37 +415,13 @@ omit(object, (x) => isNumber(x))
  */
 export declare function omit(obj: Object, paths: Iteratee | PropertyKey[]): {};
 /**
- * Checks if the `value` is in `collection`.
- * @param {string|Array|Object} collection The collection to inspect.
- * @param value The value to search for.
- * @returns {boolean} Returns `true` if value is found, else `false`.
- * @example
-```
-contains([1, 2, 3], 1)
-// => true
-
-contains([1, 2, 3], 1, 2)
-// => false
-
-contains({ 'a': 1, 'b': 2 }, 1)
-// => true
-
-contains('abcd', 'bc')
-// => true
-```
- *
- * @see {@link find}
- * @see {@link indexOf}
- */
-export declare function contains(collection: string | any[] | Object, value: any): boolean;
-/**
  * This method is like {@link find} except that it returns the index of the first element `predicate` returns truthy for instead of the element itself.
  * @param {Array} obj The array to inspect.
  * @param {string|Object|Iteratee} fn The predicate function
  * @param {number} [start=0] The index to search from.
  * @returns {number} The index of the found value, else -1
  * @example
-```
+```js
 let users = [
   { 'user': 'barney',  'active': false },
   { 'user': 'fred',    'active': false },
@@ -471,11 +447,11 @@ export declare function index(obj: any, fn: Iteratee | string | Object, start?: 
 /**
  * This method is like {@link index} except that it searches for a given value directly, instead of using a predicate function.
  * @param {Array} obj The array to inspect.
- * @param {*} x The value to find
+ * @param {*} value The value to find
  * @param {number} [start=0] The index to search from.
  * @returns {number} The index of the found value, else -1
  * @example
-```
+```js
 indexOf([1, 2, 1, 2], 2)
 // => 1
 
@@ -486,7 +462,7 @@ indexOf([1, 2, 1, 2], 2, 2)
  * @see {@link index}
  * @see {@link lastIndexOf}
  */
-export declare function indexOf(obj: any, x: any, start?: number): any;
+export declare function indexOf(obj: any, value: any, start?: number): any;
 /**
  * This method is like {@link index} except that it iterates the collection from right to left.
  * @param {Array} obj The array to inspect.
@@ -494,7 +470,7 @@ export declare function indexOf(obj: any, x: any, start?: number): any;
  * @param {number} [start] The index to search from.
  * @returns {number} The index of the found value, else -1
  * @example
-```
+```js
 let users = [
   { 'user': 'barney',  'active': true },
   { 'user': 'fred',    'active': false },
@@ -519,11 +495,11 @@ export declare function lastIndex(obj: any[], fn: string | Iteratee | Object, st
 /**
  * This method is like {@link indexOf} except that it iterates the collection from right to left.
  * @param {Array} obj The array to inspect.
- * @param {*} x The value to find
+ * @param {*} value The value to find
  * @param {number} [start] The index to search from.
  * @returns {number} The index of the found value, else -1
  * @example
-```
+```js
 lastIndexOf([1, 2, 1, 2], 2)
 // => 3
 
@@ -534,7 +510,7 @@ lastIndexOf([1, 2, 1, 2], 2, 2)
  * @see {@link lastIndex}
  * @see {@link indexOf}
  */
-export declare function lastIndexOf(obj: any[], x: any, start?: any): any;
+export declare function lastIndexOf(obj: any[], value: any, start?: any): any;
 /**
  * Creates a shallow clone of `value`. If `deep` is `true` it will clone it recursively.
  * @param {*} value
@@ -566,7 +542,7 @@ export declare function cloneTypedArray(typedArray: any, isDeep: any): any;
  * @param fn The iteratee invoked per element.
  * @returns Returns the new duplicate free array.
  * @example
-```
+```js
 uniq([2, 1, 2])
 // => [2, 1]
 
@@ -583,7 +559,7 @@ export declare function uniq<T = any>(arr: T[], fn?: PropertyKey | Iteratee): T[
  * @param fn The iteratee invoked per element.
  * @returns Returns the new duplicate free array
  * @example
-```
+```js
 uniq([2, 1, 2])
 // => [1, 2]
 ```
@@ -601,7 +577,7 @@ export declare function sortedUniq(arr: any, fn?: string | Iteratee): any[];
  * @returns Returns `object`.
  *
  * @example
-```
+```js
 let object = {
   'a': [{ 'b': 2 }, { 'd': 4 }]
 }
@@ -619,38 +595,38 @@ export declare function merge(object: any, ...sources: any[]): Object;
  * Returns a generator of array values not included in the other given arrays using a `Set` for equality comparisons. The order and references of result values are not guaranteed.
  * @param args The initial arrays
  * @example
-```
+```js
 [...difference([2, 1], [2, 3])]
 // => [1]
 ```
  * @see {@link union}
  * @see {@link intersection}
  */
-export declare function difference(...args: Iterable<any>[]): Generator<any, void, unknown>;
+export declare function difference(...args: Array<Iterable<any>>): Generator<any, void, unknown>;
 /**
  * Creates a generator of unique values that are included in all given arrays.
  * @param args The arrays to inspect
  * @example
-```
+```js
 [...intersection([2, 1], [2, 3])]
 // => [2]
 ```
 * @see {@link difference}
  * @see {@link union}
  */
-export declare function intersection(...args: Iterable<any>[]): Generator<any, void, unknown>;
+export declare function intersection(...args: Array<Iterable<any>>): Generator<any, void, unknown>;
 /**
  * Creates a generator of unique values from all given arrays using `Set` for equality comparisons.
  * @param args The arrays to perform union on.
  * @example
-```
+```js
 [...union([2], [1, 2])]
 // => [2, 1]
 ```
  * @see {@link difference}
  * @see {@link intersection}
  */
-export declare function union(...args: Iterable<any>[]): Generator<unknown, void, unknown>;
+export declare function union(...args: Array<Iterable<any>>): Generator<unknown, void, unknown>;
 /**
  * Creates an object composed of keys generated from the results of running each element of `arr` thru `func`. The order of grouped values is determined by the order they occur in `arr`. The corresponding value of each key is an array of elements responsible for generating the key.
  *
@@ -659,7 +635,7 @@ export declare function union(...args: Iterable<any>[]): Generator<unknown, void
  * @returns Returns the composed aggregate object.
  *
  * @example
-```
+```js
 groupBy([6.1, 4.2, 6.3], Math.floor)
 // => { '4': [4.2], '6': [6.1, 6.3] }
 

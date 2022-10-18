@@ -33,11 +33,11 @@
     "tsc:w": "tsc -p ./tsconfig.xo.json --declaration --watch",
     "lint": "eslint src/**",
     "lint:fix": "eslint src/** --fix",
-    "build": "npm run tsc && npm run docs",
+    "build": "npm run lint:fix && npm run tsc && npm run docs",
     "docs": "typedoc"
   },
   "lint-staged": {
-    "*.ts": "eslint"
+    "*.ts": "eslint --fix"
   },
   "husky": {
     "hooks": {

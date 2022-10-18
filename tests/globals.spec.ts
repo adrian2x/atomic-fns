@@ -1,43 +1,42 @@
 import assert from 'assert'
 import {
-  True,
-  False,
-  CustomError,
-  type,
-  str,
-  isBool,
-  isObject,
-  isString,
-  isArray,
-  isArrayLike,
-  isNumber,
-  isNaN,
-  isNull,
-  isBigint,
-  isFunc,
-  isPromise,
-  isSymbol,
-  isAsync,
-  uniqueId,
+  bin,
   call,
   chr,
-  ord,
-  keys,
-  values,
-  round,
-  enumerate,
-  isEmpty,
-  isGenerator,
+  CustomError,
+  False,
+  get,
   hash,
   hashCode,
   HASH_KEY,
-  bin,
   hex,
-  oct,
+  isArray,
+  isArrayLike,
+  isAsync,
+  isBigint,
+  isBool,
+  isEmpty,
+  isFunc,
+  isNaN,
+  isNull,
+  isNumber,
+  isObject,
+  isPromise,
+  isString,
+  isSymbol,
+  keys,
   list,
   next,
-  get
+  oct,
+  ord,
+  round,
+  str,
+  True,
+  type,
+  uniqueId,
+  values
 } from '../src/globals/index.js'
+import { enumerate } from '../src/itertools/index.js'
 
 function cb() {}
 
@@ -214,17 +213,6 @@ describe('globals', () => {
     assert(round(1.5) === 2)
     assert(round(1.54, 2) === 1.54)
     assert(round(1.545, 3) === 1.545)
-  })
-
-  it('enumerate', () => {
-    let iter = enumerate(['foo', 'bar', 'baz'])
-    assert(isGenerator(iter))
-    let values = [...iter]
-    assert.deepEqual(values, [
-      [0, 'foo'],
-      [1, 'bar'],
-      [2, 'baz']
-    ])
   })
 
   it('next', () => {

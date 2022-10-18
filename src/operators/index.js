@@ -8,10 +8,6 @@ export const id = (x) => x;
 export const bool = (x) => !!x;
 export const not = (x) => !x;
 export const isinstance = (x, y) => x instanceof y;
-export const all = (arr, fn = bool) => arr.every(fn);
-export const any = (arr, fn = bool) => arr.some(fn);
-export const and = all;
-export const or = any;
 export function comp(x, y) {
     const op = call(x, 'compare', y);
     if (isNumber(op))
@@ -29,48 +25,6 @@ export function eq(x, y) {
     if (op != null)
         return op;
     return x === y;
-}
-export function shallowEqual(x, y) {
-    if (!x || !y)
-        return x === y;
-    if (Array.isArray(x)) {
-        for (let i = 0; i < x.length; i++) {
-            if (!eq(x[i], y[i]))
-                return false;
-        }
-        return true;
-    }
-    if (isObject(x)) {
-        if (eq(x, y))
-            return true;
-        for (const key in x) {
-            if (!eq(x[key], y[key]))
-                return false;
-        }
-        return true;
-    }
-    return eq(x, y);
-}
-export function deepEqual(x, y) {
-    if (x === y)
-        return true;
-    if (Array.isArray(x)) {
-        for (let i = 0; i < x.length; i++) {
-            if (!deepEqual(x[i], y[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-    if (isObject(x)) {
-        for (const key in x) {
-            if (!deepEqual(x[key], y[key])) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return false;
 }
 export function lt(x, y) {
     const op = call(x, 'lt', y);
@@ -151,4 +105,67 @@ export function pow(x, y) {
     if (op != null)
         return op;
     return x ** y;
+}
+export function shallowEqual(obj, other) {
+    if (obj === other)
+        return true;
+    if (!obj || !other)
+        return false;
+    if (Array.isArray(obj)) {
+        // compare the arrays
+        if (obj.length !== other.length)
+            return false;
+        for (let i = 0; i < obj.length; i++) {
+            if (obj[i] !== other[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    else if (isObject(obj)) {
+        // compare the object keys
+        const objKeys = Object.keys(obj);
+        const otherKeys = Object.keys(other);
+        if (objKeys.length !== otherKeys.length)
+            return false;
+        for (const key of objKeys) {
+            if (!Object.prototype.hasOwnProperty.call(other, key) || obj[key] !== other[key]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+export function deepEqual(obj, other, checker = eq) {
+    if (checker(obj, other))
+        return true;
+    if (!obj || !other)
+        return false;
+    if (Array.isArray(obj)) {
+        // compare the arrays
+        if (obj.length !== other.length)
+            return false;
+        for (let i = 0; i < obj.length; i++) {
+            if (!deepEqual(obj[i], other[i], checker)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    else if (isObject(obj)) {
+        // compare the object keys
+        const objKeys = Object.keys(obj);
+        const otherKeys = Object.keys(other);
+        if (objKeys.length !== otherKeys.length)
+            return false;
+        for (const key of objKeys) {
+            if (!Object.prototype.hasOwnProperty.call(other, key) ||
+                !deepEqual(obj[key], other[key], checker)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }

@@ -1,7 +1,6 @@
 import assert from 'assert'
 import {
   compact,
-  contains,
   filter,
   find,
   forEach,
@@ -19,17 +18,12 @@ import {
   union,
   groupBy
 } from '../src/collections/index.js'
-import { floor } from '../src/globals/index.js'
 
 describe('collections', () => {
   it('compact', () => {
     let filtered = compact([0, 1, false, 2, '', 3])
     assert.deepEqual(filtered, [1, 2, 3])
-  })
-
-  it('contains', () => {
-    assert(contains([4, 7, 1, 9], 1))
-    assert(!contains([4, 7, 1, 9], NaN))
+    assert.deepEqual(compact({ a: 1, b: undefined, c: false, d: [] }), { a: 1 })
   })
 
   it('clone array', () => {
@@ -203,7 +197,7 @@ describe('collections', () => {
   })
 
   it('groupBy', () => {
-    assert.deepEqual(groupBy([6.1, 4.2, 6.3], floor), { '4': [4.2], '6': [6.1, 6.3] })
+    assert.deepEqual(groupBy([6.1, 4.2, 6.3], Math.floor), { '4': [4.2], '6': [6.1, 6.3] })
   })
 
   it('merge', () => {
