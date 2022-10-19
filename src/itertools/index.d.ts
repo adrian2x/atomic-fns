@@ -4,6 +4,15 @@
  * @module Iterators
  */
 import { Comp, Function, Predicate } from '../globals/index.js';
+import { add } from '../operators/index.js';
+/**
+ * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
+ * @param iterable The iterable to accumulate
+ * @param func The accumulator function (default `add`).
+ * @param initial Optional initial value (defaults to the first element in iterable)
+ * @returns A sequence of accumulated values
+ */
+export declare function accumulate<T>(iterable: Iterable<T>, func?: typeof add, initial?: any): Generator<any, void, unknown>;
 /**
  * Returns `true` when all of the items in iterable are truthy. An optional predicate function can be used to define what truthiness means for this specific collection.
  * @param iterable
@@ -42,7 +51,7 @@ any([1, 4, 5] => (n) => n % 2 === 0)
 @see {@link all}
  */
 export declare const any: <T>(iterable: Iterable<T>, fn?: Predicate<T>) => boolean;
-export declare function chain<T>(...iterables: Array<Iterable<T>>): Iterable<T>;
+export declare function chain<T>(...iterables: Array<Iterable<T>>): Generator<T, void, unknown>;
 /**
  * Checks if the `value` is in `collection`.
  * @param collection The collection to inspect.
@@ -111,7 +120,7 @@ export declare function icompact<T>(iterable: Iterable<T>): Generator<T, void, u
  * Iterates over elements of collection, producing only those elements where predicate returns a `truthy` value.
  */
 export declare function ifilter<T>(iterable: Iterable<T>, predicate: Predicate): Generator<T, void, unknown>;
-export declare function imap<T>(iterable: Iterable<T>, mapper: (x: T) => any): Generator<any, void, unknown>;
+export declare function imap<T>(iterable: Iterable<T>, mapFn: (x: T) => any): Generator<any, void, unknown>;
 /**
  * Returns a generator flattening one level of nesting in a list of lists.
  * @param iterables The iterable to flatten
@@ -121,14 +130,17 @@ export declare function imap<T>(iterable: Iterable<T>, mapper: (x: T) => any): G
 // => [0, 1, 2, 3]
 ```
  */
-export declare function iflatten<T = any>(iterables: Iterable<Iterable<T>>): Iterable<T>;
+export declare function iflatten<T = any>(iterables: Iterable<Iterable<T>>): Generator<T, void, unknown>;
+export declare function flatMap<T>(iterable: Iterable<T>, mapFn?: (x: T) => any): Generator<T, void, unknown>;
 export declare function islice<T>(iterable: Iterable<T>, start: number, stop?: number, step?: number): Generator<number | T, number | T | undefined, unknown>;
+export declare function itake<T>(n: number, iterable: Iterable<T>): Generator<unknown, void, unknown>;
 /**
  * Returns an Iterator from the elements of a collection or the object keys.
  * @param obj The given collection to iterate over.
  * @returns An Iterator type.
  */
 export declare function iter<T>(obj: any): Iterator<T>;
+export declare function partition<T>(iterable: Iterable<T>, predicate: Predicate<T>): T[][];
 /**
  * Returns the smallest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `le` method, this will be called to compare.
  * @param iterable The iterable to inspect.
@@ -211,6 +223,7 @@ sum([1, 2, 3, 4], 5)
 ```
  */
 export declare function sum(args: Iterable<number>, initial?: number): number;
+export declare function take<T>(n: number, iterable: Iterable<T>): T[];
 /**
  * Returns a generator that takes elements from the iterable as long as the predicate is `true`.
  * @param iterable The iterable to inspect.

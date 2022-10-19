@@ -13,6 +13,7 @@ import {
   isBool,
   isEmpty,
   isFunc,
+  isIterable,
   isNull,
   isNumber,
   isObject,
@@ -20,8 +21,10 @@ import {
   Iteratee,
   keys,
   NotImplementedError,
+  Predicate,
   set
 } from '../globals/index.js'
+import { enumerate } from '../itertools/index.js'
 import { comp, eq, id } from '../operators/index.js'
 
 /**
@@ -417,10 +420,22 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
  * @see {@link filter}
  * @see {@link map}
  */
-export function forEach(collection: any[] | Object, fn: Iteratee) {
-  for (const key of keys(collection)) {
-    const res = fn(collection[key], key, collection)
-    if (res === false) return collection
+export function forEach<T>(collection: T[] | Iterable<T> | Object, fn: Iteratee) {
+  if (Array.isArray(collection)) {
+    for (let i = 0; i < collection.length; i++) {
+      const res = fn(collection[i], i, collection)
+      if (res === false) return collection
+    }
+  } else if (isIterable(collection)) {
+    for (const [index, value] of enumerate(collection as Iterable<T>)) {
+      const res = fn(value, index, collection)
+      if (res === false) return collection
+    }
+  } else {
+    for (const key of keys(collection)) {
+      const res = fn(collection[key], key, collection)
+      if (res === false) return collection
+    }
   }
 }
 
@@ -1099,7 +1114,7 @@ groupBy(['one', 'two', 'three'], 'length')
 // => { '3': ['one', 'two'], '5': ['three'] }
 ```
  */
-export function groupBy(arr: any[] | Object, func: Iteratee | PropertyKey = id): Object {
+export function groupBy(arr: Iterable<any> | Object, func: Iteratee | PropertyKey = id): Object {
   const results = {}
   const useKey = typeof func === 'function' ? func : partial(get, func)
   forEach(arr, (value) => {
@@ -1110,3 +1125,29 @@ export function groupBy(arr: any[] | Object, func: Iteratee | PropertyKey = id):
   })
   return results
 }
+
+/**
+ * Removes all elements from array that `func` returns truthy for and returns an array of the removed elements.
+ * @param arr The array to remove from.
+ * @param func The function invoked per iteration or value(s) or value to remove.
+ * @returns
+ */
+export function remove<T>(arr: T[], func: Iteratee<T>)
+export function remove<T>(arr: T[], func: any[])
+export function remove<T>(arr: T[], func: any)
+export function remove<T>(arr: T[], func) {
+  return arr.filter((x, i) => {
+    if (x !== func) {
+      if (isArray(func)) return !func.includes(x)
+      else if (isFunc(func)) return !func(x, i, arr)
+      return true
+    }
+  })
+}
+
+// TODO: binary search utils
+// TODO: heap/heapify
+// TODO: deque
+// TODO: Counter
+// TODO: Skip list
+// TODO: BST (BTree)

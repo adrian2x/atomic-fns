@@ -14,7 +14,27 @@ import {
   Predicate,
   ValueError
 } from '../globals/index.js'
-import { bool, comp, eq, gt, id, le } from '../operators/index.js'
+import { bool, comp, eq, gt, id, le, add } from '../operators/index.js'
+
+/**
+ * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
+ * @param iterable The iterable to accumulate
+ * @param func The accumulator function (default `add`).
+ * @param initial Optional initial value (defaults to the first element in iterable)
+ * @returns A sequence of accumulated values
+ */
+export function* accumulate<T>(iterable: Iterable<T>, func = add, initial?) {
+  const it = iter(iterable)
+  let total = initial
+  let head = it.next()
+  if (initial == null) total = head.value
+  while (!head.done) {
+    yield total
+    head = it.next()
+    if (head.done) return
+    total = func(total, head.value)
+  }
+}
 
 /**
  * Returns `true` when all of the items in iterable are truthy. An optional predicate function can be used to define what truthiness means for this specific collection.
@@ -181,9 +201,9 @@ export function* ifilter<T>(iterable: Iterable<T>, predicate: Predicate) {
   }
 }
 
-export function* imap<T>(iterable: Iterable<T>, mapper: (x: T) => any) {
+export function* imap<T>(iterable: Iterable<T>, mapFn: (x: T) => any) {
   for (const item of iterable) {
-    yield mapper(item)
+    yield mapFn(item)
   }
 }
 
@@ -196,12 +216,16 @@ export function* imap<T>(iterable: Iterable<T>, mapper: (x: T) => any) {
 // => [0, 1, 2, 3]
 ```
  */
-export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>): Iterable<T> {
+export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>) {
   for (const iterator of iterables) {
     for (const item of iterator) {
       yield item
     }
   }
+}
+
+export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = id) {
+  return iflatten<T>(imap(iterable, mapFn))
 }
 
 export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, step = 1) {
@@ -218,6 +242,15 @@ export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, 
   }
 }
 
+export function* itake<T>(n: number, iterable: Iterable<T>) {
+  const it = iter(iterable)
+  while (n-- > 0) {
+    const item = it.next()
+    if (!item.done) yield item.value
+    else return
+  }
+}
+
 /**
  * Returns an Iterator from the elements of a collection or the object keys.
  * @param obj The given collection to iterate over.
@@ -227,6 +260,16 @@ export function iter<T>(obj): Iterator<T> {
   const iterable = call(obj, Symbol.iterator)
   if (notNull(iterable)) return iterable as Iterator<T>
   return Object.keys(obj)[Symbol.iterator]() as Iterator<T>
+}
+
+export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
+  const left = [] as T[]
+  const right = [] as T[]
+  for (const value of iterable) {
+    if (predicate(value)) left.push(value)
+    else right.push(value)
+  }
+  return [left, right]
 }
 
 /**
@@ -413,6 +456,11 @@ export function sum(args: Iterable<number>, initial = 0) {
   }
   return initial
 }
+
+export function take<T>(n: number, iterable: Iterable<T>) {
+  return Array.from(itake<T>(n, iterable)) as T[]
+}
+
 /**
  * Returns a generator that takes elements from the iterable as long as the predicate is `true`.
  * @param iterable The iterable to inspect.

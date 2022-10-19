@@ -1,6 +1,6 @@
 import assert from 'assert'
-import { isEmpty } from '../src/globals/index.js'
 import {
+  accumulate,
   all,
   any,
   chain,
@@ -8,37 +8,49 @@ import {
   dropWhile,
   enumerate,
   first,
+  flatMap,
   icompact,
   ifilter,
   iflatten,
   imap,
   islice,
+  itake,
   max,
   min,
+  partition,
   range,
   reduce,
   reversed,
   sort,
   sorted,
   sum,
+  take,
   takeWhile,
   times,
   zip
 } from '../src/itertools/index.js'
 
-function cb() {}
+const Falsy = (x) => !x
 
 describe('operators', () => {
+  it('accumulate', () => {
+    assert.deepEqual([...accumulate([1, 2, 3, 4])], [1, 3, 6, 10])
+    assert.deepEqual(
+      [...accumulate([3, 4, 6, 2, 1, 9, 0, 7, 5, 8], (x, y) => max([x, y]))],
+      [3, 4, 6, 6, 6, 9, 9, 9, 9, 9]
+    )
+  })
+
   it('all', () => {
     assert(all([1, true, [], 'test', {}]))
     assert(!all([[], {}, '']))
-    assert(all([[], {}, ''], isEmpty))
+    assert(all<any>([false, 0, '', null, undefined, NaN], Falsy))
   })
 
   it('any', () => {
     assert(any([1, true, [], 'test', {}]))
     assert(!any([0, false, '']))
-    assert(any([0, false, ''], (x) => !x))
+    assert(any([0, false, ''], Falsy))
   })
 
   it('chain', () => {
@@ -52,7 +64,7 @@ describe('operators', () => {
   })
 
   it('dropWhile', () => {
-    let it = dropWhile([false, 0, '', true, '', []], isEmpty)
+    let it = dropWhile([false, 0, '', true, '', []], Falsy)
     assert.deepEqual([...it], [true, '', []])
   })
 
@@ -70,6 +82,30 @@ describe('operators', () => {
     assert(first(['foo', 'bar']) === 'foo')
     assert(first([0, 1]) === 0)
     assert(first([1, 1]) === 1)
+  })
+
+  it('flatMap', () => {
+    assert.deepEqual(
+      [
+        ...flatMap([
+          [1, 2],
+          [3, 4]
+        ])
+      ],
+      [1, 2, 3, 4]
+    )
+    assert.deepEqual(
+      [
+        ...flatMap(
+          [
+            [1, 2],
+            [3, 4]
+          ],
+          ([x, y]) => [x * 2, y * 2]
+        )
+      ],
+      [2, 4, 6, 8]
+    )
   })
 
   it('icompact', () => {
@@ -107,12 +143,28 @@ describe('operators', () => {
     assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 4, 2)], [1, 3])
   })
 
+  it('itake', () => {
+    let it = itake(3, [false, 0, '', true, '', []])
+    assert.deepEqual([...it], [false, 0, ''])
+  })
+
+  it('take', () => {
+    let it = take(3, [false, 0, '', true, '', []])
+    assert.deepEqual(it, [false, 0, ''])
+  })
+
   it('min', () => {
     assert(min([5, 4, 3, 1, 2]) === 1)
   })
 
   it('max', () => {
     assert(max([7, 9, 3, 11]) === 11)
+  })
+
+  it('partition', () => {
+    let [A, B] = partition([false, 0, '', true, '', []], Falsy)
+    assert.deepEqual(A, [false, 0, '', ''])
+    assert.deepEqual(B, [true, []])
   })
 
   it('range', () => {

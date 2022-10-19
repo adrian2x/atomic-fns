@@ -16,7 +16,8 @@ import {
   difference,
   intersection,
   union,
-  groupBy
+  groupBy,
+  remove
 } from '../src/collections/index.js'
 
 describe('collections', () => {
@@ -247,6 +248,18 @@ describe('collections', () => {
     assert.deepEqual(
       omit(target, (x) => !x),
       { user: 'fred', age: 40 }
+    )
+  })
+
+  it('remove', () => {
+    assert.deepEqual(remove([1, 2, 3, 4], 1), [2, 3, 4])
+    assert.deepEqual(remove([1, 2, 3, 4], [3, 4]), [1, 2])
+  })
+
+  it('removeBy', () => {
+    assert.deepEqual(
+      remove([1, 2, 3, 4], (x) => x % 2 === 0),
+      [1, 3]
     )
   })
 

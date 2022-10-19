@@ -4,7 +4,8 @@
  * @module Collections
  */
 import { partial } from '../functools/index.js';
-import { call, get, isArray, isArrayLike, isBool, isEmpty, isFunc, isNull, isNumber, isObject, isString, keys, NotImplementedError, set } from '../globals/index.js';
+import { call, get, isArray, isArrayLike, isBool, isEmpty, isFunc, isIterable, isNull, isNumber, isObject, isString, keys, NotImplementedError, set } from '../globals/index.js';
+import { enumerate } from '../itertools/index.js';
 import { comp, eq, id } from '../operators/index.js';
 /**
  * A `Collection` is an iterable {@link Container} type.
@@ -350,10 +351,26 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
  * @see {@link map}
  */
 export function forEach(collection, fn) {
-    for (const key of keys(collection)) {
-        const res = fn(collection[key], key, collection);
-        if (res === false)
-            return collection;
+    if (Array.isArray(collection)) {
+        for (let i = 0; i < collection.length; i++) {
+            const res = fn(collection[i], i, collection);
+            if (res === false)
+                return collection;
+        }
+    }
+    else if (isIterable(collection)) {
+        for (const [index, value] of enumerate(collection)) {
+            const res = fn(value, index, collection);
+            if (res === false)
+                return collection;
+        }
+    }
+    else {
+        for (const key of keys(collection)) {
+            const res = fn(collection[key], key, collection);
+            if (res === false)
+                return collection;
+        }
     }
 }
 /**
@@ -1051,3 +1068,20 @@ export function groupBy(arr, func = id) {
     });
     return results;
 }
+export function remove(arr, func) {
+    return arr.filter((x, i) => {
+        if (x !== func) {
+            if (isArray(func))
+                return !func.includes(x);
+            else if (isFunc(func))
+                return !func(x, i, arr);
+            return true;
+        }
+    });
+}
+// TODO: binary search utils
+// TODO: heap/heapify
+// TODO: deque
+// TODO: Counter
+// TODO: Skip list
+// TODO: BST (BTree)

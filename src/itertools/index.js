@@ -4,7 +4,28 @@
  * @module Iterators
  */
 import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js';
-import { bool, comp, eq, gt, id, le } from '../operators/index.js';
+import { bool, comp, eq, gt, id, le, add } from '../operators/index.js';
+/**
+ * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
+ * @param iterable The iterable to accumulate
+ * @param func The accumulator function (default `add`).
+ * @param initial Optional initial value (defaults to the first element in iterable)
+ * @returns A sequence of accumulated values
+ */
+export function* accumulate(iterable, func = add, initial) {
+    const it = iter(iterable);
+    let total = initial;
+    let head = it.next();
+    if (initial == null)
+        total = head.value;
+    while (!head.done) {
+        yield total;
+        head = it.next();
+        if (head.done)
+            return;
+        total = func(total, head.value);
+    }
+}
 /**
  * Returns `true` when all of the items in iterable are truthy. An optional predicate function can be used to define what truthiness means for this specific collection.
  * @param iterable
@@ -168,9 +189,9 @@ export function* ifilter(iterable, predicate) {
             yield value;
     }
 }
-export function* imap(iterable, mapper) {
+export function* imap(iterable, mapFn) {
     for (const item of iterable) {
-        yield mapper(item);
+        yield mapFn(item);
     }
 }
 /**
@@ -188,6 +209,9 @@ export function* iflatten(iterables) {
             yield item;
         }
     }
+}
+export function flatMap(iterable, mapFn = id) {
+    return iflatten(imap(iterable, mapFn));
 }
 export function* islice(iterable, start, stop, step = 1) {
     if (stop != null && stop < 0)
@@ -207,6 +231,16 @@ export function* islice(iterable, start, stop, step = 1) {
         }
     }
 }
+export function* itake(n, iterable) {
+    const it = iter(iterable);
+    while (n-- > 0) {
+        const item = it.next();
+        if (!item.done)
+            yield item.value;
+        else
+            return;
+    }
+}
 /**
  * Returns an Iterator from the elements of a collection or the object keys.
  * @param obj The given collection to iterate over.
@@ -217,6 +251,17 @@ export function iter(obj) {
     if (notNull(iterable))
         return iterable;
     return Object.keys(obj)[Symbol.iterator]();
+}
+export function partition(iterable, predicate) {
+    const left = [];
+    const right = [];
+    for (const value of iterable) {
+        if (predicate(value))
+            left.push(value);
+        else
+            right.push(value);
+    }
+    return [left, right];
 }
 /**
  * Returns the smallest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `le` method, this will be called to compare.
@@ -385,6 +430,9 @@ export function sum(args, initial = 0) {
         initial += x;
     }
     return initial;
+}
+export function take(n, iterable) {
+    return Array.from(itake(n, iterable));
 }
 /**
  * Returns a generator that takes elements from the iterable as long as the predicate is `true`.

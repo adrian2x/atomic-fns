@@ -291,7 +291,7 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
  * @see {@link filter}
  * @see {@link map}
  */
-export declare function forEach(collection: any[] | Object, fn: Iteratee): Object | undefined;
+export declare function forEach<T>(collection: T[] | Iterable<T> | Object, fn: Iteratee): Object | undefined;
 /**
  * This method is like {@link forEach} except that it iterates over the collection from right to left.
 
@@ -644,4 +644,13 @@ groupBy(['one', 'two', 'three'], 'length')
 // => { '3': ['one', 'two'], '5': ['three'] }
 ```
  */
-export declare function groupBy(arr: any[] | Object, func?: Iteratee | PropertyKey): Object;
+export declare function groupBy(arr: Iterable<any> | Object, func?: Iteratee | PropertyKey): Object;
+/**
+ * Removes all elements from array that `func` returns truthy for and returns an array of the removed elements.
+ * @param arr The array to remove from.
+ * @param func The function invoked per iteration or value(s) or value to remove.
+ * @returns
+ */
+export declare function remove<T>(arr: T[], func: Iteratee<T>): any;
+export declare function remove<T>(arr: T[], func: any[]): any;
+export declare function remove<T>(arr: T[], func: any): any;
