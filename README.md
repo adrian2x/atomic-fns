@@ -9,7 +9,8 @@ You may prefer this because it's:
 * **Modular**: Pick what you need. Works with all bundlers and also supports tree-shaking.
 * **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
 * **Lazy**: Leverage generators, iterators, and functional composition.
-* **Fluent**: Pure functions and abstract classes. Include only what you need.
+* **Zero deps**: Built from scratch with no dependencies whatsoever.
+* **Well tested**: All modules have comprehensive test suites aiming for 100% coverage.
 * **TypeScript & docs**: Includes type declaration files and js with JSDocs for best in class experience.
 
 ## Get Started

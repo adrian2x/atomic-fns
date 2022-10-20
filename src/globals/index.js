@@ -82,45 +82,16 @@ export function type(value) {
                 return 'boolean';
             if (value instanceof Function)
                 return 'function';
-            // IE improperly marshals typeof across execution contexts, but a
-            // cross-context object will still return false for "instanceof Object".
             if (value instanceof Array)
                 return 'array';
             if (value[Symbol.toStringTag])
                 return value[Symbol.toStringTag];
             const className = str(value);
-            // In Firefox 3.6, attempting to access iframe window objects' length
-            // property throws an NS_ERROR_FAILURE, so we need to special-case it
-            // here.
             if (className === '[object Window]')
                 return 'object';
-            // We cannot always use constructor === Array or instanceof Array because
-            // different frames have different Array objects.
-            // Mark Miller noticed that Object.prototype.toString
-            // allows access to the unforgeable [[Class]] property.
-            //  15.2.4.2 Object.prototype.toString ( )
-            //  When the toString method is called, the following steps are taken:
-            //      1. Get the [[Class]] property of this object.
-            //      2. Compute a string value by concatenating the three strings
-            //         "[object ", Result(1), and "]".
-            //      3. Return Result(2).
-            // and this behavior survives the destruction of the execution context.
             if (className.endsWith('Array]') || Array.isArray(value)) {
                 return 'array';
             }
-            // HACK: There is still an array case that fails.
-            //     function ArrayImpostor() {}
-            //     ArrayImpostor.prototype = [];
-            //     var impostor = new ArrayImpostor;
-            // this can be fixed by getting rid of the fast path
-            // (value instanceof Array) and solely relying on
-            // (value && Object.prototype.toString.vall(value) === '[object Array]')
-            // but that would require many more function calls and is not warranted
-            // unless closure code is receiving objects from untrusted sources.
-            // IE in cross-window calls does not correctly marshal the function type
-            // (it appears just as an object) so we cannot use just typeof val ==
-            // 'function'. However, if the object has a call property, it is a
-            // function.
             if (className.endsWith('Function]') || typeof value.call === 'function') {
                 return 'function';
             }
@@ -134,10 +105,6 @@ export function type(value) {
         }
     }
     else if (result === 'function' && typeof value.call === 'undefined') {
-        // In Safari typeof nodeList returns 'function', and on Firefox typeof
-        // behaves similarly for HTML{Applet,Embed,Object}, Elements and RegExps. We
-        // would like to return object for those and we can detect an invalid
-        // function by making sure that the function object has a call method.
         return 'object';
     }
     else if (Number.isNaN(value))

@@ -7,7 +7,7 @@ export declare const id: (x: any) => any;
 export declare const bool: (x: any) => boolean;
 export declare const not: (x: any) => boolean;
 export declare const isinstance: (x: any, y: any) => boolean;
-export declare function comp(x: any, y: any): any;
+export declare function comp(x: any, y: any): 0 | 1 | -1;
 export declare function eq(x: any, y: any): any;
 export declare function lt(x: any, y: any): any;
 export declare function le(x: any, y: any): any;

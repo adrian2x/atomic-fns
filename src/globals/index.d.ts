@@ -96,42 +96,42 @@ export declare function type(value: any): any;
  */
 export declare const str: (obj: any) => any;
 /** Check if value is a boolean type. */
-export declare const isBool: (x: any) => boolean;
+export declare const isBool: (x: any) => x is boolean;
 /** Check if value is an iterable type. */
-export declare const isIterable: (x: any) => boolean;
+export declare const isIterable: (x: any) => x is IterableIterator<any>;
 /** Check if value is an object type. */
-export declare const isObject: (x: any) => boolean;
+export declare const isObject: (x: any) => x is Object;
 /** Check if value is a string type. */
-export declare const isString: (x: any) => boolean;
+export declare const isString: (x: any) => x is string;
 /** Check if value is an Array type. */
-export declare const isArray: (x: any) => boolean;
+export declare const isArray: (x: any) => x is any[];
 /**
  * Check if value is Array-like type.
  * A value is considered array-like if it's not a function and has a `.length` number property.
  */
 export declare const isArrayLike: (x: any) => boolean;
 /** Check if value is a function type. */
-export declare const isFunc: (x: any) => boolean;
+export declare const isFunc: (x: any) => x is Function;
 /** Check if value is a number type. */
-export declare const isNumber: (x: any) => boolean;
+export declare const isNumber: (x: any) => x is number;
 /** Check if value is a bigint type. */
-export declare const isBigint: (x: any) => boolean;
+export declare const isBigint: (x: any) => x is BigInt;
 /** Check if value is NaN based on `Number.isNaN`. */
-export declare const isNaN: (x: any) => boolean;
+export declare const isNaN: (x: any) => x is number;
 /** Check if value is a Promise type. */
-export declare const isPromise: (x: any) => boolean;
+export declare const isPromise: (x: any) => x is Promise<any>;
 /** Check if value is an async function type. */
 export declare const isAsync: (x: any) => boolean;
 /** Check if value is a generator function type. */
-export declare const isGenerator: (x: any) => boolean;
+export declare const isGenerator: (x: any) => x is Generator<unknown, any, unknown>;
 /** Check if value is `null` or `undefined`. */
-export declare const isNull: (x: any) => boolean;
+export declare const isNull: (x: any) => x is null | undefined;
 /** Check if value is not `null` or `undefined`. */
 export declare const notNull: (x: any) => boolean;
 /** Returns `true` for objects without length or falsey values. */
 export declare const isEmpty: (x: any) => boolean;
 /** Check if value is a `Symbol` type */
-export declare const isSymbol: (x: any) => boolean;
+export declare const isSymbol: (x: any) => x is symbol;
 /**
  * Returns the number of elements in a collection type.
  *

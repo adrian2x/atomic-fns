@@ -1,23 +1,23 @@
 import assert from 'assert'
 import {
+  clone,
   compact,
+  count,
+  difference,
   filter,
   find,
-  forEach,
   findRight,
   flatten,
-  map,
-  clone,
-  pick,
-  omit,
-  uniq,
-  sortedUniq,
-  merge,
-  difference,
-  intersection,
-  union,
+  forEach,
   groupBy,
-  remove
+  intersection,
+  merge,
+  omit,
+  pick,
+  remove,
+  sortedUniq,
+  union,
+  uniq
 } from '../src/collections/index.js'
 
 describe('collections', () => {
@@ -25,6 +25,12 @@ describe('collections', () => {
     let filtered = compact([0, 1, false, 2, '', 3])
     assert.deepEqual(filtered, [1, 2, 3])
     assert.deepEqual(compact({ a: 1, b: undefined, c: false, d: [] }), { a: 1 })
+  })
+
+  it('count', () => {
+    let counters = count([0, 1, false, 2, '', 3], (x) => !!x)
+    assert(counters['true'] === 3)
+    assert(counters['false'] === 3)
   })
 
   it('clone array', () => {
@@ -143,8 +149,7 @@ describe('collections', () => {
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
-    let result = []
-    // @ts-expect-error
+    let result = [] as any
     forEach(users, (value, key) => result.push([key, value]))
     assert.deepEqual(
       result,

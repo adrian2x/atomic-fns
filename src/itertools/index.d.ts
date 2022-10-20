@@ -223,7 +223,7 @@ sum([1, 2, 3, 4], 5)
 ```
  */
 export declare function sum(args: Iterable<number>, initial?: number): number;
-export declare function take<T>(n: number, iterable: Iterable<T>): T[];
+export declare function take<T>(n: number, iterable: Iterable<T>): unknown[];
 /**
  * Returns a generator that takes elements from the iterable as long as the predicate is `true`.
  * @param iterable The iterable to inspect.

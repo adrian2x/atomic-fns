@@ -458,7 +458,7 @@ export function sum(args: Iterable<number>, initial = 0) {
 }
 
 export function take<T>(n: number, iterable: Iterable<T>) {
-  return Array.from(itake<T>(n, iterable)) as T[]
+  return [...itake<T>(n, iterable)]
 }
 
 /**

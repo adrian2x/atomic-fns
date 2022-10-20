@@ -4,7 +4,7 @@
  * @module Collections
  */
 import { partial } from '../functools/index.js';
-import { call, get, isArray, isArrayLike, isBool, isEmpty, isFunc, isIterable, isNull, isNumber, isObject, isString, keys, NotImplementedError, set } from '../globals/index.js';
+import { call, get, isArray, isArrayLike, isBool, isEmpty, isFunc, isIterable, isNull, isNumber, isObject, isString, isSymbol, keys, NotImplementedError, set } from '../globals/index.js';
 import { enumerate } from '../itertools/index.js';
 import { comp, eq, id } from '../operators/index.js';
 /**
@@ -164,17 +164,7 @@ export class FrozenSet extends Set {
         return Object.freeze(this);
     }
 }
-/**
- * Creates a new array with all `falsey` and empty values removed.
- * @param arr The array to compact
- * @returns A new array with the filtered values.
- * @example
-```js
-compact([0, 1, false, 2, '', 3])
-// => [1, 2, 3]
-```
- */
-export const compact = (arr) => {
+export function compact(arr) {
     if (arr == null)
         return;
     if (Array.isArray(arr))
@@ -186,7 +176,15 @@ export const compact = (arr) => {
         }
     }
     return result;
-};
+}
+export function count(iterable, func) {
+    const counters = {};
+    forEach(iterable, (value, key) => {
+        const result = func(value, key);
+        counters[result] = get(result, counters, 0) + 1;
+    });
+    return counters;
+}
 /**
  * Creates a function that can be used to create named tuple-like objects.
  * @example
@@ -230,9 +228,9 @@ filter(users, 'active')
  */
 export function filter(arr, fn = isNull) {
     if (Array.isArray(arr)) {
-        if (typeof fn === 'function')
+        if (isFunc(fn))
             return arr.filter(fn);
-        if (typeof fn === 'string')
+        if (isNumber(fn) || isString(fn) || isSymbol(fn))
             return arr.filter((x) => get(fn, x));
         if (isObject(fn))
             return arr.filter(matches(fn));
@@ -266,9 +264,9 @@ find(users, 'active')
  */
 export function find(arr, fn) {
     if (Array.isArray(arr)) {
-        if (typeof fn === 'function')
+        if (isFunc(fn))
             return arr.find(fn);
-        if (typeof fn === 'string')
+        if (isNumber(fn) || isString(fn) || isSymbol(fn))
             return arr.find((x) => x?.[fn]);
         if (isObject(fn))
             return arr.find(matches(fn));
@@ -329,27 +327,6 @@ export const matches = (shape) => (obj) => {
     }
     return true;
 };
-/**
- * Iterates over elements of collection and invokes `iteratee` for each element. The iteratee is invoked with three arguments: `(value, index|key, collection)`. Iteratee functions may exit iteration early by explicitly returning `false`.
- * @example
-```js
-forEach([1, 2], (value) => {
-  console.log(value)
-})
-// => Logs `1` then `2`.
-
-forEach({ 'a': 1, 'b': 2 }, (value, key) => {
-  console.log(key)
-})
-// => Logs 'a' then 'b' (iteration order is not guaranteed).
-```
- * @param {Array|Object} collection The collection to iterate over.
- * @param {Iteratee} fn The function invoked per iteration.
- * @returns {*} Returns `collection`.
- * @see {@link forEachRight}
- * @see {@link filter}
- * @see {@link map}
- */
 export function forEach(collection, fn) {
     if (Array.isArray(collection)) {
         for (let i = 0; i < collection.length; i++) {
@@ -1068,15 +1045,19 @@ export function groupBy(arr, func = id) {
     });
     return results;
 }
+/**
+ * Removes all elements from array that `func` returns truthy for and returns an array of the removed elements.
+ * @param arr The array to remove from.
+ * @param func The function invoked per iteration or value(s) or value to remove.
+ * @returns
+ */
 export function remove(arr, func) {
     return arr.filter((x, i) => {
-        if (x !== func) {
-            if (isArray(func))
-                return !func.includes(x);
-            else if (isFunc(func))
-                return !func(x, i, arr);
-            return true;
-        }
+        if (isArray(func))
+            return !func.includes(x);
+        else if (isFunc(func))
+            return !func(x, i, arr);
+        return x !== func;
     });
 }
 // TODO: binary search utils

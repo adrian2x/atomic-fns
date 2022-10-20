@@ -4,11 +4,25 @@
  * @module Random
  */
 import { isObject } from '../globals/index.js';
-/** Returns a random float between a [min, max) value (max exclusive). */
+/**
+ * Returns a random float between a [min, max) value (max exclusive).
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
 export const random = (min = 0, max = 1) => Math.random() * (max - min) + min;
-/** Returns a random integer between a [min, max] value (inclusive). */
+/**
+ * Returns a random integer between a [min, max] value (inclusive).
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
 export const randomInt = (min = 0, max = 1) => Math.round(random(min, max));
-/** Returns the item at some random index in a sequence. */
+/**
+ * Returns the item at some random index in a sequence.
+ * @returns {T}
+ * @template T
+ */
 export const choice = (arr) => {
     if (!arr || !arr.length)
         return;
@@ -16,35 +30,33 @@ export const choice = (arr) => {
 };
 /**
  * Returns a random sample of size k from a list of items.
- *
- * @export
- * @param {any[]} arr
- * @param {number} k
- * @return
+ * @param {Array} arr
+ * @param {number} size
+ * @returns A new array with `size` random elements from `arr`.
+ * @template T
  */
-export function sample(arr, k) {
-    if (!arr || !arr.length || arr.length < k)
-        return;
-    const result = [];
-    for (let i = 0; i < k; i++) {
-        result.push(choice(arr));
-    }
-    return result;
+export function sample(arr, size) {
+    if (!arr || !arr.length || arr.length < size)
+        return [];
+    return shuffle(arr.slice()).slice(-size);
 }
 /**
  * Shuffles a collection elements in-place. Uses the Fisher-Yates algorithm for uniform shuffling. If collection is an Object it returns shuffled `Object.values()`.
  *
- * @param {*} arr
- * @return
+ * @param {Array} arr
+ * @param {number} size
+ * @returns The shuffled array.
+ * @template T
  */
-export function shuffle(arr) {
+export function shuffle(arr, size) {
     if (!arr || !arr.length)
-        return;
+        return arr;
     if (isObject(arr))
         arr = Object.values(arr);
-    const n = arr.length - 1;
-    for (let i = n; i > 0; i--) {
-        const j = randomInt(0, i);
+    if (size == null)
+        size = arr.length - 1;
+    for (let i = 0; i <= size; i++) {
+        const j = randomInt(i, size);
         const temp = arr[j];
         arr[j] = arr[i];
         arr[i] = temp;

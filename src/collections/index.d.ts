@@ -173,7 +173,9 @@ compact([0, 1, false, 2, '', 3])
 // => [1, 2, 3]
 ```
  */
-export declare const compact: (arr: any[] | Object) => {} | undefined;
+export declare function compact(arr: any[]): any;
+export declare function compact(arr: Object): any;
+export declare function count<T>(iterable: Iterable<T> | Object, func: Iteratee<T>): {};
 /**
  * Creates a function that can be used to create named tuple-like objects.
  * @example
@@ -291,7 +293,9 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
  * @see {@link filter}
  * @see {@link map}
  */
-export declare function forEach<T>(collection: T[] | Iterable<T> | Object, fn: Iteratee): Object | undefined;
+export declare function forEach<T>(collection: T[], fn: Iteratee<T>): any;
+export declare function forEach<T>(collection: Iterable<T>, fn: Iteratee<T>): any;
+export declare function forEach<T>(collection: Object, fn: Iteratee<T>): any;
 /**
  * This method is like {@link forEach} except that it iterates over the collection from right to left.
 
@@ -651,6 +655,4 @@ export declare function groupBy(arr: Iterable<any> | Object, func?: Iteratee | P
  * @param func The function invoked per iteration or value(s) or value to remove.
  * @returns
  */
-export declare function remove<T>(arr: T[], func: Iteratee<T>): any;
-export declare function remove<T>(arr: T[], func: any[]): any;
-export declare function remove<T>(arr: T[], func: any): any;
+export declare function remove<T>(arr: T[], func: any): T[];

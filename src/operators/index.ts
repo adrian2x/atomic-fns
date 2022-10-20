@@ -16,7 +16,7 @@ export const isinstance = (x, y) => x instanceof y
 
 export function comp(x, y) {
   const op = call(x, 'compare', y)
-  if (isNumber(op)) return op
+  if (isNumber(op)) return op as 0 | 1 | -1
   if (eq(x, y)) return 0
   if (le(x, y)) return -1
   if (ge(x, y)) return 1

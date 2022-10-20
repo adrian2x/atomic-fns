@@ -110,45 +110,15 @@ export function type(value) {
       if (value instanceof String) return 'string'
       if (value instanceof Boolean) return 'boolean'
       if (value instanceof Function) return 'function'
-      // IE improperly marshals typeof across execution contexts, but a
-      // cross-context object will still return false for "instanceof Object".
       if (value instanceof Array) return 'array'
       if (value[Symbol.toStringTag]) return value[Symbol.toStringTag]
 
       const className = str(value)
-      // In Firefox 3.6, attempting to access iframe window objects' length
-      // property throws an NS_ERROR_FAILURE, so we need to special-case it
-      // here.
       if (className === '[object Window]') return 'object'
-
-      // We cannot always use constructor === Array or instanceof Array because
-      // different frames have different Array objects.
-      // Mark Miller noticed that Object.prototype.toString
-      // allows access to the unforgeable [[Class]] property.
-      //  15.2.4.2 Object.prototype.toString ( )
-      //  When the toString method is called, the following steps are taken:
-      //      1. Get the [[Class]] property of this object.
-      //      2. Compute a string value by concatenating the three strings
-      //         "[object ", Result(1), and "]".
-      //      3. Return Result(2).
-      // and this behavior survives the destruction of the execution context.
       if (className.endsWith('Array]') || Array.isArray(value)) {
         return 'array'
       }
-      // HACK: There is still an array case that fails.
-      //     function ArrayImpostor() {}
-      //     ArrayImpostor.prototype = [];
-      //     var impostor = new ArrayImpostor;
-      // this can be fixed by getting rid of the fast path
-      // (value instanceof Array) and solely relying on
-      // (value && Object.prototype.toString.vall(value) === '[object Array]')
-      // but that would require many more function calls and is not warranted
-      // unless closure code is receiving objects from untrusted sources.
 
-      // IE in cross-window calls does not correctly marshal the function type
-      // (it appears just as an object) so we cannot use just typeof val ==
-      // 'function'. However, if the object has a call property, it is a
-      // function.
       if (className.endsWith('Function]') || typeof value.call === 'function') {
         return 'function'
       }
@@ -161,10 +131,6 @@ export function type(value) {
       return 'null'
     }
   } else if (result === 'function' && typeof value.call === 'undefined') {
-    // In Safari typeof nodeList returns 'function', and on Firefox typeof
-    // behaves similarly for HTML{Applet,Embed,Object}, Elements and RegExps. We
-    // would like to return object for those and we can detect an invalid
-    // function by making sure that the function object has a call method.
     return 'object'
   } else if (Number.isNaN(value)) return 'NaN'
   return result
@@ -179,22 +145,22 @@ export function type(value) {
 export const str = (obj) => (obj != null ? obj.toString() : '')
 
 /** Check if value is a boolean type. */
-export const isBool = (x) => type(x) === 'boolean'
+export const isBool = (x): x is boolean => type(x) === 'boolean'
 
 /** Check if value is an iterable type. */
-export const isIterable = (x) => {
+export const isIterable = (x): x is IterableIterator<any> => {
   if (x == null) return false
   return typeof x[Symbol.iterator] === 'function'
 }
 
 /** Check if value is an object type. */
-export const isObject = (x) => typeof x === 'object' && type(x) === 'object'
+export const isObject = (x): x is Object => typeof x === 'object' && type(x) === 'object'
 
 /** Check if value is a string type. */
-export const isString = (x) => type(x) === 'string'
+export const isString = (x): x is string => type(x) === 'string'
 
 /** Check if value is an Array type. */
-export const isArray = (x) => Array.isArray(x)
+export const isArray = (x): x is any[] => Array.isArray(x)
 
 /**
  * Check if value is Array-like type.
@@ -206,30 +172,30 @@ export const isArrayLike = (x) => {
 }
 
 /** Check if value is a function type. */
-export const isFunc = (x) => x?.constructor === Function
+export const isFunc = (x): x is Function => x?.constructor === Function
 
 /** Check if value is a number type. */
-export const isNumber = (x) => type(x) === 'number'
+export const isNumber = (x): x is number => type(x) === 'number'
 
 /** Check if value is a bigint type. */
-export const isBigint = (x) => type(x) === 'bigint'
+export const isBigint = (x): x is BigInt => type(x) === 'bigint'
 
 /** Check if value is NaN based on `Number.isNaN`. */
-export const isNaN = (x) => Number.isNaN(x)
+export const isNaN = (x): x is typeof NaN => Number.isNaN(x)
 
 /** Check if value is a Promise type. */
-export const isPromise = (x) => type(x) === 'Promise'
+export const isPromise = (x): x is Promise<any> => type(x) === 'Promise'
 
 /** Check if value is an async function type. */
 export const isAsync = (x) => x?.constructor.name === 'AsyncFunction'
 
 /** Check if value is a generator function type. */
-export const isGenerator = (x) => {
+export const isGenerator = (x): x is Generator => {
   return x?.constructor.constructor?.name === 'GeneratorFunction'
 }
 
 /** Check if value is `null` or `undefined`. */
-export const isNull = (x) => x == null
+export const isNull = (x): x is null | undefined => x == null
 
 /** Check if value is not `null` or `undefined`. */
 export const notNull = (x) => x != null
@@ -238,7 +204,7 @@ export const notNull = (x) => x != null
 export const isEmpty = (x) => (len(x) === 0 ? true : !x)
 
 /** Check if value is a `Symbol` type */
-export const isSymbol = (x) => type(x) === 'symbol'
+export const isSymbol = (x): x is symbol => type(x) === 'symbol'
 
 /**
  * Returns the number of elements in a collection type.

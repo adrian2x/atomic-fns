@@ -432,7 +432,7 @@ export function sum(args, initial = 0) {
     return initial;
 }
 export function take(n, iterable) {
-    return Array.from(itake(n, iterable));
+    return [...itake(n, iterable)];
 }
 /**
  * Returns a generator that takes elements from the iterable as long as the predicate is `true`.

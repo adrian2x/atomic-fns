@@ -18,10 +18,10 @@ import {
   isNumber,
   isObject,
   isString,
+  isSymbol,
   Iteratee,
   keys,
   NotImplementedError,
-  Predicate,
   set
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
@@ -254,7 +254,9 @@ compact([0, 1, false, 2, '', 3])
 // => [1, 2, 3]
 ```
  */
-export const compact = (arr: any[] | Object) => {
+export function compact(arr: any[])
+export function compact(arr: Object)
+export function compact(arr) {
   if (arr == null) return
   if (Array.isArray(arr)) return arr.filter((x) => !isEmpty(x))
   const result = {}
@@ -264,6 +266,15 @@ export const compact = (arr: any[] | Object) => {
     }
   }
   return result
+}
+
+export function count<T>(iterable: Iterable<T> | Object, func: Iteratee<T>) {
+  const counters = {}
+  forEach(iterable, (value: T, key) => {
+    const result = func(value, key)
+    counters[result] = get(result, counters, 0) + 1
+  })
+  return counters
 }
 
 /**
@@ -310,8 +321,8 @@ filter(users, 'active')
  */
 export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
   if (Array.isArray(arr)) {
-    if (typeof fn === 'function') return arr.filter(fn as Iteratee)
-    if (typeof fn === 'string') return arr.filter((x) => get(fn, x))
+    if (isFunc(fn)) return arr.filter(fn)
+    if (isNumber(fn) || isString(fn) || isSymbol(fn)) return arr.filter((x) => get(fn, x))
     if (isObject(fn)) return arr.filter(matches(fn))
   }
 }
@@ -344,8 +355,8 @@ find(users, 'active')
  */
 export function find(arr, fn: Iteratee | PropertyKey | Object) {
   if (Array.isArray(arr)) {
-    if (typeof fn === 'function') return arr.find(fn as Iteratee)
-    if (typeof fn === 'string') return arr.find((x) => x?.[fn])
+    if (isFunc(fn)) return arr.find(fn)
+    if (isNumber(fn) || isString(fn) || isSymbol(fn)) return arr.find((x) => x?.[fn])
     if (isObject(fn)) return arr.find(matches(fn))
   }
 }
@@ -420,15 +431,18 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
  * @see {@link filter}
  * @see {@link map}
  */
-export function forEach<T>(collection: T[] | Iterable<T> | Object, fn: Iteratee) {
+export function forEach<T>(collection: T[], fn: Iteratee<T>)
+export function forEach<T>(collection: Iterable<T>, fn: Iteratee<T>)
+export function forEach<T>(collection: Object, fn: Iteratee<T>)
+export function forEach<T>(collection, fn: Iteratee<T>) {
   if (Array.isArray(collection)) {
     for (let i = 0; i < collection.length; i++) {
       const res = fn(collection[i], i, collection)
       if (res === false) return collection
     }
   } else if (isIterable(collection)) {
-    for (const [index, value] of enumerate(collection as Iterable<T>)) {
-      const res = fn(value, index, collection)
+    for (const [index, value] of enumerate(collection)) {
+      const res = fn(value as T, index, collection)
       if (res === false) return collection
     }
   } else {
@@ -1132,16 +1146,11 @@ export function groupBy(arr: Iterable<any> | Object, func: Iteratee | PropertyKe
  * @param func The function invoked per iteration or value(s) or value to remove.
  * @returns
  */
-export function remove<T>(arr: T[], func: Iteratee<T>)
-export function remove<T>(arr: T[], func: any[])
-export function remove<T>(arr: T[], func: any)
-export function remove<T>(arr: T[], func) {
+export function remove<T>(arr: T[], func: any) {
   return arr.filter((x, i) => {
-    if (x !== func) {
-      if (isArray(func)) return !func.includes(x)
-      else if (isFunc(func)) return !func(x, i, arr)
-      return true
-    }
+    if (isArray(func)) return !func.includes(x)
+    else if (isFunc(func)) return !func(x, i, arr)
+    return x !== func
   })
 }
 
