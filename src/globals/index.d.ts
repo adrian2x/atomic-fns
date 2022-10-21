@@ -5,25 +5,27 @@
  */
 /** Describes a function used to compare two values.
  *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#description}
+ * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#description Array.sort()}
  */
 export declare type Comp = (x: any, y: any) => -1 | 0 | 1;
+/** This is just a noop function. */
+export declare const _: () => void;
 /**
  * A generic function type with arbitrary arguments and return.
  */
-export declare type Function = (...args: any[]) => any;
+export declare type Function<T = any> = (...args: any) => T;
 /**
  * An iteratee function used for collection methods.
- * @see {@link filter}
- * @see {@link find}
- * @see {@link forEach}
- * @see {@link index}
- * @see {@link map}
- * @see {@link pick}
- * @see {@link omit}
- * @see {@link uniq}
- * @see {@link sortedUniq}
- * @see {@link groupBy}
+ * @see {@link Collections.filter}
+ * @see {@link Collections.find}
+ * @see {@link Collections.forEach}
+ * @see {@link Collections.index}
+ * @see {@link Collections.map}
+ * @see {@link Collections.pick}
+ * @see {@link Collections.omit}
+ * @see {@link Collections.uniq}
+ * @see {@link Collections.sortedUniq}
+ * @see {@link Collections.groupBy}
  */
 export declare type Iteratee<T = any> = (value: T, key?: any, arr?: any) => any;
 export declare type Predicate<T = any> = (value: T) => any;
@@ -111,7 +113,7 @@ export declare const isArray: (x: any) => x is any[];
  */
 export declare const isArrayLike: (x: any) => boolean;
 /** Check if value is a function type. */
-export declare const isFunc: (x: any) => x is Function;
+export declare const isFunc: (x: any) => x is Function<any>;
 /** Check if value is a number type. */
 export declare const isNumber: (x: any) => x is number;
 /** Check if value is a bigint type. */
@@ -172,32 +174,6 @@ export declare const keys: (object: Object) => string[];
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values Object.values()}
  */
 export declare const values: (object: any) => unknown[];
-/**
- * Round `x` to the number of digits after the decimal point. If `digits` is
- * omitted, it returns the nearest integer to x.
- *
- * @param {number} x
- * @param {number} [digits=0]
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round Math.round()}
- */
-export declare function round(x: number, digits?: number): number;
-/**
- * Rounds down and returns the largest integer less than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer less than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor Math.floor()}
- */
-export declare const floor: (x: number) => number;
-/**
- * Rounds up and returns the largest integer greater than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer greater than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
- */
-export declare const ceil: (x: number) => number;
 /**
  * Check if a given property is present in a given object.
  * @param obj The object to check.

@@ -18,8 +18,8 @@ export function comp(x, y) {
   const op = call(x, 'compare', y)
   if (isNumber(op)) return op as 0 | 1 | -1
   if (eq(x, y)) return 0
-  if (le(x, y)) return -1
-  if (ge(x, y)) return 1
+  if (lte(x, y)) return -1
+  if (gte(x, y)) return 1
   return 0
 }
 
@@ -35,8 +35,8 @@ export function lt(x, y) {
   return x < y
 }
 
-export function le(x, y) {
-  let op = call(x, 'le', y)
+export function lte(x, y) {
+  let op = call(x, 'lte', y)
   if (op != null) return op
   op = call(x, 'eq', y)
   if (op === true) return op
@@ -51,8 +51,8 @@ export function gt(x, y) {
   return x > y
 }
 
-export function ge(x, y) {
-  let op = call(x, 'ge', y)
+export function gte(x, y) {
+  let op = call(x, 'gte', y)
   if (op != null) return op
   op = call(x, 'eq', y)
   if (op === true) return op
@@ -73,8 +73,8 @@ export function sub(x, y) {
   return x - y
 }
 
-export function mult(x, y) {
-  const op = call(x, 'mult', y)
+export function mul(x, y) {
+  const op = call(x, 'mul', y)
   if (op != null) return op
   return x * y
 }

@@ -3,6 +3,8 @@
  *
  * @module Globals
  */
+/** This is just a noop function. */
+export const _ = () => { };
 /** A function that always returns `true`. */
 export const True = () => true;
 /** A function that always returns `false`. */
@@ -222,35 +224,6 @@ export const keys = (object) => Object.keys(object);
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values Object.values()}
  */
 export const values = (object) => Object.values(object);
-/**
- * Round `x` to the number of digits after the decimal point. If `digits` is
- * omitted, it returns the nearest integer to x.
- *
- * @param {number} x
- * @param {number} [digits=0]
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round Math.round()}
- */
-export function round(x, digits = 0) {
-    const base = 10 ** digits;
-    return Math.round(x * base) / base;
-}
-/**
- * Rounds down and returns the largest integer less than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer less than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor Math.floor()}
- */
-export const floor = (x) => Math.floor(x);
-/**
- * Rounds up and returns the largest integer greater than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer greater than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
- */
-export const ceil = (x) => Math.ceil(x);
 /**
  * Check if a given property is present in a given object.
  * @param obj The object to check.

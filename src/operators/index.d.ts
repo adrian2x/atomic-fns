@@ -10,12 +10,12 @@ export declare const isinstance: (x: any, y: any) => boolean;
 export declare function comp(x: any, y: any): 0 | 1 | -1;
 export declare function eq(x: any, y: any): any;
 export declare function lt(x: any, y: any): any;
-export declare function le(x: any, y: any): any;
+export declare function lte(x: any, y: any): any;
 export declare function gt(x: any, y: any): any;
-export declare function ge(x: any, y: any): any;
+export declare function gte(x: any, y: any): any;
 export declare function add(x: any, y: any): any;
 export declare function sub(x: any, y: any): any;
-export declare function mult(x: any, y: any): any;
+export declare function mul(x: any, y: any): any;
 export declare function div(x: any, y: any): any;
 export declare function mod(x: any, y: any): any;
 /**

@@ -15,20 +15,18 @@ import {
   imap,
   islice,
   itake,
-  max,
-  min,
   partition,
   range,
   reduce,
   reversed,
   sort,
   sorted,
-  sum,
   take,
   takeWhile,
   times,
   zip
 } from '../src/itertools/index.js'
+import { max } from '../src/math/index.js'
 
 const Falsy = (x) => !x
 
@@ -153,14 +151,6 @@ describe('operators', () => {
     assert.deepEqual(it, [false, 0, ''])
   })
 
-  it('min', () => {
-    assert(min([5, 4, 3, 1, 2]) === 1)
-  })
-
-  it('max', () => {
-    assert(max([7, 9, 3, 11]) === 11)
-  })
-
   it('partition', () => {
     let [A, B] = partition([false, 0, '', true, '', []], Falsy)
     assert.deepEqual(A, [false, 0, '', ''])
@@ -237,12 +227,6 @@ describe('operators', () => {
         { user: 'fred', age: 40 }
       ]
     )
-  })
-
-  it('sum', () => {
-    assert(sum([]) === 0)
-    assert(sum([1, 2, 3, 4]) === 10)
-    assert(sum([1, 2, 3, 4], 5) === 15)
   })
 
   it('times', () => {

@@ -4,7 +4,7 @@
  * @module Iterators
  */
 import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js';
-import { bool, comp, eq, gt, id, le, add } from '../operators/index.js';
+import { add, bool, comp, eq, id } from '../operators/index.js';
 /**
  * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
  * @param iterable The iterable to accumulate
@@ -99,7 +99,7 @@ contains('abcd', 'bc')
 // => true
 ```
  *
- * @see {@link collections.find}
+ * @see {@link Collections.find}
  */
 export function contains(collection, value) {
     if (!collection)
@@ -264,24 +264,6 @@ export function partition(iterable, predicate) {
     return [left, right];
 }
 /**
- * Returns the smallest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `le` method, this will be called to compare.
- * @param iterable The iterable to inspect.
- * @param key Optional key function to transform the elements (default `id`).
- * @returns The smallest element in the iterable.
- */
-export function min(iterable, key = id) {
-    return reduce(iterable, (x, y) => (le(key(x), key(y)) ? x : y));
-}
-/**
- * Returns the largest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `gt` method, this will be called to compare.
- * @param iterable The iterable to inspect.
- * @param key Optional key function to transform the elements (default `id`).
- * @returns The largest element in the iterable.
- */
-export function max(iterable, key = id) {
-    return reduce(iterable, (x, y) => (gt(key(x), key(y)) ? x : y));
-}
-/**
  * Returns a generator for a sequence of numbers in the given range, starting from `start` (default 0) to `stop` (not-inclusive) in increments of `step` (default 1).
  *
  * `range(x)` is a shorthand for `range(0, x, 1)`.
@@ -410,26 +392,6 @@ export function sort(args, reverse, compareFn) {
     if (reverse === true)
         args.reverse();
     return args;
-}
-/**
- * Sums `initial` and the items of an iterable and returns the total.
- * @param args The elements to add to `initial`.
- * @param initial The initial value to add to (default `0`).
- * @returns The total sum of initial and iterable elements.
- * @example
-```js
-sum([1, 2, 3, 4])
-// => 10
-
-sum([1, 2, 3, 4], 5)
-// => 15
-```
- */
-export function sum(args, initial = 0) {
-    for (const x of args) {
-        initial += x;
-    }
-    return initial;
 }
 export function take(n, iterable) {
     return [...itake(n, iterable)];

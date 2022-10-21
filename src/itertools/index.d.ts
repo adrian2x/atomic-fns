@@ -72,7 +72,7 @@ contains('abcd', 'bc')
 // => true
 ```
  *
- * @see {@link collections.find}
+ * @see {@link Collections.find}
  */
 export declare function contains(collection: Iterable<any>, value: any): any;
 /**
@@ -142,20 +142,6 @@ export declare function itake<T>(n: number, iterable: Iterable<T>): Generator<un
 export declare function iter<T>(obj: any): Iterator<T>;
 export declare function partition<T>(iterable: Iterable<T>, predicate: Predicate<T>): T[][];
 /**
- * Returns the smallest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `le` method, this will be called to compare.
- * @param iterable The iterable to inspect.
- * @param key Optional key function to transform the elements (default `id`).
- * @returns The smallest element in the iterable.
- */
-export declare function min<T>(iterable: Iterable<T>, key?: (x: any) => any): any;
-/**
- * Returns the largest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `gt` method, this will be called to compare.
- * @param iterable The iterable to inspect.
- * @param key Optional key function to transform the elements (default `id`).
- * @returns The largest element in the iterable.
- */
-export declare function max<T>(iterable: Iterable<T>, key?: (x: any) => any): any;
-/**
  * Returns a generator for a sequence of numbers in the given range, starting from `start` (default 0) to `stop` (not-inclusive) in increments of `step` (default 1).
  *
  * `range(x)` is a shorthand for `range(0, x, 1)`.
@@ -208,21 +194,6 @@ export declare function sort(args: any[]): any[];
 export declare function sort(args: any[], reverse: boolean): any[];
 export declare function sort(args: any[], compareFn: Comp): any[];
 export declare function sort(args: any[], reverse: boolean, compareFn: Comp): any[];
-/**
- * Sums `initial` and the items of an iterable and returns the total.
- * @param args The elements to add to `initial`.
- * @param initial The initial value to add to (default `0`).
- * @returns The total sum of initial and iterable elements.
- * @example
-```js
-sum([1, 2, 3, 4])
-// => 10
-
-sum([1, 2, 3, 4], 5)
-// => 15
-```
- */
-export declare function sum(args: Iterable<number>, initial?: number): number;
 export declare function take<T>(n: number, iterable: Iterable<T>): unknown[];
 /**
  * Returns a generator that takes elements from the iterable as long as the predicate is `true`.

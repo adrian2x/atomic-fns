@@ -29,7 +29,6 @@ import {
   next,
   oct,
   ord,
-  round,
   str,
   True,
   type,
@@ -205,14 +204,6 @@ describe('globals', () => {
   it('values', () => {
     let obj = { a: 1, b: 2 }
     assert.deepEqual(values(obj), Object.values(obj))
-  })
-
-  it('round', () => {
-    assert(round(0.5) === 1)
-    assert(round(-0.5) === 0)
-    assert(round(1.5) === 2)
-    assert(round(1.54, 2) === 1.54)
-    assert(round(1.545, 3) === 1.545)
   })
 
   it('next', () => {

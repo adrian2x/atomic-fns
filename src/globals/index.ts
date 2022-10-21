@@ -6,27 +6,30 @@
 
 /** Describes a function used to compare two values.
  *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#description}
+ * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#description Array.sort()}
  */
 export type Comp = (x, y) => -1 | 0 | 1
+
+/** This is just a noop function. */
+export const _ = () => {}
 
 /**
  * A generic function type with arbitrary arguments and return.
  */
-export type Function = (...args) => any
+export type Function<T = any> = (...args: any) => T
 
 /**
  * An iteratee function used for collection methods.
- * @see {@link filter}
- * @see {@link find}
- * @see {@link forEach}
- * @see {@link index}
- * @see {@link map}
- * @see {@link pick}
- * @see {@link omit}
- * @see {@link uniq}
- * @see {@link sortedUniq}
- * @see {@link groupBy}
+ * @see {@link Collections.filter}
+ * @see {@link Collections.find}
+ * @see {@link Collections.forEach}
+ * @see {@link Collections.index}
+ * @see {@link Collections.map}
+ * @see {@link Collections.pick}
+ * @see {@link Collections.omit}
+ * @see {@link Collections.uniq}
+ * @see {@link Collections.sortedUniq}
+ * @see {@link Collections.groupBy}
  */
 export type Iteratee<T = any> = (value: T, key?, arr?) => any
 
@@ -269,38 +272,6 @@ export const keys = (object: Object) => Object.keys(object)
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values Object.values()}
  */
 export const values = (object) => Object.values(object)
-
-/**
- * Round `x` to the number of digits after the decimal point. If `digits` is
- * omitted, it returns the nearest integer to x.
- *
- * @param {number} x
- * @param {number} [digits=0]
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round Math.round()}
- */
-export function round(x: number, digits = 0) {
-  const base = 10 ** digits
-  return Math.round(x * base) / base
-}
-
-/**
- * Rounds down and returns the largest integer less than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer less than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor Math.floor()}
- */
-export const floor = (x: number) => Math.floor(x)
-
-/**
- * Rounds up and returns the largest integer greater than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer greater than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
- */
-export const ceil = (x: number) => Math.ceil(x)
 
 /**
  * Check if a given property is present in a given object.
