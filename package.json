@@ -1,9 +1,12 @@
 {
   "name": "atomic-fns",
   "description": "Like Lodash, but for ESNext and with types. Stop shipping code built for browsers from 2015.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "main": "src/index.js",
   "type": "module",
+  "types": "src/index.d.ts",
+  "module": "src/index.js",
+  "sideEffects": false,
   "devDependencies": {
     "@types/jasmine": "^4.3.0",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
