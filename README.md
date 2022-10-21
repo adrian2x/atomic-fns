@@ -1,5 +1,7 @@
 # atomic-fns
 
+[Read the Docs](https://atomic-fns.dev)
+
 ## Like Lodash, but for ESNext and with types.
 
 Stop shipping code built for browsers from 2015. Really though, look at the [issues](https://github.com/lodash/lodash/issues/2930).
@@ -40,7 +42,7 @@ uniqueId('user_')
 
 ## Docs
 
-🚢 Coming soon at [atomic-fns.dev](https://atomic-fns.dev)
+📖 Available on [atomic-fns.dev](https://atomic-fns.dev)
 
 💡 See the `src` directory for comments.
 

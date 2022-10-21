@@ -144,10 +144,29 @@ export declare const isSymbol: (x: any) => x is symbol;
  */
 export declare function len(value: any): any;
 /**
- * Generates a unique ID using random numbers.
- * If prefix is given, the ID is appended to it.
+ * Generates a unique ID using random numbers. If a prefix is given, the ID is appended to it and returned as a string.
+ * @param {string} [pre=''] The id prefix.
+ * @returns {number|string} Returns the numeric or string ID.
+ * @example
+```js
+uniqueId()
+// => 3445556877
+
+uniqueId('user_')
+// => 'user_1033763188'
+```
  */
 export declare const uniqueId: (pre?: string) => any;
+/**
+ * Generates a monotonically increasing, pseudo-random based uuid-v4 string. These are sortable, url-friendly and are 100% unique if the IDs are generated more than 1 millisecond apart. If two IDs are generated at the same millisecond, the chance of collision is still pretty low (1 in 10^15).
+ * @returns Returns a GUID formatted string.
+ * @example
+```js
+uuid()
+// => '183f8ef3-b8f0-4000-81f5-89234c836d00'
+```
+ */
+export declare const uuid: () => string;
 /**
  * Checks if `obj.key` is a function, and calls it with any given `args`.
  * @param {*} obj

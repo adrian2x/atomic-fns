@@ -33,11 +33,10 @@ import {
   True,
   type,
   uniqueId,
-  values
+  values,
+  _
 } from '../src/globals/index.js'
 import { enumerate } from '../src/itertools/index.js'
-
-function cb() {}
 
 describe('globals', () => {
   it('CustomError', () => {
@@ -68,12 +67,14 @@ describe('globals', () => {
     assert(type([]) === 'array')
     assert(type({}) === 'object')
     assert(type(type) === 'function')
+    assert(type(Error()) === 'error')
+    assert(type(new CustomError()) === 'error')
     assert(type(Symbol()) === 'symbol')
     assert(type(new Map()) === 'Map')
     assert(type(new WeakMap()) === 'WeakMap')
     assert(type(new Set()) === 'Set')
     assert(type(new WeakSet()) === 'WeakSet')
-    assert(type(new Promise(cb)) === 'Promise')
+    assert(type(new Promise(_)) === 'Promise')
     assert(type(new Int8Array()) === 'Int8Array')
     assert(type(new Uint8Array()) === 'Uint8Array')
     assert(type(new Uint8ClampedArray()) === 'Uint8ClampedArray')
@@ -114,14 +115,14 @@ describe('globals', () => {
   })
 
   it('isFunc', () => {
-    assert(isFunc(cb))
+    assert(isFunc(_))
     assert(!isFunc([]))
   })
 
   it('isAsync', () => {
     assert(isAsync(async function () {}))
     assert(isAsync(async () => {}))
-    assert(!isAsync(cb))
+    assert(!isAsync(_))
   })
 
   it('isNaN', () => {
@@ -142,7 +143,7 @@ describe('globals', () => {
   })
 
   it('isPromise', () => {
-    assert(isPromise(new Promise(cb)))
+    assert(isPromise(new Promise(_)))
   })
 
   it('isSymbol', () => {

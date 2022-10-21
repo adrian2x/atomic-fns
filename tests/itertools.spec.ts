@@ -158,10 +158,12 @@ describe('operators', () => {
   })
 
   it('range', () => {
+    assert.deepEqual([...range(0)], [])
     assert.deepEqual([...range(4)], [0, 1, 2, 3])
-    assert.deepEqual([...range(5, 9)], [5, 6, 7, 8])
-    assert.deepEqual([...range(5, 0, -2)], [5, 3, 1])
-    assert.deepEqual([...range(-3)], [])
+    assert.deepEqual([...range(-4)], [0, -1, -2, -3])
+    assert.deepEqual([...range(0, -4, -1)], [0, -1, -2, -3])
+    assert.deepEqual([...range(1, 5)], [1, 2, 3, 4])
+    assert.deepEqual([...range(0, 20, 5)], [0, 5, 10, 15])
   })
 
   it('reduce', () => {
