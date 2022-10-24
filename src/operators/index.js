@@ -3,22 +3,30 @@
  *
  * @module Operators
  */
-import { call, isNumber, isObject } from '../globals/index.js';
+import { call, isObject } from '../globals/index.js';
 export const id = (x) => x;
 export const bool = (x) => !!x;
 export const not = (x) => !x;
 export const isinstance = (x, y) => x instanceof y;
-export function comp(x, y) {
-    const op = call(x, 'compare', y);
-    if (isNumber(op))
-        return op;
-    if (eq(x, y))
+/**
+ * Checks whether `x` is a comparable type and returns the result of `x.compare(y)`.
+ * Otherwise the return value of the compare function checks if:
+ *   - `x === y` or `x.lt(y)` returns `0`
+ *   - `x < y` or `x.lt(y)` returns `-1`
+ *   - otherwise returns `1`
+ * @param {*} x An initial value
+ * @param {*} y Other value to compare
+ * @returns {-1 | 0 | 1} The comparison result
+ */
+export function compare(x, y) {
+    if (x === y)
         return 0;
-    if (lte(x, y))
+    const op = call(x, 'compare', y);
+    if (op === -1 || op === 0 || op === 1)
+        return op;
+    if (x < y || lt(x, y))
         return -1;
-    if (gte(x, y))
-        return 1;
-    return 0;
+    return 1;
 }
 export function eq(x, y) {
     const op = call(x, 'eq', y);

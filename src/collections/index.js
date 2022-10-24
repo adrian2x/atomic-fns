@@ -4,166 +4,12 @@
  * @module Collections
  */
 import { partial } from '../functools/index.js';
-import { call, get, isArray, isArrayLike, isBool, isEmpty, isFunc, isIterable, isNull, isNumber, isObject, isString, isSymbol, keys, NotImplementedError, set } from '../globals/index.js';
+import { call, get, isArray, isArrayLike, isBool, isEmpty, isFunc, isIterable, isNull, isNumber, isObject, isString, isSymbol, keys, set } from '../globals/index.js';
 import { enumerate } from '../itertools/index.js';
-import { comp, eq, id } from '../operators/index.js';
-/**
- * A `Collection` is an iterable {@link Container} type.
- * This is an abstract base class for user-defined collection types.
- *
- *
- * @abstract
- * @class Collection
- * @implements {Container}
- */
-export class Collection {
-    /**
-     * Returns an iterator for the container items
-     * @return {Iterator}
-     */
-    [Symbol.iterator]() {
-        return this;
-    }
-    /**
-     * Implements the iterator protocol and returns the next item in the iterable.
-     */
-    next() { }
-    /**
-     * Adds a new item to the container.
-     * @param item - The item to add to the collection.
-     */
-    add(item) { }
-    /**
-     * Checks if item is present in the container.
-     * @param item - The item to search for in the collection.
-     * @returns `true` when the element is found, else `false`
-     */
-    contains(item) {
-        return false;
-    }
-    /**
-     * Returns the total number of elements in the container.
-     */
-    size() {
-        throw new NotImplementedError();
-    }
-    /**
-     * Remove the first item from the container where `item == x`
-     * @returns `true` when the element is found and removed, else `false`
-     */
-    remove(x) {
-        return false;
-    }
-    /**
-     * Retrieve and remove the item at index `i`.
-     * @returns the item or undefined if not found.
-     */
-    pop(i) { }
-    /**
-     * Remove all items from the container
-     */
-    clear() { }
-}
-/**
- * A sequence is an iterable {@link Collection} type with efficient index-based access.
- * @abstract
- * @class Sequence
- * @extends {Collection}
- * @template T
- */
-export class Sequence extends Collection {
-    /**
-     * Return the item at the given key or index
-     * @param {*} key
-     * @memberof Sequence
-     */
-    get(key) {
-        throw new NotImplementedError();
-    }
-    /**
-     * Set a new value at the given key or index
-     *
-     * @param {*} key
-     * @param {T} val
-     * @memberof Sequence
-     */
-    set(key, val) {
-        throw new NotImplementedError();
-    }
-    /**
-     * Deletes the given key or index, and its value.
-     * Raises ValueError if not key is found.
-     *
-     * @param {*} key
-     * @memberof Sequence
-     */
-    delete(key) {
-        throw new NotImplementedError();
-    }
-    /**
-     * Adds a new item to the end of the sequence.
-     *
-     * @param {T} x
-     * @memberof Sequence
-     */
-    append(x) { }
-    /**
-     * Append all the items to the sequence.
-     *
-     * @param {Iterable<T>} iter
-     * @memberof Sequence
-     */
-    extend(iter) { }
-    /**
-     * Return the index of x in the sequence, or undefined if not found.
-     *
-     * @param {T} item
-     * @return {(number | undefined)}
-     * @memberof Sequence
-     */
-    indexOf(item) {
-        throw new NotImplementedError();
-    }
-    size() {
-        return 0;
-    }
-    reversed() {
-        throw new NotImplementedError();
-    }
-}
-/**
- * Returns a new immutable Set object with elements from `iterable`. Its contents cannot be altered after it's created.
- *
- *
- * @class FrozenSet
- * @extends {Set<T>}
- * @template T
- */
-export class FrozenSet extends Set {
-    constructor(iterable) {
-        super(iterable);
-        return this.freeze();
-    }
-    /** @private */
-    add() {
-        throw TypeError('FrozenSet cannot be modified.');
-        return this; // eslint-disable-line
-    }
-    /** @private */
-    delete() {
-        throw TypeError('FrozenSet cannot be modified.');
-        return false; // eslint-disable-line
-    }
-    /** @private */
-    clear() {
-        throw TypeError('FrozenSet cannot be modified.');
-        return this; // eslint-disable-line
-    }
-    /** @private */
-    freeze() {
-        return Object.freeze(this);
-    }
-}
+import { compare, eq, id } from '../operators/index.js';
+export * from './abc.js';
+export * from './deque.js';
+export * from './frozenset.js';
 export function compact(arr) {
     if (arr == null)
         return;
@@ -852,7 +698,7 @@ uniq([2, 1, 2])
  */
 export function sortedUniq(arr, fn = id) {
     const values = uniq(arr, fn);
-    values.sort(comp);
+    values.sort(compare);
     return values;
 }
 function baseMergeDeep(obj, source, key, stack) {

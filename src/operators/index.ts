@@ -4,7 +4,7 @@
  * @module Operators
  */
 
-import { call, isNumber, isObject } from '../globals/index.js'
+import { call, isObject } from '../globals/index.js'
 
 export const id = (x) => x
 
@@ -14,13 +14,28 @@ export const not = (x) => !x
 
 export const isinstance = (x, y) => x instanceof y
 
-export function comp(x, y) {
+/** Describes a function used to compare two values.
+ *
+ * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#parameters Array.sort()}
+ */
+export type Comparer<T = any> = (x: T, y: T) => -1 | 0 | 1
+
+/**
+ * Checks whether `x` is a comparable type and returns the result of `x.compare(y)`.
+ * Otherwise the return value of the compare function checks if:
+ *   - `x === y` or `x.lt(y)` returns `0`
+ *   - `x < y` or `x.lt(y)` returns `-1`
+ *   - otherwise returns `1`
+ * @param {*} x An initial value
+ * @param {*} y Other value to compare
+ * @returns {-1 | 0 | 1} The comparison result
+ */
+export function compare(x, y): -1 | 0 | 1 {
+  if (x === y) return 0
   const op = call(x, 'compare', y)
-  if (isNumber(op)) return op as 0 | 1 | -1
-  if (eq(x, y)) return 0
-  if (lte(x, y)) return -1
-  if (gte(x, y)) return 1
-  return 0
+  if (op === -1 || op === 0 || op === 1) return op
+  if (x < y || lt(x, y)) return -1
+  return 1
 }
 
 export function eq(x, y) {

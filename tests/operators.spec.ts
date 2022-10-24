@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { bool, id, isinstance, not, comp, shallowEqual } from '../src/operators/index.js'
+import { bool, id, isinstance, not, compare, shallowEqual } from '../src/operators/index.js'
 
 describe('operators', () => {
   it('id', () => {
@@ -18,10 +18,10 @@ describe('operators', () => {
     assert(not(''))
   })
 
-  it('comp', () => {
-    assert(comp(1, 1) === 0)
-    assert(comp(2, 3) === -1)
-    assert(comp(4, 3) === 1)
+  it('compare', () => {
+    assert(compare(1, 1) === 0)
+    assert(compare(2, 3) === -1)
+    assert(compare(4, 3) === 1)
   })
 
   it('isinstance', () => {

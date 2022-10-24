@@ -6,15 +6,15 @@
 
 import {
   call,
-  Comp,
   Function,
   isEmpty,
   isObject,
+  Iteratee,
   notNull,
   Predicate,
   ValueError
 } from '../globals/index.js'
-import { add, bool, comp, eq, id } from '../operators/index.js'
+import { add, bool, compare, Comparer, eq, id } from '../operators/index.js'
 
 /**
  * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
@@ -119,7 +119,7 @@ export function contains(collection: Iterable<any>, value) {
   return any(collection, (x) => eq(value, x))
 }
 
-const compKey = (cmp: Comp, key) => (x, y) => cmp(key(x), key(y))
+const compKey = (compare: Comparer, key) => (x, y) => compare(key(x), key(y))
 
 /**
  * Returns a generator that drops elements from the iterable as long as the predicate is `true`; afterwards, returns every remaining element. Note, the generator does not produce any output until the predicate first becomes `false`.
@@ -142,6 +142,24 @@ export function* dropWhile<T>(iterable: Iterable<T>, predicate: Predicate) {
     if (head.done) return head.value
     yield head.value
   }
+}
+
+export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
+  for (const [index, value] of enumerate(iterable)) {
+    if (fun(value as T, index, iterable) === false) {
+      return
+    }
+  }
+}
+
+export function IterableIterator<T = any>(next) {
+  const it: Iterator<T> & Iterable<T> = {
+    next,
+    [Symbol.iterator]() {
+      return this
+    }
+  }
+  return it
 }
 
 /**
@@ -201,7 +219,7 @@ export function* ifilter<T>(iterable: Iterable<T>, predicate: Predicate) {
   }
 }
 
-export function* imap<T>(iterable: Iterable<T>, mapFn: (x: T) => any) {
+export function* imap<T, TReturn = any>(iterable: Iterable<T>, mapFn: (x: T) => TReturn) {
   for (const item of iterable) {
     yield mapFn(item)
   }
@@ -352,7 +370,7 @@ export function reversed<T>(iterable: Iterable<T>) {
 
 export function sorted(args: any[]): any[]
 export function sorted(args: any[], reverse: boolean): any[]
-export function sorted(args: any[], reverse: boolean, comp: Comp): any[]
+export function sorted(args: any[], reverse: boolean, comp: Comparer): any[]
 export function sorted(args: any[], key: Function): any[]
 export function sorted(args: any[], key: Function, reverse: boolean): any[]
 
@@ -369,11 +387,16 @@ export function sorted(args: any[], key: Function, reverse: boolean): any[]
  *
  * @param {(Array | Object)} args
  * @param {(boolean | Function)} [key]
- * @param {(boolean | Comp)} [reverse]
- * @param {Comp} [compareFn]
+ * @param {(boolean | Comparer)} [reverse]
+ * @param {Comparer} [compareFn]
  * @return
  */
-export function sorted(args, key?: boolean | Function, reverse?: boolean | Comp, compareFn?: Comp) {
+export function sorted(
+  args,
+  key?: boolean | Function,
+  reverse?: boolean | Comparer,
+  compareFn?: Comparer
+) {
   if (isObject(args)) args = Object.keys(args)
   if (typeof key === 'boolean') {
     if (typeof reverse === 'function') {
@@ -385,7 +408,7 @@ export function sorted(args, key?: boolean | Function, reverse?: boolean | Comp,
     key = id
   }
   const copy = Array.from(args)
-  const _compare = compKey(compareFn || comp, key || id)
+  const _compare = compKey(compareFn || compare, key || id)
   copy.sort(_compare)
   if (reverse) copy.reverse()
   return copy
@@ -393,8 +416,8 @@ export function sorted(args, key?: boolean | Function, reverse?: boolean | Comp,
 
 export function sort(args: any[]): any[]
 export function sort(args: any[], reverse: boolean): any[]
-export function sort(args: any[], compareFn: Comp): any[]
-export function sort(args: any[], reverse: boolean, compareFn: Comp): any[]
+export function sort(args: any[], compareFn: Comparer): any[]
+export function sort(args: any[], reverse: boolean, compareFn: Comparer): any[]
 
 /**
  * Sort `args` in place. Can be called like this:
@@ -403,16 +426,16 @@ export function sort(args: any[], reverse: boolean, compareFn: Comp): any[]
  *   - sort([...], true, (x, y) => number) => reverse and using custom compare
  *
  * @param {any[]} args
- * @param {(boolean | Comp)} [reverse]
- * @param {Comp} [compareFn]
+ * @param {(boolean | Comparer)} [reverse]
+ * @param {Comparer} [compareFn]
  * @return
  */
-export function sort(args: any[], reverse?: boolean | Comp, compareFn?: Comp) {
+export function sort(args: any[], reverse?: boolean | Comparer, compareFn?: Comparer) {
   if (typeof reverse === 'function') {
     compareFn = reverse
     reverse = false
   }
-  args.sort(compareFn || comp)
+  args.sort(compareFn || compare)
   if (reverse === true) args.reverse()
   return args
 }

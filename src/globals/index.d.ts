@@ -3,11 +3,6 @@
  *
  * @module Globals
  */
-/** Describes a function used to compare two values.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#description Array.sort()}
- */
-export declare type Comp = (x: any, y: any) => -1 | 0 | 1;
 /** This is just a noop function. */
 export declare const _: () => void;
 /**
@@ -27,7 +22,7 @@ export declare type Function<T = any> = (...args: any) => T;
  * @see {@link Collections.sortedUniq}
  * @see {@link Collections.groupBy}
  */
-export declare type Iteratee<T = any> = (value: T, key?: any, arr?: any) => any;
+export declare type Iteratee<T = any, K = any> = (value: T, key?: K, arr?: any) => any;
 export declare type Predicate<T = any> = (value: T) => any;
 /** A function that always returns `true`. */
 export declare const True: () => boolean;

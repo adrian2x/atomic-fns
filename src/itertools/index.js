@@ -4,7 +4,7 @@
  * @module Iterators
  */
 import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js';
-import { add, bool, comp, eq, id } from '../operators/index.js';
+import { add, bool, compare, eq, id } from '../operators/index.js';
 /**
  * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
  * @param iterable The iterable to accumulate
@@ -109,7 +109,7 @@ export function contains(collection, value) {
         return includes;
     return any(collection, (x) => eq(value, x));
 }
-const compKey = (cmp, key) => (x, y) => cmp(key(x), key(y));
+const compKey = (compare, key) => (x, y) => compare(key(x), key(y));
 /**
  * Returns a generator that drops elements from the iterable as long as the predicate is `true`; afterwards, returns every remaining element. Note, the generator does not produce any output until the predicate first becomes `false`.
  * @param iterable The iterable to inspect.
@@ -133,6 +133,22 @@ export function* dropWhile(iterable, predicate) {
             return head.value;
         yield head.value;
     }
+}
+export function iforEach(iterable, fun) {
+    for (const [index, value] of enumerate(iterable)) {
+        if (fun(value, index, iterable) === false) {
+            return;
+        }
+    }
+}
+export function IterableIterator(next) {
+    const it = {
+        next,
+        [Symbol.iterator]() {
+            return this;
+        }
+    };
+    return it;
 }
 /**
  * Yields elements like `[index, item]` from an iterable. Index starts at zero by default.
@@ -350,8 +366,8 @@ export function reversed(iterable) {
  *
  * @param {(Array | Object)} args
  * @param {(boolean | Function)} [key]
- * @param {(boolean | Comp)} [reverse]
- * @param {Comp} [compareFn]
+ * @param {(boolean | Comparer)} [reverse]
+ * @param {Comparer} [compareFn]
  * @return
  */
 export function sorted(args, key, reverse, compareFn) {
@@ -368,7 +384,7 @@ export function sorted(args, key, reverse, compareFn) {
         key = id;
     }
     const copy = Array.from(args);
-    const _compare = compKey(compareFn || comp, key || id);
+    const _compare = compKey(compareFn || compare, key || id);
     copy.sort(_compare);
     if (reverse)
         copy.reverse();
@@ -381,8 +397,8 @@ export function sorted(args, key, reverse, compareFn) {
  *   - sort([...], true, (x, y) => number) => reverse and using custom compare
  *
  * @param {any[]} args
- * @param {(boolean | Comp)} [reverse]
- * @param {Comp} [compareFn]
+ * @param {(boolean | Comparer)} [reverse]
+ * @param {Comparer} [compareFn]
  * @return
  */
 export function sort(args, reverse, compareFn) {
@@ -390,7 +406,7 @@ export function sort(args, reverse, compareFn) {
         compareFn = reverse;
         reverse = false;
     }
-    args.sort(compareFn || comp);
+    args.sort(compareFn || compare);
     if (reverse === true)
         args.reverse();
     return args;

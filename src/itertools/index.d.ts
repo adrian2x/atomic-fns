@@ -3,8 +3,8 @@
  *
  * @module Iterators
  */
-import { Comp, Function, Predicate } from '../globals/index.js';
-import { add } from '../operators/index.js';
+import { Function, Iteratee, Predicate } from '../globals/index.js';
+import { add, Comparer } from '../operators/index.js';
 /**
  * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
  * @param iterable The iterable to accumulate
@@ -82,6 +82,8 @@ export declare function contains(collection: Iterable<any>, value: any): any;
  * @returns Elements
  */
 export declare function dropWhile<T>(iterable: Iterable<T>, predicate: Predicate): Generator<unknown, any, unknown>;
+export declare function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>): void;
+export declare function IterableIterator<T = any>(next: any): Iterator<T, any, undefined> & Iterable<T>;
 /**
  * Yields elements like `[index, item]` from an iterable. Index starts at zero by default.
  * @template T
@@ -120,7 +122,7 @@ export declare function icompact<T>(iterable: Iterable<T>): Generator<T, void, u
  * Iterates over elements of collection, producing only those elements where predicate returns a `truthy` value.
  */
 export declare function ifilter<T>(iterable: Iterable<T>, predicate: Predicate): Generator<T, void, unknown>;
-export declare function imap<T>(iterable: Iterable<T>, mapFn: (x: T) => any): Generator<any, void, unknown>;
+export declare function imap<T, TReturn = any>(iterable: Iterable<T>, mapFn: (x: T) => TReturn): Generator<TReturn, void, unknown>;
 /**
  * Returns a generator flattening one level of nesting in a list of lists.
  * @param iterables The iterable to flatten
@@ -187,13 +189,13 @@ export declare function reduce<T>(iterable: Iterable<T>, reducer: (prev: T, valu
 export declare function reversed<T>(iterable: Iterable<T>): T[];
 export declare function sorted(args: any[]): any[];
 export declare function sorted(args: any[], reverse: boolean): any[];
-export declare function sorted(args: any[], reverse: boolean, comp: Comp): any[];
+export declare function sorted(args: any[], reverse: boolean, comp: Comparer): any[];
 export declare function sorted(args: any[], key: Function): any[];
 export declare function sorted(args: any[], key: Function, reverse: boolean): any[];
 export declare function sort(args: any[]): any[];
 export declare function sort(args: any[], reverse: boolean): any[];
-export declare function sort(args: any[], compareFn: Comp): any[];
-export declare function sort(args: any[], reverse: boolean, compareFn: Comp): any[];
+export declare function sort(args: any[], compareFn: Comparer): any[];
+export declare function sort(args: any[], reverse: boolean, compareFn: Comparer): any[];
 export declare function take<T>(n: number, iterable: Iterable<T>): unknown[];
 /**
  * Returns a generator that takes elements from the iterable as long as the predicate is `true`.

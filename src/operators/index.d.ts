@@ -7,7 +7,22 @@ export declare const id: (x: any) => any;
 export declare const bool: (x: any) => boolean;
 export declare const not: (x: any) => boolean;
 export declare const isinstance: (x: any, y: any) => boolean;
-export declare function comp(x: any, y: any): 0 | 1 | -1;
+/** Describes a function used to compare two values.
+ *
+ * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#parameters Array.sort()}
+ */
+export declare type Comparer<T = any> = (x: T, y: T) => -1 | 0 | 1;
+/**
+ * Checks whether `x` is a comparable type and returns the result of `x.compare(y)`.
+ * Otherwise the return value of the compare function checks if:
+ *   - `x === y` or `x.lt(y)` returns `0`
+ *   - `x < y` or `x.lt(y)` returns `-1`
+ *   - otherwise returns `1`
+ * @param {*} x An initial value
+ * @param {*} y Other value to compare
+ * @returns {-1 | 0 | 1} The comparison result
+ */
+export declare function compare(x: any, y: any): -1 | 0 | 1;
 export declare function eq(x: any, y: any): any;
 export declare function lt(x: any, y: any): any;
 export declare function lte(x: any, y: any): any;
