@@ -4,14 +4,14 @@
 
 ## Like Lodash, but for ESNext and with types.
 
-Stop shipping code built for browsers from 2015. Really though, look at the [issues](https://github.com/lodash/lodash/issues/2930).
+Stop shipping code built for browsers from 2015. Really though, look at all the [issues](https://github.com/lodash/lodash/issues/2930).
 
 You may prefer this because it's:
 
-* **Modular**: Pick what you need. Works with all bundlers and also supports tree-shaking.
+* **Modular**: Pick what you need. Supports tree-shaking, no side effects and works with all bundlers.
 * **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
 * **Lazy**: Leverage generators, iterators, and functional composition.
-* **Zero deps**: Built from scratch with no dependencies whatsoever.
+* **Zero deps**: Built from scratch with no runtime dependencies or polyfills.
 * **Well tested**: All modules have comprehensive test suites aiming for 100% coverage.
 * **TypeScript & docs**: Includes type declaration files and js with JSDocs for best in class experience.
 
@@ -24,7 +24,10 @@ npm install atomic-fns
 ```
 
 ## How to use
-```typescript
+
+Just import any function or class you need. See the full list of utilities [here](https://atomic-fns.dev/modules.html).
+
+```js
 import { reversed, sorted, times, uniqueId } from 'atomic-fns'
 
 reversed([1, 2, 3, 4])

@@ -33,6 +33,9 @@ export * from './BTree.js'
 export * from './Heap.js'
 export * from './LRUCache.js'
 export * from './SplayTree.js'
+export * from './SortedSet.js'
+export * from './SortedMap.js'
+export * from './SortedTree.js'
 
 /**
  * Creates a new array with all falsy and empty values removed.

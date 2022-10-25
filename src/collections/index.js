@@ -14,6 +14,9 @@ export * from './BTree.js';
 export * from './Heap.js';
 export * from './LRUCache.js';
 export * from './SplayTree.js';
+export * from './SortedSet.js';
+export * from './SortedMap.js';
+export * from './SortedTree.js';
 export function compact(arr) {
     if (arr == null)
         return;
