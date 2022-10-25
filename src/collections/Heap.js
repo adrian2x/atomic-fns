@@ -1,16 +1,35 @@
 import { compare } from '../operators/index.js';
 import { Collection } from './abc.js';
 export class Heap extends Collection {
-    /**
-     * @internal
-     */
     items;
-    /**
-     * @internal
-     */
     compare;
     count = 0;
-    size() {
+    /**
+     * Initializes a new Heap instance.
+     *
+     * **Note:** When constructing the heap from an array, it will operate directly on this array. For other iterables, it will create a new array.
+     *
+     * @param {Iterable<T>} [container=[]] The initial values.
+     * @param {Comparer} [cmp=compare] Compare function. Defaults to smaller values first.
+     */
+    constructor(container = [], cmp = compare) {
+        super();
+        this.compare = cmp;
+        if (Array.isArray(container)) {
+            // use the provided array to avoid copying.
+            this.items = container;
+        }
+        else {
+            this.items = Array.from(container);
+        }
+        this.count = this.items.length;
+        const halfLength = this.count >> 1;
+        // Heapify the items
+        for (let parent = (this.count - 1) >> 1; parent >= 0; --parent) {
+            this.heapifyDown(parent, halfLength);
+        }
+    }
+    get size() {
         return this.count;
     }
     clear() {
@@ -32,7 +51,7 @@ export class Heap extends Collection {
     pop() {
         if (!this.count)
             return;
-        let value = this.items[0];
+        const value = this.items[0];
         const last = this.items.pop();
         this.count -= 1;
         if (this.count) {
@@ -53,7 +72,7 @@ export class Heap extends Collection {
      * @return `true` if element exists.
      */
     contains(item) {
-        return this.items.indexOf(item) >= 0;
+        return this.items.includes(item);
     }
     /**
      * Remove specified item from heap.
@@ -81,31 +100,6 @@ export class Heap extends Collection {
     }
     values() {
         return this.items[Symbol.iterator]();
-    }
-    /**
-     * Initializes a new Heap instance.
-     *
-     * **Note:** When constructing the heap from an array, it will operate directly on this array. For other iterables, it will create a new array.
-     *
-     * @param {Iterable<T>} [container=[]] The initial values.
-     * @param {Comparer} [cmp=compare] Compare function. Defaults to smaller values first.
-     */
-    constructor(container = [], cmp = compare) {
-        super();
-        this.compare = cmp;
-        if (Array.isArray(container)) {
-            // use the provided array to avoid copying.
-            this.items = container;
-        }
-        else {
-            this.items = Array.from(container);
-        }
-        this.count = this.items.length;
-        const halfLength = this.count >> 1;
-        // Heapify the items
-        for (let parent = (this.count - 1) >> 1; parent >= 0; --parent) {
-            this.heapifyDown(parent, halfLength);
-        }
     }
     heapifyUp(pos) {
         const item = this.items[pos];

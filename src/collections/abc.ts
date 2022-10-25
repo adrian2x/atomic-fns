@@ -71,10 +71,10 @@ export abstract class Collection implements Container {
   /**
    * Returns the total number of elements in the collection.
    */
-  abstract size(): number
+  abstract get size(): number
 
   get length() {
-    return this.size()
+    return this.size
   }
 
   /**
@@ -82,7 +82,7 @@ export abstract class Collection implements Container {
    * @returns {boolean} `true` if is empty.
    */
   empty() {
-    return !this.size()
+    return !this.size
   }
 }
 
@@ -139,6 +139,13 @@ export abstract class Sequence<V = any, K = any> extends Collection {
   abstract entries(): Iterable<[K, V]>
 }
 
+/**
+ * A mapping is a {@link Collection} indexed by keys that may have associated values.
+ * @abstract
+ * @class Mapping
+ * @extends {Collection}
+ * @template K, V
+ */
 export abstract class Mapping<K, V> extends Collection {
   /**
    * Returns the value for the given key, or return `defaults` if not found.

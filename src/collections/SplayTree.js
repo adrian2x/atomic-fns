@@ -1,5 +1,4 @@
-import { KeyError } from '../globals/index.js';
-import { eq, gt, lt } from '../operators/index.js';
+import { compare, eq } from '../operators/index.js';
 import { Mapping } from './abc.js';
 /**
  * Base SplayTree node class.
@@ -39,12 +38,18 @@ class Node {
  * Insertion, look-up and removal in O(log n) *amortized* time.
  * For many patterns of non-random operations splay trees can take better than logarithmic time, without requiring advance knowledge of the pattern.
  * @see {@link https://en.wikipedia.org/wiki/Splay_tree Splay tree}
- * @template {K, V}
+ * @template K, V
  */
 export class SplayTree extends Mapping {
     root;
-    count = 0;
-    size() {
+    cmp;
+    count;
+    constructor(compareFn) {
+        super();
+        this.cmp = compareFn ?? compare;
+        this.count = 0;
+    }
+    get size() {
         return this.count;
     }
     empty() {
@@ -65,13 +70,13 @@ export class SplayTree extends Mapping {
             return;
         // Note: deterministic splaying (always moves key to front):
         // this.splay(key)
-        // if (eq(key, this.root.key)) return this.root.value
+        // if (this.cmp(key, this.root.key) === 0) return this.root.value
         // Randomized Splay Trees https://doi.org/10.1016%2Fs0020-0190%2801%2900230-7
         // The randomized idea is only moving accessed keys with a certain probability `p`.
         // Values of `p` closer to 1 tend to perform well.
         if (Math.random() <= 0.75) {
             this.splay(key);
-            if (eq(key, this.root.key))
+            if (this.cmp(key, this.root.key) === 0)
                 return this.root.value;
             else
                 return undefined;
@@ -79,9 +84,10 @@ export class SplayTree extends Mapping {
         // Lookup the node down the tree
         let current = this.root;
         while (current) {
-            if (eq(key, current.key))
+            const rank = this.cmp(key, current.key);
+            if (rank === 0)
                 return current.value;
-            if (lt(key, current.key))
+            if (rank < 0)
                 current = current.left;
             else
                 current = current.right;
@@ -102,10 +108,14 @@ export class SplayTree extends Mapping {
         // Splay on the key to move the last node on the search path for
         // the key to the root of the tree.
         this.splay(key);
-        if (eq(key, this.root.key))
+        const rank = this.cmp(key, this.root.key);
+        if (rank === 0) {
+            // Update the value
+            this.root.value = value;
             return;
+        }
         const node = new Node(key, value);
-        if (gt(key, this.root.key)) {
+        if (rank > 0) {
             node.left = this.root;
             node.right = this.root.right;
             this.root.right = undefined;
@@ -119,17 +129,17 @@ export class SplayTree extends Mapping {
         this.count += 1;
     }
     /**
-     * Removes a specified key from the tree if it exists in the tree. The removed value is returned. If the key is not found, a KeyError is thrown.
+     * Removes a specified key if it exists in the tree. The removed value is returned or `undefined` if not found.
      * @param {K} key The key to remove.
      * @returns {V} The removed value associated with `key`.
      */
     remove(key) {
         if (!this.root) {
-            throw new KeyError('Key not found: ' + key);
+            return;
         }
         this.splay(key);
         if (!eq(key, this.root.key)) {
-            throw new KeyError('Key not found: ' + key);
+            return;
         }
         const removed = this.root;
         if (!this.root.left) {
@@ -194,7 +204,7 @@ export class SplayTree extends Mapping {
         this.splay(key);
         // Now the result is either the root node or the greatest node in
         // the left subtree.
-        if (lt(this.root.key, key)) {
+        if (this.cmp(this.root.key, key) < 0) {
             return this.root;
         }
         else if (this.root.left) {
@@ -214,11 +224,12 @@ export class SplayTree extends Mapping {
         stub = left = right = new Node(null, null);
         let root = this.root;
         while (true) {
-            if (lt(key, root.key)) {
+            const rank = this.cmp(key, root.key);
+            if (rank < 0) {
                 if (!root.left) {
                     break;
                 }
-                if (lt(key, root.left.key)) {
+                if (this.cmp(key, root.left.key) < 0) {
                     // Rotate right.
                     const tmp = root.left;
                     root.left = tmp.right;
@@ -233,11 +244,11 @@ export class SplayTree extends Mapping {
                 right = root;
                 root = root.left;
             }
-            else if (gt(key, root.key)) {
+            else if (rank > 0) {
                 if (!root.right) {
                     break;
                 }
-                if (gt(key, root.right.key)) {
+                if (this.cmp(key, root.right.key) > 0) {
                     // Rotate left.
                     const tmp = root.right;
                     root.right = tmp.left;
@@ -264,7 +275,7 @@ export class SplayTree extends Mapping {
         this.root = root;
     }
     add(key) {
-        return this.set(key, undefined);
+        return this.set(key, null);
     }
     /**
      * Returns `true` if the given key is in the tree.

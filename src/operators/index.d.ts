@@ -20,9 +20,9 @@ export declare type Comparer<T = any> = (x: T, y: T) => number;
  *   - otherwise returns `1`
  * @param {*} x An initial value
  * @param {*} y Other value to compare
- * @returns {-1 | 0 | 1} The comparison result
+ * @returns {number} The comparison result
  */
-export declare function compare(x: any, y: any): -1 | 0 | 1;
+export declare function compare(x: any, y: any): number;
 export declare function eq(x: any, y: any): any;
 export declare function lt(x: any, y: any): any;
 export declare function lte(x: any, y: any): any;

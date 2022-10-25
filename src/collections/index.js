@@ -10,6 +10,10 @@ import { compare, eq, id } from '../operators/index.js';
 export * from './abc.js';
 export * from './deque.js';
 export * from './frozenset.js';
+export * from './BTree.js';
+export * from './Heap.js';
+export * from './LRUCache.js';
+export * from './SplayTree.js';
 export function compact(arr) {
     if (arr == null)
         return;

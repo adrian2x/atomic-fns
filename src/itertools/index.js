@@ -181,7 +181,7 @@ export function first(iterable) {
     return iter(iterable).next().value;
 }
 /**
- * Creates a new generator that filters all `falsey` and empty values from iterable.
+ * Creates a new generator that filters all falsy and empty values from iterable.
  * @param arr The array to compact
  * @returns A new array with the filtered values.
  * @example

@@ -34,7 +34,7 @@ class BNode<K, V = any> {
   // If so, it must be cloned before being mutated to avoid changing an unrelated tree.
   // This is transitive: if it's true, children are also shared even if `isShared!=true`
   // in those children. (Certain operations will propagate isShared=true to children.)
-  isShared: true | undefined
+  isShared?: boolean
   get isLeaf() {
     return (this as any).children === undefined
   }
@@ -350,13 +350,14 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
 
   /**
    * Initializes an empty B+ tree.
+   * @param {?Iterable<[K, V]>} [entries] The initial key value pairs.
    * @param compareFn Custom function to compare pairs of elements in the tree.
    *   If not specified, defaultComparator will be used which is valid as long as K extends DefaultComparable.
    * @param entries A set of key-value pairs to initialize the tree
    * @param {number} [maxNodeSize=64] Branching factor (maximum items or children per node)
    *   Must be in range 4..256. If undefined or <4 then default is used; if >256 then 256.
    */
-  public constructor(entries?: Array<[K, V]>, compareFn?: Comparer, maxNodeSize: number = 64) {
+  public constructor(entries?: Iterable<[K, V]>, compareFn?: Comparer, maxNodeSize: number = 64) {
     super()
     this._maxNodeSize = maxNodeSize >= 4 ? Math.min(maxNodeSize, 256) : 64
     this._compare = compareFn || compare
@@ -364,7 +365,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   /** Gets the number of key-value pairs in the tree. */
-  size() {
+  get size() {
     return this.count
   }
 
@@ -374,36 +375,36 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     this.count = 0
   }
 
-  /** Runs a function for each key-value pair, in order from smallest to
-   *  largest key. For compatibility with ES6 Map, the argument order to
-   *  the callback is backwards: value first, then key. Call forEachPair
-   *  instead to receive the key as the first argument.
-   * @returns the number of values that were sent to the callback,
-   *        or the R value if the callback returned {break:R}. */
-  forEach<R = number>(iteratee: Iteratee<V, K>): R | number {
-    return this.forEachPair((k, v) => iteratee(v as V, k, this))
-  }
+  // /** Runs a function for each key-value pair, in order from smallest to
+  //  *  largest key. For compatibility with ES6 Map, the argument order to
+  //  *  the callback is backwards: value first, then key. Call forEachPair
+  //  *  instead to receive the key as the first argument.
+  //  * @returns the number of values that were sent to the callback,
+  //  *        or the R value if the callback returned {break:R}. */
+  // forEach<R = number>(iteratee: Iteratee<V, K>): R | number {
+  //   return this.forEachPair((k, v) => iteratee(v as V, k, this))
+  // }
 
-  /** Runs a function for each key-value pair, in order from smallest to
-   *  largest key. The callback can return {break:R} (where R is any value
-   *  except undefined) to stop immediately and return R from forEachPair.
-   * @param onFound A function that is called for each key-value pair. This
-   *        function can return {break:R} to stop early with result R.
-   *        The reason that you must return {break:R} instead of simply R
-   *        itself is for consistency with editRange(), which allows
-   *        multiple actions, not just breaking.
-   * @param initialCounter This is the value of the third argument of
-   *        `onFound` the first time it is called. The counter increases
-   *        by one each time `onFound` is called. Default value: 0
-   * @returns the number of pairs sent to the callback (plus initialCounter,
-   *        if you provided one). If the callback returned {break:R} then
-   *        the R value is returned instead. */
-  private forEachPair<R = number>(callback: Iteratee<K, V>, initialCounter?: number): R | number {
-    const low = this.minKey()
-    const high = this.maxKey()
-    // eslint-disable-next-line
-    return this.rangeForEach(low!, high, true, callback, initialCounter)
-  }
+  // /** Runs a function for each key-value pair, in order from smallest to
+  //  *  largest key. The callback can return {break:R} (where R is any value
+  //  *  except undefined) to stop immediately and return R from forEachPair.
+  //  * @param onFound A function that is called for each key-value pair. This
+  //  *        function can return {break:R} to stop early with result R.
+  //  *        The reason that you must return {break:R} instead of simply R
+  //  *        itself is for consistency with editRange(), which allows
+  //  *        multiple actions, not just breaking.
+  //  * @param initialCounter This is the value of the third argument of
+  //  *        `onFound` the first time it is called. The counter increases
+  //  *        by one each time `onFound` is called. Default value: 0
+  //  * @returns the number of pairs sent to the callback (plus initialCounter,
+  //  *        if you provided one). If the callback returned {break:R} then
+  //  *        the R value is returned instead. */
+  // private forEachPair<R = number>(callback: Iteratee<K, V>, initialCounter?: number): R | number {
+  //   const low = this.minKey()
+  //   const high = this.maxKey()
+  //   // eslint-disable-next-line
+  //   return this.rangeForEach(low!, high, true, callback, initialCounter)
+  // }
 
   /**
    * Finds a pair in the tree and returns the associated value.
@@ -436,7 +437,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   add(key: K) {
-    return this.set(key, undefined as any)
+    return this.set(key, null as V)
   }
 
   /**
@@ -687,7 +688,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    *  additional nodes as shared.
    *  @param force Clone all nodes, even shared ones.
    */
-  protected clone(force = false): BTree<K, V> {
+  clone(force = false): BTree<K, V> {
     const result = new BTree<K, V>(undefined, this._compare, this._maxNodeSize)
     result.root = this.root.greedyClone(force)
     result.count = this.count
@@ -812,9 +813,12 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    * @returns The number of pairs added to the collection.
    * @description Computational complexity: O(pairs.length * log(size + pairs.length))
    */
-  extend(entries: Array<[K, V]>): number {
+  extend(entries: Iterable<[K, V]>): number {
     let added = 0
-    for (let i = 0; i < entries.length; i++) if (this.set(entries[i][0], entries[i][1])) added++
+    for (const pair of entries) {
+      this.set(pair[0], pair[1] ?? (null as V))
+      added++
+    }
     return added
   }
 
@@ -942,7 +946,12 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     const t = this as any
     // Note: all other mutators ultimately call set() or editRange()
     //       so we don't need to override those others.
-    t.clear = t.set = t.editRange = () => TypeError('Attempted to modify a frozen BTree')
+    t.clear =
+      t.set =
+      t.editRange =
+        () => {
+          throw TypeError('Attempted to modify a frozen BTree')
+        }
   }
 
   [Symbol.iterator]() {

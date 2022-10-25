@@ -108,7 +108,7 @@ export declare function enumerate<T = any>(iterable: Iterable<T>, start?: number
  */
 export declare function first<T>(iterable: Iterable<T>): any;
 /**
- * Creates a new generator that filters all `falsey` and empty values from iterable.
+ * Creates a new generator that filters all falsy and empty values from iterable.
  * @param arr The array to compact
  * @returns A new array with the filtered values.
  * @example

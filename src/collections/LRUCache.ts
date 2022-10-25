@@ -8,10 +8,9 @@ import { getPointerArray } from './typedArrays.js'
  */
 export class Cache<K, V = any> extends Mapping<K, V> {
   capacity: number
-  // Properties
-  count = 0
-  head = 0
-  tail = 0
+  head: number = 0
+  tail: number = 0
+  count: number = 0
   protected items = new Map<K, number>()
   protected forward: Uint8Array | Uint16Array | Uint32Array
   protected backward: Uint8Array | Uint16Array | Uint32Array
@@ -35,7 +34,7 @@ export class Cache<K, V = any> extends Mapping<K, V> {
   }
 
   /**
-   * This is just an alias of {@see Cache.set}.
+   * This is just an alias of {@link Cache.set}.
    * @param {K} key The key to add (note value will be `undefined`).
    */
   add(key: K) {
@@ -62,7 +61,7 @@ export class Cache<K, V = any> extends Mapping<K, V> {
     this.items = new Map()
   }
 
-  size() {
+  get size() {
     return this.count
   }
 

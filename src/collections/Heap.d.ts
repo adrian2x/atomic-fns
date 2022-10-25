@@ -1,16 +1,19 @@
 import type { Comparer } from '../operators/index.js';
 import { Collection } from './abc.js';
 export declare class Heap<T> extends Collection {
-    /**
-     * @internal
-     */
     private readonly items;
-    /**
-     * @internal
-     */
     private readonly compare;
     private count;
-    size(): number;
+    /**
+     * Initializes a new Heap instance.
+     *
+     * **Note:** When constructing the heap from an array, it will operate directly on this array. For other iterables, it will create a new array.
+     *
+     * @param {Iterable<T>} [container=[]] The initial values.
+     * @param {Comparer} [cmp=compare] Compare function. Defaults to smaller values first.
+     */
+    constructor(container?: Iterable<T>, cmp?: Comparer);
+    get size(): number;
     clear(): void;
     /**
      * Push element into a container in order.
@@ -38,15 +41,6 @@ export declare class Heap<T> extends Collection {
      */
     remove(item: T): boolean;
     values(): IterableIterator<T>;
-    /**
-     * Initializes a new Heap instance.
-     *
-     * **Note:** When constructing the heap from an array, it will operate directly on this array. For other iterables, it will create a new array.
-     *
-     * @param {Iterable<T>} [container=[]] The initial values.
-     * @param {Comparer} [cmp=compare] Compare function. Defaults to smaller values first.
-     */
-    constructor(container?: Iterable<T>, cmp?: Comparer);
     private heapifyUp;
     private heapifyDown;
 }

@@ -8,11 +8,11 @@ import { Sequence } from './abc.js';
  * @constructor
  */
 export class Deque extends Sequence {
-    ArrayClass;
-    capacity;
     items;
     start = 0;
     count = 0;
+    capacity;
+    ArrayClass;
     constructor(ArrayClass = [], capacity = 1024) {
         super();
         if (typeof capacity !== 'number' || capacity <= 0)
@@ -27,7 +27,7 @@ export class Deque extends Sequence {
             }
         }
     }
-    size() {
+    get size() {
         return this.count;
     }
     /**

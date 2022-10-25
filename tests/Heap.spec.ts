@@ -39,7 +39,7 @@ describe('Heap', () => {
       h.add(value)
       assert(h.contains(value))
     }
-    assert(h.size() === arr.length)
+    assert(h.size === arr.length)
   })
 
   it('pop', () => {
@@ -49,7 +49,7 @@ describe('Heap', () => {
       h.add(value)
     }
     assert(h.pop() === 1)
-    assert(h.size() === arr.length - 1)
+    assert(h.size === arr.length - 1)
     assert(h.pop() === 2)
   })
 
@@ -60,7 +60,7 @@ describe('Heap', () => {
       h.add(value)
     }
     assert(h.pop() === 1)
-    assert(h.size() === arr.length - 1)
+    assert(h.size === arr.length - 1)
     assert(h.pop() === 2)
   })
 })

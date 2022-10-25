@@ -7,7 +7,7 @@ describe('deque', () => {
 
   it('empty', () => {
     let deque = new Deque()
-    assert(deque.size() === 0)
+    assert(deque.size === 0)
   })
 
   it('iterable', () => {
@@ -23,10 +23,10 @@ describe('deque', () => {
   it('append', () => {
     let values = [1, 2, 3, 4]
     let deque = new Deque(values)
-    assert(deque.size() === values.length)
+    assert(deque.size === values.length)
     assert.deepEqual(deque.toArray(), values)
     deque.append(5)
-    assert(deque.size() === 5)
+    assert(deque.size === 5)
     assert.deepEqual(deque.toArray(), [1, 2, 3, 4, 5])
   })
 
@@ -38,7 +38,7 @@ describe('deque', () => {
     deque.appendleft(1)
     deque.appendleft(0)
     assert.deepEqual(deque.toArray(), [0, 1, 1, 0, 1, 2, 3, 4])
-    assert(deque.size() === 8)
+    assert(deque.size === 8)
   })
 
   it('pop', () => {
@@ -48,7 +48,7 @@ describe('deque', () => {
     assert(deque.pop() === 3)
     assert(deque.pop() === 2)
     assert(deque.pop() === 1)
-    assert(deque.size() === 0)
+    assert(deque.size === 0)
     assert.deepEqual(deque.toArray(), [])
     // assert.throws(() => deque.pop())
   })
@@ -60,7 +60,7 @@ describe('deque', () => {
     assert(deque.popleft() === 2)
     assert(deque.popleft() === 3)
     assert(deque.popleft() === 4)
-    assert(deque.size() === 0)
+    assert(deque.size === 0)
     assert.deepEqual(deque.toArray(), [])
     // assert.throws(() => deque.popleft())
   })
@@ -87,7 +87,7 @@ describe('deque', () => {
     let values = [1, 2, 3, 4]
     let deque = new Deque(values)
     deque.clear()
-    assert(deque.size() === 0)
+    assert(deque.size === 0)
     assert.deepEqual(deque.toArray(), [])
   })
 
@@ -102,7 +102,7 @@ describe('deque', () => {
   it('toArray', () => {
     let values = [1, 2, 3, 4]
     let deque = new Deque(values)
-    assert(deque.size() === values.length)
+    assert(deque.size === values.length)
     assert.deepEqual(deque.toArray(), values)
   })
 })

@@ -164,7 +164,7 @@ export const isGenerator = (x) => {
 export const isNull = (x) => x == null;
 /** Check if value is not `null` or `undefined`. */
 export const notNull = (x) => x != null;
-/** Returns `true` for objects without length or falsey values. */
+/** Returns `true` for objects without length or falsy values. */
 export const isEmpty = (x) => (len(x) === 0 ? true : !x);
 /** Check if value is a `Symbol` type */
 export const isSymbol = (x) => type(x) === 'symbol';
@@ -179,11 +179,14 @@ export const isSymbol = (x) => type(x) === 'symbol';
 export function len(value) {
     if (value == null)
         return;
-    if (value.length !== undefined) {
+    if (isNumber(value.length)) {
         return value.length;
     }
     if (isFunc(value.size)) {
         return value.size();
+    }
+    if (isNumber(value.size)) {
+        return value.size;
     }
     if (isObject(value)) {
         return Object.keys(value).length;

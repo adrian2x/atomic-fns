@@ -29,9 +29,13 @@ import { compare, eq, id } from '../operators/index.js'
 export * from './abc.js'
 export * from './deque.js'
 export * from './frozenset.js'
+export * from './BTree.js'
+export * from './Heap.js'
+export * from './LRUCache.js'
+export * from './SplayTree.js'
 
 /**
- * Creates a new array with all `falsey` and empty values removed.
+ * Creates a new array with all falsy and empty values removed.
  * @param arr The array to compact
  * @returns A new array with the filtered values.
  * @example

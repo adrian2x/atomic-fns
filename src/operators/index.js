@@ -16,13 +16,13 @@ export const isinstance = (x, y) => x instanceof y;
  *   - otherwise returns `1`
  * @param {*} x An initial value
  * @param {*} y Other value to compare
- * @returns {-1 | 0 | 1} The comparison result
+ * @returns {number} The comparison result
  */
 export function compare(x, y) {
     if (x === y)
         return 0;
     const op = call(x, 'compare', y);
-    if (op === -1 || op === 0 || op === 1)
+    if (typeof op === 'number')
         return op;
     if (x < y || lt(x, y))
         return -1;

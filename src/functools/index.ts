@@ -204,7 +204,7 @@ export type Maybe<T> = T | undefined
 export type Result<T, E = any> = [Maybe<T>, Maybe<E>]
 
 /**
- * Wraps a function to catch any exceptions inside and return a `go` style error-return type.
+ * Wraps a function to catch any exceptions inside and return a `go` style error-return type {@link Result}.
  *
  * @param {Function} fun The function to wrap and catch if it throws.
  * @param {?function(err: E, res: T): *} [onFinally] Optional callback that will be called on the `finally` clause if given.
@@ -233,7 +233,7 @@ export function result<T = any, E = unknown>(
  *
  * @param {Function|Promise} awaitable The function or promise to await.
  * @param {?function(err: E, res: T): *} [onFinally] Optional callback that will be called on the `finally` clause if given.
- * @returns {Function} A new function that awaits the `awaitable` param and returns a return type.
+ * @returns {Function} A new function that awaits the `awaitable` param and returns a {@link Result} type.
  * @template T,E
  */
 export function resultAsync<T = any, E = unknown>(

@@ -12,39 +12,18 @@ export declare class BTree<K = any, V = any> extends Mapping<K, V> {
     _compare: Comparer;
     /**
      * Initializes an empty B+ tree.
+     * @param {?Iterable<[K, V]>} [entries] The initial key value pairs.
      * @param compareFn Custom function to compare pairs of elements in the tree.
      *   If not specified, defaultComparator will be used which is valid as long as K extends DefaultComparable.
      * @param entries A set of key-value pairs to initialize the tree
      * @param {number} [maxNodeSize=64] Branching factor (maximum items or children per node)
      *   Must be in range 4..256. If undefined or <4 then default is used; if >256 then 256.
      */
-    constructor(entries?: Array<[K, V]>, compareFn?: Comparer, maxNodeSize?: number);
+    constructor(entries?: Iterable<[K, V]>, compareFn?: Comparer, maxNodeSize?: number);
     /** Gets the number of key-value pairs in the tree. */
-    size(): number;
+    get size(): number;
     /** Releases the tree so that its size is 0. */
     clear(): void;
-    /** Runs a function for each key-value pair, in order from smallest to
-     *  largest key. For compatibility with ES6 Map, the argument order to
-     *  the callback is backwards: value first, then key. Call forEachPair
-     *  instead to receive the key as the first argument.
-     * @returns the number of values that were sent to the callback,
-     *        or the R value if the callback returned {break:R}. */
-    forEach<R = number>(iteratee: Iteratee<V, K>): R | number;
-    /** Runs a function for each key-value pair, in order from smallest to
-     *  largest key. The callback can return {break:R} (where R is any value
-     *  except undefined) to stop immediately and return R from forEachPair.
-     * @param onFound A function that is called for each key-value pair. This
-     *        function can return {break:R} to stop early with result R.
-     *        The reason that you must return {break:R} instead of simply R
-     *        itself is for consistency with editRange(), which allows
-     *        multiple actions, not just breaking.
-     * @param initialCounter This is the value of the third argument of
-     *        `onFound` the first time it is called. The counter increases
-     *        by one each time `onFound` is called. Default value: 0
-     * @returns the number of pairs sent to the callback (plus initialCounter,
-     *        if you provided one). If the callback returned {break:R} then
-     *        the R value is returned instead. */
-    private forEachPair;
     /**
      * Finds a pair in the tree and returns the associated value.
      * @param defaultValue a value to return if the key was not found.
@@ -115,7 +94,7 @@ export declare class BTree<K = any, V = any> extends Mapping<K, V> {
      *  additional nodes as shared.
      *  @param force Clone all nodes, even shared ones.
      */
-    protected clone(force?: boolean): BTree<K, V>;
+    clone(force?: boolean): BTree<K, V>;
     /** Gets an array filled with the contents of the tree, sorted by key */
     toArray(): Array<[K, V]>;
     /** Gets a string representing the tree's data based on toArray(). */
@@ -176,7 +155,7 @@ export declare class BTree<K = any, V = any> extends Mapping<K, V> {
      * @returns The number of pairs added to the collection.
      * @description Computational complexity: O(pairs.length * log(size + pairs.length))
      */
-    extend(entries: Array<[K, V]>): number;
+    extend(entries: Iterable<[K, V]>): number;
     /**
      * Scans the specified range of keys, in ascending order by key.
      * Note: the callback `onFound` must not insert or remove items in the

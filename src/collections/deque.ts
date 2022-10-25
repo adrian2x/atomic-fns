@@ -9,11 +9,11 @@ import { Sequence } from './abc.js'
  * @constructor
  */
 export class Deque<T> extends Sequence<T> {
-  ArrayClass: any
-  capacity: number
   items: T[]
-  start = 0
-  count = 0
+  start: number = 0
+  count: number = 0
+  capacity: number
+  ArrayClass: any
 
   constructor(ArrayClass = [] as T[], capacity = 1024) {
     super()
@@ -31,7 +31,7 @@ export class Deque<T> extends Sequence<T> {
     }
   }
 
-  size() {
+  get size() {
     return this.count
   }
 

@@ -125,7 +125,7 @@ export declare const isGenerator: (x: any) => x is Generator<unknown, any, unkno
 export declare const isNull: (x: any) => x is null | undefined;
 /** Check if value is not `null` or `undefined`. */
 export declare const notNull: (x: any) => boolean;
-/** Returns `true` for objects without length or falsey values. */
+/** Returns `true` for objects without length or falsy values. */
 export declare const isEmpty: (x: any) => boolean;
 /** Check if value is a `Symbol` type */
 export declare const isSymbol: (x: any) => x is symbol;

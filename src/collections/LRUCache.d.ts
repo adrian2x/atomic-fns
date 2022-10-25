@@ -5,9 +5,9 @@ import { Mapping } from './abc.js';
  */
 export declare class Cache<K, V = any> extends Mapping<K, V> {
     capacity: number;
-    count: number;
     head: number;
     tail: number;
+    count: number;
     protected items: Map<K, number>;
     protected forward: Uint8Array | Uint16Array | Uint32Array;
     protected backward: Uint8Array | Uint16Array | Uint32Array;
@@ -15,7 +15,7 @@ export declare class Cache<K, V = any> extends Mapping<K, V> {
     protected V: V[];
     constructor(capacity?: number, Keys?: ArrayConstructor, Values?: ArrayConstructor);
     /**
-     * This is just an alias of {@see Cache.set}.
+     * This is just an alias of {@link Cache.set}.
      * @param {K} key The key to add (note value will be `undefined`).
      */
     add(key: K): void;
@@ -30,7 +30,7 @@ export declare class Cache<K, V = any> extends Mapping<K, V> {
      * Method used to clear the structure.
      */
     clear(): void;
-    size(): number;
+    get size(): number;
     /**
      * Method used to splay a value on top.
      *

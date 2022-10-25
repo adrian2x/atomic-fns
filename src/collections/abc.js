@@ -9,14 +9,14 @@
  */
 export class Collection {
     get length() {
-        return this.size();
+        return this.size;
     }
     /**
      * Check if there are no items.
      * @returns {boolean} `true` if is empty.
      */
     empty() {
-        return !this.size();
+        return !this.size;
     }
 }
 /**
@@ -28,5 +28,12 @@ export class Collection {
  */
 export class Sequence extends Collection {
 }
+/**
+ * A mapping is a {@link Collection} indexed by keys that may have associated values.
+ * @abstract
+ * @class Mapping
+ * @extends {Collection}
+ * @template K, V
+ */
 export class Mapping extends Collection {
 }

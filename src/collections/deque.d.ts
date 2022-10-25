@@ -6,13 +6,13 @@ import { Sequence } from './abc.js';
  * @constructor
  */
 export declare class Deque<T> extends Sequence<T> {
-    ArrayClass: any;
-    capacity: number;
     items: T[];
     start: number;
     count: number;
+    capacity: number;
+    ArrayClass: any;
     constructor(ArrayClass?: T[], capacity?: number);
-    size(): number;
+    get size(): number;
     /**
      * Method used to clear the structure.
      *

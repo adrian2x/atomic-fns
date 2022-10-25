@@ -5,7 +5,7 @@ describe('SplayTree', () => {
   it('empty', () => {
     let tree = new SplayTree()
     assert(tree.empty())
-    assert(tree.size() === 0)
+    assert(tree.size === 0)
   })
 
   it('set', () => {
@@ -14,7 +14,7 @@ describe('SplayTree', () => {
       tree.set(i, i)
       assert(tree.contains(i))
     }
-    assert(tree.size() === 10)
+    assert(tree.size === 10)
   })
 
   it('get', () => {
@@ -23,13 +23,14 @@ describe('SplayTree', () => {
       tree.set(i, i)
       assert(tree.get(i) === i)
     }
-    assert(tree.size() === 100)
+    assert(tree.size === 100)
   })
 
   it('splay', () => {
     let tree = new SplayTree()
     for (let i = 100; i > 0; i--) {
       tree.add(i)
+      assert(tree.contains(i))
     }
     tree.splay(42)
     assert(tree.root?.key === 42)
@@ -63,19 +64,20 @@ describe('SplayTree', () => {
     let tree = new SplayTree()
     tree.set(42, 42)
     assert(tree.contains(42))
-    tree.remove(42)
+    assert(tree.remove(42) === 42)
     assert(!tree.contains(42))
-    assert.throws(() => tree.remove(42))
+    assert(tree.remove(42) === undefined)
   })
 
   it('clear', () => {
     let tree = new SplayTree()
     for (let i = 1; i <= 5; i++) {
       tree.add(i)
+      assert(tree.contains(i))
     }
     tree.clear()
     assert(tree.empty())
-    assert(tree.size() === 0)
+    assert(tree.size === 0)
     for (let i = 1; i <= 5; i++) {
       assert(!tree.contains(i))
     }

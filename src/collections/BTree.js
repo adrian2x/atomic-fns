@@ -316,6 +316,7 @@ export class BTree extends Mapping {
     _compare;
     /**
      * Initializes an empty B+ tree.
+     * @param {?Iterable<[K, V]>} [entries] The initial key value pairs.
      * @param compareFn Custom function to compare pairs of elements in the tree.
      *   If not specified, defaultComparator will be used which is valid as long as K extends DefaultComparable.
      * @param entries A set of key-value pairs to initialize the tree
@@ -330,7 +331,7 @@ export class BTree extends Mapping {
             this.extend(entries);
     }
     /** Gets the number of key-value pairs in the tree. */
-    size() {
+    get size() {
         return this.count;
     }
     /** Releases the tree so that its size is 0. */
@@ -338,35 +339,35 @@ export class BTree extends Mapping {
         this.root = EmptyLeaf;
         this.count = 0;
     }
-    /** Runs a function for each key-value pair, in order from smallest to
-     *  largest key. For compatibility with ES6 Map, the argument order to
-     *  the callback is backwards: value first, then key. Call forEachPair
-     *  instead to receive the key as the first argument.
-     * @returns the number of values that were sent to the callback,
-     *        or the R value if the callback returned {break:R}. */
-    forEach(iteratee) {
-        return this.forEachPair((k, v) => iteratee(v, k, this));
-    }
-    /** Runs a function for each key-value pair, in order from smallest to
-     *  largest key. The callback can return {break:R} (where R is any value
-     *  except undefined) to stop immediately and return R from forEachPair.
-     * @param onFound A function that is called for each key-value pair. This
-     *        function can return {break:R} to stop early with result R.
-     *        The reason that you must return {break:R} instead of simply R
-     *        itself is for consistency with editRange(), which allows
-     *        multiple actions, not just breaking.
-     * @param initialCounter This is the value of the third argument of
-     *        `onFound` the first time it is called. The counter increases
-     *        by one each time `onFound` is called. Default value: 0
-     * @returns the number of pairs sent to the callback (plus initialCounter,
-     *        if you provided one). If the callback returned {break:R} then
-     *        the R value is returned instead. */
-    forEachPair(callback, initialCounter) {
-        const low = this.minKey();
-        const high = this.maxKey();
-        // eslint-disable-next-line
-        return this.rangeForEach(low, high, true, callback, initialCounter);
-    }
+    // /** Runs a function for each key-value pair, in order from smallest to
+    //  *  largest key. For compatibility with ES6 Map, the argument order to
+    //  *  the callback is backwards: value first, then key. Call forEachPair
+    //  *  instead to receive the key as the first argument.
+    //  * @returns the number of values that were sent to the callback,
+    //  *        or the R value if the callback returned {break:R}. */
+    // forEach<R = number>(iteratee: Iteratee<V, K>): R | number {
+    //   return this.forEachPair((k, v) => iteratee(v as V, k, this))
+    // }
+    // /** Runs a function for each key-value pair, in order from smallest to
+    //  *  largest key. The callback can return {break:R} (where R is any value
+    //  *  except undefined) to stop immediately and return R from forEachPair.
+    //  * @param onFound A function that is called for each key-value pair. This
+    //  *        function can return {break:R} to stop early with result R.
+    //  *        The reason that you must return {break:R} instead of simply R
+    //  *        itself is for consistency with editRange(), which allows
+    //  *        multiple actions, not just breaking.
+    //  * @param initialCounter This is the value of the third argument of
+    //  *        `onFound` the first time it is called. The counter increases
+    //  *        by one each time `onFound` is called. Default value: 0
+    //  * @returns the number of pairs sent to the callback (plus initialCounter,
+    //  *        if you provided one). If the callback returned {break:R} then
+    //  *        the R value is returned instead. */
+    // private forEachPair<R = number>(callback: Iteratee<K, V>, initialCounter?: number): R | number {
+    //   const low = this.minKey()
+    //   const high = this.maxKey()
+    //   // eslint-disable-next-line
+    //   return this.rangeForEach(low!, high, true, callback, initialCounter)
+    // }
     /**
      * Finds a pair in the tree and returns the associated value.
      * @param defaultValue a value to return if the key was not found.
@@ -398,7 +399,7 @@ export class BTree extends Mapping {
         return true;
     }
     add(key) {
-        return this.set(key, undefined);
+        return this.set(key, null);
     }
     /**
      * Returns true if the key exists in the B+ tree, false if not.
@@ -741,9 +742,10 @@ export class BTree extends Mapping {
      */
     extend(entries) {
         let added = 0;
-        for (let i = 0; i < entries.length; i++)
-            if (this.set(entries[i][0], entries[i][1]))
-                added++;
+        for (const pair of entries) {
+            this.set(pair[0], pair[1] ?? null);
+            added++;
+        }
         return added;
     }
     /**
@@ -857,7 +859,12 @@ export class BTree extends Mapping {
         const t = this;
         // Note: all other mutators ultimately call set() or editRange()
         //       so we don't need to override those others.
-        t.clear = t.set = t.editRange = () => TypeError('Attempted to modify a frozen BTree');
+        t.clear =
+            t.set =
+                t.editRange =
+                    () => {
+                        throw TypeError('Attempted to modify a frozen BTree');
+                    };
     }
     [Symbol.iterator]() {
         return this.entries();

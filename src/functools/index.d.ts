@@ -88,7 +88,7 @@ export declare function once(func: Function): (...args: any[]) => any;
 export declare type Maybe<T> = T | undefined;
 export declare type Result<T, E = any> = [Maybe<T>, Maybe<E>];
 /**
- * Wraps a function to catch any exceptions inside and return a `go` style error-return type.
+ * Wraps a function to catch any exceptions inside and return a `go` style error-return type {@link Result}.
  *
  * @param {Function} fun The function to wrap and catch if it throws.
  * @param {?function(err: E, res: T): *} [onFinally] Optional callback that will be called on the `finally` clause if given.
@@ -101,7 +101,7 @@ export declare function result<T = any, E = unknown>(fun: Function<T>, onFinally
  *
  * @param {Function|Promise} awaitable The function or promise to await.
  * @param {?function(err: E, res: T): *} [onFinally] Optional callback that will be called on the `finally` clause if given.
- * @returns {Function} A new function that awaits the `awaitable` param and returns a return type.
+ * @returns {Function} A new function that awaits the `awaitable` param and returns a {@link Result} type.
  * @template T,E
  */
 export declare function resultAsync<T = any, E = unknown>(awaitable: Promise<T> | Function<Promise<T>>, onFinally?: (err: E, res: T) => any): (...args: any[]) => Promise<Result<T, E>>;

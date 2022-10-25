@@ -3,18 +3,36 @@ import { compare } from '../operators/index.js'
 import { Collection } from './abc.js'
 
 export class Heap<T> extends Collection {
-  /**
-   * @internal
-   */
   private readonly items: T[]
+  private readonly compare: Comparer
+  private count: number = 0
+
   /**
-   * @internal
+   * Initializes a new Heap instance.
+   *
+   * **Note:** When constructing the heap from an array, it will operate directly on this array. For other iterables, it will create a new array.
+   *
+   * @param {Iterable<T>} [container=[]] The initial values.
+   * @param {Comparer} [cmp=compare] Compare function. Defaults to smaller values first.
    */
-  private readonly compare: (x: T, y: T) => number
+  constructor(container: Iterable<T> = [], cmp: Comparer = compare) {
+    super()
+    this.compare = cmp
+    if (Array.isArray(container)) {
+      // use the provided array to avoid copying.
+      this.items = container
+    } else {
+      this.items = Array.from(container)
+    }
+    this.count = this.items.length
+    const halfLength = this.count >> 1
+    // Heapify the items
+    for (let parent = (this.count - 1) >> 1; parent >= 0; --parent) {
+      this.heapifyDown(parent, halfLength)
+    }
+  }
 
-  private count = 0
-
-  size() {
+  get size() {
     return this.count
   }
 
@@ -88,31 +106,6 @@ export class Heap<T> extends Collection {
 
   values() {
     return this.items[Symbol.iterator]()
-  }
-
-  /**
-   * Initializes a new Heap instance.
-   *
-   * **Note:** When constructing the heap from an array, it will operate directly on this array. For other iterables, it will create a new array.
-   *
-   * @param {Iterable<T>} [container=[]] The initial values.
-   * @param {Comparer} [cmp=compare] Compare function. Defaults to smaller values first.
-   */
-  constructor(container: Iterable<T> = [], cmp: Comparer = compare) {
-    super()
-    this.compare = cmp
-    if (Array.isArray(container)) {
-      // use the provided array to avoid copying.
-      this.items = container
-    } else {
-      this.items = Array.from(container)
-    }
-    this.count = this.items.length
-    const halfLength = this.count >> 1
-    // Heapify the items
-    for (let parent = (this.count - 1) >> 1; parent >= 0; --parent) {
-      this.heapifyDown(parent, halfLength)
-    }
   }
 
   private heapifyUp(pos: number) {

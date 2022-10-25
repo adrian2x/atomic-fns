@@ -28,12 +28,12 @@ export type Comparer<T = any> = (x: T, y: T) => number
  *   - otherwise returns `1`
  * @param {*} x An initial value
  * @param {*} y Other value to compare
- * @returns {-1 | 0 | 1} The comparison result
+ * @returns {number} The comparison result
  */
-export function compare(x, y): -1 | 0 | 1 {
+export function compare(x, y): number {
   if (x === y) return 0
   const op = call(x, 'compare', y)
-  if (op === -1 || op === 0 || op === 1) return op
+  if (typeof op === 'number') return op
   if (x < y || lt(x, y)) return -1
   return 1
 }

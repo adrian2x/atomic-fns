@@ -4,7 +4,7 @@ import { Cache, LRUCache } from '../src/collections/LRUCache.js'
 describe('Cache', () => {
   it('empty', () => {
     let cache = new Cache()
-    assert(cache.size() === 0)
+    assert(cache.size === 0)
   })
 
   it('contains', () => {
@@ -72,7 +72,7 @@ describe('Cache', () => {
 describe('LRUCache', () => {
   it('empty', () => {
     let cache = new LRUCache()
-    assert(cache.size() === 0)
+    assert(cache.size === 0)
   })
 
   it('contains', () => {
