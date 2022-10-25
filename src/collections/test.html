@@ -1,0 +1,11 @@
+<script type="module" src="./SplayTree.js"></script>
+<script type="module">
+  import { SplayTree } from './SplayTree.js'
+  let tree = new SplayTree()
+
+  for (let i = 20; i > 0; i -= 2) {
+    tree.set(i, i)
+  }
+
+  console.log(tree)
+</script>
