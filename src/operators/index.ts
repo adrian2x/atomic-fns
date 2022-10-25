@@ -18,7 +18,7 @@ export const isinstance = (x, y) => x instanceof y
  *
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#parameters Array.sort()}
  */
-export type Comparer<T = any> = (x: T, y: T) => -1 | 0 | 1
+export type Comparer<T = any> = (x: T, y: T) => number
 
 /**
  * Checks whether `x` is a comparable type and returns the result of `x.compare(y)`.

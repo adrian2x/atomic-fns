@@ -11,7 +11,7 @@ export declare const isinstance: (x: any, y: any) => boolean;
  *
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#parameters Array.sort()}
  */
-export declare type Comparer<T = any> = (x: T, y: T) => -1 | 0 | 1;
+export declare type Comparer<T = any> = (x: T, y: T) => number;
 /**
  * Checks whether `x` is a comparable type and returns the result of `x.compare(y)`.
  * Otherwise the return value of the compare function checks if:
