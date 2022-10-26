@@ -4,7 +4,9 @@ import { Mapping } from './abc.js'
 import { getPointerArray } from './typedArrays.js'
 
 /**
- * Base append-only Cache collection.
+ * Base append-only Cache collection that supports adding and accessing keys in O(1).
+ * The collection has a fixed given size (default 1024) and when full, it evicts keys using LRU approach. This operation is also O(1).
+ * @template K, V
  */
 export class Cache<K, V = any> extends Mapping<K, V> {
   capacity: number
@@ -17,6 +19,12 @@ export class Cache<K, V = any> extends Mapping<K, V> {
   protected K: K[]
   protected V: V[]
 
+  /**
+   * Create a new cache object of fixed size.
+   * @param {number} [capacity=1024] The maximum number of keys to keep in cache.
+   * @param {Function} [Keys=Array] The constructor to use for the Keys array. When using numeric values, a TypedArray constructor can be used.
+   * @param {Function} [Values=Array] The constructor to use for the Values array. When using numeric values, a TypedArray constructor can be used.
+   */
   constructor(capacity = 1024, Keys = Array, Values = Array) {
     super()
     this.capacity = capacity
@@ -61,6 +69,9 @@ export class Cache<K, V = any> extends Mapping<K, V> {
     this.items = new Map()
   }
 
+  /**
+   * Returns the number of keys in the cache.
+   */
   get size() {
     return this.count
   }
@@ -315,16 +326,26 @@ export class Cache<K, V = any> extends Mapping<K, V> {
   }
 }
 
+/**
+ * Implements a Least Recently Used fixed-capacity cache which supports updating, removing, and accessing keys in O(1).
+ */
 export class LRUCache<K, V> extends Cache<K, V> {
   deletedSize = 0
   deleted: Uint8Array | Uint16Array | Uint32Array
 
+  /**
+   * Create a new LRU cache object of fixed size.
+   * @param {number} [capacity=1024] The maximum number of keys to keep in cache.
+   * @param {Function} [Keys=Array] The constructor to use for the Keys array. When using numeric values, a TypedArray constructor can be used.
+   * @param {Function} [Values=Array] The constructor to use for the Values array. When using numeric values, a TypedArray constructor can be used.
+   */
   constructor(capacity = 1024, Keys = Array, Values = Array) {
     super(capacity, Keys, Values)
     const PointerArray = getPointerArray(capacity)
     this.deleted = new PointerArray(capacity)
   }
 
+  /** Remove all elements in the cache. */
   clear() {
     super.clear()
     this.deletedSize = 0

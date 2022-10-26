@@ -52,7 +52,7 @@ You could also import any individual module directly from an html page like this
 ```html
 <script type="module">
   import {
-    namedtuple, Deque, Heap, SortedSet, SortedMap
+    namedtuple, FrozenSet, SortedSet, SortedMap
   } from 'https://unpkg.com/atomic-fns/core/collections';
   // your code goes here...
 </script>
@@ -66,7 +66,7 @@ This library features a data model similar to [Python](https://docs.python.org/3
 For example in Python collections `size()` is a method while in JS its just a property. So this library uses `size` property instead of methods. Similarly, the `len` function implementation checks for both `length` and `size` since many JS objects have a `length` property.
 
 ## Special method names
-This library adds support for operators via object methods like:
+This library adds support for operators using object methods such as:
   - `obj.eq(other)`  adds custom `obj == other`.
   - `obj.lt(other)`  adds custom `obj < other`.
   - `obj.lte(other)`  adds custom `obj <= other`.
@@ -76,10 +76,24 @@ This library adds support for operators via object methods like:
 
 When you implement those, you can also apply operators to values like `eq(x, y), lte(x, y), compare(x, y)`, etc. to get the result of `x.<operator>(y)`.
 
-Some new base types introduced: `Collection, Sequence, Mapping, FrozenSet, IterableIterator`.
+## New Types
+
+Introduces some common base interfaces and typing patterns you may have seen like `Optional`, `Result`, `Comparable`, `Iterator`, and others.
+
+### Sorted Containers
+  - [SortedSet](https://atomic-fns.dev/classes/Collections.SortedSet.html)
+  - [SortedMap](https://atomic-fns.dev/classes/Collections.SortedMap.html)
+  - [SortedTree](https://atomic-fns.dev/classes/Collections.SortedTree.html)
+
+### Other Containers
+  - [Deque](https://atomic-fns.dev/classes/Collections.Deque.html)
+  - [FrozenSet](https://atomic-fns.dev/classes/Collections.FrozenSet.html)
+  - [LRUCache](https://atomic-fns.dev/classes/Collections.LRUCache.html)
+
 
 ## Contributing
 If you want to contribute to the project and make it better, your help is very welcome. Contributing is also a great way to learn more about social coding on Github, new technologies and and their ecosystems and how to make constructive, helpful bug reports, feature requests and the noblest of all contributions: a good, clean pull request. You will be listed as a **Champion** on the official site as well.
+
 
 ## License
 

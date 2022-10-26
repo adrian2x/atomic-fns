@@ -1,7 +1,9 @@
 import { Iteratee } from '../globals/index.js';
 import { Mapping } from './abc.js';
 /**
- * Base append-only Cache collection.
+ * Base append-only Cache collection that supports adding and accessing keys in O(1).
+ * The collection has a fixed given size (default 1024) and when full, it evicts keys using LRU approach. This operation is also O(1).
+ * @template K, V
  */
 export declare class Cache<K, V = any> extends Mapping<K, V> {
     capacity: number;
@@ -13,6 +15,12 @@ export declare class Cache<K, V = any> extends Mapping<K, V> {
     protected backward: Uint8Array | Uint16Array | Uint32Array;
     protected K: K[];
     protected V: V[];
+    /**
+     * Create a new cache object of fixed size.
+     * @param {number} [capacity=1024] The maximum number of keys to keep in cache.
+     * @param {Function} [Keys=Array] The constructor to use for the Keys array. When using numeric values, a TypedArray constructor can be used.
+     * @param {Function} [Values=Array] The constructor to use for the Values array. When using numeric values, a TypedArray constructor can be used.
+     */
     constructor(capacity?: number, Keys?: ArrayConstructor, Values?: ArrayConstructor);
     /**
      * This is just an alias of {@link Cache.set}.
@@ -30,6 +38,9 @@ export declare class Cache<K, V = any> extends Mapping<K, V> {
      * Method used to clear the structure.
      */
     clear(): void;
+    /**
+     * Returns the number of keys in the cache.
+     */
     get size(): number;
     /**
      * Method used to splay a value on top.
@@ -101,10 +112,20 @@ export declare class Cache<K, V = any> extends Mapping<K, V> {
      */
     inspect(): Map<any, any>;
 }
+/**
+ * Implements a Least Recently Used fixed-capacity cache which supports updating, removing, and accessing keys in O(1).
+ */
 export declare class LRUCache<K, V> extends Cache<K, V> {
     deletedSize: number;
     deleted: Uint8Array | Uint16Array | Uint32Array;
+    /**
+     * Create a new LRU cache object of fixed size.
+     * @param {number} [capacity=1024] The maximum number of keys to keep in cache.
+     * @param {Function} [Keys=Array] The constructor to use for the Keys array. When using numeric values, a TypedArray constructor can be used.
+     * @param {Function} [Values=Array] The constructor to use for the Values array. When using numeric values, a TypedArray constructor can be used.
+     */
     constructor(capacity?: number, Keys?: ArrayConstructor, Values?: ArrayConstructor);
+    /** Remove all elements in the cache. */
     clear(): void;
     /**
      * Method used to set the value for the given key in the cache.

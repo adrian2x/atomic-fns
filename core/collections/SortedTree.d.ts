@@ -1,9 +1,9 @@
 import { Comparer } from '../operators/index.js';
 import { Mapping } from './abc.js';
 /**
- * A `SortedTree` is a map that holds key value pairs in sorted orders of keys. Any primitive value (and objects that implement a `compare` or `lt` methods) can be used as keys or values.
- * @see {@link Operators.compare}
- * @see {@link Operators.lt}
+ * A `SortedTree` is a map that holds key value pairs ordered by keys. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as keys or values.
+ * @see {@link Compare}
+ * @see {@link Ordered}
  * @template K, V
  */
 export declare class SortedTree<K, V> extends Mapping<K, V> {

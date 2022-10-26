@@ -1,7 +1,7 @@
 import { Mapping } from './abc.js';
 import { SplayTree } from './SplayTree.js';
 /**
- * A `SortedMap` is a map that holds key value pairs in sorted orders of keys. Any primitive value (and objects that implement a `compare` or `lt` methods) can be used as keys or values.
+ * A `SortedMap` is a map that holds key value pairs ordered by keys. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as keys or values.
  * @see {@link Operators.compare}
  * @see {@link Operators.lt}
  * @template K, V

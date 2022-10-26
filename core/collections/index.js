@@ -159,6 +159,8 @@ export function findRight(arr, fn) {
 /**
  * Performs an efficient array insert operation in the given array. If the index or the array is invalid, it just returns the given array.
  *
+ * **Note:** Uses the same behavior as `Array.splice`.
+ *
  * @param {Array<*>} arr The given array to insert into
  * @param {number} index The index of the array insert operation.
  * @param {*} value The value to insert in the array at the given `index`.

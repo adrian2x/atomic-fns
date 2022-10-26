@@ -1,4 +1,10 @@
 import { Collection } from './abc.js';
+/**
+ * A `SortedSet` is a set that holds values in order. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as values.
+ * @see {@link Compare}
+ * @see {@link Ordered}
+ * @template K, V
+ */
 export declare class SortedSet<T> extends Collection {
     private readonly store;
     /**
