@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { SplayTree } from '../src/collections/SplayTree.js'
+import { SplayTree } from '../core/collections/SplayTree.js'
 
 describe('SplayTree', () => {
   it('empty', () => {

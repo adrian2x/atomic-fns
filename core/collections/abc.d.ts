@@ -19,7 +19,7 @@ export interface Equals {
  * @interface Ordered
  */
 export interface Comparable {
-    compare: (other: any) => -1 | 1 | 0;
+    compare: (other: any) => number;
 }
 /**
  * Implements an iterable that allows sorting elements.

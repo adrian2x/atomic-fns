@@ -21,7 +21,7 @@ export interface Equals {
  * @interface Ordered
  */
 export interface Comparable {
-  compare: (other) => -1 | 1 | 0
+  compare: (other) => number
 }
 
 /**

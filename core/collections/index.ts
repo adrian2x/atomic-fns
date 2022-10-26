@@ -3,17 +3,40 @@
  *
  * @module Collections
  */
-import { Iteratee } from '../globals/index.js';
-export * from './abc.js';
-export * from './deque.js';
-export * from './frozenset.js';
-export * from './BTree.js';
-export * from './Heap.js';
-export * from './LRUCache.js';
-export * from './SplayTree.js';
-export * from './SortedSet.js';
-export * from './SortedMap.js';
-export * from './SortedTree.js';
+
+import { partial } from '../functools/index.js'
+import {
+  call,
+  get,
+  isArray,
+  isArrayLike,
+  isBool,
+  isEmpty,
+  isFunc,
+  isIterable,
+  isNull,
+  isNumber,
+  isObject,
+  isString,
+  isSymbol,
+  Iteratee,
+  keys,
+  set
+} from '../globals/index.js'
+import { enumerate } from '../itertools/index.js'
+import { compare, eq, id } from '../operators/index.js'
+
+export * from './abc.js'
+export * from './BTree.js'
+export * from './deque.js'
+export * from './frozenset.js'
+export * from './Heap.js'
+export * from './LRUCache.js'
+export * from './SortedSet.js'
+export * from './SortedMap.js'
+export * from './SortedTree.js'
+export * from './SplayTree.js'
+
 /**
  * Creates a new array with all falsy and empty values removed.
  * @param arr The array to compact
@@ -24,9 +47,29 @@ compact([0, 1, false, 2, '', 3])
 // => [1, 2, 3]
 ```
  */
-export declare function compact(arr: any[]): any;
-export declare function compact(arr: Object): any;
-export declare function count<T>(iterable: Iterable<T> | Object, func: Iteratee<T>): {};
+export function compact(arr: any[])
+export function compact(arr: Object)
+export function compact(arr) {
+  if (arr == null) return
+  if (Array.isArray(arr)) return arr.filter((x) => !isEmpty(x))
+  const result = {}
+  for (const key of Object.keys(arr)) {
+    if (!isEmpty(arr[key])) {
+      result[key] = arr[key]
+    }
+  }
+  return result
+}
+
+export function count<T>(iterable: Iterable<T> | Object, func: Iteratee<T>) {
+  const counters = {}
+  forEach(iterable, (value: T, key) => {
+    const result = func(value, key)
+    counters[result] = get(result, counters, 0) + 1
+  })
+  return counters
+}
+
 /**
  * Creates a function that can be used to create named tuple-like objects.
  * @example
@@ -38,7 +81,10 @@ export declare function count<T>(iterable: Iterable<T> | Object, func: Iteratee<
  * @param fields - A list of field names
  * @returns A function that can be called with the field values
  */
-export declare function namedtuple(...fields: string[]): (...args: any[]) => {};
+export function namedtuple(...fields: string[]) {
+  return (...args) => fields.reduce((prev, f, i) => set(f, prev, args[i], false, true), {})
+}
+
 /**
  * Iterates over elements of collection, returning an array of all elements where predicate returns truthy value.
  *
@@ -66,7 +112,14 @@ filter(users, 'active')
  * @param {Function} fn The predicate function invoked for each item
  * @returns {Array} The new filtered array
  */
-export declare function filter(arr: any, fn?: Iteratee | PropertyKey | Object): any[] | undefined;
+export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
+  if (Array.isArray(arr)) {
+    if (isFunc(fn)) return arr.filter(fn)
+    if (isNumber(fn) || isString(fn) || isSymbol(fn)) return arr.filter((x) => get(fn, x))
+    if (isObject(fn)) return arr.filter(matches(fn))
+  }
+}
+
 /**
  * Iterates over elements of collection, returning the first element where predicate returns truthy value. The predicate is invoked with three arguments: `(value, index|key, collection)`.
  * @example
@@ -93,7 +146,13 @@ find(users, 'active')
  * @returns {*} The matched element, else `undefined`.
  * @see {@link findRight}
  */
-export declare function find(arr: any, fn: Iteratee | PropertyKey | Object): any;
+export function find(arr, fn: Iteratee | PropertyKey | Object) {
+  if (Array.isArray(arr)) {
+    if (isFunc(fn)) return arr.find(fn)
+    if (isNumber(fn) || isString(fn) || isSymbol(fn)) return arr.find((x) => x?.[fn])
+    if (isObject(fn)) return arr.find(matches(fn))
+  }
+}
 /**
  * This method is like {@link find} except that it iterates from right to left.
  * @example
@@ -106,7 +165,21 @@ findRight([1, 2, 3, 4], (n) => n % 2 === 1)
  * @returns {*} The matched element, else `undefined`.
  * @see {@link find}
  */
-export declare function findRight(arr: any, fn: Iteratee | PropertyKey | Object): any;
+export function findRight(arr, fn: Iteratee | PropertyKey | Object) {
+  if (Array.isArray(arr)) {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const x = arr[i]
+      if (typeof fn === 'function') {
+        if (fn(x)) return x
+      } else if (typeof fn === 'string') {
+        if (x?.[fn]) return x
+      } else if (isObject(fn)) {
+        if (matches(fn)(x)) return x
+      }
+    }
+  }
+}
+
 /**
  * Creates a function that performs a partial deep comparison between a given object and `shape`, returning `true` if the given object has equivalent property values, else `false`.
  * @example
@@ -122,7 +195,14 @@ filter(objects, matches({ a: 4, c: 6 }))
  * @param shape
  * @returns
  */
-export declare const matches: (shape: any) => (obj: any) => boolean;
+export const matches = (shape) => (obj) => {
+  if (!shape || !obj) return false
+  for (const key in shape) {
+    if (obj[key] !== shape[key]) return false
+  }
+  return true
+}
+
 /**
  * Iterates over elements of collection and invokes `iteratee` for each element. The iteratee is invoked with three arguments: `(value, index|key, collection)`. Iteratee functions may exit iteration early by explicitly returning `false`.
  * @example
@@ -144,9 +224,28 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
  * @see {@link filter}
  * @see {@link map}
  */
-export declare function forEach<T>(collection: T[], fn: Iteratee<T>): any;
-export declare function forEach<T>(collection: Iterable<T>, fn: Iteratee<T>): any;
-export declare function forEach<T>(collection: Object, fn: Iteratee<T>): any;
+export function forEach<T>(collection: T[], fn: Iteratee<T>)
+export function forEach<T>(collection: Iterable<T>, fn: Iteratee<T>)
+export function forEach<T>(collection: Object, fn: Iteratee<T>)
+export function forEach<T>(collection, fn: Iteratee<T>) {
+  if (Array.isArray(collection)) {
+    for (let i = 0; i < collection.length; i++) {
+      const res = fn(collection[i], i, collection)
+      if (res === false) return collection
+    }
+  } else if (isIterable(collection)) {
+    for (const [index, value] of enumerate(collection)) {
+      const res = fn(value as T, index, collection)
+      if (res === false) return collection
+    }
+  } else {
+    for (const key of keys(collection)) {
+      const res = fn(collection[key], key, collection)
+      if (res === false) return collection
+    }
+  }
+}
+
 /**
  * This method is like {@link forEach} except that it iterates over the collection from right to left.
 
@@ -164,7 +263,25 @@ forEachRight([1, 2], (value) => {
  * @see {@link filter}
  * @see {@link map}
  */
-export declare function forEachRight(collection: any[] | Object, fn: Iteratee): Object;
+export function forEachRight(collection: any[] | Object, fn: Iteratee) {
+  if (Array.isArray(collection)) {
+    for (let i = collection.length - 1; i >= 0; i--) {
+      const value = collection[i]
+      const res = fn(value, i, collection)
+      if (res === false) return collection
+    }
+  } else if (isObject(collection)) {
+    const keys = Object.keys(collection)
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const key = keys[i]
+      const value = collection[key]
+      const res = fn(value, i, collection)
+      if (res === false) return collection
+    }
+  }
+  return collection
+}
+
 /**
  * Flattens an array or object. Arrays will be flattened recursively up to `depth` times. Objects will be flattened recursively.
  * @example
@@ -202,7 +319,50 @@ flatten({
  * @returns {*} The new flattened array or object.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flat Array.flat()}
  */
-export declare function flatten(arr: any[] | Object, depth?: boolean | number): Object;
+export function flatten(arr: any[] | Object, depth: boolean | number = 1) {
+  if (!depth) return arr
+  if (Array.isArray(arr)) return flattenArray(arr, depth, [])
+  if (isObject(arr)) return flattenObj(arr)
+  return arr
+}
+
+function flattenArray(arr: any[], depth: boolean | number = 1, result: any[] = []) {
+  for (const value of arr) {
+    if (depth && Array.isArray(value)) {
+      flattenArray(value, typeof depth === 'number' ? depth - 1 : depth, result)
+    } else {
+      result.push(value)
+    }
+  }
+  return result
+}
+
+function flattenObj(obj, prefix = '', result = {}, keepNull = false) {
+  if (isString(obj) || isNumber(obj) || isBool(obj) || (keepNull && isNull(obj))) {
+    result[prefix] = obj
+    return result
+  }
+
+  if (isArray(obj) || isObject(obj)) {
+    for (const i of Object.keys(obj)) {
+      let pref = prefix
+      if (isArray(obj)) {
+        pref = `${pref}[${i}]`
+      } else {
+        if (prefix) {
+          pref = `${prefix}.${i}`
+        } else {
+          pref = i
+        }
+      }
+      flattenObj(obj[i], pref, result, keepNull)
+    }
+    return result
+  }
+
+  return result
+}
+
 /**
  * Creates an array of values by running each element in collection thru iteratee. The iteratee is invoked with three arguments: `(value, index|key, collection)`.
  * @example
@@ -231,7 +391,21 @@ map(users, 'user')
  * @returns Returns the new mapped array.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map Array.map()}
  */
-export declare function map(arr: any, fn: Iteratee | PropertyKey): any[] | undefined;
+export function map(arr, fn: Iteratee | PropertyKey) {
+  if (Array.isArray(arr)) {
+    return arr.map((x, i) => {
+      if (typeof fn === 'function') return fn(x, i, arr)
+      return x?.[fn]
+    })
+  }
+  if (isObject(arr)) {
+    return Object.keys(arr).map((key) => {
+      if (typeof fn === 'function') return fn(arr[key], key, arr)
+      return get(fn, arr[key])
+    })
+  }
+}
+
 /**
  * Creates an object composed of the picked object properties.
  * @param {Object} obj The source object.
@@ -250,7 +424,26 @@ pick(object, (x) => isNumber(x))
  *
  * @see {@link omit}
  */
-export declare function pick(obj: Object, paths: Iteratee | PropertyKey[]): {};
+export function pick(obj: Object, paths: Iteratee | PropertyKey[]) {
+  if (!obj) return {}
+
+  const result = {}
+
+  if (typeof paths === 'function') {
+    for (const key of Object.keys(obj)) {
+      if (paths(obj[key], key)) {
+        result[key] = obj[key]
+      }
+    }
+    return result
+  }
+
+  for (const key of paths) {
+    result[key] = get(key, obj)
+  }
+  return result
+}
+
 /**
  * The opposite of {@link pick} - this method creates an object composed of the own and inherited enumerable property paths of `object` that are not omitted.
  * @example
@@ -268,7 +461,27 @@ omit(object, (x) => isNumber(x))
  * @returns {Object} Returns the new object.
  * @see {@link pick}
  */
-export declare function omit(obj: Object, paths: Iteratee | PropertyKey[]): {};
+export function omit(obj: Object, paths: Iteratee | PropertyKey[]) {
+  if (!obj) return {}
+
+  const result = {}
+
+  if (typeof paths === 'function') {
+    for (const key of Object.keys(obj)) {
+      if (!paths(obj[key], key)) {
+        result[key] = obj[key]
+      }
+    }
+    return result
+  }
+
+  Object.assign(result, obj)
+  for (const key of paths) {
+    delete result[key]
+  }
+  return result
+}
+
 /**
  * This method is like {@link find} except that it returns the index of the first element `predicate` returns truthy for instead of the element itself.
  * @param {Array} obj The array to inspect.
@@ -298,7 +511,26 @@ index(users, 'active')
  * @see {@link lastIndex}
  *
  */
-export declare function index(obj: any, fn: Iteratee | string | Object, start?: number): number | undefined;
+export function index(obj, fn: Iteratee | string | Object, start = 0) {
+  if (obj == null) return
+  const length = obj.length
+  if (length && start < 0) {
+    start = Math.max(start + length, 0)
+  }
+  if (!length || start >= length) return -1
+  if (isObject(fn)) {
+    fn = matches(fn)
+  }
+  for (; start < length; start++) {
+    if (typeof fn === 'function') {
+      if (fn(obj[start], start, obj)) return start
+    } else {
+      if (obj[start]?.[fn as PropertyKey]) return start
+    }
+  }
+  return -1
+}
+
 /**
  * This method is like {@link index} except that it searches for a given value directly, instead of using a predicate function.
  * @param {Array} obj The array to inspect.
@@ -317,7 +549,21 @@ indexOf([1, 2, 1, 2], 2, 2)
  * @see {@link index}
  * @see {@link lastIndexOf}
  */
-export declare function indexOf(obj: any, value: any, start?: number): any;
+export function indexOf(obj, value, start = 0) {
+  if (obj == null) return
+  const op = call(obj, 'indexOf', value, start)
+  if (op != null) return op
+  const length = obj.length
+  if (length && start < 0) {
+    start = Math.max(start + length, 0)
+  }
+  if (!length || start >= length) return -1
+  for (; start < length; start++) {
+    if (eq(value, obj[start])) return start
+  }
+  return -1
+}
+
 /**
  * This method is like {@link index} except that it iterates the collection from right to left.
  * @param {Array} obj The array to inspect.
@@ -346,7 +592,23 @@ findLastIndex(users, 'active')
  * @see {@link index}
  * @see {@link lastIndexOf}
  */
-export declare function lastIndex(obj: any[], fn: string | Iteratee | Object, start?: any): any;
+export function lastIndex(obj: any[], fn: string | Iteratee | Object, start?) {
+  if (obj == null) return
+  const length = obj.length
+  if (start == null) start = length - 1
+  if (!length || start < 0) return -1
+  if (isObject(fn)) {
+    fn = matches(fn)
+  }
+  for (; start >= 0; start--) {
+    if (typeof fn === 'function') {
+      if (fn(obj[start])) return start
+    } else {
+      if (obj[start]?.[fn as PropertyKey]) return start
+    }
+  }
+  return -1
+}
 /**
  * This method is like {@link indexOf} except that it iterates the collection from right to left.
  * @param {Array} obj The array to inspect.
@@ -365,7 +627,19 @@ lastIndexOf([1, 2, 1, 2], 2, 2)
  * @see {@link lastIndex}
  * @see {@link indexOf}
  */
-export declare function lastIndexOf(obj: any[], value: any, start?: any): any;
+export function lastIndexOf(obj: any[], value, start?) {
+  if (obj == null) return
+  const op = call(obj, 'lastIndexOf', value, start)
+  if (op != null) return op
+  const length = obj.length
+  if (start == null) start = length - 1
+  if (!length || start < 0) return -1
+  for (; start >= 0; start--) {
+    if (eq(value, obj[start])) return start
+  }
+  return -1
+}
+
 /**
  * Creates a shallow clone of `value`. If `deep` is `true` it will clone it recursively.
  * @param {*} value
@@ -374,7 +648,30 @@ export declare function lastIndexOf(obj: any[], value: any, start?: any): any;
  * @see {@link cloneArray}
  * @see {@link cloneTypedArray}
  */
-export declare function clone(value: any, deep?: boolean): any;
+export function clone(value, deep = false) {
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+    return cloneTypedArray(value, deep)
+  }
+  if (isArray(value) || isArrayLike(value)) {
+    return cloneArray(value, deep)
+  }
+  if (isObject(value)) {
+    if (isFunc(value.clone)) {
+      return value.clone()
+    }
+    const copy = {}
+    for (const key in value) {
+      if (deep) {
+        copy[key] = clone(value[key], deep)
+      } else {
+        copy[key] = value[key]
+      }
+    }
+    return copy
+  }
+  return value
+}
+
 /**
  * Clones an array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used.
  * @param arr The array to clone
@@ -382,7 +679,11 @@ export declare function clone(value: any, deep?: boolean): any;
  * @returns The new array
  * @see {@link clone}
  */
-export declare function cloneArray(arr: any, deep?: boolean): any;
+export function cloneArray(arr, deep = false) {
+  if (!deep) return Array.from(arr)
+  return structuredClone(arr)
+}
+
 /**
  * Clones a typed array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used.
  * @param arr The array to clone
@@ -390,7 +691,11 @@ export declare function cloneArray(arr: any, deep?: boolean): any;
  * @returns The new array
  * @see {@link clone}
  */
-export declare function cloneTypedArray(typedArray: any, isDeep: any): any;
+export function cloneTypedArray(typedArray, isDeep) {
+  const buffer = isDeep ? structuredClone(typedArray) : typedArray.buffer
+  return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length)
+}
+
 /**
  * Creates a duplicate-free version of an array, using a `Set` for equality comparisons, in which only the first occurrence of each element is kept. The order of result values is not guaranteed.
  * @param arr The array containing duplicated elements
@@ -407,7 +712,15 @@ uniq([2.1, 1.2, 2.3], Math.floor)
  *
  * @see {@link sortedUniq}
  */
-export declare function uniq<T = any>(arr: T[], fn?: PropertyKey | Iteratee): T[];
+export function uniq<T = any>(arr: T[], fn: PropertyKey | Iteratee = id) {
+  const keys = new Set<T>()
+  const mapper = typeof fn === 'function' ? fn : (x) => x?.[fn]
+  for (const x of arr) {
+    keys.add(mapper(x))
+  }
+  return Array.from(keys.values())
+}
+
 /**
  * This method is like {@link uniq} except that it sorts the results in ascending order
  * @param arr The array containing duplicated elements
@@ -420,7 +733,68 @@ uniq([2, 1, 2])
 ```
  * @see {@link uniq}
  */
-export declare function sortedUniq(arr: any, fn?: string | Iteratee): any[];
+export function sortedUniq(arr, fn: string | Iteratee = id) {
+  const values = uniq(arr, fn)
+  values.sort(compare)
+  return values
+}
+
+function baseMergeDeep(obj, source, key, stack) {
+  const objValue = obj[key]
+  const srcValue = source[key]
+  const stacked = stack.get(srcValue)
+  if (stacked && (objValue !== stacked || !(key in obj))) {
+    obj[key] = stacked
+    return
+  }
+
+  let newValue: any
+  let isCommon = newValue === undefined
+  const isArray = Array.isArray(srcValue)
+  const isTyped = ArrayBuffer.isView(srcValue)
+
+  if (isArray || isTyped) {
+    if (Array.isArray(objValue)) {
+      newValue = objValue
+    } else if (isArrayLike(objValue)) {
+      newValue = Array.from(objValue)
+    } else if (isTyped) {
+      isCommon = false
+      newValue = cloneTypedArray(srcValue, true)
+    } else {
+      newValue = []
+    }
+  } else if (isObject(srcValue)) {
+    newValue = objValue
+    if (!isObject(objValue)) {
+      newValue = srcValue
+    }
+  } else {
+    isCommon = false
+  }
+  if (isCommon) {
+    stack.set(srcValue, newValue)
+    baseMerge(newValue, srcValue, stack)
+    stack.delete(srcValue)
+  }
+  obj[key] = newValue
+}
+
+function baseMerge(obj, source, stack?) {
+  if (obj === source) return obj
+  for (const key of Object.keys(source)) {
+    const srcValue = source[key]
+    const objValue = obj[key]
+    if (typeof srcValue === 'object' && srcValue !== null) {
+      baseMergeDeep(obj, source, key, stack || new WeakMap())
+    } else {
+      if (objValue !== srcValue) {
+        obj[key] = srcValue
+      }
+    }
+  }
+}
+
 /**
  * Recursively merges own and inherited enumerable string keyed properties of source objects into the destination object. Source properties that resolve to `undefined` are skipped if a destination value exists. Array and plain object properties are merged recursively. Other objects and value types are overridden by assignment. Source objects are applied from left to right. Subsequent sources overwrite property assignments of previous sources.
  *
@@ -445,7 +819,13 @@ merge(object, other)
 // => { 'a': [{ 'b': 2, 'c': 3 }, { 'd': 4, 'e': 5 }] }
 ```
  */
-export declare function merge(object: any, ...sources: any[]): Object;
+export function merge(object, ...sources): Object {
+  for (const source of sources) {
+    baseMerge(object, source)
+  }
+  return object
+}
+
 /**
  * Assigns own and inherited enumerable string keyed properties of source objects to the destination object for all destination properties that resolve to `undefined`. Source objects are applied from left to right. Once a property is set, additional values of the same property are ignored.
  * **Note:** This method mutates `object`.
@@ -459,7 +839,17 @@ defaults({ 'a': 1 }, { 'b': 2 }, { 'a': 3 })
 // => { 'a': 1, 'b': 2 }
 ```
  */
-export declare function defaults(object: Object, ...sources: Object[]): Object;
+export function defaults(object: Object, ...sources: Object[]) {
+  for (const source of sources) {
+    for (const key in source) {
+      if (object[key] === undefined) {
+        object[key] = source[key]
+      }
+    }
+  }
+  return object
+}
+
 /**
  * Returns a generator of array values not included in the other given arrays using a `Set` for equality comparisons. The order and references of result values are not guaranteed.
  * @param args The initial arrays
@@ -471,7 +861,21 @@ export declare function defaults(object: Object, ...sources: Object[]): Object;
  * @see {@link union}
  * @see {@link intersection}
  */
-export declare function difference(...args: Array<Iterable<any>>): Generator<any, void, unknown>;
+export function* difference(...args: Array<Iterable<any>>) {
+  const sets = args.map((arr) => new Set(arr))
+  const setA = sets[0]
+
+  for (let i = 1; i < sets.length; i++) {
+    for (const x of sets[i].values()) {
+      if (!setA.delete(x)) setA.add(x)
+    }
+  }
+
+  for (const x of setA.values()) {
+    yield x
+  }
+}
+
 /**
  * Creates a generator of unique values that are included in all given arrays.
  * @param args The arrays to inspect
@@ -483,7 +887,24 @@ export declare function difference(...args: Array<Iterable<any>>): Generator<any
 * @see {@link difference}
  * @see {@link union}
  */
-export declare function intersection(...args: Array<Iterable<any>>): Generator<any, void, unknown>;
+export function* intersection(...args: Array<Iterable<any>>) {
+  const sets = args.map((arr) => new Set(arr))
+  // build a counter map to find items in all
+  const results = new Map()
+  const total = sets.length
+
+  for (let i = 0; i < total; i++) {
+    for (const x of sets[i].values()) {
+      const count = results.get(x) || 0
+      results.set(x, count + 1)
+    }
+  }
+
+  for (const [key, value] of results.entries()) {
+    if (value === total) yield key
+  }
+}
+
 /**
  * Creates a generator of unique values from all given arrays using `Set` for equality comparisons.
  * @param args The arrays to perform union on.
@@ -495,7 +916,18 @@ export declare function intersection(...args: Array<Iterable<any>>): Generator<a
  * @see {@link difference}
  * @see {@link intersection}
  */
-export declare function union(...args: Array<Iterable<any>>): Generator<unknown, void, unknown>;
+export function* union(...args: Array<Iterable<any>>) {
+  const results = new Set()
+  for (const arr of args) {
+    for (const item of arr) {
+      results.add(item)
+    }
+  }
+  for (const item of results.values()) {
+    yield item
+  }
+}
+
 /**
  * Creates an object composed of keys generated from the results of running each element of `arr` thru `func`. The order of grouped values is determined by the order they occur in `arr`. The corresponding value of each key is an array of elements responsible for generating the key.
  *
@@ -513,11 +945,31 @@ groupBy(['one', 'two', 'three'], 'length')
 // => { '3': ['one', 'two'], '5': ['three'] }
 ```
  */
-export declare function groupBy(arr: Iterable<any> | Object, func?: Iteratee | PropertyKey): Object;
+export function groupBy(arr: Iterable<any> | Object, func: Iteratee | PropertyKey = id): Object {
+  const results = {}
+  const useKey = typeof func === 'function' ? func : partial(get, func)
+  forEach(arr, (value) => {
+    const groupKey = useKey(value)
+    const values = results[groupKey] || []
+    values.push(value)
+    results[groupKey] = values
+  })
+  return results
+}
+
 /**
  * Removes all elements from array that `func` returns truthy for and returns an array of the removed elements.
  * @param arr The array to remove from.
  * @param func The function invoked per iteration or value(s) or value to remove.
  * @returns
  */
-export declare function remove<T>(arr: T[], func: any): T[];
+export function remove<T>(arr: T[], func: any) {
+  return arr.filter((x, i) => {
+    if (isArray(func)) return !func.includes(x)
+    else if (isFunc(func)) return !func(x, i, arr)
+    return x !== func
+  })
+}
+
+// TODO: binary search utils
+// TODO: Counter

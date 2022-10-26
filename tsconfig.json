@@ -27,7 +27,7 @@
     // "moduleDetection": "auto",                        /* Control what method is used to detect module-format JS files. */
     /* Modules */
     "module": "ESNext", /* Specify what module code is generated. */
-    "rootDir": "./src", /* Specify the root folder within your source files. */
+    "rootDir": "core", /* Specify the root folder within your source files. */
     "moduleResolution": "node", /* Specify how TypeScript looks up a file from a given module specifier. */
     // "baseUrl": "./",                                  /* Specify the base directory to resolve non-relative module names. */
     // "paths": {},                                      /* Specify a set of entries that re-map imports to additional lookup locations. */
@@ -106,14 +106,14 @@
   ],
   "typedocOptions": {
     "entryPoints": [
-      "./src/globals/index.ts",
-      "./src/collections/index.ts",
-      "./src/datetime/index.ts",
-      "./src/functools/index.ts",
-      "./src/itertools/index.ts",
-      "./src/math/index.ts",
-      "./src/operators/index.ts",
-      "./src/random/index.ts",
+      "./core/globals/index.ts",
+      "./core/collections/index.ts",
+      "./core/datetime/index.ts",
+      "./core/functools/index.ts",
+      "./core/itertools/index.ts",
+      "./core/math/index.ts",
+      "./core/operators/index.ts",
+      "./core/random/index.ts",
     ],
     "out": "docs",
     "exclude": [

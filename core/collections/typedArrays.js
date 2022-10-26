@@ -20,9 +20,8 @@ export function getPointerArray(size) {
         return Uint8Array;
     if (maxIndex <= MAX_16BIT_INTEGER)
         return Uint16Array;
-    if (maxIndex <= MAX_32BIT_INTEGER)
-        return Uint32Array;
-    throw new Error('mnemonist: Pointer Array of size > 4294967295 is not supported.');
+    // if (maxIndex <= MAX_32BIT_INTEGER) return Uint32Array
+    return Uint32Array;
 }
 export function getSignedPointerArray(size) {
     const maxIndex = size - 1;

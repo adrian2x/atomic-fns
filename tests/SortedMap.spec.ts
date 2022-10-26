@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { SortedMap } from '../src/collections/SortedMap.js'
+import { SortedMap } from '../core/collections/SortedMap.js'
 
 describe('SortedMap', () => {
   it('empty', () => {

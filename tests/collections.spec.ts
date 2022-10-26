@@ -18,7 +18,7 @@ import {
   sortedUniq,
   union,
   uniq
-} from '../src/collections/index.js'
+} from '../core/collections/index.js'
 
 describe('collections', () => {
   it('compact', () => {

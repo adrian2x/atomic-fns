@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { SortedTree } from '../src/collections/SortedTree.js'
+import { SortedTree } from '../core/collections/SortedTree.js'
 
 describe('SortedTree', () => {
   it('empty', () => {
