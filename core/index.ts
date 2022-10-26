@@ -1,5 +1,4 @@
 export * from './collections/index.js'
-export * from './datetime/index.js'
 export * from './functools/index.js'
 export * from './globals/index.js'
 export * from './itertools/index.js'
