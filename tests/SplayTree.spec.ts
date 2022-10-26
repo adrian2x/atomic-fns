@@ -6,6 +6,9 @@ describe('SplayTree', () => {
     let tree = new SplayTree()
     assert(tree.empty())
     assert(tree.size === 0)
+    for (const value of tree.values()) {
+      assert(!value)
+    }
   })
 
   it('set', () => {
@@ -33,7 +36,7 @@ describe('SplayTree', () => {
       assert(tree.contains(i))
     }
     tree.splay(42)
-    assert(tree.root?.key === 42)
+    assert(tree.top() === 42)
   })
 
   it('lowerBound', () => {

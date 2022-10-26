@@ -10,7 +10,6 @@ declare class Node<K = any, V = any> {
     left?: Node<K, V>;
     right?: Node<K, V>;
     constructor(key: K, value: V);
-    traverse(): Generator<any, void, any>;
     get height(): any;
 }
 /**
@@ -18,13 +17,21 @@ declare class Node<K = any, V = any> {
  * Insertion, look-up and removal in O(log n) *amortized* time.
  * For many patterns of non-random operations splay trees can take better than logarithmic time, without requiring advance knowledge of the pattern.
  * @see {@link https://en.wikipedia.org/wiki/Splay_tree Splay tree}
+ * @see {@link https://web.archive.org/web/20220930173835/http://www14.in.tum.de/personen/albers/papers/ipl02.pdf Randomized Splay Trees}
  * @template K, V
  */
 export declare class SplayTree<K, V = any> extends Mapping<K, V> {
-    root?: Node<K, V>;
+    protected root?: Node<K, V>;
     protected cmp: Comparer;
-    count: number;
-    constructor(compareFn?: any);
+    protected randSplay: number;
+    protected count: number;
+    /**
+     * Create a new randomized Splay Tree
+     * @param compareFn
+     * @param p When an element is accessed, with probability `p` splay the tree. With probability `1 - p`, leave the tree as it is.
+     */
+    constructor(compareFn?: any, p?: number);
+    top(): K | undefined;
     get size(): number;
     empty(): boolean;
     get height(): any;

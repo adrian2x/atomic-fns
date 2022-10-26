@@ -13,16 +13,6 @@ class Node {
         this.key = key;
         this.value = value;
     }
-    *traverse() {
-        let current = this;
-        while (current) {
-            const left = current.left;
-            if (left)
-                yield* left.traverse();
-            yield current;
-            current = current.right;
-        }
-    }
     get height() {
         if (this.left && this.right)
             return 1 + Math.max(this.right.height, this.left.height);
@@ -33,21 +23,40 @@ class Node {
         return 0;
     }
 }
+// In-order traversal of a tree
+function* traverse(node) {
+    while (node) {
+        yield* traverse(node.left);
+        yield node;
+        node = node.right;
+    }
+}
 /**
  * A splay tree is a *self-balancing binary* search tree with the additional property that recently accessed elements are quick to access again.
  * Insertion, look-up and removal in O(log n) *amortized* time.
  * For many patterns of non-random operations splay trees can take better than logarithmic time, without requiring advance knowledge of the pattern.
  * @see {@link https://en.wikipedia.org/wiki/Splay_tree Splay tree}
+ * @see {@link https://web.archive.org/web/20220930173835/http://www14.in.tum.de/personen/albers/papers/ipl02.pdf Randomized Splay Trees}
  * @template K, V
  */
 export class SplayTree extends Mapping {
     root;
     cmp;
+    randSplay;
     count;
-    constructor(compareFn) {
+    /**
+     * Create a new randomized Splay Tree
+     * @param compareFn
+     * @param p When an element is accessed, with probability `p` splay the tree. With probability `1 - p`, leave the tree as it is.
+     */
+    constructor(compareFn, p = 0.5) {
         super();
         this.cmp = compareFn ?? compare;
         this.count = 0;
+        this.randSplay = p;
+    }
+    top() {
+        return this.root?.key;
     }
     get size() {
         return this.count;
@@ -74,7 +83,7 @@ export class SplayTree extends Mapping {
         // Randomized Splay Trees https://doi.org/10.1016%2Fs0020-0190%2801%2900230-7
         // The randomized idea is only moving accessed keys with a certain probability `p`.
         // Values of `p` closer to 1 tend to perform well.
-        if (Math.random() <= 0.75) {
+        if (Math.random() <= this.randSplay) {
             this.splay(key);
             if (this.cmp(key, this.root.key) === 0)
                 return this.root.value;
@@ -304,9 +313,7 @@ export class SplayTree extends Mapping {
      * @returns {Iterable<K>} An iterable of keys in-order.
      */
     *keys() {
-        if (!this.root)
-            return [];
-        for (const node of this.root.traverse()) {
+        for (const node of traverse(this.root)) {
             yield node.key;
         }
     }
@@ -315,9 +322,7 @@ export class SplayTree extends Mapping {
      * @returns {Iterable<[K,V]>} A iterable of `[key, value]` pairs sorted by key.
      */
     *entries() {
-        if (!this.root)
-            return [];
-        for (const node of this.root.traverse()) {
+        for (const node of traverse(this.root)) {
             yield [node.key, node.value];
         }
     }
@@ -326,9 +331,7 @@ export class SplayTree extends Mapping {
      * @returns {Iterable<V>} A iterable of `[key, value]` pairs sorted by key.
      */
     *values() {
-        if (!this.root)
-            return [];
-        for (const node of this.root.traverse()) {
+        for (const node of traverse(this.root)) {
             yield node.value;
         }
     }
