@@ -157,6 +157,20 @@ export function findRight(arr, fn) {
     }
 }
 /**
+ * Performs an efficient array insert operation in the given array. If the index or the array is invalid, it just returns the given array.
+ *
+ * @param {Array<*>} arr The given array to insert into
+ * @param {number} index The index of the array insert operation.
+ * @param {*} value The value to insert in the array at the given `index`.
+ * @returns {Array<*>} The given array.
+ */
+export function insert(arr, index, value) {
+    if (!arr || arr.length <= index || index < 0)
+        return arr;
+    arr.splice(index, 0, value);
+    return arr;
+}
+/**
  * Creates a function that performs a partial deep comparison between a given object and `shape`, returning `true` if the given object has equivalent property values, else `false`.
  * @example
 ```js
@@ -898,7 +912,7 @@ export function* union(...args) {
  *
  * @param arr The collection to iterate over.
  * @param [func=id] The iteratee to transform keys.
- * @returns Returns the composed aggregate object.
+ * @returns Returns the aggregated object.
  *
  * @example
 ```js
@@ -918,6 +932,35 @@ export function groupBy(arr, func = id) {
         const values = results[groupKey] || [];
         values.push(value);
         results[groupKey] = values;
+    });
+    return results;
+}
+/**
+ * Similar to {@link groupBy} but it returns a {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map Map} object with the results.
+ *
+ * @param arr The collection to iterate over.
+ * @param {Function | PropertyKey} [func=id] The iteratee to transform keys.
+ * @returns {Map} Returns the aggregated map object.
+ * @template K, V
+ *
+ * @example
+```js
+groupByMap([6.1, 4.2, 6.3], Math.floor)
+// => Map { 4: [4.2], 6: [6.1, 6.3] }
+
+// The `property` iteratee shorthand.
+groupByMap(['one', 'two', 'three'], 'length')
+// => Map { 3: ['one', 'two'], 5: ['three'] }
+```
+ */
+export function groupByMap(arr, func = id) {
+    const results = new Map();
+    const useKey = typeof func === 'function' ? func : partial(get, func);
+    forEach(arr, (value) => {
+        const groupKey = useKey(value);
+        const values = results.get(groupKey) || [];
+        values.push(value);
+        results.set(groupKey, values);
     });
     return results;
 }

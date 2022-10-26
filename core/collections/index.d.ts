@@ -108,6 +108,15 @@ findRight([1, 2, 3, 4], (n) => n % 2 === 1)
  */
 export declare function findRight(arr: any, fn: Iteratee | PropertyKey | Object): any;
 /**
+ * Performs an efficient array insert operation in the given array. If the index or the array is invalid, it just returns the given array.
+ *
+ * @param {Array<*>} arr The given array to insert into
+ * @param {number} index The index of the array insert operation.
+ * @param {*} value The value to insert in the array at the given `index`.
+ * @returns {Array<*>} The given array.
+ */
+export declare function insert(arr: any[], index: number, value: any): any[];
+/**
  * Creates a function that performs a partial deep comparison between a given object and `shape`, returning `true` if the given object has equivalent property values, else `false`.
  * @example
 ```js
@@ -501,7 +510,7 @@ export declare function union(...args: Array<Iterable<any>>): Generator<unknown,
  *
  * @param arr The collection to iterate over.
  * @param [func=id] The iteratee to transform keys.
- * @returns Returns the composed aggregate object.
+ * @returns Returns the aggregated object.
  *
  * @example
 ```js
@@ -514,6 +523,25 @@ groupBy(['one', 'two', 'three'], 'length')
 ```
  */
 export declare function groupBy(arr: Iterable<any> | Object, func?: Iteratee | PropertyKey): Object;
+/**
+ * Similar to {@link groupBy} but it returns a {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map Map} object with the results.
+ *
+ * @param arr The collection to iterate over.
+ * @param {Function | PropertyKey} [func=id] The iteratee to transform keys.
+ * @returns {Map} Returns the aggregated map object.
+ * @template K, V
+ *
+ * @example
+```js
+groupByMap([6.1, 4.2, 6.3], Math.floor)
+// => Map { 4: [4.2], 6: [6.1, 6.3] }
+
+// The `property` iteratee shorthand.
+groupByMap(['one', 'two', 'three'], 'length')
+// => Map { 3: ['one', 'two'], 5: ['three'] }
+```
+ */
+export declare function groupByMap<K = any, V = any>(arr: Iterable<any> | Object, func?: Iteratee | PropertyKey): Map<K, V[]>;
 /**
  * Removes all elements from array that `func` returns truthy for and returns an array of the removed elements.
  * @param arr The array to remove from.
