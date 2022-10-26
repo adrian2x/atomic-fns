@@ -3,7 +3,7 @@ import { compare } from '../operators/index.js'
 import { Collection } from './abc.js'
 
 export class Heap<T> extends Collection {
-  private readonly items: T[]
+  private readonly heap: T[]
   private readonly compare: Comparer
   private count: number = 0
 
@@ -20,16 +20,20 @@ export class Heap<T> extends Collection {
     this.compare = cmp
     if (Array.isArray(container)) {
       // use the provided array to avoid copying.
-      this.items = container
+      this.heap = container
     } else {
-      this.items = Array.from(container)
+      this.heap = Array.from(container)
     }
-    this.count = this.items.length
+    this.count = this.heap.length
     const halfLength = this.count >> 1
     // Heapify the items
     for (let parent = (this.count - 1) >> 1; parent >= 0; --parent) {
-      this.heapifyDown(parent, halfLength)
+      heapifyDown(this.heap, parent, halfLength, this.compare)
     }
+  }
+
+  at(n: number) {
+    return this.heap.at(n)
   }
 
   get size() {
@@ -38,7 +42,7 @@ export class Heap<T> extends Collection {
 
   clear() {
     this.count = 0
-    this.items.length = 0
+    this.heap.length = 0
   }
 
   /**
@@ -46,8 +50,8 @@ export class Heap<T> extends Collection {
    * @param item The element to push.
    */
   add(item: T) {
-    this.items.push(item)
-    this.heapifyUp(this.count)
+    this.heap.push(item)
+    heapifyUp(this.heap, this.count, this.compare)
     this.count += 1
   }
 
@@ -56,12 +60,12 @@ export class Heap<T> extends Collection {
    */
   pop() {
     if (!this.count) return
-    const value = this.items[0]
-    const last = this.items.pop() as T
+    const value = this.heap[0]
+    const last = this.heap.pop() as T
     this.count -= 1
     if (this.count) {
-      this.items[0] = last
-      this.heapifyDown(0, this.count >> 1)
+      this.heap[0] = last
+      heapifyDown(this.heap, 0, this.count >> 1, this.compare)
     }
     return value
   }
@@ -70,7 +74,8 @@ export class Heap<T> extends Collection {
    * Accesses the top element.
    */
   top() {
-    return this.items[0] as T | undefined
+    if (!this.count) return
+    return this.heap[0] as T | undefined
   }
 
   /**
@@ -79,7 +84,8 @@ export class Heap<T> extends Collection {
    * @return `true` if element exists.
    */
   contains(item: T) {
-    return this.items.includes(item)
+    if (!this.count) return false
+    return this.heap.includes(item)
   }
 
   /**
@@ -88,52 +94,96 @@ export class Heap<T> extends Collection {
    * @return `true` if the item was removed.
    */
   remove(item: T) {
-    const index = this.items.indexOf(item)
+    const index = this.heap.indexOf(item)
     if (index < 0) return false
     if (index === 0) {
       this.pop()
     } else if (index === this.count - 1) {
-      this.items.pop()
+      this.heap.pop()
       this.count -= 1
     } else {
-      this.items.splice(index, 1, this.items.pop() as T)
+      this.heap.splice(index, 1, this.heap.pop() as T)
       this.count -= 1
-      this.heapifyUp(index)
-      this.heapifyDown(index, this.count >> 1)
+      heapifyUp(this.heap, index, this.compare)
+      heapifyDown(this.heap, index, this.count >> 1, this.compare)
     }
     return true
   }
 
+  /**
+   * Returns an iterable with all the values in the heap.
+   * @returns {Iterable<T>} The values in the heap.
+   */
   values() {
-    return this.items[Symbol.iterator]()
+    return this.heap[Symbol.iterator]()
   }
+}
 
-  private heapifyUp(pos: number) {
-    const item = this.items[pos]
-    while (pos > 0) {
-      const parent = (pos - 1) >> 1
-      const parentItem = this.items[parent]
-      if (this.compare(parentItem, item) <= 0) break
-      this.items[pos] = parentItem
-      pos = parent
+function heapifyDown(heap, i: number, halfLength: number, compareFn = compare) {
+  const item = heap[i]
+  while (i < halfLength) {
+    let left = (i << 1) | 1
+    const right = left + 1
+    let minItem = heap[left]
+    if (right < heap.length && compareFn(minItem, heap[right]) > 0) {
+      left = right
+      minItem = heap[right]
     }
-    this.items[pos] = item
+    if (compareFn(minItem, item) >= 0) break
+    heap[i] = minItem
+    i = left
   }
+  heap[i] = item
+}
 
-  private heapifyDown(pos: number, halfLength: number) {
-    const item = this.items[pos]
-    while (pos < halfLength) {
-      let left = (pos << 1) | 1
-      const right = left + 1
-      let minItem = this.items[left]
-      if (right < this.count && this.compare(minItem, this.items[right]) > 0) {
-        left = right
-        minItem = this.items[right]
-      }
-      if (this.compare(minItem, item) >= 0) break
-      this.items[pos] = minItem
-      pos = left
-    }
-    this.items[pos] = item
+function heapifyUp(heap, i: number, compareFn) {
+  const item = heap[i]
+  while (i > 0) {
+    const parent = (i - 1) >> 1
+    const parentItem = heap[parent]
+    if (compareFn(parentItem, item) <= 0) break
+    heap[i] = parentItem
+    i = parent
   }
+  heap[i] = item
+}
+
+/**
+ * Transform any array into a heap, in-place, in linear time.
+ * @param {Array} heap
+ * @param {Comparer} [compareFn=compare] Custom compare function
+ */
+export function heapify(heap, compareFn = compare) {
+  const size = heap.length
+  const halfLength = size >> 1
+  for (let parent = (size - 1) >> 1; parent >= 0; --parent) {
+    heapifyDown(heap, parent, halfLength, compareFn)
+  }
+}
+
+/**
+ * Push the value `item` onto the `heap`, maintaining the heap invariant.
+ * @param {Array} heap
+ * @param {*} item
+ * @param {Comparer} [compareFn=compare] Custom compare function
+ */
+export function heappush<T>(heap: T[], item: T, compareFn = compare) {
+  heap.push(item)
+  heapifyUp(heap, heap.length - 1, compareFn)
+}
+
+/**
+ * Pop and return the smallest item from the `heap`, maintaining the heap invariant.
+ * @param {Array} heap
+ * @param {Comparer} [compareFn=compare] Custom compare function
+ */
+export function heappop<T>(heap: T[], compareFn = compare) {
+  const last = heap.pop() as T
+  if (heap.length) {
+    const item = heap[0]
+    heap[0] = last
+    heapifyDown(heap, 0, heap.length >> 1, compareFn)
+    return item
+  }
+  return last
 }

@@ -1,7 +1,8 @@
 import type { Comparer } from '../operators/index.js';
+import { compare } from '../operators/index.js';
 import { Collection } from './abc.js';
 export declare class Heap<T> extends Collection {
-    private readonly items;
+    private readonly heap;
     private readonly compare;
     private count;
     /**
@@ -13,6 +14,7 @@ export declare class Heap<T> extends Collection {
      * @param {Comparer} [cmp=compare] Compare function. Defaults to smaller values first.
      */
     constructor(container?: Iterable<T>, cmp?: Comparer);
+    at(n: number): T | undefined;
     get size(): number;
     clear(): void;
     /**
@@ -40,7 +42,28 @@ export declare class Heap<T> extends Collection {
      * @return `true` if the item was removed.
      */
     remove(item: T): boolean;
+    /**
+     * Returns an iterable with all the values in the heap.
+     * @returns {Iterable<T>} The values in the heap.
+     */
     values(): IterableIterator<T>;
-    private heapifyUp;
-    private heapifyDown;
 }
+/**
+ * Transform any array into a heap, in-place, in linear time.
+ * @param {Array} heap
+ * @param {Comparer} [compareFn=compare] Custom compare function
+ */
+export declare function heapify(heap: any, compareFn?: typeof compare): void;
+/**
+ * Push the value `item` onto the `heap`, maintaining the heap invariant.
+ * @param {Array} heap
+ * @param {*} item
+ * @param {Comparer} [compareFn=compare] Custom compare function
+ */
+export declare function heappush<T>(heap: T[], item: T, compareFn?: typeof compare): void;
+/**
+ * Pop and return the smallest item from the `heap`, maintaining the heap invariant.
+ * @param {Array} heap
+ * @param {Comparer} [compareFn=compare] Custom compare function
+ */
+export declare function heappop<T>(heap: T[], compareFn?: typeof compare): T;
