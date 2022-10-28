@@ -98,7 +98,10 @@ export const compose = (...args) => flow(args.reverse())
  * @param {Function} [resolver] The function to resolve the cache key.
  * @return {Function} Returns the new memoized function.
  */
-export function memoize(func: Function, resolver?: Function): Function {
+export function memoize<T>(
+  func: Function<T>,
+  resolver?: Function
+): Function<ReturnType<typeof func>> {
   const cache = new Map()
   return (...args) => {
     const key = resolver ? resolver(...args) : args[0]
