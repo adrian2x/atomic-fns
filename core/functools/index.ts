@@ -191,14 +191,14 @@ single(3) // => 1
 // => `func` is invoked only once.
 ```
  */
-export function once(func: Function) {
+export function once<T>(func: Function<T>) {
   let result, isCalled
   return (...args) => {
     if (!isCalled) {
       result = func(...args)
       isCalled = true
     }
-    return result
+    return result as T
   }
 }
 

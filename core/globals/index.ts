@@ -142,14 +142,24 @@ export function type(value) {
  */
 export const str = (obj) => (obj != null ? obj.toString() : '')
 
+export function hasOwnProperty(obj, prop) {
+  return Object.prototype.hasOwnProperty.call(obj, prop)
+}
+
 /** Check if value is a boolean type. */
 export const isBool = (x): x is boolean => type(x) === 'boolean'
+
+/** Check if value is an `Error` type. */
+export const isError = (x): x is Error => x instanceof Error
 
 /** Check if value is an iterable type. */
 export const isIterable = (x): x is IterableIterator<any> => {
   if (x == null) return false
   return typeof x[Symbol.iterator] === 'function'
 }
+
+/** Check if value is a native `Date` type. */
+export const isDate = (x): x is Date => x instanceof Date
 
 /** Check if value is an object type. */
 export const isObject = (x): x is Object => typeof x === 'object' && type(x) === 'object'
@@ -169,11 +179,11 @@ export const isArrayLike = (x) => {
   return T === 'array' || (T === 'object' && isNumber(x.length))
 }
 
-/** Check if value is a function type. */
-export const isFunc = (x): x is Function => x?.constructor === Function
-
 /** Check if value is a number type. */
 export const isNumber = (x): x is number => type(x) === 'number'
+
+/** Check if value is an integer number type. */
+export const isInteger = (x): x is number => type(x) === 'number' && Math.floor(x) === x
 
 /** Check if value is a bigint type. */
 export const isBigint = (x): x is BigInt => type(x) === 'bigint'
@@ -184,8 +194,11 @@ export const isNaN = (x): x is typeof NaN => Number.isNaN(x)
 /** Check if value is a Promise type. */
 export const isPromise = (x): x is Promise<any> => type(x) === 'Promise'
 
+/** Check if value is a function type. */
+export const isFunction = (x): x is Function => x?.constructor === Function
+
 /** Check if value is an async function type. */
-export const isAsync = (x) => x?.constructor.name === 'AsyncFunction'
+export const isAsyncFunction = (x) => x?.constructor.name === 'AsyncFunction'
 
 /** Check if value is a generator function type. */
 export const isGenerator = (x): x is Generator => {
@@ -195,14 +208,34 @@ export const isGenerator = (x): x is Generator => {
 /** Check if value is `null` or `undefined`. */
 export const isNull = (x): x is null | undefined => x == null
 
+/** Check if value === `undefined`. */
+export function isUndefined(o) {
+  return typeof o === 'undefined'
+}
+
 /** Check if value is not `null` or `undefined`. */
 export const notNull = (x) => x != null
 
 /** Returns `true` for objects without length or falsy values. */
 export const isEmpty = (x) => (len(x) === 0 ? true : !x)
 
+/** Check if value is a `RegExp` type */
+export const isRegExp = (x): x is RegExp => x instanceof RegExp
+
 /** Check if value is a `Symbol` type */
 export const isSymbol = (x): x is symbol => type(x) === 'symbol'
+
+/** Check if value is a `Set` type. */
+export const isSet = <T>(x): x is Set<T> => x instanceof Set
+
+/** Check if value is a `Map` type. */
+export const isMap = <K, V>(x): x is Map<K, V> => x instanceof Map
+
+/** Check if value is a `WeakSet` type. */
+export const isWeakSet = <T extends object>(x): x is WeakSet<T> => x instanceof WeakSet
+
+/** Check if value is a `WeakMap` type. */
+export const isWeakMap = <K extends object, V>(x): x is WeakMap<K, V> => x instanceof WeakMap
 
 /**
  * Returns the number of elements in a collection type.
@@ -217,7 +250,7 @@ export function len(value) {
   if (isNumber(value.length)) {
     return value.length
   }
-  if (isFunc(value.size)) {
+  if (isFunction(value.size)) {
     return value.size()
   }
   if (isNumber(value.size)) {
@@ -267,7 +300,7 @@ export const uuid = () => {
  * @return `obj.key(...args)` or `undefined`.
  */
 export function call(obj: any, key: PropertyKey, ...args: any[]) {
-  if (isFunc(get(key, obj))) {
+  if (isFunction(get(key, obj))) {
     return obj[key](...args)
   }
 }

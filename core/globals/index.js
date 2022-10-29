@@ -122,14 +122,21 @@ export function type(value) {
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString | Object.toString }
  */
 export const str = (obj) => (obj != null ? obj.toString() : '');
+export function hasOwnProperty(obj, prop) {
+    return Object.prototype.hasOwnProperty.call(obj, prop);
+}
 /** Check if value is a boolean type. */
 export const isBool = (x) => type(x) === 'boolean';
+/** Check if value is an `Error` type. */
+export const isError = (x) => x instanceof Error;
 /** Check if value is an iterable type. */
 export const isIterable = (x) => {
     if (x == null)
         return false;
     return typeof x[Symbol.iterator] === 'function';
 };
+/** Check if value is a native `Date` type. */
+export const isDate = (x) => x instanceof Date;
 /** Check if value is an object type. */
 export const isObject = (x) => typeof x === 'object' && type(x) === 'object';
 /** Check if value is a string type. */
@@ -144,30 +151,46 @@ export const isArrayLike = (x) => {
     const T = type(x);
     return T === 'array' || (T === 'object' && isNumber(x.length));
 };
-/** Check if value is a function type. */
-export const isFunc = (x) => x?.constructor === Function;
 /** Check if value is a number type. */
 export const isNumber = (x) => type(x) === 'number';
+/** Check if value is an integer number type. */
+export const isInteger = (x) => type(x) === 'number' && Math.floor(x) === x;
 /** Check if value is a bigint type. */
 export const isBigint = (x) => type(x) === 'bigint';
 /** Check if value is NaN based on `Number.isNaN`. */
 export const isNaN = (x) => Number.isNaN(x);
 /** Check if value is a Promise type. */
 export const isPromise = (x) => type(x) === 'Promise';
+/** Check if value is a function type. */
+export const isFunction = (x) => x?.constructor === Function;
 /** Check if value is an async function type. */
-export const isAsync = (x) => x?.constructor.name === 'AsyncFunction';
+export const isAsyncFunction = (x) => x?.constructor.name === 'AsyncFunction';
 /** Check if value is a generator function type. */
 export const isGenerator = (x) => {
     return x?.constructor.constructor?.name === 'GeneratorFunction';
 };
 /** Check if value is `null` or `undefined`. */
 export const isNull = (x) => x == null;
+/** Check if value === `undefined`. */
+export function isUndefined(o) {
+    return typeof o === 'undefined';
+}
 /** Check if value is not `null` or `undefined`. */
 export const notNull = (x) => x != null;
 /** Returns `true` for objects without length or falsy values. */
 export const isEmpty = (x) => (len(x) === 0 ? true : !x);
+/** Check if value is a `RegExp` type */
+export const isRegExp = (x) => x instanceof RegExp;
 /** Check if value is a `Symbol` type */
 export const isSymbol = (x) => type(x) === 'symbol';
+/** Check if value is a `Set` type. */
+export const isSet = (x) => x instanceof Set;
+/** Check if value is a `Map` type. */
+export const isMap = (x) => x instanceof Map;
+/** Check if value is a `WeakSet` type. */
+export const isWeakSet = (x) => x instanceof WeakSet;
+/** Check if value is a `WeakMap` type. */
+export const isWeakMap = (x) => x instanceof WeakMap;
 /**
  * Returns the number of elements in a collection type.
  *
@@ -182,7 +205,7 @@ export function len(value) {
     if (isNumber(value.length)) {
         return value.length;
     }
-    if (isFunc(value.size)) {
+    if (isFunction(value.size)) {
         return value.size();
     }
     if (isNumber(value.size)) {
@@ -229,7 +252,7 @@ export const uuid = () => {
  * @return `obj.key(...args)` or `undefined`.
  */
 export function call(obj, key, ...args) {
-    if (isFunc(get(key, obj))) {
+    if (isFunction(get(key, obj))) {
         return obj[key](...args);
     }
 }

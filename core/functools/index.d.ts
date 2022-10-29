@@ -47,7 +47,7 @@ export declare const compose: (...args: any[]) => (x: any) => any;
  * @param {Function} [resolver] The function to resolve the cache key.
  * @return {Function} Returns the new memoized function.
  */
-export declare function memoize(func: Function, resolver?: Function): Function;
+export declare function memoize<T>(func: Function<T>, resolver?: Function): Function<ReturnType<typeof func>>;
 export declare function cache(target: any, name: any, descriptor: any): any;
 /**
  * Creates a debounced function that delays invoking `func` until after `wait` milliseconds have elapsed since the last time the debounced function was invoked. Subsequent calls to the debounced function return the result of the last successful invocation. Provide options to set the `maxWait` milliseconds, regardless of when the function was last invoked.
@@ -84,7 +84,7 @@ single(3) // => 1
 // => `func` is invoked only once.
 ```
  */
-export declare function once(func: Function): (...args: any[]) => any;
+export declare function once<T>(func: Function<T>): (...args: any[]) => T;
 export declare type Maybe<T> = T | undefined;
 export declare type Result<T, E = any> = [Maybe<T>, Maybe<E>];
 /**

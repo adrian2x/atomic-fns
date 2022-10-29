@@ -12,11 +12,11 @@ import {
   hex,
   isArray,
   isArrayLike,
-  isAsync,
+  isAsyncFunction,
   isBigint,
   isBool,
   isEmpty,
-  isFunc,
+  isFunction,
   isNaN,
   isNull,
   isNumber,
@@ -114,15 +114,15 @@ describe('globals', () => {
     assert(!isArrayLike(''))
   })
 
-  it('isFunc', () => {
-    assert(isFunc(_))
-    assert(!isFunc([]))
+  it('isFunction', () => {
+    assert(isFunction(_))
+    assert(!isFunction([]))
   })
 
-  it('isAsync', () => {
-    assert(isAsync(async function () {}))
-    assert(isAsync(async () => {}))
-    assert(!isAsync(_))
+  it('isAsyncFunction', () => {
+    assert(isAsyncFunction(async function () {}))
+    assert(isAsyncFunction(async () => {}))
+    assert(!isAsyncFunction(_))
   })
 
   it('isNaN', () => {

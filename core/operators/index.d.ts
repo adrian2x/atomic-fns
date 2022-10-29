@@ -145,4 +145,4 @@ export declare function shallowEqual(obj: any, other: any): boolean;
  * @param other
  * @returns `true` if the objects are considered equal.
  */
-export declare function deepEqual(obj: any, other: any, checker?: typeof eq): boolean;
+export declare function deepEqual(obj: any, other: any, checker?: typeof eq, seen?: WeakSet<object>): boolean;

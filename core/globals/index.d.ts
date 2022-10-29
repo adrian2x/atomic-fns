@@ -92,10 +92,15 @@ export declare function type(value: any): any;
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString | Object.toString }
  */
 export declare const str: (obj: any) => any;
+export declare function hasOwnProperty(obj: any, prop: any): boolean;
 /** Check if value is a boolean type. */
 export declare const isBool: (x: any) => x is boolean;
+/** Check if value is an `Error` type. */
+export declare const isError: (x: any) => x is Error;
 /** Check if value is an iterable type. */
 export declare const isIterable: (x: any) => x is IterableIterator<any>;
+/** Check if value is a native `Date` type. */
+export declare const isDate: (x: any) => x is Date;
 /** Check if value is an object type. */
 export declare const isObject: (x: any) => x is Object;
 /** Check if value is a string type. */
@@ -107,28 +112,42 @@ export declare const isArray: (x: any) => x is any[];
  * A value is considered array-like if it's not a function and has a `.length` number property.
  */
 export declare const isArrayLike: (x: any) => boolean;
-/** Check if value is a function type. */
-export declare const isFunc: (x: any) => x is Function<any>;
 /** Check if value is a number type. */
 export declare const isNumber: (x: any) => x is number;
+/** Check if value is an integer number type. */
+export declare const isInteger: (x: any) => x is number;
 /** Check if value is a bigint type. */
 export declare const isBigint: (x: any) => x is BigInt;
 /** Check if value is NaN based on `Number.isNaN`. */
 export declare const isNaN: (x: any) => x is number;
 /** Check if value is a Promise type. */
 export declare const isPromise: (x: any) => x is Promise<any>;
+/** Check if value is a function type. */
+export declare const isFunction: (x: any) => x is Function<any>;
 /** Check if value is an async function type. */
-export declare const isAsync: (x: any) => boolean;
+export declare const isAsyncFunction: (x: any) => boolean;
 /** Check if value is a generator function type. */
 export declare const isGenerator: (x: any) => x is Generator<unknown, any, unknown>;
 /** Check if value is `null` or `undefined`. */
 export declare const isNull: (x: any) => x is null | undefined;
+/** Check if value === `undefined`. */
+export declare function isUndefined(o: any): boolean;
 /** Check if value is not `null` or `undefined`. */
 export declare const notNull: (x: any) => boolean;
 /** Returns `true` for objects without length or falsy values. */
 export declare const isEmpty: (x: any) => boolean;
+/** Check if value is a `RegExp` type */
+export declare const isRegExp: (x: any) => x is RegExp;
 /** Check if value is a `Symbol` type */
 export declare const isSymbol: (x: any) => x is symbol;
+/** Check if value is a `Set` type. */
+export declare const isSet: <T>(x: any) => x is Set<T>;
+/** Check if value is a `Map` type. */
+export declare const isMap: <K, V>(x: any) => x is Map<K, V>;
+/** Check if value is a `WeakSet` type. */
+export declare const isWeakSet: <T extends object>(x: any) => x is WeakSet<T>;
+/** Check if value is a `WeakMap` type. */
+export declare const isWeakMap: <K extends object, V>(x: any) => x is WeakMap<K, V>;
 /**
  * Returns the number of elements in a collection type.
  *

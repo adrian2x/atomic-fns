@@ -57,7 +57,7 @@ export function compare(x, y) {
  * @returns {boolean} `true` if `x` and `y` are equal or `false` otherwise.
  */
 export function eq(x, y) {
-    return x === y || call(x, 'eq', y) != null;
+    return Object.is(x, y) || call(x, 'eq', y) != null;
 }
 /**
  * Compares two values to check if `x` is strictly less than `y`. If `x` is an object with a `lt` method, it returns `x.lt(y)`.
@@ -237,10 +237,14 @@ export function shallowEqual(obj, other) {
  * @param other
  * @returns `true` if the objects are considered equal.
  */
-export function deepEqual(obj, other, checker = eq) {
+export function deepEqual(obj, other, checker = eq, seen = new WeakSet()) {
     if (checker(obj, other))
         return true;
     if (!obj || !other)
+        return false;
+    if (obj.prototype !== other.prototype)
+        return false;
+    if (seen.has(obj) && seen.has(other))
         return false;
     if (Array.isArray(obj)) {
         // compare the arrays
@@ -253,15 +257,41 @@ export function deepEqual(obj, other, checker = eq) {
         }
         return true;
     }
-    else if (isObject(obj)) {
-        // compare the object keys
+    if (obj instanceof Set) {
+        if (obj.size !== other.size)
+            return false;
+        for (const value of obj.values()) {
+            if (!other.has(value))
+                return false;
+        }
+        return true;
+    }
+    if (obj instanceof Map) {
+        // compare keys and values
+        if (obj.size !== other.size)
+            return false;
+        seen.add(obj);
+        seen.add(other);
+        for (const key of obj.keys()) {
+            if (!other.has(key))
+                return false;
+            if (!deepEqual(obj.get(key), other.get(key), checker, seen)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (isObject(obj)) {
+        // compare the object own enumerable keys
         const objKeys = Object.keys(obj);
         const otherKeys = Object.keys(other);
         if (objKeys.length !== otherKeys.length)
             return false;
+        seen.add(obj);
+        seen.add(other);
         for (const key of objKeys) {
             if (!Object.prototype.hasOwnProperty.call(other, key) ||
-                !deepEqual(obj[key], other[key], checker)) {
+                !deepEqual(obj[key], other[key], checker, seen)) {
                 return false;
             }
         }

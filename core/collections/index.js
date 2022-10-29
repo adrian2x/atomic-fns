@@ -4,7 +4,7 @@
  * @module Collections
  */
 import { partial } from '../functools/index.js';
-import { call, get, isArray, isArrayLike, isBool, isEmpty, isFunc, isIterable, isNull, isNumber, isObject, isString, isSymbol, keys, set } from '../globals/index.js';
+import { call, get, isArray, isArrayLike, isBool, isEmpty, isFunction, isIterable, isNull, isNumber, isObject, isString, isSymbol, keys, set } from '../globals/index.js';
 import { enumerate } from '../itertools/index.js';
 import { compare, eq, id } from '../operators/index.js';
 export * from './abc.js';
@@ -81,7 +81,7 @@ filter(users, 'active')
  */
 export function filter(arr, fn = isNull) {
     if (Array.isArray(arr)) {
-        if (isFunc(fn))
+        if (isFunction(fn))
             return arr.filter(fn);
         if (isNumber(fn) || isString(fn) || isSymbol(fn))
             return arr.filter((x) => get(fn, x));
@@ -117,7 +117,7 @@ find(users, 'active')
  */
 export function find(arr, fn) {
     if (Array.isArray(arr)) {
-        if (isFunc(fn))
+        if (isFunction(fn))
             return arr.find(fn);
         if (isNumber(fn) || isString(fn) || isSymbol(fn))
             return arr.find((x) => x?.[fn]);
@@ -644,7 +644,7 @@ export function clone(value, deep = false) {
         return cloneArray(value, deep);
     }
     if (isObject(value)) {
-        if (isFunc(value.clone)) {
+        if (isFunction(value.clone)) {
             return value.clone();
         }
         const copy = {};
@@ -976,7 +976,7 @@ export function remove(arr, func) {
     return arr.filter((x, i) => {
         if (isArray(func))
             return !func.includes(x);
-        else if (isFunc(func))
+        else if (isFunction(func))
             return !func(x, i, arr);
         return x !== func;
     });

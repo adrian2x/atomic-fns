@@ -12,7 +12,7 @@ import {
   isArrayLike,
   isBool,
   isEmpty,
-  isFunc,
+  isFunction,
   isIterable,
   isNull,
   isNumber,
@@ -114,7 +114,7 @@ filter(users, 'active')
  */
 export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
   if (Array.isArray(arr)) {
-    if (isFunc(fn)) return arr.filter(fn)
+    if (isFunction(fn)) return arr.filter(fn)
     if (isNumber(fn) || isString(fn) || isSymbol(fn)) return arr.filter((x) => get(fn, x))
     if (isObject(fn)) return arr.filter(matches(fn))
   }
@@ -148,7 +148,7 @@ find(users, 'active')
  */
 export function find(arr, fn: Iteratee | PropertyKey | Object) {
   if (Array.isArray(arr)) {
-    if (isFunc(fn)) return arr.find(fn)
+    if (isFunction(fn)) return arr.find(fn)
     if (isNumber(fn) || isString(fn) || isSymbol(fn)) return arr.find((x) => x?.[fn])
     if (isObject(fn)) return arr.find(matches(fn))
   }
@@ -672,7 +672,7 @@ export function clone(value, deep = false) {
     return cloneArray(value, deep)
   }
   if (isObject(value)) {
-    if (isFunc(value.clone)) {
+    if (isFunction(value.clone)) {
       return value.clone()
     }
     const copy = {}
@@ -1015,7 +1015,7 @@ export function groupByMap<K = any, V = any>(
 export function remove<T>(arr: T[], func: any) {
   return arr.filter((x, i) => {
     if (isArray(func)) return !func.includes(x)
-    else if (isFunc(func)) return !func(x, i, arr)
+    else if (isFunction(func)) return !func(x, i, arr)
     return x !== func
   })
 }
