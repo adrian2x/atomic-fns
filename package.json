@@ -1,12 +1,22 @@
 {
   "name": "atomic-fns",
   "description": "Like Lodash, but for ESNext and with types. Stop shipping code built for browsers from 2015.",
-  "version": "0.3.3-beta",
+  "version": "0.3.4",
   "main": "core/index.js",
   "type": "module",
   "types": "core/index.d.ts",
   "module": "core/index.js",
   "sideEffects": false,
+  "scripts": {
+    "prepublishOnly": "npm test",
+    "test": "NODE_OPTIONS=--loader=ts-node/esm jasmine --config=jasmine.json",
+    "tsc": "tsc -p ./tsconfig.xo.json --declaration",
+    "tsc:w": "tsc -p ./tsconfig.xo.json --declaration --watch",
+    "lint": "eslint core/**/*.ts",
+    "lint:fix": "eslint core/**/*.ts --fix",
+    "build": "npm run lint:fix && npm run tsc && npm run docs",
+    "docs": "typedoc"
+  },
   "devDependencies": {
     "@types/jasmine": "^4.3.0",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
@@ -26,16 +36,6 @@
     "ts-node": "^10.4.1",
     "typedoc": "^0.23.16",
     "typescript": "^4.8.4"
-  },
-  "scripts": {
-    "prepublishOnly": "npm test",
-    "test": "NODE_OPTIONS=--loader=ts-node/esm jasmine --config=jasmine.json",
-    "tsc": "tsc -p ./tsconfig.xo.json --declaration",
-    "tsc:w": "tsc -p ./tsconfig.xo.json --declaration --watch",
-    "lint": "eslint core/**/*.ts",
-    "lint:fix": "eslint core/**/*.ts --fix",
-    "build": "npm run lint:fix && npm run tsc && npm run docs",
-    "docs": "typedoc"
   },
   "lint-staged": {
     "*.ts": "eslint --fix"

@@ -1,0 +1,67 @@
+<script type="module">
+  import { IntlDate } from './index.js'
+  window.IntlDate = IntlDate
+
+  let d = new IntlDate('', { locale: 'en' })
+  console.log('toString', d.toString())
+
+  console.log('%A', d.format('%A'))
+  console.log('%a', d.format('%a'))
+
+  console.log('%%d', d.format('%d'))
+  console.log('%-d', d.format('%-d'))
+
+  console.log('%m', d.format('%m'))
+  console.log('%-m', d.format('%-m'))
+  console.log('%B', d.format('%B'))
+  console.log('%b', d.format('%b'))
+  console.log('%bb', d.format('%bb'))
+
+  console.log('%Y', d.format('%Y'))
+  console.log('%y', d.format('%y'))
+
+  console.log('%N', d.format('%N'))
+  console.log('%n', d.format('%n'))
+
+  console.log('%I', d.format('%I'))
+  console.log('%-I', d.format('%-I'))
+  console.log('%H', d.format('%H'))
+  console.log('%-H', d.format('%-H'))
+  console.log('%K', d.format('%K'))
+  console.log('%k', d.format('%k'))
+
+  console.log('%M', d.format('%M'))
+  console.log('%-M', d.format('%-M'))
+
+  console.log('%S', d.format('%S'))
+  console.log('%-S', d.format('%-S'))
+
+  console.log('%P', d.format('%P'))
+  console.log('%p', d.format('%p'))
+  console.log('%pp', d.format('%pp'))
+
+  console.log('%Z', d.format('%Z'))
+  console.log('%-Z', d.format('%-Z'))
+  console.log('%z', d.format('%z'))
+  console.log('%-z', d.format('%-z'))
+  console.log('%ZZ', d.format('%ZZ'))
+  console.log('%-ZZ', d.format('%-ZZ'))
+
+  console.log(d.format('%A, %d/%m/%y'))
+  console.log(d.format('%y-%m-%d, %A'))
+  console.log(d.format('%y %B %d %A %I:%M:%S %P'))
+  console.log(d.format('%y %B %d %A %-I:%-M:%-S %p'))
+  console.log(d.format('%y %b %d %a %H:%M:%S'))
+  console.log(d.format('%y %b %d %a %-H:%-M:%S'))
+  console.log(d.format('%y %b %d %a %K:%M:%S %P')) // %p shows on 12h clock
+  console.log(d.format('%y %b %d %a %k:%-M:%S %p')) // %p No effect on 24h
+  console.log(d.format('%a, %b %d, %y %N, %K:%M:%S %P'))
+  console.log(d.format('%a, %b %d, %y %n, %K:%M:%S %P'))
+  console.log(d.format('%a, %b %d, %y %k:%M:%S %P')) // %p No effect on 24h
+  console.log(d.format('%y %b %d %a %-I:%M:%S %P %Z'))
+  console.log(d.format('%y %b %d %a %-I:%M:%S %P %-Z'))
+  console.log(d.format('%y %b %d %a %-I:%M:%S %P %z'))
+  console.log(d.format('%y %b %d %a %-I:%M:%S %P %-z'))
+  console.log(d.format('%y %b %d %a %-I:%M:%S %P %ZZ'))
+  console.log(d.format('%a, %b %d, %y %-I:%M:%S %-ZZ'))
+</script>

@@ -110,6 +110,7 @@
       "./core/collections/index.ts",
       "./core/datetime/index.ts",
       "./core/functools/index.ts",
+      "./core/i18n/index.ts",
       "./core/itertools/index.ts",
       "./core/math/index.ts",
       "./core/operators/index.ts",
