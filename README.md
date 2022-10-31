@@ -21,7 +21,7 @@ You may prefer this because it's:
 
 ## Get Started
 
-This library is available as an npm package.
+This library is available as an [npm package](https://www.npmjs.com/package/atomic-fns).
 
 To install the package you need to have [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) (or [yarn](https://yarnpkg.com/getting-started/install)) and then run:
 

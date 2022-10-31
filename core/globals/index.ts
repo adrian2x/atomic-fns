@@ -5,7 +5,7 @@
  */
 
 /** This is just a noop function. */
-export const _ = () => {}
+export const noop = () => {}
 
 /**
  * A generic function type with arbitrary arguments and return.

@@ -34,7 +34,7 @@ import {
   type,
   uniqueId,
   values,
-  _
+  noop
 } from '../core/globals/index.js'
 import { enumerate } from '../core/itertools/index.js'
 
@@ -74,7 +74,7 @@ describe('globals', () => {
     assert(type(new WeakMap()) === 'WeakMap')
     assert(type(new Set()) === 'Set')
     assert(type(new WeakSet()) === 'WeakSet')
-    assert(type(new Promise(_)) === 'Promise')
+    assert(type(new Promise(noop)) === 'Promise')
     assert(type(new Int8Array()) === 'Int8Array')
     assert(type(new Uint8Array()) === 'Uint8Array')
     assert(type(new Uint8ClampedArray()) === 'Uint8ClampedArray')
@@ -115,14 +115,14 @@ describe('globals', () => {
   })
 
   it('isFunction', () => {
-    assert(isFunction(_))
+    assert(isFunction(noop))
     assert(!isFunction([]))
   })
 
   it('isAsyncFunction', () => {
     assert(isAsyncFunction(async function () {}))
     assert(isAsyncFunction(async () => {}))
-    assert(!isAsyncFunction(_))
+    assert(!isAsyncFunction(noop))
   })
 
   it('isNaN', () => {
@@ -143,7 +143,7 @@ describe('globals', () => {
   })
 
   it('isPromise', () => {
-    assert(isPromise(new Promise(_)))
+    assert(isPromise(new Promise(noop)))
   })
 
   it('isSymbol', () => {

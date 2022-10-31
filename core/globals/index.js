@@ -4,7 +4,7 @@
  * @module Globals
  */
 /** This is just a noop function. */
-export const _ = () => { };
+export const noop = () => { };
 /** A function that always returns `true`. */
 export const True = () => true;
 /** A function that always returns `false`. */

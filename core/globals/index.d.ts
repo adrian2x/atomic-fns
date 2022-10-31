@@ -4,7 +4,7 @@
  * @module Globals
  */
 /** This is just a noop function. */
-export declare const _: () => void;
+export declare const noop: () => void;
 /**
  * A generic function type with arbitrary arguments and return.
  */
