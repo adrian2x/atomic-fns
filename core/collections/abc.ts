@@ -36,7 +36,7 @@ export interface Ordered<T> {
  * Implements an iterable that allows backward iteration.
  * @interface Reversible
  */
-export interface Reversible<T = unknown> {
+export interface Reversible<T = any> {
   reversed: () => Iterable<T>
 }
 

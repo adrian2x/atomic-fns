@@ -87,6 +87,7 @@ single(3) // => 1
 export declare function once<T>(func: Function<T>): (...args: any[]) => T;
 export declare type Maybe<T> = T | undefined;
 export declare type Result<T, E = any> = [Maybe<T>, Maybe<E>];
+export declare type Optional<T> = Maybe<T>;
 /**
  * Wraps a function to catch any exceptions inside and return a `go` style error-return type {@link Result}.
  *

@@ -206,6 +206,8 @@ export type Maybe<T> = T | undefined
 
 export type Result<T, E = any> = [Maybe<T>, Maybe<E>]
 
+export type Optional<T> = Maybe<T>
+
 /**
  * Wraps a function to catch any exceptions inside and return a `go` style error-return type {@link Result}.
  *
