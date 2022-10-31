@@ -12,17 +12,17 @@ export class Deque extends Sequence {
     start = 0;
     count = 0;
     capacity;
-    ArrayClass;
-    constructor(ArrayClass = [], capacity = 1024) {
+    ArrayConstructor;
+    constructor(arrType = [], capacity = 1024) {
         super();
         if (typeof capacity !== 'number' || capacity <= 0)
             throw new ValueError(`Deque capacity should be a positive integer.`);
-        this.ArrayClass = ArrayClass.constructor;
+        this.ArrayConstructor = arrType.constructor;
         this.capacity = capacity;
-        this.items = new this.ArrayClass(ArrayClass.length || this.capacity);
+        this.items = new this.ArrayConstructor(arrType.length || this.capacity);
         this.clear();
-        if (ArrayClass.length) {
-            for (const item of ArrayClass) {
+        if (arrType.length) {
+            for (const item of arrType) {
                 this.append(item);
             }
         }
@@ -195,7 +195,7 @@ export class Deque extends Sequence {
         const offset = this.start + this.count;
         if (offset < this.capacity)
             return this.items.slice(this.start, offset);
-        const array = new this.ArrayClass(this.count);
+        const array = new this.ArrayConstructor(this.count);
         const c = this.capacity;
         const l = this.count;
         let i = this.start;
@@ -273,7 +273,7 @@ export class Deque extends Sequence {
     }
     inspect() {
         const array = this.toArray();
-        array.type = this.ArrayClass.name;
+        array.type = this.ArrayConstructor.name;
         array.capacity = this.capacity;
         // Trick so that node displays the name of the constructor
         Object.defineProperty(array, 'constructor', {

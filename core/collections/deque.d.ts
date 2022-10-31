@@ -10,8 +10,8 @@ export declare class Deque<T> extends Sequence<T> {
     start: number;
     count: number;
     capacity: number;
-    ArrayClass: any;
-    constructor(ArrayClass?: T[], capacity?: number);
+    ArrayConstructor: any;
+    constructor(arrType?: T[], capacity?: number);
     get size(): number;
     /**
      * Method used to clear the structure.

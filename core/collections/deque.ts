@@ -5,40 +5,44 @@ import { Sequence } from './abc.js'
 
 /**
  * Fixed capacity double-ended queue implemented as ring deque.
- *
- * @constructor
+ * @template T
  */
-export class Deque<T> extends Sequence<T> {
+export class Deque<T = any> extends Sequence<T> {
   items: T[]
   start: number = 0
   count: number = 0
   capacity: number
-  ArrayClass: any
+  ArrayConstructor: any
 
-  constructor(ArrayClass = [] as T[], capacity = 1024) {
+  /**
+   * Creates a new `Deque` instance of a fixed size.
+   * @param {Array} [arrType = []] The initial elements or array type to use (accepts any kind of typed array).
+   * @param {number} [capacity=1024] The fixed size of the deque. Defaults to `1024`.
+   */
+  constructor(arrType = [] as T[], capacity = 1024) {
     super()
     if (typeof capacity !== 'number' || capacity <= 0)
       throw new ValueError(`Deque capacity should be a positive integer.`)
 
-    this.ArrayClass = ArrayClass.constructor
+    this.ArrayConstructor = arrType.constructor
     this.capacity = capacity
-    this.items = new this.ArrayClass(ArrayClass.length || this.capacity)
+    this.items = new this.ArrayConstructor(arrType.length || this.capacity)
     this.clear()
-    if (ArrayClass.length) {
-      for (const item of ArrayClass) {
+
+    if (arrType.length) {
+      for (const item of arrType) {
         this.append(item)
       }
     }
   }
 
+  /** Returns the total number of elements in the deque. */
   get size() {
     return this.count
   }
 
   /**
    * Method used to clear the structure.
-   *
-   * @return {undefined}
    */
   clear() {
     // Properties
@@ -48,19 +52,17 @@ export class Deque<T> extends Sequence<T> {
 
   /**
    * Alias of {@link Deque.append}
-   *
-   * @param  {any}    item - Item to append.
-   * @return {number}      - Returns the new size of the deque.
+   * @param {T} item Item to append.
+   * @returns {number} Returns the new size of the deque.
    */
   add(item) {
     return this.append(item)
   }
 
   /**
-   * Method used to append a value to the deque.
-   *
-   * @param  {any}    item - Item to append.
-   * @return {number}      - Returns the new size of the deque.
+   * Appends a new element to the end of the deque.
+   * @param {T} item Item to append.
+   * @returns {number} Returns the new size of the deque.
    */
   append(item) {
     if (this.count === this.capacity) this.popleft()
@@ -73,10 +75,9 @@ export class Deque<T> extends Sequence<T> {
   }
 
   /**
-   * Method used to prepend a value to the deque.
-   *
-   * @param  {any}    item - Item to prepend.
-   * @return {number}      - Returns the new size of the deque.
+   * Appends a new element to the beginning of the deque.
+   * @param {T} item Item to prepend.
+   * @returns {number} Returns the new size of the deque.
    */
   appendleft(item) {
     if (this.count === this.capacity) this.pop()
@@ -92,9 +93,8 @@ export class Deque<T> extends Sequence<T> {
   }
 
   /**
-   * Method used to pop the deque.
-   *
-   * @return {any} - Returns the popped item.
+   * Removes and returns the element at the end of the deque.
+   * @returns {?T} Returns the popped item.
    */
   pop() {
     if (this.count === 0) return
@@ -108,15 +108,15 @@ export class Deque<T> extends Sequence<T> {
 
   /**
    * Alias of {@link Deque.pop}
+   * @returns {?T} Returns the popped item.
    */
   remove() {
     return this.pop()
   }
 
   /**
-   * Method used to shift the deque.
-   *
-   * @return {any} - Returns the shifted item.
+   * Removes and returns the element at the beginning of the deque.
+   * @returns {?T} Returns the removed deque element.
    */
   popleft() {
     if (this.count === 0) return
@@ -132,9 +132,8 @@ export class Deque<T> extends Sequence<T> {
   }
 
   /**
-   * Method used to peek the first value of the deque.
-   *
-   * @return {any}
+   * Returns the element at the beginning of the deque.
+   * @returns {?T} The element if exists
    */
   first() {
     if (this.count === 0) return
@@ -143,10 +142,9 @@ export class Deque<T> extends Sequence<T> {
   }
 
   /**
-   * Method used to get the desired value of the deque.
-   *
-   * @param  {number} index
-   * @return {any}
+   * Returns the element at a specified index position in the deque.
+   * @param {number} index The given index
+   * @returns {?T} The element if exists
    */
   get(index) {
     if (this.count === 0) return
@@ -160,9 +158,8 @@ export class Deque<T> extends Sequence<T> {
   }
 
   /**
-   * Update the value at a given `index`.
-   * @param index The given index
-   * @param value The new value to set at `index`.
+   * Update the element at a given `index`.
+   * @param {number} index The given index
    */
   set(index: number, value: T) {
     if (index < 0) index += this.count
@@ -170,6 +167,11 @@ export class Deque<T> extends Sequence<T> {
     this.items[index] = value
   }
 
+  /**
+   * Check if a given element is in the deque.
+   * @param {T} x The value to find
+   * @returns {boolean} `true` if the value is found
+   */
   contains(x) {
     for (const value of this.values()) {
       if (eq(x, value)) return true
@@ -177,6 +179,11 @@ export class Deque<T> extends Sequence<T> {
     return false
   }
 
+  /**
+   * Returns the first element that matches the `iteratee` function.
+   * @param {Iteratee<T>} iteratee A function that will be invoked per element
+   * @returns {?T} The element if exists
+   */
   find(iteratee: Iteratee<T>) {
     for (const [key, value] of this.entries()) {
       if (iteratee(value, key, this)) return value
@@ -184,11 +191,8 @@ export class Deque<T> extends Sequence<T> {
   }
 
   /**
-   * Method used to iterate over the deque.
-   *
-   * @param  {function}  iteratee - Function to call for each item.
-   * @param  {object}    scope    - Optional scope.
-   * @return {undefined}
+   * Calls `iteratee` function for every element in the deque.
+   * @param {Iteratee<T>} iteratee A function that will be invoked per element
    */
   forEach(iteratee) {
     const c = this.capacity
@@ -205,14 +209,17 @@ export class Deque<T> extends Sequence<T> {
     }
   }
 
+  /**
+   * Returns a new array with all the elements in reverse order.
+   * @returns {Array<T>} The elements reversed
+   */
   reversed() {
     return this.toArray().reverse()
   }
 
   /**
-   * Method used to convert the deque to a JavaScript array.
-   *
-   * @return {array}
+   * Returns a new array with all the elements in the order they were added to the deque.
+   * @returns {Array<T>} The elements array
    */
   toArray() {
     // Optimization
@@ -220,7 +227,7 @@ export class Deque<T> extends Sequence<T> {
 
     if (offset < this.capacity) return this.items.slice(this.start, offset)
 
-    const array = new this.ArrayClass(this.count)
+    const array = new this.ArrayConstructor(this.count)
     const c = this.capacity
     const l = this.count
     let i = this.start
@@ -238,9 +245,8 @@ export class Deque<T> extends Sequence<T> {
   }
 
   /**
-   * Method used to create an iterator over the deque's values.
-   *
-   * @return {Iterator}
+   * Returns an iterator over the deque's values.
+   * @returns {Iterator}
    */
   values(): Iterable<T> {
     const items = this.items
@@ -269,14 +275,16 @@ export class Deque<T> extends Sequence<T> {
     })
   }
 
+  /**
+   * Alias of {@link Deque.values}. Returns iterator of values.
+   */
   keys() {
     return this.values()
   }
 
   /**
-   * Method used to create an iterator over the deque's entries.
-   *
-   * @return {Iterator}
+   * Creates an iterator of `[index, value]` pairs for all elements in the deque.
+   * @returns {Iterator}
    */
   entries() {
     const items = this.items
@@ -312,10 +320,11 @@ export class Deque<T> extends Sequence<T> {
     return this.inspect()
   }
 
+  // This is just for debugging in nodejs
   inspect() {
     const array = this.toArray()
 
-    array.type = this.ArrayClass.name
+    array.type = this.ArrayConstructor.name
     array.capacity = this.capacity
 
     // Trick so that node displays the name of the constructor
