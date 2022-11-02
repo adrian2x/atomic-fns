@@ -1,14 +1,14 @@
 import assert from 'assert'
-import { Cache, LRUCache } from '../core/collections/LRUCache.js'
+import { LRUCache } from '../core/collections/LRUCache.js'
 
 describe('Cache', () => {
   it('empty', () => {
-    let cache = new Cache()
+    let cache = new LRUCache()
     assert(cache.size === 0)
   })
 
   it('contains', () => {
-    let cache = new Cache(2)
+    let cache = new LRUCache(2)
     assert(cache.capacity === 2)
     assert(!cache.contains(1))
     cache.set(1, 'foo')
@@ -18,49 +18,49 @@ describe('Cache', () => {
   })
 
   it('evicts LRU keys', () => {
-    let cache = new Cache(2)
+    let cache = new LRUCache(2)
     assert(cache.capacity === 2)
     cache.set(1, 'foo')
     cache.set(2, 'bar')
     assert(cache.get(1) === 'foo')
     cache.set(3, 'other')
     assert(cache.get(2) === undefined)
-    assert.deepEqual([...cache.keys()], [3, 1])
+    assert.deepEqual([...cache.keys()], [1, 3])
   })
 
   it('keys', () => {
-    let cache = new Cache(5)
+    let cache = new LRUCache(5)
     for (const value of [1, 2, 3, 4, 5]) {
       cache.set(value, value)
     }
-    assert.deepEqual([...cache.keys()], [5, 4, 3, 2, 1])
+    assert.deepEqual([...cache.keys()], [1, 2, 3, 4, 5])
   })
 
   it('values', () => {
-    let cache = new Cache(5)
+    let cache = new LRUCache(5)
     for (const value of [1, 2, 3, 4, 5]) {
       cache.set(value, value)
     }
-    assert.deepEqual([...cache.keys()], [5, 4, 3, 2, 1])
+    assert.deepEqual([...cache.keys()], [1, 2, 3, 4, 5])
   })
 
   it('entries', () => {
-    let cache = new Cache(3)
+    let cache = new LRUCache(3)
     for (const value of [1, 2, 3]) {
       cache.set(value, 0)
     }
     assert.deepEqual(
       [...cache.entries()],
       [
-        [3, 0],
+        [1, 0],
         [2, 0],
-        [1, 0]
+        [3, 0]
       ]
     )
   })
 
   it('iterator', () => {
-    let cache = new Cache(3)
+    let cache = new LRUCache(3)
     for (const value of [1, 2, 3]) {
       cache.set(value, 0)
     }
@@ -93,7 +93,7 @@ describe('LRUCache', () => {
     assert(cache.get(1) === 'foo')
     cache.set(3, 'other')
     assert(cache.get(2) === undefined)
-    assert.deepEqual([...cache.keys()], [3, 1])
+    assert.deepEqual([...cache.keys()], [1, 3])
   })
 
   it('keys', () => {
@@ -101,7 +101,7 @@ describe('LRUCache', () => {
     for (const value of [1, 2, 3, 4, 5]) {
       cache.set(value, value)
     }
-    assert.deepEqual([...cache.keys()], [5, 4, 3, 2, 1])
+    assert.deepEqual([...cache.keys()], [1, 2, 3, 4, 5])
   })
 
   it('values', () => {
@@ -109,7 +109,7 @@ describe('LRUCache', () => {
     for (const value of [1, 2, 3, 4, 5]) {
       cache.set(value, value)
     }
-    assert.deepEqual([...cache.keys()], [5, 4, 3, 2, 1])
+    assert.deepEqual([...cache.keys()], [1, 2, 3, 4, 5])
   })
 
   it('entries', () => {
@@ -120,9 +120,9 @@ describe('LRUCache', () => {
     assert.deepEqual(
       [...cache.entries()],
       [
-        [3, 0],
+        [1, 0],
         [2, 0],
-        [1, 0]
+        [3, 0]
       ]
     )
   })

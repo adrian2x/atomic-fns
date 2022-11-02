@@ -1,486 +1,141 @@
-import { Iteratee, NotImplementedError, ValueError } from '../globals/index.js'
-import { IterableIterator } from '../itertools/index.js'
 import { Mapping } from './abc.js'
-import { getPointerArray } from './typedArrays.js'
 
 /**
- * Base append-only Cache collection that supports adding and accessing keys in O(1).
- * The collection has a fixed given size (default 1024) and when full, it evicts keys using LRU approach. This operation is also O(1).
+ * Implements a Least Recently Used fixed-capacity cache which supports updating, removing, and accessing keys in O(1).
  * @template K, V
  */
-export class Cache<K, V = any> extends Mapping<K, V> {
-  capacity: number
-  head: number = 0
-  tail: number = 0
-  count: number = 0
-  protected items = new Map<K, number>()
-  protected forward: Uint8Array | Uint16Array | Uint32Array
-  protected backward: Uint8Array | Uint16Array | Uint32Array
-  protected K: K[]
-  protected V: V[]
+export class LRUCache<K = any, V = any> extends Mapping<K, V> {
+  protected items = new Map<K, V>()
+  protected maxSize: number
 
   /**
-   * Create a new cache object of fixed size.
-   * @param {number} [capacity=1024] The maximum number of keys to keep in cache.
-   * @param {Function} [Keys=Array] The constructor to use for the Keys array. When using numeric values, a TypedArray constructor can be used.
-   * @param {Function} [Values=Array] The constructor to use for the Values array. When using numeric values, a TypedArray constructor can be used.
+   * Creates a new instance of fixed size.
+   * @param {number} capacity
    */
-  constructor(capacity = 1024, Keys = Array, Values = Array) {
+  constructor(capacity = 1024) {
     super()
-    this.capacity = capacity
-
-    if (typeof this.capacity !== 'number' || this.capacity <= 0)
-      throw new ValueError('LRUCache capacity should be a positive integer.')
-    else if (!isFinite(this.capacity) || Math.floor(this.capacity) !== this.capacity)
-      throw new ValueError('LRUCache capacity should be a finite positive integer.')
-
-    const PointerArray = getPointerArray(capacity)
-    this.forward = new PointerArray(capacity)
-    this.backward = new PointerArray(capacity)
-    this.K = new Keys(capacity)
-    this.V = new Values(capacity)
+    this.maxSize = capacity
   }
 
   /**
-   * This is just an alias of {@link Cache.set}.
-   * @param {K} key The key to add (note value will be `undefined`).
+   * Adds a new element with a specified `key` and `value` to the cache. If an element with the same key already exists, the element will be updated.
+   * @param {K} key
+   * @param {V} value
+   * @returns {this}
    */
-  add(key: K) {
-    return this.set(key, undefined)
-  }
-
-  /**
-   * Method used to check whether the key exists in the cache.
-   *
-   * @param  {any} key   - Key.
-   * @return {boolean}
-   */
-  contains(key) {
-    return this.items.has(key)
-  }
-
-  /**
-   * Method used to clear the structure.
-   */
-  clear() {
-    this.count = 0
-    this.head = 0
-    this.tail = 0
-    this.items = new Map()
-  }
-
-  /**
-   * Returns the number of keys in the cache.
-   */
-  get size() {
-    return this.count
-  }
-
-  /**
-   * Method used to splay a value on top.
-   *
-   * @param  {number}   pointer - Pointer of the value to splay on top.
-   * @return {Cache}
-   */
-  protected splayOnTop(pointer) {
-    const oldHead = this.head
-
-    if (this.head === pointer) return this
-
-    const previous = this.backward[pointer]
-    const next = this.forward[pointer]
-
-    if (this.tail === pointer) {
-      this.tail = previous
-    } else {
-      this.backward[next] = previous
+  set(key: K, value: V) {
+    if (this.items.size === this.maxSize) {
+      // Because ES6 maps remember insertion order, we can evict the first key
+      const lastKey = this.items.keys().next().value
+      this.items.delete(lastKey)
     }
-
-    this.forward[previous] = next
-
-    this.backward[oldHead] = pointer
-    this.head = pointer
-    this.forward[pointer] = oldHead
-
+    // Delete the previous key to update the new insertion order
+    this.items.delete(key)
+    this.items.set(key, value)
     return this
   }
 
   /**
-   * Method used to get the value attached to the given key. Will move the
-   * related key to the front of the underlying linked list.
-   *
-   * @param  {any} key   - Key.
-   * @return {any}
+   * This is just an alias of {@link LRUCache.set}.
+   * @param {K} key The key to add (note value will be `undefined`)
+   * @returns {this}
    */
-  get(key) {
-    const pointer = this.items.get(key)
-
-    if (typeof pointer === 'undefined') return
-
-    this.splayOnTop(pointer)
-
-    return this.V[pointer]
+  add(key: K) {
+    return this.set(key, undefined as V)
   }
 
   /**
-   * Method used to set the value for the given key in the cache.
-   *
-   * @param  {any} key   - Key.
-   * @param  {any} value - Value.
-   * @return {undefined}
+   * Returns `true` if the specified `key` is found on the cache.
+   * @param {K} key
+   * @returns {boolean}
    */
-  set(key, value) {
-    let pointer = this.items.get(key)
-
-    // The key already exists, we just need to update the value and splay on top
-    if (typeof pointer !== 'undefined') {
-      this.splayOnTop(pointer)
-      this.V[pointer] = value
-
-      return
-    }
-
-    // The cache is not yet full
-    if (this.count < this.capacity) {
-      pointer = this.count++
-    }
-
-    // Cache is full, we need to drop the last value
-    else {
-      pointer = this.tail
-      this.tail = this.backward[pointer]
-      this.items.delete(this.K[pointer])
-    }
-
-    // Storing key & value
-    this.items.set(key, pointer)
-    this.K[pointer] = key
-    this.V[pointer] = value
-
-    // Moving the item at the front of the list
-    this.forward[pointer] = this.head
-    this.backward[this.head] = pointer
-    this.head = pointer
+  contains(key: K) {
+    return this.items.has(key)
   }
 
   /**
-   * Method used to get the value attached to the given key. Does not modify
-   * the ordering of the underlying linked list.
-   *
-   * @param  {any} key   - Key.
-   * @return {any}
+   * Get the value associated with the specified `key`, or `undefined` it not found.
+   * @param {K} key
+   * @returns {?V} The associated value or `undefined`
    */
-  peek(key) {
-    const pointer = this.items.get(key)
-
-    if (typeof pointer === 'undefined') return
-
-    return this.V[pointer]
-  }
-
-  /**
-   * Method used to iterate over the cache's entries using a callback.
-   *
-   * @param  {Iteratee<V>}  iteratee - Function to call for each item.
-   */
-  forEach(iteratee: Iteratee<V>) {
-    let i = 0
-    const l = this.count
-
-    let pointer = this.head
-    const keys = this.K
-    const values = this.V
-    const forward = this.forward
-
-    while (i < l) {
-      iteratee(values[pointer], keys[pointer], this)
-      pointer = forward[pointer]
-      i++
+  get(key: K) {
+    if (this.items.has(key)) {
+      const value = this.items.get(key)
+      // Delete the previous key to update the new insertion order
+      this.items.delete(key)
+      this.items.set(key, value as V)
+      return value
     }
   }
 
   /**
-   * Method used to create an iterator over the cache's keys from most
-   * recently used to least recently used.
-   *
-   * @return {Iterator<K>}
+   * Removes all keys and values from the cache.
+   * @returns {this}
+   */
+  clear() {
+    this.items.clear()
+    return this
+  }
+
+  /**
+   * Removes a key from the cache and returns `true` if the key existed or `false` otherwise.
+   * @param {K} key
+   * @returns {boolean} `true` if the key existed and was removed
+   */
+  delete(key: K) {
+    return this.items.delete(key)
+  }
+
+  /**
+   * Removes the value associated with the specified `key` from the cache and returns the removed value if the key existed.
+   * @param {K} key
+   * @returns {?V} The value if it was removed or `undefined`.
+   */
+  remove(key: K) {
+    const value = this.items.get(key)
+    this.items.delete(key)
+    return value
+  }
+
+  /**
+   * Returns the total number of elements in the cache.
+   */
+  get size() {
+    return this.items.size
+  }
+
+  /**
+   * Returns the total capacity of the cache.
+   */
+  get capacity() {
+    return this.maxSize
+  }
+
+  /**
+   * Returns an iterable of all the keys in the cache, in insertion order.
+   * @returns {IterableIterator<K>}
    */
   keys() {
-    let i = 0
-    const l = this.count
-
-    let pointer = this.head
-    const keys = this.K
-    const forward = this.forward
-
-    return IterableIterator(() => {
-      if (i >= l) return { done: true }
-
-      const key = keys[pointer]
-
-      i++
-
-      if (i < l) pointer = forward[pointer]
-
-      return {
-        done: false,
-        value: key
-      }
-    })
+    return this.items.keys()
   }
 
   /**
-   * Method used to create an iterator over the cache's values from most
-   * recently used to least recently used.
-   *
-   * @return {Iterator<V>}
+   * Returns an iterable of all the values in the cache, in insertion order.
+   * @returns {IterableIterator<V>}
    */
   values() {
-    let i = 0
-    const l = this.count
-
-    let pointer = this.head
-    const values = this.V
-    const forward = this.forward
-
-    return IterableIterator(() => {
-      if (i >= l) return { done: true }
-
-      const value = values[pointer]
-
-      i++
-
-      if (i < l) pointer = forward[pointer]
-
-      return {
-        done: false,
-        value
-      }
-    })
+    return this.items.values()
   }
 
   /**
-   * Method used to create an iterator over the cache's entries from most
-   * recently used to least recently used.
-   *
-   * @return {Iterator<[K, V]>}
+   * Returns an iterable of all the [key, value] pairs in the cache, in insertion order.
+   * @returns {IterableIterator<[K, V]>}
    */
   entries() {
-    let i = 0
-    const l = this.count
-
-    let pointer = this.head
-    const keys = this.K
-    const values = this.V
-    const forward = this.forward
-
-    return IterableIterator<[K, V]>(() => {
-      if (i >= l) return { done: true }
-
-      const key = keys[pointer]
-      const value = values[pointer]
-
-      i++
-
-      if (i < l) pointer = forward[pointer]
-
-      return { value: [key, value] }
-    })
-  }
-
-  /**
-   * NotImplemented -- throws an exception.
-   * @param key
-   * @returns
-   */
-  remove(key: any) {
-    throw new NotImplementedError(`Base Cache class does not implement remove().`)
+    return this.items.entries()
   }
 
   [Symbol.iterator]() {
     return this.entries()
-  }
-
-  /**
-   * Convenience known methods.
-   */
-  inspect() {
-    const proxy = new Map()
-
-    const iterator = this.entries()
-    let step
-
-    while (((step = iterator.next()), !step.done)) proxy.set(step.value[0], step.value[1])
-
-    // Trick so that node displays the name of the constructor
-    Object.defineProperty(proxy, 'constructor', {
-      value: Cache,
-      enumerable: false
-    })
-
-    return proxy
-  }
-
-  [Symbol.for('nodejs.util.inspect.custom')]() {
-    return this.inspect()
-  }
-}
-
-/**
- * Implements a Least Recently Used fixed-capacity cache which supports updating, removing, and accessing keys in O(1).
- */
-export class LRUCache<K, V> extends Cache<K, V> {
-  deletedSize = 0
-  deleted: Uint8Array | Uint16Array | Uint32Array
-
-  /**
-   * Create a new LRU cache object of fixed size.
-   * @param {number} [capacity=1024] The maximum number of keys to keep in cache.
-   * @param {Function} [Keys=Array] The constructor to use for the Keys array. When using numeric values, a TypedArray constructor can be used.
-   * @param {Function} [Values=Array] The constructor to use for the Values array. When using numeric values, a TypedArray constructor can be used.
-   */
-  constructor(capacity = 1024, Keys = Array, Values = Array) {
-    super(capacity, Keys, Values)
-    const PointerArray = getPointerArray(capacity)
-    this.deleted = new PointerArray(capacity)
-  }
-
-  /** Remove all elements in the cache. */
-  clear() {
-    super.clear()
-    this.deletedSize = 0
-  }
-
-  /**
-   * Method used to set the value for the given key in the cache.
-   *
-   * @param  {any} key   - Key.
-   * @param  {any} value - Value.
-   * @return {undefined}
-   */
-  set(key, value) {
-    let pointer = this.items.get(key)
-
-    // The key already exists, we just need to update the value and splay on top
-    if (typeof pointer !== 'undefined') {
-      this.splayOnTop(pointer)
-      this.V[pointer] = value
-
-      return
-    }
-
-    // The cache is not yet full
-    if (this.count < this.capacity) {
-      if (this.deletedSize > 0) {
-        // If there is a "hole" in the pointer list, reuse it
-        pointer = this.deleted[--this.deletedSize]
-      } else {
-        // otherwise append to the pointer list
-        pointer = this.count
-      }
-      this.count++
-    }
-
-    // Cache is full, we need to drop the last value
-    else {
-      pointer = this.tail
-      this.tail = this.backward[pointer]
-      this.items.delete(this.K[pointer])
-    }
-
-    // Storing key & value
-    this.items.set(key, pointer)
-    this.K[pointer] = key
-    this.V[pointer] = value
-
-    // Moving the item at the front of the list
-    this.forward[pointer] = this.head
-    this.backward[this.head] = pointer
-    this.head = pointer
-  }
-
-  /**
-   * Method used to delete the entry for the given key in the cache.
-   *
-   * @param  {any} key   - Key.
-   * @return {boolean}   - true if the item was present
-   */
-  delete(key) {
-    const pointer = this.items.get(key)
-
-    if (typeof pointer === 'undefined') {
-      return false
-    }
-
-    this.items.delete(key)
-
-    if (this.count === 1) {
-      this.count = 0
-      this.head = 0
-      this.tail = 0
-      this.deletedSize = 0
-      return true
-    }
-
-    const previous = this.backward[pointer]
-    const next = this.forward[pointer]
-
-    if (this.head === pointer) {
-      this.head = next
-    }
-    if (this.tail === pointer) {
-      this.tail = previous
-    }
-
-    this.forward[previous] = next
-    this.backward[next] = previous
-
-    this.count--
-    this.deleted[this.deletedSize++] = pointer
-
-    return true
-  }
-
-  /**
-   * Method used to remove and return the value for the given key in the cache.
-   *
-   * @param  {any} key                 - Key.
-   * @return {any} The value, if present; the missing indicator if absent
-   */
-  remove(key) {
-    const pointer = this.items.get(key)
-
-    if (typeof pointer === 'undefined') {
-      return
-    }
-
-    const dead = this.V[pointer]
-    this.items.delete(key)
-
-    if (this.count === 1) {
-      this.count = 0
-      this.head = 0
-      this.tail = 0
-      this.deletedSize = 0
-      return dead
-    }
-
-    const previous = this.backward[pointer]
-    const next = this.forward[pointer]
-
-    if (this.head === pointer) {
-      this.head = next
-    }
-    if (this.tail === pointer) {
-      this.tail = previous
-    }
-
-    this.forward[previous] = next
-    this.backward[next] = previous
-
-    this.count--
-    this.deleted[this.deletedSize++] = pointer
-
-    return dead
   }
 }

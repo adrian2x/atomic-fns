@@ -1,152 +1,80 @@
-import { Iteratee } from '../globals/index.js';
 import { Mapping } from './abc.js';
 /**
- * Base append-only Cache collection that supports adding and accessing keys in O(1).
- * The collection has a fixed given size (default 1024) and when full, it evicts keys using LRU approach. This operation is also O(1).
+ * Implements a Least Recently Used fixed-capacity cache which supports updating, removing, and accessing keys in O(1).
  * @template K, V
  */
-export declare class Cache<K, V = any> extends Mapping<K, V> {
-    capacity: number;
-    head: number;
-    tail: number;
-    count: number;
-    protected items: Map<K, number>;
-    protected forward: Uint8Array | Uint16Array | Uint32Array;
-    protected backward: Uint8Array | Uint16Array | Uint32Array;
-    protected K: K[];
-    protected V: V[];
+export declare class LRUCache<K = any, V = any> extends Mapping<K, V> {
+    protected items: Map<K, V>;
+    protected maxSize: number;
     /**
-     * Create a new cache object of fixed size.
-     * @param {number} [capacity=1024] The maximum number of keys to keep in cache.
-     * @param {Function} [Keys=Array] The constructor to use for the Keys array. When using numeric values, a TypedArray constructor can be used.
-     * @param {Function} [Values=Array] The constructor to use for the Values array. When using numeric values, a TypedArray constructor can be used.
+     * Creates a new instance of fixed size.
+     * @param {number} capacity
      */
-    constructor(capacity?: number, Keys?: ArrayConstructor, Values?: ArrayConstructor);
+    constructor(capacity?: number);
     /**
-     * This is just an alias of {@link Cache.set}.
-     * @param {K} key The key to add (note value will be `undefined`).
+     * Adds a new element with a specified `key` and `value` to the cache. If an element with the same key already exists, the element will be updated.
+     * @param {K} key
+     * @param {V} value
+     * @returns {this}
      */
-    add(key: K): void;
+    set(key: K, value: V): this;
     /**
-     * Method used to check whether the key exists in the cache.
-     *
-     * @param  {any} key   - Key.
-     * @return {boolean}
+     * This is just an alias of {@link LRUCache.set}.
+     * @param {K} key The key to add (note value will be `undefined`)
+     * @returns {this}
      */
-    contains(key: any): boolean;
+    add(key: K): this;
     /**
-     * Method used to clear the structure.
+     * Returns `true` if the specified `key` is found on the cache.
+     * @param {K} key
+     * @returns {boolean}
      */
-    clear(): void;
+    contains(key: K): boolean;
     /**
-     * Returns the number of keys in the cache.
+     * Get the value associated with the specified `key`, or `undefined` it not found.
+     * @param {K} key
+     * @returns {?V} The associated value or `undefined`
+     */
+    get(key: K): V | undefined;
+    /**
+     * Removes all keys and values from the cache.
+     * @returns {this}
+     */
+    clear(): this;
+    /**
+     * Removes a key from the cache and returns `true` if the key existed or `false` otherwise.
+     * @param {K} key
+     * @returns {boolean} `true` if the key existed and was removed
+     */
+    delete(key: K): boolean;
+    /**
+     * Removes the value associated with the specified `key` from the cache and returns the removed value if the key existed.
+     * @param {K} key
+     * @returns {?V} The value if it was removed or `undefined`.
+     */
+    remove(key: K): V | undefined;
+    /**
+     * Returns the total number of elements in the cache.
      */
     get size(): number;
     /**
-     * Method used to splay a value on top.
-     *
-     * @param  {number}   pointer - Pointer of the value to splay on top.
-     * @return {Cache}
+     * Returns the total capacity of the cache.
      */
-    protected splayOnTop(pointer: any): this;
+    get capacity(): number;
     /**
-     * Method used to get the value attached to the given key. Will move the
-     * related key to the front of the underlying linked list.
-     *
-     * @param  {any} key   - Key.
-     * @return {any}
+     * Returns an iterable of all the keys in the cache, in insertion order.
+     * @returns {IterableIterator<K>}
      */
-    get(key: any): V | undefined;
+    keys(): IterableIterator<K>;
     /**
-     * Method used to set the value for the given key in the cache.
-     *
-     * @param  {any} key   - Key.
-     * @param  {any} value - Value.
-     * @return {undefined}
+     * Returns an iterable of all the values in the cache, in insertion order.
+     * @returns {IterableIterator<V>}
      */
-    set(key: any, value: any): void;
+    values(): IterableIterator<V>;
     /**
-     * Method used to get the value attached to the given key. Does not modify
-     * the ordering of the underlying linked list.
-     *
-     * @param  {any} key   - Key.
-     * @return {any}
+     * Returns an iterable of all the [key, value] pairs in the cache, in insertion order.
+     * @returns {IterableIterator<[K, V]>}
      */
-    peek(key: any): V | undefined;
-    /**
-     * Method used to iterate over the cache's entries using a callback.
-     *
-     * @param  {Iteratee<V>}  iteratee - Function to call for each item.
-     */
-    forEach(iteratee: Iteratee<V>): void;
-    /**
-     * Method used to create an iterator over the cache's keys from most
-     * recently used to least recently used.
-     *
-     * @return {Iterator<K>}
-     */
-    keys(): Iterator<any, any, undefined> & Iterable<any>;
-    /**
-     * Method used to create an iterator over the cache's values from most
-     * recently used to least recently used.
-     *
-     * @return {Iterator<V>}
-     */
-    values(): Iterator<any, any, undefined> & Iterable<any>;
-    /**
-     * Method used to create an iterator over the cache's entries from most
-     * recently used to least recently used.
-     *
-     * @return {Iterator<[K, V]>}
-     */
-    entries(): Iterator<[K, V], any, undefined> & Iterable<[K, V]>;
-    /**
-     * NotImplemented -- throws an exception.
-     * @param key
-     * @returns
-     */
-    remove(key: any): void;
-    [Symbol.iterator](): Iterator<[K, V], any, undefined> & Iterable<[K, V]>;
-    /**
-     * Convenience known methods.
-     */
-    inspect(): Map<any, any>;
-}
-/**
- * Implements a Least Recently Used fixed-capacity cache which supports updating, removing, and accessing keys in O(1).
- */
-export declare class LRUCache<K, V> extends Cache<K, V> {
-    deletedSize: number;
-    deleted: Uint8Array | Uint16Array | Uint32Array;
-    /**
-     * Create a new LRU cache object of fixed size.
-     * @param {number} [capacity=1024] The maximum number of keys to keep in cache.
-     * @param {Function} [Keys=Array] The constructor to use for the Keys array. When using numeric values, a TypedArray constructor can be used.
-     * @param {Function} [Values=Array] The constructor to use for the Values array. When using numeric values, a TypedArray constructor can be used.
-     */
-    constructor(capacity?: number, Keys?: ArrayConstructor, Values?: ArrayConstructor);
-    /** Remove all elements in the cache. */
-    clear(): void;
-    /**
-     * Method used to set the value for the given key in the cache.
-     *
-     * @param  {any} key   - Key.
-     * @param  {any} value - Value.
-     * @return {undefined}
-     */
-    set(key: any, value: any): void;
-    /**
-     * Method used to delete the entry for the given key in the cache.
-     *
-     * @param  {any} key   - Key.
-     * @return {boolean}   - true if the item was present
-     */
-    delete(key: any): boolean;
-    /**
-     * Method used to remove and return the value for the given key in the cache.
-     *
-     * @param  {any} key                 - Key.
-     * @return {any} The value, if present; the missing indicator if absent
-     */
-    remove(key: any): V | undefined;
+    entries(): IterableIterator<[K, V]>;
+    [Symbol.iterator](): IterableIterator<[K, V]>;
 }
