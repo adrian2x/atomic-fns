@@ -48,6 +48,14 @@ export declare const compose: (...args: any[]) => (x: any) => any;
  * @return {Function} Returns the new memoized function.
  */
 export declare function memoize<T>(func: Function<T>, resolver?: Function): Function<ReturnType<typeof func>>;
+/**
+ * Can be used as a decorator on any function or method to memoize its results.
+ * **NOTE:** By default the given function is memoized using it's first argument, regardless of others.
+ * @param target
+ * @param name
+ * @param descriptor
+ * @returns A memoized version of the given function
+ */
 export declare function cache(target: any, name: any, descriptor: any): any;
 /**
  * Creates a debounced function that delays invoking `func` until after `wait` milliseconds have elapsed since the last time the debounced function was invoked. Subsequent calls to the debounced function return the result of the last successful invocation. Provide options to set the `maxWait` milliseconds, regardless of when the function was last invoked.
@@ -90,19 +98,25 @@ export declare type Result<T, E = any> = [Maybe<T>, Maybe<E>];
 export declare type Optional<T> = Maybe<T>;
 /**
  * Wraps a function to catch any exceptions inside and return a `go` style error-return type {@link Result}.
- *
- * @param {Function} fun The function to wrap and catch if it throws.
- * @param {?function(err: E, res: T): *} [onFinally] Optional callback that will be called on the `finally` clause if given.
- * @returns {Function} A new function that wraps `fun`.
  * @template T,E
+ * @param {Function} fun The function to wrap and catch if it throws.
+ * @param {Function} [onFinally] Optional callback that will be invoked with `(err?, value)` on the `finally` clause.
+ * @returns {Function} A new function that wraps `fun`.
  */
 export declare function result<T = any, E = unknown>(fun: Function<T>, onFinally?: (err: E, res: T) => any): (...args: any[]) => Result<T, E>;
 /**
  * Wraps a function or promise to catch any exceptions inside and return a `go` style error-return type. This is like {@link result} but it deals with async functions or promises.
- *
- * @param {Function|Promise} awaitable The function or promise to await.
- * @param {?function(err: E, res: T): *} [onFinally] Optional callback that will be called on the `finally` clause if given.
- * @returns {Function} A new function that awaits the `awaitable` param and returns a {@link Result} type.
  * @template T,E
+ * @param {Function<T>|Promise<T>} awaitable The function or promise to await.
+ * @param {Function} [onFinally] Optional callback that will be invoked with `(err?, value)` on the `finally` clause.
+ * @returns {Function<Promise<Result<T, E>>>} A new function that awaits the `awaitable` param and returns a {@link Result} type.
  */
 export declare function resultAsync<T = any, E = unknown>(awaitable: Promise<T> | Function<Promise<T>>, onFinally?: (err: E, res: T) => any): (...args: any[]) => Promise<Result<T, E>>;
+/**
+ * Converts a function that expects a node-style callback argument like `(err, result)` to return a Promise instead.
+ * @template T
+ * @param {Function<T>} fun The given function to convert from callback style to Promise.
+ * @param {*} thisArg
+ * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a Promise.
+ */
+export declare function promisify<T = any>(fun: Function<T>, thisArg: any): (...args: any[]) => Promise<T>;
