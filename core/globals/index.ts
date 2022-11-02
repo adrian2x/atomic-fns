@@ -162,7 +162,7 @@ export const isIterable = (x): x is IterableIterator<any> => {
 export const isDate = (x): x is Date => x instanceof Date
 
 /** Check if value is an object type. */
-export const isObject = (x): x is Object => typeof x === 'object' && type(x) === 'object'
+export const isObject = (x): x is Object => type(x) === 'object'
 
 /** Check if value is a string type. */
 export const isString = (x): x is string => type(x) === 'string'
@@ -183,7 +183,7 @@ export const isArrayLike = (x) => {
 export const isNumber = (x): x is number => type(x) === 'number'
 
 /** Check if value is an integer number type. */
-export const isInteger = (x): x is number => type(x) === 'number' && Math.floor(x) === x
+export const isInteger = (x): x is number => type(x) === 'number' && Math.trunc(x) === x
 
 /** Check if value is a bigint type. */
 export const isBigint = (x): x is BigInt => type(x) === 'bigint'
@@ -209,9 +209,7 @@ export const isGenerator = (x): x is Generator => {
 export const isNull = (x): x is null | undefined => x == null
 
 /** Check if value === `undefined`. */
-export function isUndefined(o) {
-  return typeof o === 'undefined'
-}
+export const isUndefined = (x): x is undefined => x === undefined
 
 /** Check if value is not `null` or `undefined`. */
 export const notNull = (x) => x != null
@@ -474,7 +472,7 @@ export const int = (x, base = 10) => parseInt(x, base)
 export const list = (value?) => (value ? Array.from(value) : [])
 
 /**
- * Retrieve the next item from the iterator by calling it's `next()` method.
+ * Retrieve the next item from the iterator by calling its `next()` method.
  * @param iter The iterator.
  * @returns The next value from the iterator.
  */

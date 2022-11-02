@@ -138,7 +138,7 @@ export const isIterable = (x) => {
 /** Check if value is a native `Date` type. */
 export const isDate = (x) => x instanceof Date;
 /** Check if value is an object type. */
-export const isObject = (x) => typeof x === 'object' && type(x) === 'object';
+export const isObject = (x) => type(x) === 'object';
 /** Check if value is a string type. */
 export const isString = (x) => type(x) === 'string';
 /** Check if value is an Array type. */
@@ -154,7 +154,7 @@ export const isArrayLike = (x) => {
 /** Check if value is a number type. */
 export const isNumber = (x) => type(x) === 'number';
 /** Check if value is an integer number type. */
-export const isInteger = (x) => type(x) === 'number' && Math.floor(x) === x;
+export const isInteger = (x) => type(x) === 'number' && Math.trunc(x) === x;
 /** Check if value is a bigint type. */
 export const isBigint = (x) => type(x) === 'bigint';
 /** Check if value is NaN based on `Number.isNaN`. */
@@ -172,9 +172,7 @@ export const isGenerator = (x) => {
 /** Check if value is `null` or `undefined`. */
 export const isNull = (x) => x == null;
 /** Check if value === `undefined`. */
-export function isUndefined(o) {
-    return typeof o === 'undefined';
-}
+export const isUndefined = (x) => x === undefined;
 /** Check if value is not `null` or `undefined`. */
 export const notNull = (x) => x != null;
 /** Returns `true` for objects without length or falsy values. */
@@ -407,7 +405,7 @@ export const int = (x, base = 10) => parseInt(x, base);
  */
 export const list = (value) => (value ? Array.from(value) : []);
 /**
- * Retrieve the next item from the iterator by calling it's `next()` method.
+ * Retrieve the next item from the iterator by calling its `next()` method.
  * @param iter The iterator.
  * @returns The next value from the iterator.
  */

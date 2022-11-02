@@ -131,7 +131,7 @@ export declare const isGenerator: (x: any) => x is Generator<unknown, any, unkno
 /** Check if value is `null` or `undefined`. */
 export declare const isNull: (x: any) => x is null | undefined;
 /** Check if value === `undefined`. */
-export declare function isUndefined(o: any): boolean;
+export declare const isUndefined: (x: any) => x is undefined;
 /** Check if value is not `null` or `undefined`. */
 export declare const notNull: (x: any) => boolean;
 /** Returns `true` for objects without length or falsy values. */
@@ -293,7 +293,7 @@ export declare const int: (x: any, base?: number) => number;
  */
 export declare const list: (value?: any) => unknown[];
 /**
- * Retrieve the next item from the iterator by calling it's `next()` method.
+ * Retrieve the next item from the iterator by calling its `next()` method.
  * @param iter The iterator.
  * @returns The next value from the iterator.
  */
