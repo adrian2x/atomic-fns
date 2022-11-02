@@ -220,10 +220,10 @@ export function len(value) {
  * @example
 ```js
 uniqueId()
-// => 3445556877
+// 3445556877
 
 uniqueId('user_')
-// => 'user_1033763188'
+// 'user_1033763188'
 ```
  */
 export const uniqueId = (pre = '') => 
@@ -235,7 +235,7 @@ export const uniqueId = (pre = '') =>
  * @example
 ```js
 uuid()
-// => '183f8ef3-b8f0-4000-81f5-89234c836d00'
+// '183f8ef3-b8f0-4000-81f5-89234c836d00'
 ```
  */
 export const uuid = () => {

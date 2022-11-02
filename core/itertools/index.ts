@@ -44,13 +44,13 @@ export function* accumulate<T>(iterable: Iterable<T>, func = add, initial?) {
  * @example
 ```js
 all([0])
-// => true
+// true
 
 all([1, 2, 3])
-// => true
+// true
 
 all([2, 4, 6] => (n) => n > 1)
-// => true
+// true
 ```
 @see {@link any}
  */
@@ -69,13 +69,13 @@ export const all = <T>(iterable: Iterable<T>, fn: Predicate<T> = bool) => {
  * @example
 ```js
 any([0])
-// => false
+// false
 
 any([0, 1, null, undefined])
-// => true
+// true
 
 any([1, 4, 5] => (n) => n % 2 === 0)
-// => true
+// true
 ```
 @see {@link all}
  */
@@ -98,16 +98,16 @@ export function chain<T>(...iterables: Array<Iterable<T>>) {
  * @example
 ```js
 contains([1, 2, 3], 1)
-// => true
+// true
 
 contains([1, 2, 3], 1, 2)
-// => false
+// false
 
 contains({ 'a': 1, 'b': 2 }, 1)
-// => true
+// true
 
 contains('abcd', 'bc')
-// => true
+// true
 ```
  *
  * @see {@link Collections.find}
@@ -171,11 +171,11 @@ export function IterableIterator<T = any>(next) {
  * @example
 ```js
 console.log([...enumerate(['hello', 'world'])])
-// => [[0, 'hello'], [1, 'world']]
+// [[0, 'hello'], [1, 'world']]
 
 // Start with index `1`
 console.log([...enumerate(['hello', 'world'], 1)])
-// => [[1, 'hello'], [2, 'world']]
+// [[1, 'hello'], [2, 'world']]
 ```
  */
 export function* enumerate<T = any>(iterable: Iterable<T>, start = 0) {
@@ -201,7 +201,7 @@ export function first<T>(iterable: Iterable<T>) {
  * @example
 ```js
 compact([0, 1, false, 2, '', 3])
-// => [1, 2, 3]
+// [1, 2, 3]
 ```
  */
 export function* icompact<T>(iterable: Iterable<T>) {
@@ -231,7 +231,7 @@ export function* imap<T, TReturn = any>(iterable: Iterable<T>, mapFn: (x: T) => 
  * @example
 ```js
 [...iflatten([[0, 1], [2, 3]])]
-// => [0, 1, 2, 3]
+// [0, 1, 2, 3]
 ```
  */
 export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>) {
@@ -298,19 +298,19 @@ export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
  * @example
 ```js
 range(5)
-// => [0, 1, 2, 3, 4]
+// [0, 1, 2, 3, 4]
 
 range(2, 5)
-// => [2, 3, 4]
+// [2, 3, 4]
 
 range(0, 5, 2)
-// => [0, 2, 4]
+// [0, 2, 4]
 
 range(5, 0, -1)
-// => [5, 4, 3, 2, 1]
+// [5, 4, 3, 2, 1]
 
 range(-3)
-// => []
+// []
 ```
  */
 export function* range(...args: number[]) {
@@ -342,7 +342,7 @@ export function* range(...args: number[]) {
  * @example
 ```js
 reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0)
-// => 15
+// 15
 ```
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce Array.reduce()}
  */
@@ -475,9 +475,9 @@ export function* times(n: number, fn: (index: number) => any) {
 ```js
 for item of zip([1, 2, 3], ['sugar', 'spice', 'nice'])
   console.log(item)
-// => [1, 'sugar']
-// => [2, 'spice']
-// => [3, 'nice']
+// [1, 'sugar']
+// [2, 'spice']
+// [3, 'nice']
 ```
  */
 export function* zip(...args: Array<Iterable<any>>) {

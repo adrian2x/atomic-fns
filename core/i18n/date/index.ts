@@ -22,7 +22,7 @@ export type DateParts = {
   millisecond?: number
 }
 
-type DateLike = number | string | Date | DateParts
+export type DateLike = number | string | Date | DateParts
 
 /**
  * Creates a date tied to a given locale (default system locale) which can be formatted in that locale's language using the native {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis} directly or using a formatting string compatible with `strftime`.

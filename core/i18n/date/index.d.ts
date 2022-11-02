@@ -7,7 +7,7 @@ export declare type DateParts = {
     second?: number;
     millisecond?: number;
 };
-declare type DateLike = number | string | Date | DateParts;
+export declare type DateLike = number | string | Date | DateParts;
 /**
  * Creates a date tied to a given locale (default system locale) which can be formatted in that locale's language using the native {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis} directly or using a formatting string compatible with `strftime`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis}
@@ -221,4 +221,3 @@ export declare function daysInMonth(year: number, month: number): number | null;
  * @returns {number}
  */
 export declare function weeksInYear(weekYear: number): 53 | 52;
-export {};

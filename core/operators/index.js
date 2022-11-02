@@ -36,8 +36,8 @@ export const isinstance = (x, y) => x instanceof y;
  * @param {*} y Other value to compare
  * @returns {number} The comparison result
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#parameters Array.sort()}
- * @see {@link eq}
- * @see {@link lt}
+ * @see {@link Operators.eq}
+ * @see {@link Operators.lt}
  */
 export function compare(x, y) {
     if (x === y || eq(x, y))

@@ -160,11 +160,11 @@ export function throttle(func, wait) {
 ```js
 let func = x => x
 let single = once(func)
-single(1) // => 1
-single(2) // => 1
-single(3) // => 1
+single(1) // 1
+single(2) // 1
+single(3) // 1
 // ...
-// => `func` is invoked only once.
+// `func` is invoked only once.
 ```
  */
 export function once(func) {
@@ -231,8 +231,8 @@ export function resultAsync(awaitable, onFinally) {
  */
 export function promisify(fun, thisArg) {
     const original = fun.bind(thisArg);
-    return (...args) => {
-        return new Promise((resolve, reject) => original(...args, (err, result) => {
+    return async (...args) => {
+        return await new Promise((resolve, reject) => original(...args, (err, result) => {
             if (err)
                 return reject(err);
             resolve(result);

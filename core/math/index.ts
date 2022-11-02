@@ -111,7 +111,7 @@ export function max<T>(iterable: Iterable<T>, key = id) {
 let objects = [{ 'n': 4 }, { 'n': 2 }, { 'n': 8 }, { 'n': 6 }]
 
 mean(objects, (o) => o.n)
-// => 5
+// 5
 ```
  */
 export function mean(iterable: number[]): false | number
@@ -134,10 +134,10 @@ export function mean<T>(iterable: Iterable<T>, key = id): false | number {
  * @example
 ```js
 sum([1, 2, 3, 4])
-// => 10
+// 10
 
 sum([1, 2, 3, 4], 5)
-// => 15
+// 15
 ```
  */
 export function sum(iterable: number[]): number

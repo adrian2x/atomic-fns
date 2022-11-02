@@ -73,7 +73,7 @@ export declare function max<T>(iterable: Iterable<T>, key?: Predicate<T>): T;
 let objects = [{ 'n': 4 }, { 'n': 2 }, { 'n': 8 }, { 'n': 6 }]
 
 mean(objects, (o) => o.n)
-// => 5
+// 5
 ```
  */
 export declare function mean(iterable: number[]): false | number;
@@ -86,10 +86,10 @@ export declare function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): fals
  * @example
 ```js
 sum([1, 2, 3, 4])
-// => 10
+// 10
 
 sum([1, 2, 3, 4], 5)
-// => 15
+// 15
 ```
  */
 export declare function sum(iterable: number[]): number;

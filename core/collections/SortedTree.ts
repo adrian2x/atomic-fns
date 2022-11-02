@@ -4,7 +4,7 @@ import { BTree } from './BTree.js'
 
 /**
  * A `SortedTree` is a map that holds key value pairs ordered by keys. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as keys or values.
- * @see {@link Compare}
+ * @see {@link Comparable}
  * @see {@link Ordered}
  * @template K, V
  */

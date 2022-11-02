@@ -35,8 +35,8 @@ export declare type Comparer<T = any> = (x: T, y: T) => number;
  * @param {*} y Other value to compare
  * @returns {number} The comparison result
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#parameters Array.sort()}
- * @see {@link eq}
- * @see {@link lt}
+ * @see {@link Operators.eq}
+ * @see {@link Operators.lt}
  */
 export declare function compare(x: any, y: any): number;
 /**

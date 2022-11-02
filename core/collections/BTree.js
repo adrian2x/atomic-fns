@@ -3,7 +3,7 @@ import { compare } from '../operators/index.js';
 import { Mapping } from './abc.js';
 const Delete = { delete: true };
 const DeleteRange = () => Delete;
-const Break = { break: true };
+const Break = { done: true };
 const EmptyArray = [];
 const ReusedArray = []; // assumed thread-local
 // Optimization: this array of `undefined`s is used instead of a normal
@@ -277,7 +277,7 @@ class BNode {
                             values[i] = result.value;
                         }
                     }
-                    if (result.break !== undefined)
+                    if (result.done !== undefined)
                         return result;
                 }
             }
@@ -344,23 +344,23 @@ export class BTree extends Mapping {
     //  *  the callback is backwards: value first, then key. Call forEachPair
     //  *  instead to receive the key as the first argument.
     //  * @returns the number of values that were sent to the callback,
-    //  *        or the R value if the callback returned {break:R}. */
+    //  *        or the R value if the callback returned {done:R}. */
     // forEach<R = number>(iteratee: Iteratee<V, K>): R | number {
     //   return this.forEachPair((k, v) => iteratee(v as V, k, this))
     // }
     // /** Runs a function for each key-value pair, in order from smallest to
-    //  *  largest key. The callback can return {break:R} (where R is any value
+    //  *  largest key. The callback can return {done:R} (where R is any value
     //  *  except undefined) to stop immediately and return R from forEachPair.
     //  * @param onFound A function that is called for each key-value pair. This
-    //  *        function can return {break:R} to stop early with result R.
-    //  *        The reason that you must return {break:R} instead of simply R
+    //  *        function can return {done:R} to stop early with result R.
+    //  *        The reason that you must return {done:R} instead of simply R
     //  *        itself is for consistency with editRange(), which allows
     //  *        multiple actions, not just breaking.
     //  * @param initialCounter This is the value of the third argument of
     //  *        `onFound` the first time it is called. The counter increases
     //  *        by one each time `onFound` is called. Default value: 0
     //  * @returns the number of pairs sent to the callback (plus initialCounter,
-    //  *        if you provided one). If the callback returned {break:R} then
+    //  *        if you provided one). If the callback returned {done:R} then
     //  *        the R value is returned instead. */
     // private forEachPair<R = number>(callback: Iteratee<K, V>, initialCounter?: number): R | number {
     //   const low = this.minKey()
@@ -758,16 +758,16 @@ export class BTree extends Mapping {
      * @param includeHigh If the `high` key is present, `onFound` is called for
      *        that final pair if and only if this parameter is true.
      * @param onFound A function that is called for each key-value pair. This
-     *        function can return {break:R} to stop early with result R.
+     *        function can return {done:R} to stop early with result R.
      * @param initialCounter Initial third argument of onFound. This value
      *        increases by one each time `onFound` is called. Default: 0
      * @returns The number of values found, or R if the callback returned
-     *        `{break:R}` to stop early.
+     *        `{done:R}` to stop early.
      * @description Computational complexity: O(number of items scanned + log size)
      */
     rangeForEach(low, high, includeHigh, onFound, initialCounter) {
         const r = this.root.forRange(low, high, includeHigh, false, this, initialCounter || 0, onFound);
-        return typeof r === 'number' ? r : r.break;
+        return typeof r === 'number' ? r : r.done;
     }
     /**
      * Scans and potentially modifies values for a subsequence of keys.
@@ -785,13 +785,13 @@ export class BTree extends Mapping {
      * @param onFound A function that is called for each key-value pair. This
      *        function can return `{value:v}` to change the value associated
      *        with the current key, `{delete:true}` to delete the current pair,
-     *        `{break:R}` to stop early with result R, or it can return nothing
+     *        `{done:R}` to stop early with result R, or it can return nothing
      *        (undefined or {}) to cause no effect and continue iterating.
-     *        `{break:R}` can be combined with one of the other two commands.
+     *        `{done:R}` can be combined with one of the other two commands.
      *        The third argument `counter` is the number of items iterated
      *        previously; it equals 0 when `onFound` is called the first time.
      * @returns The number of values scanned, or R if the callback returned
-     *        `{break:R}` to stop early.
+     *        `{done:R}` to stop early.
      * @description
      *   Computational complexity: O(number of items scanned + log size)
      *   Note: if the tree has been cloned with clone(), any shared
@@ -804,7 +804,7 @@ export class BTree extends Mapping {
             this.root = root = root.clone();
         try {
             const r = root.forRange(low, high, includeHigh, true, this, initialCounter || 0, onFound);
-            return typeof r === 'number' ? r : r.break;
+            return typeof r === 'number' ? r : r.done;
         }
         finally {
             let isShared;

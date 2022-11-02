@@ -166,11 +166,11 @@ export declare class BTree<K = any, V = any> extends Mapping<K, V> {
      * @param includeHigh If the `high` key is present, `onFound` is called for
      *        that final pair if and only if this parameter is true.
      * @param onFound A function that is called for each key-value pair. This
-     *        function can return {break:R} to stop early with result R.
+     *        function can return {done:R} to stop early with result R.
      * @param initialCounter Initial third argument of onFound. This value
      *        increases by one each time `onFound` is called. Default: 0
      * @returns The number of values found, or R if the callback returned
-     *        `{break:R}` to stop early.
+     *        `{done:R}` to stop early.
      * @description Computational complexity: O(number of items scanned + log size)
      */
     rangeForEach<R = number>(low: K, high: K, includeHigh: boolean, onFound?: Iteratee<K, V>, initialCounter?: number): R | number;
@@ -190,13 +190,13 @@ export declare class BTree<K = any, V = any> extends Mapping<K, V> {
      * @param onFound A function that is called for each key-value pair. This
      *        function can return `{value:v}` to change the value associated
      *        with the current key, `{delete:true}` to delete the current pair,
-     *        `{break:R}` to stop early with result R, or it can return nothing
+     *        `{done:R}` to stop early with result R, or it can return nothing
      *        (undefined or {}) to cause no effect and continue iterating.
-     *        `{break:R}` can be combined with one of the other two commands.
+     *        `{done:R}` can be combined with one of the other two commands.
      *        The third argument `counter` is the number of items iterated
      *        previously; it equals 0 when `onFound` is called the first time.
      * @returns The number of values scanned, or R if the callback returned
-     *        `{break:R}` to stop early.
+     *        `{done:R}` to stop early.
      * @description
      *   Computational complexity: O(number of items scanned + log size)
      *   Note: if the tree has been cloned with clone(), any shared

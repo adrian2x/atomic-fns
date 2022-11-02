@@ -85,11 +85,11 @@ export declare function throttle(func: Function, wait: number): Function;
 ```js
 let func = x => x
 let single = once(func)
-single(1) // => 1
-single(2) // => 1
-single(3) // => 1
+single(1) // 1
+single(2) // 1
+single(3) // 1
 // ...
-// => `func` is invoked only once.
+// `func` is invoked only once.
 ```
  */
 export declare function once<T>(func: Function<T>): (...args: any[]) => T;
