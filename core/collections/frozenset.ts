@@ -14,20 +14,17 @@ export class FrozenSet<T = any> extends Set<T> {
 
   /** @private */
   add() {
-    throw TypeError('FrozenSet cannot be modified.')
-    return this // eslint-disable-line
+    return this
   }
 
   /** @private */
   delete() {
-    throw TypeError('FrozenSet cannot be modified.')
-    return false // eslint-disable-line
+    return false
   }
 
   /** @private */
   clear() {
-    throw TypeError('FrozenSet cannot be modified.')
-    return this // eslint-disable-line
+    return this
   }
 
   /** @private */

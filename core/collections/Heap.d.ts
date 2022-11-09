@@ -14,7 +14,7 @@ export declare class Heap<T> extends Collection {
      * @param {Comparer} [cmp=compare] Compare function. Defaults to smaller values first.
      */
     constructor(container?: Iterable<T>, cmp?: Comparer);
-    at(n: number): T | undefined;
+    at(n: number): T;
     get size(): number;
     clear(): void;
     /**
@@ -25,11 +25,11 @@ export declare class Heap<T> extends Collection {
     /**
      * Removes the top element.
      */
-    pop(): T | undefined;
+    pop(): T;
     /**
      * Accesses the top element.
      */
-    top(): T | undefined;
+    top(): T;
     /**
      * Check if element is in heap.
      * @param item The item want to find.

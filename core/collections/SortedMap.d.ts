@@ -36,12 +36,12 @@ export declare class SortedMap<K, V> extends Mapping<K, V> {
      * Returns the smallest key in the tree.
      * @returns {?K}
      */
-    min(): K | undefined;
+    min(): K;
     /**
      * Returns the largest key in the tree.
      * @returns {?K}
      */
-    max(): K | undefined;
+    max(): K;
     /**
      * Returns `true` if the `key` existed in the map and was removed.
      * @param {K} key

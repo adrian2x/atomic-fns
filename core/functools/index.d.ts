@@ -12,7 +12,7 @@ import { Function } from '../globals/index.js';
  * @returns {Function} Returns the new bound function.
  * @see {@link partial}
  */
-export declare const bind: (fn: Function, thisArg: any, ...partials: any[]) => (...args: any[]) => any;
+export declare const bind: (fn: Function, thisArg: any, ...partials: any[]) => any;
 /**
  * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least arity number of arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on. The arity of `func` may be specified if `func.length` is not sufficient.
  * @param {Function} func The function to curry.
@@ -27,7 +27,7 @@ export declare const curry: (func: Function, arity?: number) => Function<any>;
  * @param {...*} [args] The arguments to apply to `fn`.
  * @returns {Function} Returns the new partially applied function
  */
-export declare const partial: (fn: any, ...args: any[]) => (...args: any[]) => any;
+export declare const partial: (fn: any, ...args: any[]) => any;
 /**
  * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from left to right.
  * @param {...*} [args] The set of functions to apply.

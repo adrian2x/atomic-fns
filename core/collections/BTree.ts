@@ -196,7 +196,7 @@ class BNode<K, V = any> {
       }
     } else {
       // Key already exists
-      if (overwrite !== false) {
+      if (overwrite) {
         if (value !== undefined) this.reifyValues()
         // usually this is a no-op, but some users may wish to edit the key
         this.keys[i] = key
@@ -287,7 +287,7 @@ class BNode<K, V = any> {
       iLow = this.indexOf(low, 0, cmp)
       iHigh = this.indexOf(high, -1, cmp)
       if (iHigh < 0) iHigh = ~iHigh
-      else if (includeHigh === true) iHigh++
+      else if (includeHigh) iHigh++
     }
     const keys = this.keys
     const values = this.values
@@ -297,7 +297,7 @@ class BNode<K, V = any> {
         const result = onFound(key, values[i], count++)
         if (result !== undefined) {
           if (editMode) {
-            if (key !== keys[i] || this.isShared === true)
+            if (key !== keys[i] || this.isShared)
               throw new Error('BTree illegally changed or cloned in editRange')
             if (result.delete) {
               this.keys.splice(i, 1)
@@ -800,7 +800,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   keysRange(low: K, high: K, includeHigh?: boolean, maxLength: number = 0x3ffffff): Array<[K, V]> {
     const results: Array<[K, V]> = []
     this.root.forRange(low, high, includeHigh, false, this, 0, (k, v) => {
-      results.push([k, v as V])
+      results.push([k, v])
       return results.length > maxLength ? Break : undefined
     })
     return results

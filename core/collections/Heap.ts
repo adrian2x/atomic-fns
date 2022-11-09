@@ -61,7 +61,7 @@ export class Heap<T> extends Collection {
   pop() {
     if (!this.count) return
     const value = this.heap[0]
-    const last = this.heap.pop() as T
+    const last = this.heap.pop()
     this.count -= 1
     if (this.count) {
       this.heap[0] = last
@@ -75,7 +75,7 @@ export class Heap<T> extends Collection {
    */
   top() {
     if (!this.count) return
-    return this.heap[0] as T | undefined
+    return this.heap[0]
   }
 
   /**
@@ -102,7 +102,7 @@ export class Heap<T> extends Collection {
       this.heap.pop()
       this.count -= 1
     } else {
-      this.heap.splice(index, 1, this.heap.pop() as T)
+      this.heap.splice(index, 1, this.heap.pop())
       this.count -= 1
       heapifyUp(this.heap, index, this.compare)
       heapifyDown(this.heap, index, this.count >> 1, this.compare)
@@ -178,7 +178,7 @@ export function heappush<T>(heap: T[], item: T, compareFn = compare) {
  * @param {Comparer} [compareFn=compare] Custom compare function
  */
 export function heappop<T>(heap: T[], compareFn = compare) {
-  const last = heap.pop() as T
+  const last = heap.pop()
   if (heap.length) {
     const item = heap[0]
     heap[0] = last

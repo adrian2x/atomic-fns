@@ -436,7 +436,7 @@ export function sort(args: any[], reverse?: boolean | Comparer, compareFn?: Comp
     reverse = false
   }
   args.sort(compareFn || compare)
-  if (reverse === true) args.reverse()
+  if (reverse) args.reverse()
   return args
 }
 

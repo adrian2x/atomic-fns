@@ -92,7 +92,6 @@ export declare function type(value: any): any;
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString | Object.toString }
  */
 export declare const str: (obj: any) => any;
-export declare function hasOwnProperty(obj: any, prop: any): boolean;
 /** Check if value is a boolean type. */
 export declare const isBool: (x: any) => x is boolean;
 /** Check if value is an `Error` type. */
@@ -118,8 +117,6 @@ export declare const isNumber: (x: any) => x is number;
 export declare const isInteger: (x: any) => x is number;
 /** Check if value is a bigint type. */
 export declare const isBigint: (x: any) => x is BigInt;
-/** Check if value is NaN based on `Number.isNaN`. */
-export declare const isNaN: (x: any) => x is number;
 /** Check if value is a Promise type. */
 export declare const isPromise: (x: any) => x is Promise<any>;
 /** Check if value is a function type. */
@@ -129,7 +126,7 @@ export declare const isAsyncFunction: (x: any) => boolean;
 /** Check if value is a generator function type. */
 export declare const isGenerator: (x: any) => x is Generator<unknown, any, unknown>;
 /** Check if value is `null` or `undefined`. */
-export declare const isNull: (x: any) => x is null | undefined;
+export declare const isNull: (x: any) => x is null;
 /** Check if value === `undefined`. */
 export declare const isUndefined: (x: any) => x is undefined;
 /** Check if value is not `null` or `undefined`. */
@@ -213,7 +210,7 @@ export declare const values: (object: any) => unknown[];
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
  */
-export declare const has: (obj: any, attr: PropertyKey) => any;
+export declare const has: (obj: any, attr: PropertyKey) => boolean;
 /**
  * Check if the attribute is present in the object or return a default value instead.
  * @param {PropertyKey} key

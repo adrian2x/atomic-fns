@@ -25,7 +25,7 @@ export declare class SortedTree<K, V> extends Mapping<K, V> {
      * @param {K} key
      * @returns {?V} The key value or `undefined`.
      */
-    get(key: K): V | undefined;
+    get(key: K): V;
     /**
      * Sets the value for the given `key`.
      * @param {K} key
@@ -37,7 +37,7 @@ export declare class SortedTree<K, V> extends Mapping<K, V> {
      * Returns the smallest key in the tree.
      * @returns {?K}
      */
-    min(): K | undefined;
+    min(): K;
     /**
      * Returns the largest key in the tree.
      * @returns {?K}

@@ -142,10 +142,6 @@ export function type(value) {
  */
 export const str = (obj) => (obj != null ? obj.toString() : '')
 
-export function hasOwnProperty(obj, prop) {
-  return Object.prototype.hasOwnProperty.call(obj, prop)
-}
-
 /** Check if value is a boolean type. */
 export const isBool = (x): x is boolean => type(x) === 'boolean'
 
@@ -187,9 +183,6 @@ export const isInteger = (x): x is number => type(x) === 'number' && Math.trunc(
 
 /** Check if value is a bigint type. */
 export const isBigint = (x): x is BigInt => type(x) === 'bigint'
-
-/** Check if value is NaN based on `Number.isNaN`. */
-export const isNaN = (x): x is typeof NaN => Number.isNaN(x)
 
 /** Check if value is a Promise type. */
 export const isPromise = (x): x is Promise<any> => type(x) === 'Promise'

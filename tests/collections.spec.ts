@@ -159,8 +159,7 @@ describe('collections', () => {
 
   it('forEach object key', () => {
     let target = { user: 'fred', age: 40, active: false }
-    let objs = []
-    // @ts-expect-error
+    let objs = [] as any[]
     forEach(target, (value, key) => objs.push([key, value]))
     assert.deepEqual(objs, Object.entries(target))
   })

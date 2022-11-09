@@ -17,7 +17,6 @@ import {
   isBool,
   isEmpty,
   isFunction,
-  isNaN,
   isNull,
   isNumber,
   isObject,
@@ -123,10 +122,6 @@ describe('globals', () => {
     assert(isAsyncFunction(async function () {}))
     assert(isAsyncFunction(async () => {}))
     assert(!isAsyncFunction(noop))
-  })
-
-  it('isNaN', () => {
-    assert(isNaN(NaN))
   })
 
   it('isNumber', () => {

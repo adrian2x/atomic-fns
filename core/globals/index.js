@@ -122,9 +122,6 @@ export function type(value) {
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString | Object.toString }
  */
 export const str = (obj) => (obj != null ? obj.toString() : '');
-export function hasOwnProperty(obj, prop) {
-    return Object.prototype.hasOwnProperty.call(obj, prop);
-}
 /** Check if value is a boolean type. */
 export const isBool = (x) => type(x) === 'boolean';
 /** Check if value is an `Error` type. */
@@ -157,8 +154,6 @@ export const isNumber = (x) => type(x) === 'number';
 export const isInteger = (x) => type(x) === 'number' && Math.trunc(x) === x;
 /** Check if value is a bigint type. */
 export const isBigint = (x) => type(x) === 'bigint';
-/** Check if value is NaN based on `Number.isNaN`. */
-export const isNaN = (x) => Number.isNaN(x);
 /** Check if value is a Promise type. */
 export const isPromise = (x) => type(x) === 'Promise';
 /** Check if value is a function type. */

@@ -38,7 +38,7 @@ export declare function count<T>(iterable: Iterable<T> | Object, func: Iteratee<
  * @param fields - A list of field names
  * @returns A function that can be called with the field values
  */
-export declare function namedtuple(...fields: string[]): (...args: any[]) => {};
+export declare function namedtuple(...fields: string[]): (...args: any[]) => any;
 /**
  * Iterates over elements of collection, returning an array of all elements where predicate returns truthy value.
  *
@@ -66,7 +66,7 @@ filter(users, 'active')
  * @param {Function} fn The predicate function invoked for each item
  * @returns {Array} The new filtered array
  */
-export declare function filter(arr: any, fn?: Iteratee | PropertyKey | Object): any[] | undefined;
+export declare function filter(arr: any, fn?: Iteratee | PropertyKey | Object): any[];
 /**
  * Iterates over elements of collection, returning the first element where predicate returns truthy value. The predicate is invoked with three arguments: `(value, index|key, collection)`.
  * @example
@@ -242,7 +242,7 @@ map(users, 'user')
  * @returns Returns the new mapped array.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map Array.map()}
  */
-export declare function map(arr: any, fn: Iteratee | PropertyKey): any[] | undefined;
+export declare function map(arr: any, fn: Iteratee | PropertyKey): any[];
 /**
  * Creates an object composed of the picked object properties.
  * @param {Object} obj The source object.
@@ -309,7 +309,7 @@ index(users, 'active')
  * @see {@link lastIndex}
  *
  */
-export declare function index(obj: any, fn: Iteratee | string | Object, start?: number): number | undefined;
+export declare function index(obj: any, fn: Iteratee | string | Object, start?: number): number;
 /**
  * This method is like {@link index} except that it searches for a given value directly, instead of using a predicate function.
  * @param {Array} obj The array to inspect.

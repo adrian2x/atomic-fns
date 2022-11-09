@@ -31,7 +31,7 @@ export declare class SplayTree<K, V = any> extends Mapping<K, V> {
      * @param p When an element is accessed, with probability `p` splay the tree. With probability `1 - p`, leave the tree as it is.
      */
     constructor(compareFn?: any, p?: number);
-    top(): K | undefined;
+    top(): K;
     get size(): number;
     empty(): boolean;
     get height(): any;
@@ -53,23 +53,23 @@ export declare class SplayTree<K, V = any> extends Mapping<K, V> {
      * @param {K} key The key to remove.
      * @returns {V} The removed value associated with `key`.
      */
-    remove(key: K): V | undefined;
+    remove(key: K): V;
     /**
      * Returns the minimum key in the tree or subtree.
      * @returns The minimum key.
      */
-    min(root?: Node<K, V> | undefined): K | undefined;
+    min(root?: Node<K, V>): K;
     /**
      * Returns the maximum key in the tree or subtree.
      * @returns The maximum key.
      */
-    max(root?: Node<K, V> | undefined): K | undefined;
+    max(root?: Node<K, V>): K;
     /**
      * Returns the largest key that is less than a given key.
      * @param key The given key
      * @returns The largest key found or `undefined`.
      */
-    lowerBound(key: any): K | Node<K, V> | undefined;
+    lowerBound(key: any): K | Node<K, V>;
     /**
      * This is the simplified top-down splaying method proposed by Sleator and Tarjan in {@link https://doi.org/10.1145%2F3828.3835 Self-Adjusting Binary Search Trees}.
      * @param key

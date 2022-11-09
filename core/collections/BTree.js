@@ -164,7 +164,7 @@ class BNode {
         }
         else {
             // Key already exists
-            if (overwrite !== false) {
+            if (overwrite) {
                 if (value !== undefined)
                     this.reifyValues();
                 // usually this is a no-op, but some users may wish to edit the key
@@ -252,7 +252,7 @@ class BNode {
             iHigh = this.indexOf(high, -1, cmp);
             if (iHigh < 0)
                 iHigh = ~iHigh;
-            else if (includeHigh === true)
+            else if (includeHigh)
                 iHigh++;
         }
         const keys = this.keys;
@@ -263,7 +263,7 @@ class BNode {
                 const result = onFound(key, values[i], count++);
                 if (result !== undefined) {
                     if (editMode) {
-                        if (key !== keys[i] || this.isShared === true)
+                        if (key !== keys[i] || this.isShared)
                             throw new Error('BTree illegally changed or cloned in editRange');
                         if (result.delete) {
                             this.keys.splice(i, 1);

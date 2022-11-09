@@ -22,7 +22,7 @@ export declare const randomInt: (min?: number, max?: number) => number;
  * @returns {T}
  * @template T
  */
-export declare const choice: <T>(arr: T[]) => T | undefined;
+export declare const choice: <T>(arr: T[]) => T;
 /**
  * Returns a random sample of size k from a list of items.
  * @param {Array} arr

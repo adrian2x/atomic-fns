@@ -63,7 +63,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
       const value = this.items.get(key)
       // Delete the previous key to update the new insertion order
       this.items.delete(key)
-      this.items.set(key, value as V)
+      this.items.set(key, value)
       return value
     }
   }

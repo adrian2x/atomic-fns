@@ -407,7 +407,7 @@ export function sort(args, reverse, compareFn) {
         reverse = false;
     }
     args.sort(compareFn || compare);
-    if (reverse === true)
+    if (reverse)
         args.reverse();
     return args;
 }

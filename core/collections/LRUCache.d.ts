@@ -35,7 +35,7 @@ export declare class LRUCache<K = any, V = any> extends Mapping<K, V> {
      * @param {K} key
      * @returns {?V} The associated value or `undefined`
      */
-    get(key: K): V | undefined;
+    get(key: K): V;
     /**
      * Removes all keys and values from the cache.
      * @returns {this}
@@ -52,7 +52,7 @@ export declare class LRUCache<K = any, V = any> extends Mapping<K, V> {
      * @param {K} key
      * @returns {?V} The value if it was removed or `undefined`.
      */
-    remove(key: K): V | undefined;
+    remove(key: K): V;
     /**
      * Returns the total number of elements in the cache.
      */

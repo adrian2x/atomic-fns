@@ -81,7 +81,7 @@ export declare class BTree<K = any, V = any> extends Mapping<K, V> {
      *  @param firstKey: Minimum key to include in the output. */
     keys(firstKey?: K): IterableIterator<K>;
     /** Gets the lowest key in the tree. Complexity: O(log size) */
-    minKey(): K | undefined;
+    minKey(): K;
     /** Gets the highest key in the tree. Complexity: O(1) */
     maxKey(): K;
     /** Returns a new iterator for iterating the values of each pair in order by key.

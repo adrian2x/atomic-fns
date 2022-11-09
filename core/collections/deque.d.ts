@@ -44,28 +44,28 @@ export declare class Deque<T = any> extends Sequence<T> {
      * Removes and returns the element at the end of the deque.
      * @returns {?T} Returns the popped item.
      */
-    pop(): T | undefined;
+    pop(): T;
     /**
      * Alias of {@link Deque.pop}
      * @returns {?T} Returns the popped item.
      */
-    remove(): T | undefined;
+    remove(): T;
     /**
      * Removes and returns the element at the beginning of the deque.
      * @returns {?T} Returns the removed deque element.
      */
-    popleft(): T | undefined;
+    popleft(): T;
     /**
      * Returns the element at the beginning of the deque.
      * @returns {?T} The element if exists
      */
-    first(): T | undefined;
+    first(): T;
     /**
      * Returns the element at a specified index position in the deque.
      * @param {number} index The given index
      * @returns {?T} The element if exists
      */
-    get(index: any): T | undefined;
+    get(index: any): T;
     /**
      * Update the element at a given `index`.
      * @param {number} index The given index
@@ -82,7 +82,7 @@ export declare class Deque<T = any> extends Sequence<T> {
      * @param {Iteratee<T>} iteratee A function that will be invoked per element
      * @returns {?T} The element if exists
      */
-    find(iteratee: Iteratee<T>): T | undefined;
+    find(iteratee: Iteratee<T>): T;
     /**
      * Calls `iteratee` function for every element in the deque.
      * @param {Iteratee<T>} iteratee A function that will be invoked per element

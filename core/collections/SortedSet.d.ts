@@ -23,12 +23,12 @@ export declare class SortedSet<T> extends Collection {
      * Returns the smallest value in the set.
      * @returns {?T}
      */
-    min(): T | undefined;
+    min(): T;
     /**
      * Returns the largest value in the set.
      * @returns {?T}
      */
-    max(): T | undefined;
+    max(): T;
     /**
      * Removes the value from the set and returns `true` if the value was found and removed.
      * @param {T} value

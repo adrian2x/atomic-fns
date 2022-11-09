@@ -81,7 +81,7 @@ export declare function contains(collection: Iterable<any>, value: any): any;
  * @param predicate A function invoked per element to check if it should be dropped.
  * @returns Elements
  */
-export declare function dropWhile<T>(iterable: Iterable<T>, predicate: Predicate): Generator<unknown, any, unknown>;
+export declare function dropWhile<T>(iterable: Iterable<T>, predicate: Predicate): Generator<any, any, unknown>;
 export declare function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>): void;
 export declare function IterableIterator<T = any>(next: any): Iterator<T, any, undefined> & Iterable<T>;
 /**
@@ -134,8 +134,8 @@ export declare function imap<T, TReturn = any>(iterable: Iterable<T>, mapFn: (x:
  */
 export declare function iflatten<T = any>(iterables: Iterable<Iterable<T>>): Generator<T, void, unknown>;
 export declare function flatMap<T>(iterable: Iterable<T>, mapFn?: (x: T) => any): Generator<T, void, unknown>;
-export declare function islice<T>(iterable: Iterable<T>, start: number, stop?: number, step?: number): Generator<number | T, number | T | undefined, unknown>;
-export declare function itake<T>(n: number, iterable: Iterable<T>): Generator<unknown, void, unknown>;
+export declare function islice<T>(iterable: Iterable<T>, start: number, stop?: number, step?: number): Generator<number | T, number | T, unknown>;
+export declare function itake<T>(n: number, iterable: Iterable<T>): Generator<any, void, unknown>;
 /**
  * Returns an Iterator from the elements of a collection or the object keys.
  * @param obj The given collection to iterate over.
@@ -196,7 +196,7 @@ export declare function sort(args: any[]): any[];
 export declare function sort(args: any[], reverse: boolean): any[];
 export declare function sort(args: any[], compareFn: Comparer): any[];
 export declare function sort(args: any[], reverse: boolean, compareFn: Comparer): any[];
-export declare function take<T>(n: number, iterable: Iterable<T>): unknown[];
+export declare function take<T>(n: number, iterable: Iterable<T>): any[];
 /**
  * Returns a generator that takes elements from the iterable as long as the predicate is `true`.
  * @param iterable The iterable to inspect.
