@@ -27,14 +27,19 @@ export class IntlDate {
   readonly locale?: string
   intlRelativeFormat: Intl.RelativeTimeFormat
 
-  /** Returns the current UTC date and time. */
-  static UTC(obj: DateLike = {}) {
-    return new IntlDate(obj, { utc: true })
+  /** Parses the provided value as UTC date or returns the current UTC date. */
+  static UTC(value?: DateLike) {
+    return new IntlDate(value, { utc: true })
   }
 
   /** Returns the current local date and time.*/
   static now() {
     return new IntlDate()
+  }
+
+  /** Creates a new date from a Unix timestamp (seconds since the unix epoch) */
+  static unix(seconds: number) {
+    return new IntlDate(seconds * 1000)
   }
 
   /**
