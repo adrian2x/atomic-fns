@@ -1,3 +1,4 @@
+import { dateUTC } from './date/utils.js';
 const NATIVE_DATE = /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/;
 /**
  * Returns a new Date from the given arguments.
@@ -6,12 +7,15 @@ const NATIVE_DATE = /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d
  * @returns {Date} The new date object
  */
 export function getDate(date, utc = false) {
-    if (date === null)
+    if (date === null) {
         return new Date(NaN);
-    if (!date)
+    }
+    if (!date) {
         return new Date();
-    if (date instanceof Date)
-        return new Date(date);
+    }
+    if (date instanceof Date) {
+        return utc ? new Date(dateUTC(date)) : date;
+    }
     if (typeof date === 'string' && !/Z$/i.test(date)) {
         const d = date.match(NATIVE_DATE);
         if (d) {
@@ -23,7 +27,8 @@ export function getDate(date, utc = false) {
             return new Date(d[1], m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms);
         }
     }
-    return new Date(date);
+    const fromDate = new Date(date);
+    return utc ? new Date(dateUTC(fromDate)) : fromDate;
 }
 const n = 'numeric', s = 'short', l = 'long', dd = '2-digit', TOKEN_MAP = {
     // weekday

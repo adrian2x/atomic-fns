@@ -13,13 +13,17 @@ export class IntlDate {
     self;
     locale;
     intlRelativeFormat;
-    /** Returns the current UTC date and time. */
-    static UTC(obj = {}) {
-        return new IntlDate(obj, { utc: true });
+    /** Parses the provided value as UTC date or returns the current UTC date. */
+    static UTC(value) {
+        return new IntlDate(value, { utc: true });
     }
     /** Returns the current local date and time.*/
     static now() {
         return new IntlDate();
+    }
+    /** Creates a new date from a Unix timestamp (seconds since the unix epoch) */
+    static unix(seconds) {
+        return new IntlDate(seconds * 1000);
     }
     /**
      * Creates a new `IntlDate` tied to the specified locale (default is system locale).
@@ -29,9 +33,10 @@ export class IntlDate {
      * @returns
      */
     constructor(obj, { locale, utc } = {}) {
-        if (obj instanceof IntlDate)
-            obj = obj.self;
         this.locale = locale;
+        if (obj instanceof IntlDate) {
+            obj = obj.self;
+        }
         if (typeof obj === 'string' || typeof obj === 'number' || obj instanceof Date) {
             this.self = getDate(obj, utc);
         }
@@ -50,7 +55,7 @@ export class IntlDate {
             }
         }
         else {
-            this.self = new Date();
+            this.self = getDate(new Date(obj), utc);
         }
         return this;
     }

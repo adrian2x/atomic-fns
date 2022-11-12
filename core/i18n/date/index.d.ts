@@ -10,10 +10,12 @@ export declare class IntlDate {
     private self;
     readonly locale?: string;
     intlRelativeFormat: Intl.RelativeTimeFormat;
-    /** Returns the current UTC date and time. */
-    static UTC(obj?: DateLike): IntlDate;
+    /** Parses the provided value as UTC date or returns the current UTC date. */
+    static UTC(value?: DateLike): IntlDate;
     /** Returns the current local date and time.*/
     static now(): IntlDate;
+    /** Creates a new date from a Unix timestamp (seconds since the unix epoch) */
+    static unix(seconds: number): IntlDate;
     /**
      * Creates a new `IntlDate` tied to the specified locale (default is system locale).
      * **Note:** The allowed values for `month` start at 1, which is different from legacy `Date`

@@ -50,17 +50,22 @@ export class IntlDate {
    * @returns
    */
   constructor(obj?: DateLike | IntlDate, { locale, utc }: any = {}) {
-    if (obj instanceof IntlDate) obj = obj.self
     this.locale = locale
+
+    if (obj instanceof IntlDate) {
+      obj = obj.self
+    }
 
     if (typeof obj === 'string' || typeof obj === 'number' || obj instanceof Date) {
       this.self = getDate(obj, utc)
     } else if (isObject(obj)) {
       let { year, month, day, hour, minute, second, millisecond } = obj
+
       // NOTE month is from 1-12, not from 0-11
       if (typeof month === 'number') {
         month -= 1
       }
+
       if (utc) {
         // from UTC to current
         this.self = new Date(
@@ -78,7 +83,7 @@ export class IntlDate {
         )
       }
     } else {
-      this.self = new Date()
+      this.self = getDate(new Date(obj), utc)
     }
 
     return this
