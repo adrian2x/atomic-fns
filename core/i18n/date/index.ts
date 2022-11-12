@@ -1,6 +1,6 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
-import { format, getDate } from './format.js'
+import { format, getDate } from '../format.js'
 import {
   asNumber,
   DateLike,

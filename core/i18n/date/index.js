@@ -1,6 +1,6 @@
 import { isObject, ValueError } from '../../globals/index.js';
 import { Duration, UNITS_PLURAL } from '../duration.js';
-import { format, getDate } from './format.js';
+import { format, getDate } from '../format.js';
 import { asNumber, daysInMonth, daysInYear, isLeapYear, maxDate, minDate, weeksInYear } from './utils.js';
 export { daysInMonth, daysInYear, isLeapYear, maxDate, minDate, weeksInYear };
 const INVALID_DATE_STRING = 'Invalid Date';

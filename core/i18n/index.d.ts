@@ -4,5 +4,5 @@
  * @module i18n
  */
 export * from './date/index.js';
-export * from './date/format.js';
+export * from './format.js';
 export * from './duration.js';
