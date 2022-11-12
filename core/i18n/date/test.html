@@ -1,5 +1,6 @@
 <script type="module">
   import { IntlDate } from './index.js'
+  import { Duration } from '../duration.js'
   window.IntlDate = IntlDate
 
   let d = new IntlDate('', { locale: 'en' })
@@ -64,4 +65,26 @@
   console.log(d.format('%y %b %d %a %-I:%M:%S %P %-z'))
   console.log(d.format('%y %b %d %a %-I:%M:%S %P %ZZ'))
   console.log(d.format('%a, %b %d, %y %-I:%M:%S %-ZZ'))
+
+  console.log(d.toObject())
+  console.log(d.zoneName())
+  console.log(d.offset())
+  console.log(d.offsetInMinutes())
+
+  console.log('month starts', d.startOf('month').toDate())
+  console.log('month ends', d.endOf('month').toDate())
+  console.log('1 day', d.add({ days: 1 }).toDate())
+  console.log('60 days', d.add({ days: 60 }).toDate())
+  console.log('2 months', d.add({ months: 2 }).toDate())
+  console.log('4 months', d.add({ months: 4, weeks: 2 }).toDate())
+  console.log('14 days', d.add({ days: 14 }).toDate())
+  console.log('2 week', d.add({ weeks: 2 }).toDate())
+  console.log('1 month', d.add({ months: 1 }).toDate())
+  console.log('1 year', d.add({ years: 1 }).toDate())
+
+  console.log('-30 years', d.subtract({ years: 30 }, true).toDate())
+
+  let b = new IntlDate({ year: 1992, month: 7, day: 23, hour: 21, minute: 25 })
+
+  console.log('+30 years', new Duration(d.diff(b)).rescale())
 </script>

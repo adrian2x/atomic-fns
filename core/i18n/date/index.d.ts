@@ -1,13 +1,6 @@
-export declare type DateParts = {
-    year?: number;
-    month?: number;
-    day?: number;
-    hour?: number;
-    minute?: number;
-    second?: number;
-    millisecond?: number;
-};
-export declare type DateLike = number | string | Date | DateParts;
+import { Duration, DurationUnit, TDuration } from '../duration.js';
+import { DateLike, DateParts, daysInMonth, daysInYear, isLeapYear, maxDate, minDate, weeksInYear } from './utils.js';
+export { daysInMonth, daysInYear, isLeapYear, maxDate, minDate, weeksInYear };
 /**
  * Creates a date tied to a given locale (default system locale) which can be formatted in that locale's language using the native {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis} directly or using a formatting string compatible with `strftime`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis}
@@ -15,15 +8,8 @@ export declare type DateLike = number | string | Date | DateParts;
  */
 export declare class IntlDate {
     private self;
-    readonly year: number;
-    readonly M: number;
-    readonly day: number;
-    readonly weekDay: number;
-    readonly hour: number;
-    readonly minute: number;
-    readonly second: number;
-    readonly millisecond: number;
-    readonly locale: string;
+    readonly locale?: string;
+    intlRelativeFormat: Intl.RelativeTimeFormat;
     /** Returns the current UTC date and time. */
     static UTC(obj?: DateLike): IntlDate;
     /** Returns the current local date and time.*/
@@ -36,14 +22,28 @@ export declare class IntlDate {
      * @returns
      */
     constructor(obj?: DateLike | IntlDate, { locale, utc }?: any);
+    /** Get the this date's year. */
+    get year(): number;
+    /** Returns the weekday as a number between 1 and 7, inclusive, where Monday is 1 and Sunday is 7. */
+    get dayOfWeek(): number;
+    /** Get the this date's current day of the month. */
+    get day(): number;
+    /** Get the this date's current hour. */
+    get hour(): number;
+    /** Get the this date's current minute. */
+    get minute(): number;
+    /** Get the this date's current second. */
+    get second(): number;
+    /** Get the this date's current millisecond. */
+    get millisecond(): number;
     isValid(): boolean;
-    /** Get the this date's month as a number from 1-12. */
+    /** Get the this date's month as a number from 1 to 12, inclusive. */
     get month(): number;
     /** Get the number of days in this date's month. */
-    daysInMonth(): number | null;
+    daysInMonth(): number;
     /** Get the number of days in this date's year. */
     daysInYear(): 366 | 365;
-    /** Returns `true` if this date's year is a leap year, otherwise `false`. */
+    /** Returns `true` if this date's year is a leap year. */
     isLeapYear(): boolean;
     /** Gets the number of weeks according to locale in the current moment's year. */
     weeksInYear(): 53 | 52;
@@ -68,11 +68,6 @@ export declare class IntlDate {
      * @returns {Date} A new `Date` object
      */
     toDate(): Date;
-    /**
-     * Returns the timestamp representing the UTC equivalent of this date.
-     * @returns {number} The UTC timestamp of this date.
-     */
-    toUTC(): number;
     /**
      * Returns the number of seconds since the Unix Epoch (January 1, 1970 UTC).
      * @see {@link IntlDate.timestamp}
@@ -130,11 +125,15 @@ export declare class IntlDate {
      */
     toObject(): DateParts;
     /** Returns the number of milliseconds since the Unix Epoch (January 1, 1970 UTC)  */
+    getTime(): number;
+    /** Alias of {@link IntlDate.getTime}  */
     valueOf(): number;
     /** Returns the timezone string name  */
     zoneName(): string;
-    /** Returns the timezone GMT offset name  */
+    /** Returns the timezone GMT offset  */
     offset(): string;
+    /** Returns the difference in minutes between this date and UTC  */
+    offsetInMinutes(): number;
     /**
      * Check if this date is before another date. The other value will be parsed as an `IntlDate` if not already so.
      * @param {string | number | Object | Date | IntlDate} other Another date or date like object
@@ -160,64 +159,22 @@ export declare class IntlDate {
      * @returns {boolean} Returns `true` if this date is the same as other
      */
     isSame(other: Date | IntlDate): boolean;
-    /**
-     * Returns the minimum (most distant past) of the given date values.
-     * @param {Array<Date | IntlDate>} dates
-     * @returns {Date | IntlDate} The smallest date of `dates`
-     * @see {@link minDate}
-     */
-    static min(...dates: Array<Date | IntlDate>): Date | IntlDate;
-    /**
-     * Returns the maximum (most distant future) of the given date values.
-     * @param {Array<Date | IntlDate>} dates
-     * @returns {Date | IntlDate} The largest date of `dates`
-     * @see {@link maxDate}
-     */
-    static max(...dates: Array<Date | IntlDate>): Date | IntlDate;
     lt(other: Date | IntlDate): boolean;
     eq(other: Date | IntlDate): boolean;
-    compare(other: Date | IntlDate): 0 | 1 | -1;
+    compare(other: Date | IntlDate): number;
+    set(values: DateParts): IntlDate;
+    get relativeFormat(): Intl.RelativeTimeFormat;
+    relativeTime(n: number, unit?: Intl.RelativeTimeFormatUnit): string;
+    fromNow(unit?: Intl.RelativeTimeFormatUnit): string;
+    from(other: DateLike, unit?: Intl.RelativeTimeFormatUnit): string;
+    toNow(unit?: Intl.RelativeTimeFormatUnit): string;
+    to(other: DateLike, unit?: Intl.RelativeTimeFormatUnit): string;
+    diff(other: DateLike, unit?: DurationUnit, exact?: boolean): number;
+    add(duration: TDuration, exact?: boolean): IntlDate;
+    subtract(duration: TDuration, exact?: boolean): IntlDate;
+    startOf(unit: DurationUnit): IntlDate;
+    endOf(unit: DurationUnit): IntlDate;
+    clone(date?: DateLike): IntlDate;
 }
-/**
- * Converts the given date to a UTC timestamp.
- * @param {Date} date
- * @returns {number} The milliseconds between the specified date and the UTC Epoch date.
- */
-export declare function dateToUTC(date: Date): number;
-/**
- * Returns the minimum (most distant past) of the given date values.
- * @param {Array<Date | IntlDate>} dates
- * @returns {Date | IntlDate} The smallest date of `dates`
- */
-export declare function minDate(...dates: Array<Date | IntlDate>): Date | IntlDate;
-/**
- * Returns the maximum (most distant future) of the given date values.
- * @param {Array<Date | IntlDate>} dates
- * @returns {Date | IntlDate} The largest date of `dates`
- */
-export declare function maxDate(...dates: Array<Date | IntlDate>): Date | IntlDate;
-/**
- * Returns `true` if the year is a leap year, otherwise `false`.
- * @param year The date year
- * @returns {boolean} `true` if is a leap year
- */
-export declare function isLeapYear(year: number): boolean;
-/**
- * Get the number of days in the given year.
- * @param year The date year
- * @returns {number} Number of days in year
- */
-export declare function daysInYear(year: number): 366 | 365;
-/**
- * Get the number of days in the given month and year.
- * @param year The date year
- * @param month The date month
- * @returns {number} Number of days in month
- */
-export declare function daysInMonth(year: number, month: number): number | null;
-/**
- * Gets the number of weeks according to locale in the current moment's year.
- * @param {number} weekYear The the date year
- * @returns {number}
- */
-export declare function weeksInYear(weekYear: number): 53 | 52;
+export declare function addDuration(date: string | number | Date, duration: number | TDuration | Duration, exact?: boolean): Date;
+export declare function subtract(date: string | number | Date, duration: TDuration, exact?: boolean): Date;
