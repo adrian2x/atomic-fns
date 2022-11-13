@@ -26,10 +26,12 @@ export class IntlDate {
         return new IntlDate(seconds * 1000);
     }
     /**
-     * Creates a new `IntlDate` tied to the specified locale (default is system locale).
+     * Creates a new `IntlDate` in local time and specified locale (default is system locale).
      * **Note:** The allowed values for `month` start at 1, which is different from legacy `Date`
-     * @param {DateLike | IntlDate} obj The date value (default is now)
-     * @param {{locale?: string, utc?: boolean}} opts
+     * @param {DateLike | IntlDate} obj The date value (default is current local time)
+     * @param {Object} opts The options for this date
+     * @param {boolean?} opts.utc Converts input or current time to UTC
+     * @param {string?} opts.locale A locale string to use for this date
      * @returns
      */
     constructor(obj, { locale, utc } = {}) {
