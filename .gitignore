@@ -6,7 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 package-lock.json
-build/
+dist/
 docs/
 .firebase
 
@@ -39,7 +39,7 @@ bower_components
 .lock-wscript
 
 # Compiled binary addons (https://nodejs.org/api/addons.html)
-build/Release
+dist/Release
 
 # Dependency directories
 node_modules/

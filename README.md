@@ -53,7 +53,7 @@ You could also import any individual module directly from an html page like this
 <script type="module">
   import {
     namedtuple, FrozenSet, SortedSet, SortedMap
-  } from 'https://unpkg.com/atomic-fns/core/collections';
+  } from 'https://unpkg.com/atomic-fns/collections';
   // your code goes here...
 </script>
 ```

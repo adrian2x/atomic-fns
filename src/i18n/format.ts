@@ -41,56 +41,56 @@ export function getDate(date: string | number | Date, utc = false) {
   return utc ? new Date(dateUTC(fromDate)) : fromDate
 }
 
-const n = 'numeric',
-  s = 'short',
-  l = 'long',
-  dd = '2-digit',
-  TOKEN_MAP = {
-    // weekday
-    '%A': { weekday: l },
-    '%a': { weekday: s },
-    '%aa': { weekday: n },
-    // day
-    '%d': { day: dd },
-    '%-d': { day: n },
-    // month
-    '%m': { month: dd },
-    '%-m': { month: n },
-    '%B': { month: l },
-    '%b': { month: s },
-    '%bb': { month: n },
-    // year
-    '%y': { year: n },
-    '%Y': { year: dd },
-    // hour
-    '%K': { hourCycle: 'h11', hour: dd },
-    '%I': { hourCycle: 'h12', hour: dd },
-    '%-I': { hourCycle: 'h12', hour: n },
-    '%H': { hourCycle: 'h23', hour: dd },
-    '%-H': { hourCycle: 'h23', hour: n },
-    '%k': { hourCycle: 'h24', hour: n },
-    // minutes
-    '%M': { minute: dd },
-    '%-M': { minute: n },
-    // seconds
-    '%S': { second: dd },
-    '%-S': { second: n },
-    // day period
-    '%P': { dayPeriod: l },
-    '%p': { dayPeriod: s },
-    '%pp': { dayPeriod: 'narrow' },
-    // era
-    '%N': { era: l, year: dd },
-    '%n': { era: s, year: dd },
-    '%nn': { era: n, year: 'narrow' },
-    // timeZoneName
-    '%Z': { timeZoneName: 'longGeneric', year: dd },
-    '%-Z': { timeZoneName: 'shortGeneric', year: dd },
-    '%z': { timeZoneName: 'longOffset', year: dd },
-    '%-z': { timeZoneName: 'shortOffset', year: dd },
-    '%ZZ': { timeZoneName: l, year: dd },
-    '%-ZZ': { timeZoneName: s, year: dd }
-  }
+const n = 'numeric'
+const s = 'short'
+const l = 'long'
+const dd = '2-digit'
+const TOKEN_MAP = {
+  // weekday
+  '%A': { weekday: l },
+  '%a': { weekday: s },
+  '%aa': { weekday: n },
+  // day
+  '%d': { day: dd },
+  '%-d': { day: n },
+  // month
+  '%m': { month: dd },
+  '%-m': { month: n },
+  '%B': { month: l },
+  '%b': { month: s },
+  '%bb': { month: n },
+  // year
+  '%y': { year: n },
+  '%Y': { year: dd },
+  // hour
+  '%K': { hourCycle: 'h11', hour: dd },
+  '%I': { hourCycle: 'h12', hour: dd },
+  '%-I': { hourCycle: 'h12', hour: n },
+  '%H': { hourCycle: 'h23', hour: dd },
+  '%-H': { hourCycle: 'h23', hour: n },
+  '%k': { hourCycle: 'h24', hour: n },
+  // minutes
+  '%M': { minute: dd },
+  '%-M': { minute: n },
+  // seconds
+  '%S': { second: dd },
+  '%-S': { second: n },
+  // day period
+  '%P': { dayPeriod: l },
+  '%p': { dayPeriod: s },
+  '%pp': { dayPeriod: 'narrow' },
+  // era
+  '%N': { era: l, year: dd },
+  '%n': { era: s, year: dd },
+  '%nn': { era: n, year: 'narrow' },
+  // timeZoneName
+  '%Z': { timeZoneName: 'longGeneric', year: dd },
+  '%-Z': { timeZoneName: 'shortGeneric', year: dd },
+  '%z': { timeZoneName: 'longOffset', year: dd },
+  '%-z': { timeZoneName: 'shortOffset', year: dd },
+  '%ZZ': { timeZoneName: l, year: dd },
+  '%-ZZ': { timeZoneName: s, year: dd }
+}
 
 const HOUR_PARTS = { '%I': 1, '%-I': 1, '%K': 1, '%k': 1 }
 const ERA_PARTS = { '%n': 1, '%N': 1, '%nn': 1 }
@@ -107,14 +107,14 @@ const formatter = (locale: string, opts) => new Intl.DateTimeFormat(locale, opts
  * @see {@link https://strftime.org/ strftime format}
  */
 export function format(fmt: string, date: number | Date, locale?) {
-  let results: string[] = [],
-    dayPeriod: string = '',
-    dayPeriodIndex = -1
+  const results: string[] = []
+  let dayPeriod: string = ''
+  let dayPeriodIndex = -1
   for (let i = 0; i < fmt.length; i++) {
     let part = fmt[i]
     if (part === '%') {
       // check for escaped '%'
-      if (fmt[++i] == '%') {
+      if (fmt[++i] === '%') {
         results.push('%')
         continue
       }
@@ -128,7 +128,7 @@ export function format(fmt: string, date: number | Date, locale?) {
       while (i < fmt.length - 1 && fmt[i + 1] === fmt[i]) part += fmt[++i]
 
       if (HOUR_PARTS[part]) {
-        let res = formatter(locale, TOKEN_MAP[part]).format(date).split(' ')
+        const res = formatter(locale, TOKEN_MAP[part]).format(date).split(' ')
         // save the AM/PM for the correct spot
         results.push(res[0])
         dayPeriod = res[1]
@@ -144,7 +144,7 @@ export function format(fmt: string, date: number | Date, locale?) {
 
       if (ERA_PARTS[part] || TZ_PARTS[part]) {
         // the formatting includes the date/year so we take what comes after
-        let res = formatter(locale, TOKEN_MAP[part]).format(date).split(' ')
+        const res = formatter(locale, TOKEN_MAP[part]).format(date).split(' ')
         results.push(res.slice(1).join(' '))
         continue
       }

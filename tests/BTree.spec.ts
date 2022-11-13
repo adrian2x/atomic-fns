@@ -1,6 +1,6 @@
 import assert from 'assert'
-import { BTree } from '../core/collections/BTree.js'
-import { times } from '../core/itertools/index.js'
+import { BTree } from '../src/collections/BTree.js'
+import { times } from '../src/itertools/index.js'
 
 describe('BTree', () => {
   it('get', () => {

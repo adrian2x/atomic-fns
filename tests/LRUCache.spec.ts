@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { LRUCache } from '../core/collections/LRUCache.js'
+import { LRUCache } from '../src/collections/LRUCache.js'
 
 describe('Cache', () => {
   it('empty', () => {

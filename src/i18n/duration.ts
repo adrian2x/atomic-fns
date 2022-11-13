@@ -3,123 +3,123 @@ import { isNumber, isObject, ValueError } from '../globals/index.js'
 import { parseISODuration, roundTo } from './date/utils.js'
 
 export const lowOrderMatrix = {
-    weeks: {
-      days: 7,
-      hours: 7 * 24,
-      minutes: 7 * 24 * 60,
-      seconds: 7 * 24 * 60 * 60,
-      milliseconds: 7 * 24 * 60 * 60 * 1000
-    },
-    days: {
-      hours: 24,
-      minutes: 24 * 60,
-      seconds: 24 * 60 * 60,
-      milliseconds: 24 * 60 * 60 * 1000
-    },
-    hours: { minutes: 60, seconds: 60 * 60, milliseconds: 60 * 60 * 1000 },
-    minutes: { seconds: 60, milliseconds: 60 * 1000 },
-    seconds: { milliseconds: 1000 }
+  weeks: {
+    days: 7,
+    hours: 7 * 24,
+    minutes: 7 * 24 * 60,
+    seconds: 7 * 24 * 60 * 60,
+    milliseconds: 7 * 24 * 60 * 60 * 1000
   },
-  casualMatrix = {
-    years: {
-      quarters: 4,
-      months: 12,
-      weeks: 52,
-      days: 365,
-      hours: 365 * 24,
-      minutes: 365 * 24 * 60,
-      seconds: 365 * 24 * 60 * 60,
-      milliseconds: 365 * 24 * 60 * 60 * 1000
-    },
-    quarters: {
-      months: 3,
-      weeks: 13,
-      days: 91,
-      hours: 91 * 24,
-      minutes: 91 * 24 * 60,
-      seconds: 91 * 24 * 60 * 60,
-      milliseconds: 91 * 24 * 60 * 60 * 1000
-    },
-    months: {
-      weeks: 4,
-      days: 30,
-      hours: 30 * 24,
-      minutes: 30 * 24 * 60,
-      seconds: 30 * 24 * 60 * 60,
-      milliseconds: 30 * 24 * 60 * 60 * 1000
-    },
+  days: {
+    hours: 24,
+    minutes: 24 * 60,
+    seconds: 24 * 60 * 60,
+    milliseconds: 24 * 60 * 60 * 1000
+  },
+  hours: { minutes: 60, seconds: 60 * 60, milliseconds: 60 * 60 * 1000 },
+  minutes: { seconds: 60, milliseconds: 60 * 1000 },
+  seconds: { milliseconds: 1000 }
+}
+export const casualMatrix = {
+  years: {
+    quarters: 4,
+    months: 12,
+    weeks: 52,
+    days: 365,
+    hours: 365 * 24,
+    minutes: 365 * 24 * 60,
+    seconds: 365 * 24 * 60 * 60,
+    milliseconds: 365 * 24 * 60 * 60 * 1000
+  },
+  quarters: {
+    months: 3,
+    weeks: 13,
+    days: 91,
+    hours: 91 * 24,
+    minutes: 91 * 24 * 60,
+    seconds: 91 * 24 * 60 * 60,
+    milliseconds: 91 * 24 * 60 * 60 * 1000
+  },
+  months: {
+    weeks: 4,
+    days: 30,
+    hours: 30 * 24,
+    minutes: 30 * 24 * 60,
+    seconds: 30 * 24 * 60 * 60,
+    milliseconds: 30 * 24 * 60 * 60 * 1000
+  },
 
-    ...lowOrderMatrix
+  ...lowOrderMatrix
+}
+export const exactDaysInYear = 146097.0 / 400
+export const exactDaysInMonth = 146097.0 / 4800
+export const exactMatrix = {
+  years: {
+    quarters: 4,
+    months: 12,
+    weeks: exactDaysInYear / 7,
+    days: exactDaysInYear,
+    hours: exactDaysInYear * 24,
+    minutes: exactDaysInYear * 24 * 60,
+    seconds: exactDaysInYear * 24 * 60 * 60,
+    milliseconds: exactDaysInYear * 24 * 60 * 60 * 1000
   },
-  exactDaysInYear = 146097.0 / 400,
-  exactDaysInMonth = 146097.0 / 4800,
-  exactMatrix = {
-    years: {
-      quarters: 4,
-      months: 12,
-      weeks: exactDaysInYear / 7,
-      days: exactDaysInYear,
-      hours: exactDaysInYear * 24,
-      minutes: exactDaysInYear * 24 * 60,
-      seconds: exactDaysInYear * 24 * 60 * 60,
-      milliseconds: exactDaysInYear * 24 * 60 * 60 * 1000
-    },
-    quarters: {
-      months: 3,
-      weeks: exactDaysInYear / 28,
-      days: exactDaysInYear / 4,
-      hours: (exactDaysInYear * 24) / 4,
-      minutes: (exactDaysInYear * 24 * 60) / 4,
-      seconds: (exactDaysInYear * 24 * 60 * 60) / 4,
-      milliseconds: (exactDaysInYear * 24 * 60 * 60 * 1000) / 4
-    },
-    months: {
-      weeks: exactDaysInMonth / 7,
-      days: exactDaysInMonth,
-      hours: exactDaysInMonth * 24,
-      minutes: exactDaysInMonth * 24 * 60,
-      seconds: exactDaysInMonth * 24 * 60 * 60,
-      milliseconds: exactDaysInMonth * 24 * 60 * 60 * 1000
-    },
+  quarters: {
+    months: 3,
+    weeks: exactDaysInYear / 28,
+    days: exactDaysInYear / 4,
+    hours: (exactDaysInYear * 24) / 4,
+    minutes: (exactDaysInYear * 24 * 60) / 4,
+    seconds: (exactDaysInYear * 24 * 60 * 60) / 4,
+    milliseconds: (exactDaysInYear * 24 * 60 * 60 * 1000) / 4
+  },
+  months: {
+    weeks: exactDaysInMonth / 7,
+    days: exactDaysInMonth,
+    hours: exactDaysInMonth * 24,
+    minutes: exactDaysInMonth * 24 * 60,
+    seconds: exactDaysInMonth * 24 * 60 * 60,
+    milliseconds: exactDaysInMonth * 24 * 60 * 60 * 1000
+  },
 
-    ...lowOrderMatrix
-  },
-  UNITS_PLURAL = {
-    year: 'years',
-    years: 'years',
-    quarter: 'quarters',
-    quarters: 'quarters',
-    month: 'months',
-    months: 'months',
-    week: 'weeks',
-    weeks: 'weeks',
-    day: 'days',
-    days: 'days',
-    hour: 'hours',
-    hours: 'hours',
-    minute: 'minutes',
-    minutes: 'minutes',
-    second: 'seconds',
-    seconds: 'seconds',
-    millisecond: 'milliseconds',
-    milliseconds: 'milliseconds'
-  },
-  orderedUnits = [
-    'years',
-    'quarters',
-    'months',
-    'weeks',
-    'days',
-    'hours',
-    'minutes',
-    'seconds',
-    'milliseconds'
-  ],
-  reverseUnits = orderedUnits.slice(0).reverse()
+  ...lowOrderMatrix
+}
+export const UNITS_PLURAL = {
+  year: 'years',
+  years: 'years',
+  quarter: 'quarters',
+  quarters: 'quarters',
+  month: 'months',
+  months: 'months',
+  week: 'weeks',
+  weeks: 'weeks',
+  day: 'days',
+  days: 'days',
+  hour: 'hours',
+  hours: 'hours',
+  minute: 'minutes',
+  minutes: 'minutes',
+  second: 'seconds',
+  seconds: 'seconds',
+  millisecond: 'milliseconds',
+  milliseconds: 'milliseconds'
+}
+export const orderedUnits = [
+  'years',
+  'quarters',
+  'months',
+  'weeks',
+  'days',
+  'hours',
+  'minutes',
+  'seconds',
+  'milliseconds'
+]
+export const reverseUnits = orderedUnits.slice(0).reverse()
 
 export type DurationUnit = keyof typeof UNITS_PLURAL
 
-export type TDuration = {
+export interface TDuration {
   years?: number
   months?: number
   weeks?: number
@@ -131,7 +131,7 @@ export type TDuration = {
 }
 
 function normalizeUnits(obj) {
-  let vals = {}
+  const vals = {}
   for (const unit of Object.keys(obj)) {
     vals[UNITS_PLURAL[unit]] = obj[unit]
   }
@@ -209,8 +209,8 @@ export class Duration {
   }
 
   add(duration: TDuration) {
-    const dur = new Duration(duration),
-      result = {}
+    const dur = new Duration(duration)
+    const result = {}
 
     for (const k of orderedUnits) {
       if (dur.values[k] || this.values[k]) {
@@ -285,10 +285,10 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
 
     units = units.map((u) => UNITS_PLURAL[u.toLowerCase()])
 
-    let built = {} as TDuration,
-      accumulated = {} as TDuration,
-      vals = this.toObject(),
-      lastUnit
+    const built: TDuration = {}
+    const accumulated: TDuration = {}
+    const vals = this.toObject()
+    let lastUnit
 
     for (const toUnit of orderedUnits) {
       if (units.includes(toUnit)) {
@@ -353,8 +353,8 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   }
 
   rescale() {
-    let dur = this.normalize().shiftToAll()
-    let vals = removeZeroes(dur.values)
+    const dur = this.normalize().shiftToAll()
+    const vals = removeZeroes(dur.values)
     return new Duration(vals)
   }
 
@@ -417,12 +417,12 @@ function antiTrunc(n) {
 
 // NB: mutates parameters
 function convert(matrix, sources, fromUnit, result, toUnit) {
-  const conv = matrix[toUnit][fromUnit],
-    raw = sources[fromUnit] / conv,
-    sameSign = Math.sign(raw) === Math.sign(result[toUnit]),
-    // ok, so this is wild, but see the matrix in the tests
-    added =
-      !sameSign && result[toUnit] !== 0 && Math.abs(raw) <= 1 ? antiTrunc(raw) : Math.trunc(raw)
+  const conv = matrix[toUnit][fromUnit]
+  const raw = sources[fromUnit] / conv
+  const sameSign = Math.sign(raw) === Math.sign(result[toUnit])
+  // ok, so this is wild, but see the matrix in the tests
+  const added =
+    !sameSign && result[toUnit] !== 0 && Math.abs(raw) <= 1 ? antiTrunc(raw) : Math.trunc(raw)
   result[toUnit] += added
   sources[fromUnit] -= added * conv
 }
