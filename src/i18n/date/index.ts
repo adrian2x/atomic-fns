@@ -1,6 +1,6 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
-import { format, getDate } from '../format.js'
+import { format, asDate } from '../format.js'
 import {
   asNumber,
   DateLike,
@@ -59,7 +59,7 @@ export class IntlDate {
     }
 
     if (typeof obj === 'string' || typeof obj === 'number' || obj instanceof Date) {
-      this.self = getDate(obj, utc)
+      this.self = asDate(obj, utc)
     } else if (isObject(obj)) {
       let { year, month, day, hour, minute, second, millisecond } = obj
 
@@ -85,15 +85,20 @@ export class IntlDate {
         )
       }
     } else {
-      this.self = getDate(new Date(obj), utc)
+      this.self = asDate(obj, utc)
     }
 
     return this
   }
 
-  /** Get the this date's year. */
+  /** Get the date's year. */
   get year() {
     return this.self.getFullYear()
+  }
+
+  /** Get the this date's month as a number from 1 to 12, inclusive. */
+  get month() {
+    return this.self.getMonth() + 1
   }
 
   /** Returns the weekday as a number between 1 and 7, inclusive, where Monday is 1 and Sunday is 7. */
@@ -131,11 +136,6 @@ export class IntlDate {
     return this.self.toString() !== INVALID_DATE_STRING
   }
 
-  /** Get the this date's month as a number from 1 to 12, inclusive. */
-  get month() {
-    return this.self.getMonth() + 1
-  }
-
   /** Get the number of days in this date's month. */
   daysInMonth() {
     return daysInMonth(this.year, this.month)
@@ -162,7 +162,7 @@ export class IntlDate {
    * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat Intl.DateTimeFormat()}
    */
   toString(opts?: Intl.DateTimeFormatOptions) {
-    return this.self.toLocaleDateString(this.locale, opts)
+    return this.self.toLocaleString(this.locale, opts)
   }
 
   /**

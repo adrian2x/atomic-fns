@@ -96,23 +96,6 @@ export function roundTo(number: number, digits: number, towardZero = false) {
 // DATE BASICS
 
 /**
- * Converts the given date to a UTC timestamp.
- * @param {Date} date
- * @returns {number} The milliseconds between the specified date and the UTC Epoch date.
- */
-export function dateUTC(date: Date) {
-  return Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-    date.getUTCHours(),
-    date.getUTCMinutes(),
-    date.getUTCSeconds(),
-    date.getUTCMilliseconds()
-  )
-}
-
-/**
  * Returns the minimum (most distant past) of the given date values.
  * @template T
  * @param {Array<T>} dates

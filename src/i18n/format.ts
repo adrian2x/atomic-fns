@@ -1,5 +1,3 @@
-import { dateUTC } from './date/utils.js'
-
 const NATIVE_DATE =
   /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
 
@@ -9,17 +7,13 @@ const NATIVE_DATE =
  * @param {?boolean} [utc=false] Interprets the given value as a UTC date
  * @returns {Date} The new date object
  */
-export function getDate(date: string | number | Date, utc = false) {
+export function asDate(date: string | number | Date, utc = false) {
   if (date === null) {
     return new Date(NaN)
   }
 
-  if (!date) {
-    return new Date()
-  }
-
-  if (date instanceof Date) {
-    return utc ? new Date(dateUTC(date)) : date
+  if (date == undefined) {
+    date = Date.now()
   }
 
   if (typeof date === 'string' && !/Z$/i.test(date)) {
@@ -38,7 +32,16 @@ export function getDate(date: string | number | Date, utc = false) {
   }
 
   const fromDate = new Date(date)
-  return utc ? new Date(dateUTC(fromDate)) : fromDate
+  if (utc) {
+    fromDate.setFullYear(fromDate.getUTCFullYear())
+    fromDate.setMonth(fromDate.getUTCMonth())
+    fromDate.setDate(fromDate.getUTCDate())
+    fromDate.setHours(fromDate.getUTCHours())
+    fromDate.setMinutes(fromDate.getUTCMinutes())
+    fromDate.setSeconds(fromDate.getUTCSeconds())
+    fromDate.setMilliseconds(fromDate.getUTCMilliseconds())
+  }
+  return fromDate
 }
 
 const n = 'numeric'
