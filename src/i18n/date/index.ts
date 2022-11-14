@@ -1,6 +1,6 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
-import { format, asDate } from '../format.js'
+import { asDate, format, INVALID_DATE_STRING } from '../format.js'
 import {
   asNumber,
   DateLike,
@@ -15,12 +15,9 @@ import {
 
 export { daysInMonth, daysInYear, isLeapYear, maxDate, minDate, weeksInYear }
 
-const INVALID_DATE_STRING = 'Invalid Date'
-
 /**
- * Creates a date tied to a given locale (default system locale) which can be formatted in that locale's language using the native {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis} directly or using a formatting string compatible with `strftime`.
+ * Creates a date tied to a given locale (default system locale) which can be formatted in that locale's language using the native {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis} directly or using a formatting string.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis}
- * @see {@link https://strftime.org/ strftime format}
  */
 export class IntlDate {
   private self: Date
@@ -166,12 +163,12 @@ export class IntlDate {
   }
 
   /**
-   * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as C / Python's strftime().
+   * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as moments.
    * @param {string} str The format string to use
-   * @see {@link https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes Format Codes}
+   * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
    * @example
 ```js
-new IntlDate().format('%m/%d/%y') // '10/31/2022'
+new IntlDate().format('MM/DD/YYYY') // '10/31/2022'
 ```
    */
   format(str: string) {
@@ -283,12 +280,12 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   /** Returns the timezone string name  */
   zoneName() {
-    return this.format('%Z')
+    return this.format('zzz')
   }
 
   /** Returns the timezone GMT offset  */
   offset() {
-    return this.format('%z')
+    return this.format('ZZ')
   }
 
   /** Returns the difference in minutes between this date and UTC  */
@@ -413,7 +410,9 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
   diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false) {
     let dt = new IntlDate(other)
     let dur = new Duration(this.getTime() - dt.getTime(), exact)
-    return dur.total(unit)
+    let total = dur.total(unit)
+    if (!exact) total = Math.trunc(total)
+    return total
   }
 
   // TODO: Parsing

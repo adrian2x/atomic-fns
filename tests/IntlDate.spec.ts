@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { IntlDate } from '../src/i18n/index.js'
+import { IntlDate, strftime } from '../src/i18n/index.js'
 
 describe('IntlDate', () => {
   it('now', () => {
@@ -98,7 +98,7 @@ describe('IntlDate', () => {
 
   it('toString', () => {
     let date = new Date(1964, 6, 2)
-    let testDate = new IntlDate(date)
+    let testDate = new IntlDate('1964-07-02')
     assert(testDate.toString() === date.toLocaleString())
   })
 
@@ -114,11 +114,12 @@ describe('IntlDate', () => {
   })
 
   it('isLeapYear', () => {
-    let testDate = new IntlDate(new Date(2020, 1, 29))
+    let testDate = new IntlDate('2020-02-29')
     assert(testDate.isLeapYear())
     assert(testDate.month == 2)
     assert(testDate.day == 29)
-    testDate = new IntlDate(new Date(2016, 1, 29))
+
+    testDate = new IntlDate('2016-02-29')
     assert(testDate.isLeapYear())
     assert(testDate.month == 2)
     assert(testDate.day == 29)
@@ -126,7 +127,7 @@ describe('IntlDate', () => {
 
   it('isBefore', () => {
     let date = new Date(1964, 6, 2)
-    let testDate = new IntlDate(date)
+    let testDate = new IntlDate('1964-07-02')
     assert(!testDate.isBefore(date))
     assert(testDate.isBefore(new Date()))
   })
@@ -140,14 +141,14 @@ describe('IntlDate', () => {
 
   it('isSame', () => {
     let date = new Date(1964, 6, 2)
-    let testDate = new IntlDate(date)
+    let testDate = new IntlDate('1964-07-02')
     assert(testDate.isSame(testDate))
     assert(testDate.isSame(date))
   })
 
   it('compare', () => {
     let date = new Date(1964, 6, 2)
-    let testDate = new IntlDate(date)
+    let testDate = new IntlDate('1964-07-02')
     assert(testDate.compare(testDate) === 0)
     assert(testDate.compare(date) === 0)
     assert(testDate.compare(new Date()) < 0)
@@ -155,30 +156,187 @@ describe('IntlDate', () => {
   })
 
   it('startOf', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = new IntlDate(date)
-    assert(testDate.startOf('year').year === 1964)
-    assert(testDate.startOf('year').month === 1)
-    assert(testDate.startOf('year').day === 1)
-    assert(testDate.startOf('month').month === 7)
-    assert(testDate.startOf('month').day === 1)
-    assert(testDate.startOf('day').day === 2)
-    assert(testDate.startOf('day').hour === 0)
-    assert(testDate.startOf('day').minute === 0)
-    assert(testDate.startOf('day').second === 0)
+    let date = new IntlDate('1964-07-02')
+    assert(date.startOf('year').year === 1964)
+    assert(date.startOf('year').month === 1)
+    assert(date.startOf('year').day === 1)
+    assert(date.startOf('month').month === 7)
+    assert(date.startOf('month').day === 1)
+    assert(date.startOf('day').day === 2)
+    assert(date.startOf('day').hour === 0)
+    assert(date.startOf('day').minute === 0)
+    assert(date.startOf('day').second === 0)
   })
 
   it('endOf', () => {
-    let date = new Date(2020, 1, 29)
-    let testDate = new IntlDate(date)
-    assert(testDate.endOf('year').year === 2020)
-    assert(testDate.endOf('year').month === 12)
-    assert(testDate.endOf('year').day === 31)
-    assert(testDate.endOf('month').month === 2)
-    assert(testDate.endOf('month').day === 29)
-    assert(testDate.endOf('day').day === 29)
-    assert(testDate.endOf('day').hour === 23)
-    assert(testDate.endOf('day').minute === 59)
-    assert(testDate.endOf('day').second === 59)
+    let date = new IntlDate('2020-02-29')
+    assert(date.endOf('year').year === 2020)
+    assert(date.endOf('year').month === 12)
+    assert(date.endOf('year').day === 31)
+    assert(date.endOf('month').month === 2)
+    assert(date.endOf('month').day === 29)
+    assert(date.endOf('day').day === 29)
+    assert(date.endOf('day').hour === 23)
+    assert(date.endOf('day').minute === 59)
+    assert(date.endOf('day').second === 59)
+  })
+
+  it('diff', () => {
+    let start = new IntlDate('2020-02-29')
+    let end = start.add({ years: 1 })
+
+    assert(start.isBefore(end))
+    assert(end.isAfter(start))
+    assert(end.diff(start, 'years') === 1)
+    assert(end.diff(start, 'months') === 12)
+    assert(end.diff(start, 'months', true) === 12.024887574693526)
+    assert(end.diff(start, 'days') === 366)
+    assert(end.diff(start, 'days', true) === 366)
+  })
+
+  it('to', () => {
+    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    let start = new IntlDate(date)
+    let end = new IntlDate('2020-02-29')
+    assert(start.to(end, 'years') === 'in 55 years')
+    assert(end.to(start, 'years') === '55 years ago')
+  })
+
+  it('from', () => {
+    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    let start = new IntlDate(date)
+    let end = new IntlDate('2020-02-29')
+    assert(start.from(end, 'years') === '55 years ago')
+    assert(end.from(start, 'years') === 'in 55 years')
+  })
+
+  it('toNow', () => {
+    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    let start = new IntlDate(date)
+    let end = new Date()
+    let years = end.getFullYear() - start.year
+    assert(start.toNow('years') === `in ${years} years`)
+  })
+
+  it('fromNow', () => {
+    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    let start = new IntlDate(date)
+    let end = new Date()
+    let years = end.getFullYear() - start.year
+    assert(start.fromNow('years') === `${years} years ago`)
+  })
+
+  it('add', () => {
+    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    let start = new IntlDate(date)
+    let end = start.add({ years: 5, months: 5, days: 30 })
+    assert(start.isBefore(end))
+    assert(end.isAfter(start))
+    assert(end.year === 1970)
+    assert(end.month === 1)
+    assert(end.day === 2)
+    assert(end.hour === 1)
+    assert(end.minute === 30)
+    assert(end.second === 0)
+    assert(end.millisecond === 0)
+  })
+
+  it('subtract', () => {
+    let date = new Date(1970, 0, 2, 1, 30, 0, 0)
+    let start = new IntlDate(date)
+    let end = start.subtract({ years: 5, months: 5, days: 30 })
+    assert(start.isAfter(end))
+    assert(end.isBefore(start))
+    assert(end.year === 1964)
+    assert(end.month === 7)
+    assert(end.day === 2)
+    assert(end.hour === 2)
+    assert(end.minute === 30)
+    assert(end.second === 0)
+    assert(end.millisecond === 0)
+  })
+
+  it('format', () => {
+    let date = new Date(2020, 1, 1, 16, 1, 1, 1)
+    let d = new IntlDate(date, { utc: true, locale: 'en' })
+    assert(d.format('YYYY MMMM DD dddd hh:mm:ss A') === '2020 February 01 Saturday 09:01:01 PM')
+    assert(d.format('YYYY MMMM DD dddd h:m:s a') === '2020 February 01 Saturday 9:1:1 pm')
+    assert(d.format('YYYY MMM DD ddd HH:mm:ss') === '2020 Feb 01 Sat 21:01:01')
+    assert(d.format('YYYY MMM DD ddd H:m:s') === '2020 Feb 01 Sat 21:1:1')
+    assert(d.format('YYYY MMM DD ddd hh:mm:ss A') === '2020 Feb 01 Sat 09:01:01 PM')
+    assert(d.format('YYYY MMM DD ddd HH:m:s a') === '2020 Feb 01 Sat 21:1:1 pm')
+    assert(
+      d.format('ddd, MMM DD, YYYY NNNN, hh:mm:ss A') ===
+        'Sat, Feb 01, 2020 Anno Domini, 09:01:01 PM'
+    )
+    assert(d.format('ddd, MMM DD, YYYY NN, hh:mm:ss A') === 'Sat, Feb 01, 2020 AD, 09:01:01 PM')
+    assert(d.format('ddd, MMM DD, YYYY HH:mm:ss') === 'Sat, Feb 01, 2020 21:01:01')
+    assert(
+      d.format('YYYY MMM DD ddd h:mm:ss A zzz') ===
+        '2020 Feb 01 Sat 9:01:01 PM Eastern Standard Time'
+    )
+    assert(d.format('YYYY MMM DD ddd h:mm:ss A z') === '2020 Feb 01 Sat 9:01:01 PM EST')
+  })
+
+  it('strftime format', () => {
+    let date = new Date(2020, 1, 1, 16, 1, 1, 1)
+    let d = new IntlDate(date, { utc: true, locale: 'en' })
+    date = d.toDate()
+
+    assert(strftime('%A', date) === 'Saturday')
+    assert(strftime('%a', date) === 'Sat')
+
+    assert(strftime('%d', date) === '01')
+    assert(strftime('%-d', date) === '1')
+
+    assert(strftime('%m', date) === '02')
+    assert(strftime('%-m', date) === '2')
+    assert(strftime('%B', date) === 'February')
+    assert(strftime('%b', date) === 'Feb')
+    assert(strftime('%bb', date) === '2')
+
+    assert(strftime('%Y', date) === '20')
+    assert(strftime('%y', date) === '2020')
+
+    assert(strftime('%N', date) === 'Anno Domini')
+    assert(strftime('%n', date) === 'AD')
+
+    assert(strftime('%I', date) === '09')
+    assert(strftime('%-I', date) === '9')
+    assert(strftime('%H', date) === '21')
+    assert(strftime('%-H', date) === '21')
+    assert(strftime('%K', date) === '09')
+    assert(strftime('%k', date) === '21')
+
+    assert(strftime('%M', date) === '01')
+    assert(strftime('%-M', date) === '1')
+
+    assert(strftime('%S', date) === '01')
+    assert(strftime('%-S', date) === '1')
+
+    assert(strftime('%pp', date) === 'at night')
+
+    assert(strftime('%Z', date) === 'Eastern Standard Time')
+    assert(strftime('%-Z', date) === 'EST')
+
+    assert(strftime('%A, %d/%m/%y', date) === 'Saturday, 01/02/2020')
+    assert(strftime('%y-%m-%d, %A', date) === '2020-02-01, Saturday')
+    assert(strftime('%y %B %d %A %I:%M:%S %P', date) === '2020 February 01 Saturday 09:01:01 PM')
+    assert(strftime('%y %B %d %A %-I:%-M:%-S %p', date) === '2020 February 01 Saturday 9:1:1 PM')
+    assert(strftime('%y %b %d %a %H:%M:%S', date) === '2020 Feb 01 Sat 21:01:01')
+    assert(strftime('%y %b %d %a %-H:%-M:%-S', date) === '2020 Feb 01 Sat 21:1:1')
+    assert(strftime('%y %b %d %a %K:%M:%S %P', date) === '2020 Feb 01 Sat 09:01:01 PM') // %p shows on 12h clock
+    assert(strftime('%y %b %d %a %k:%-M:%-S %p', date) === '2020 Feb 01 Sat 21:1:1') // %p No effect on 24h
+    assert(
+      strftime('%a, %b %d, %y %N, %K:%M:%S %P', date) ===
+        'Sat, Feb 01, 2020 Anno Domini, 09:01:01 PM'
+    )
+    assert(strftime('%a, %b %d, %y %n, %K:%M:%S %P', date) === 'Sat, Feb 01, 2020 AD, 09:01:01 PM')
+    assert(strftime('%a, %b %d, %y %k:%M:%S %P', date) === 'Sat, Feb 01, 2020 21:01:01') // %p No effect on 24h
+    assert(
+      strftime('%y %b %d %a %-I:%M:%S %P %Z', date) ===
+        '2020 Feb 01 Sat 9:01:01 PM Eastern Standard Time'
+    )
+    assert(strftime('%y %b %d %a %-I:%M:%S %P %-Z', date) === '2020 Feb 01 Sat 9:01:01 PM EST')
   })
 })
