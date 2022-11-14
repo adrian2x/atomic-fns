@@ -3,7 +3,7 @@ const NATIVE_DATE =
 const REGEX_PARSE =
   /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
 const REGEX_FORMAT =
-  /\[([^\]]+)]|Y{1,4}|M{1,4}|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|SSS/g
+  /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
 
@@ -182,22 +182,7 @@ export function format(formatStr: string, date: Date, locale?: string) {
   const str = formatStr || FORMAT_DEFAULT
   const zoneStr = padZoneStr(date)
 
-  const matches = {
-    N: formatPart(locale, 'N', date),
-    NN: formatPart(locale, 'NN', date),
-    NNN: formatPart(locale, 'NNN', date),
-    NNNN: formatPart(locale, 'NNNN', date),
-    YY: String(date.getFullYear()).slice(-2),
-    YYYY: date.getFullYear(),
-    M: date.getMonth() + 1,
-    MM: padStart(date.getMonth() + 1, 2, '0'),
-    MMM: formatter(locale, TOKENS.MMM).format(date),
-    MMMM: formatter(locale, TOKENS.MMMM).format(date),
-    D: date.getDate(),
-    DD: padStart(date.getDate(), 2, '0'),
-    d: date.getDay(),
-    ddd: formatter(locale, TOKENS.ddd).format(date),
-    dddd: formatter(locale, TOKENS.dddd).format(date),
+  const time = {
     H: date.getHours(),
     HH: padStart(date.getHours(), 2, '0'),
     h: formatHour(date.getHours(), 1),
@@ -209,10 +194,42 @@ export function format(formatStr: string, date: Date, locale?: string) {
     s: date.getSeconds(),
     ss: padStart(date.getSeconds(), 2, '0'),
     SSS: padStart(date.getMilliseconds(), 3, '0'),
+    X: Math.floor(date.getTime() / 1000),
+    x: date.getTime()
+  }
+
+  const matches = {
+    ...time,
+    N: formatPart(locale, 'N', date),
+    NN: formatPart(locale, 'NN', date),
+    NNN: formatPart(locale, 'NNN', date),
+    NNNN: formatPart(locale, 'NNNN', date),
+    YY: String(date.getFullYear()).slice(-2),
+    YYYY: date.getFullYear(),
+    M: date.getMonth() + 1,
+    MM: padStart(date.getMonth() + 1, 2, '0'),
+    MMM: formatter(locale, TOKENS.MMM).format(date),
+    MMMM: formatter(locale, TOKENS.MMMM).format(date),
+    Q: Math.ceil((date.getMonth() + 1) / 3),
+    D: date.getDate(),
+    DD: padStart(date.getDate(), 2, '0'),
+    d: date.getDay(),
+    ddd: formatter(locale, TOKENS.ddd).format(date),
+    dddd: formatter(locale, TOKENS.dddd).format(date),
     Z: formatPart(locale, 'Z', date),
     ZZ: formatPart(locale, 'ZZ', date),
     z: formatPart(locale, 'z', date),
-    zzz: formatPart(locale, 'zzz', date)
+    zzz: formatPart(locale, 'zzz', date),
+    LT: `${time.h}:${time.mm} ${time.A}`,
+    LTS: `${time.h}:${time.mm}:${time.ss} ${time.A}`,
+    L: formatter(locale, DATE_SHORT_DD).format(date),
+    LL: formatter(locale, DATE_FULL).format(date),
+    LLL: formatter(locale, DATE_LONG_TIME).format(date),
+    LLLL: formatter(locale, DATE_HUGE).format(date),
+    l: formatter(locale, DATE_SHORT).format(date),
+    ll: formatter(locale, DATE_MED).format(date),
+    lll: formatter(locale, DATE_MED_TIME).format(date),
+    llll: formatter(locale, DATE_MED_WITH_WEEKDAY).format(date)
   }
 
   return str.replace(REGEX_FORMAT, (match, $1) => $1 || matches[match] || zoneStr.replace(':', '')) // 'ZZ'
@@ -288,54 +305,89 @@ export function strftime(fmt: string, date: number | Date, locale?) {
 
 const DATETIME_DEFAULT = {}
 
-/** 10/14/1983 */
+/** L: 09/04/1983 */
+const DATE_SHORT_DD = {
+  year: n,
+  month: dd,
+  day: dd
+}
+
+/** l: 9/4/1983 */
 const DATE_SHORT = {
   year: n,
   month: n,
   day: n
 }
 
-/** Oct 14, 1983 */
+/** ll: Oct 14, 1983 */
 const DATE_MED = {
   year: n,
   month: s,
   day: n
 }
 
-/** Fri, Oct 14, 1983 */
-const DATE_MED_WITH_WEEKDAY = {
-  year: n,
-  month: s,
-  day: n,
-  weekday: s
-}
-
-/** October 14, 1983 */
+/** LL: October 14, 1983 */
 const DATE_FULL = {
   year: n,
   month: l,
   day: n
 }
 
-/** Tuesday, October 14, 1983 */
+/** lll: Oct 14, 1983 8:30 PM */
+const DATE_MED_TIME = {
+  year: n,
+  month: s,
+  day: n,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** LLL: October 14, 1983 8:30 PM */
+const DATE_LONG_TIME = {
+  year: n,
+  month: l,
+  day: n,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** llll: Fri, Oct 14, 1983, 8:30 PM */
+const DATE_MED_WITH_WEEKDAY = {
+  year: n,
+  month: s,
+  day: n,
+  weekday: s,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** LLLL: Tuesday, October 14, 1983, 8:30 PM */
 const DATE_HUGE = {
   year: n,
   month: l,
   day: n,
-  weekday: l
+  weekday: l,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
 }
 
-/** 09:30 AM */
+/** LT: 09:30 AM */
 const TIME_SIMPLE = {
   hour: n,
-  minute: n
+  minute: n,
+  hourCycle: 'h12'
 }
 
-/** 09:30:23 AM */
+/** LTS: 09:30:23 AM */
 const TIME_WITH_SECONDS = {
   hour: n,
   minute: n,
-  second: n
+  second: n,
+  hourCycle: 'h12'
 }
 
 /** 09:30:23 AM EDT */
@@ -343,7 +395,8 @@ const TIME_WITH_SHORT_OFFSET = {
   hour: n,
   minute: n,
   second: n,
-  timeZoneName: s
+  timeZoneName: s,
+  hourCycle: 'h12'
 }
 
 /** 09:30:23 AM Eastern Daylight Time */
@@ -351,7 +404,8 @@ const TIME_WITH_LONG_OFFSET = {
   hour: n,
   minute: n,
   second: n,
-  timeZoneName: l
+  timeZoneName: l,
+  hourCycle: 'h12'
 }
 
 /** 09:30 */
@@ -393,7 +447,8 @@ const DATETIME_SHORT = {
   month: n,
   day: n,
   hour: n,
-  minute: n
+  minute: n,
+  hourCycle: 'h12'
 }
 
 /** 10/14/1983, 9:30:33 AM */
@@ -403,7 +458,8 @@ const DATETIME_SHORT_WITH_SECONDS = {
   day: n,
   hour: n,
   minute: n,
-  second: n
+  second: n,
+  hourCycle: 'h12'
 }
 
 /** Oct 14, 1983, 9:30 AM */
@@ -412,7 +468,8 @@ const DATETIME_MED = {
   month: s,
   day: n,
   hour: n,
-  minute: n
+  minute: n,
+  hourCycle: 'h12'
 }
 
 /** Oct 14, 1983, 9:30:33 AM */
@@ -422,7 +479,8 @@ const DATETIME_MED_WITH_SECONDS = {
   day: n,
   hour: n,
   minute: n,
-  second: n
+  second: n,
+  hourCycle: 'h12'
 }
 
 /** Fri, 14 Oct 1983, 9:30 AM */
@@ -432,7 +490,8 @@ const DATETIME_MED_WITH_WEEKDAY = {
   day: n,
   weekday: s,
   hour: n,
-  minute: n
+  minute: n,
+  hourCycle: 'h12'
 }
 
 /** October 14, 1983, 9:30 AM EDT */
@@ -442,7 +501,8 @@ const DATETIME_FULL = {
   day: n,
   hour: n,
   minute: n,
-  timeZoneName: s
+  timeZoneName: s,
+  hourCycle: 'h12'
 }
 
 /** October 14, 1983, 9:30:33 AM EDT */
@@ -453,7 +513,8 @@ const DATETIME_FULL_WITH_SECONDS = {
   hour: n,
   minute: n,
   second: n,
-  timeZoneName: s
+  timeZoneName: s,
+  hourCycle: 'h12'
 }
 
 /** Friday, October 14, 1983, 9:30 AM Eastern Daylight Time */
@@ -464,7 +525,8 @@ const DATETIME_HUGE = {
   weekday: l,
   hour: n,
   minute: n,
-  timeZoneName: l
+  timeZoneName: l,
+  hourCycle: 'h12'
 }
 
 /** Friday, October 14, 1983, 9:30:33 AM Eastern Daylight Time */
@@ -476,5 +538,6 @@ const DATETIME_HUGE_WITH_SECONDS = {
   hour: n,
   minute: n,
   second: n,
-  timeZoneName: l
+  timeZoneName: l,
+  hourCycle: 'h12'
 }

@@ -25,8 +25,8 @@ export class IntlDate {
   intlRelativeFormat: Intl.RelativeTimeFormat
 
   /** Parses the provided value as UTC date or returns the current UTC date. */
-  static UTC(value?: DateLike) {
-    return new IntlDate(value, { utc: true })
+  static UTC(value?: DateLike, locale?: string) {
+    return new IntlDate(value, { utc: true, locale })
   }
 
   /** Returns the current local date and time.*/
