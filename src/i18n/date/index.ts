@@ -283,13 +283,13 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     return this.format('zzz')
   }
 
-  /** Returns the timezone GMT offset  */
-  offset() {
+  /** Returns the timezone GMT offset as a string  */
+  zone() {
     return this.format('ZZ')
   }
 
-  /** Returns the difference in minutes between this date and UTC  */
-  offsetInMinutes() {
+  /** Returns the difference in `minutes` between this date and UTC  */
+  utcOffset() {
     return this.self.getTimezoneOffset()
   }
 
@@ -480,6 +480,18 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   clone(date?: DateLike) {
     return new IntlDate(date ?? this, { locale: this.locale })
+  }
+
+  static max(...args) {
+    return maxDate.apply(undefined, args)
+  }
+
+  static min(...args) {
+    return minDate.apply(undefined, args)
+  }
+
+  inspect() {
+    return `new IntlDate("${this.toISOString()}")`
   }
 }
 

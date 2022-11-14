@@ -155,6 +155,20 @@ describe('IntlDate', () => {
     assert(new IntlDate().compare(date) > 0)
   })
 
+  it('min', () => {
+    let start = new Date(1964, 6, 2)
+    let end = new IntlDate()
+    assert(IntlDate.min(start, end) === start)
+    assert(IntlDate.min([start, end]) === start)
+  })
+
+  it('max', () => {
+    let start = new Date(1964, 6, 2)
+    let end = new IntlDate()
+    assert(IntlDate.max(start, end) === end)
+    assert(IntlDate.max([start, end]) === end)
+  })
+
   it('startOf', () => {
     let date = new IntlDate('1964-07-02')
     assert(date.startOf('year').year === 1964)
@@ -166,6 +180,11 @@ describe('IntlDate', () => {
     assert(date.startOf('day').hour === 0)
     assert(date.startOf('day').minute === 0)
     assert(date.startOf('day').second === 0)
+    assert(date.startOf('hour').minute === 0)
+    assert(date.startOf('hour').second === 0)
+    assert(date.startOf('minute').second === 0)
+    assert(date.startOf('minute').millisecond === 0)
+    assert(date.startOf('second').millisecond === 0)
   })
 
   it('endOf', () => {
@@ -179,6 +198,11 @@ describe('IntlDate', () => {
     assert(date.endOf('day').hour === 23)
     assert(date.endOf('day').minute === 59)
     assert(date.endOf('day').second === 59)
+    assert(date.endOf('hour').minute === 59)
+    assert(date.endOf('hour').second === 59)
+    assert(date.endOf('minute').second === 59)
+    assert(date.endOf('minute').millisecond === 999)
+    assert(date.endOf('second').millisecond === 999)
   })
 
   it('diff', () => {

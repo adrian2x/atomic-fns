@@ -101,14 +101,19 @@ export function roundTo(number: number, digits: number, towardZero = false) {
  * @param {Array<T>} dates
  * @returns {T} The smallest date of `dates`
  */
+export function minDate<T>(dates: Array<T>): T
 export function minDate<T>(...dates: Array<T>) {
-  let result = dates[0]
+  let ans = dates[0]
+  if (Array.isArray(ans)) {
+    dates = ans
+    ans = ans[0]
+  }
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i].valueOf() < result.valueOf()) {
-      result = dates[i]
+    if (dates[i].valueOf() < ans.valueOf()) {
+      ans = dates[i]
     }
   }
-  return result
+  return ans
 }
 
 /**
@@ -117,14 +122,19 @@ export function minDate<T>(...dates: Array<T>) {
  * @param {Array<T>} dates
  * @returns {T} The largest date of `dates`
  */
+export function maxDate<T>(dates: Array<T>): T
 export function maxDate<T>(...dates: Array<T>) {
-  let result = dates[0]
+  let ans = dates[0]
+  if (Array.isArray(ans)) {
+    dates = ans
+    ans = ans[0]
+  }
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i].valueOf() > result.valueOf()) {
-      result = dates[i]
+    if (dates[i].valueOf() > ans.valueOf()) {
+      ans = dates[i]
     }
   }
-  return result
+  return ans
 }
 
 /**
