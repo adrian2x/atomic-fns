@@ -5,11 +5,13 @@ import {
   asNumber,
   DateLike,
   DateParts,
+  dayOfYear,
   daysInMonth,
   daysInYear,
   isLeapYear,
   maxDate,
   minDate,
+  weekOfYear,
   weeksInYear
 } from './utils.js'
 
@@ -143,14 +145,33 @@ export class IntlDate {
     return daysInYear(this.year)
   }
 
+  dayOfYear() {
+    return dayOfYear(this.toDate())
+  }
+
   /** Returns `true` if this date's year is a leap year. */
   isLeapYear() {
     return isLeapYear(this.year)
   }
 
-  /** Gets the number of weeks according to locale in the current moment's year. */
+  /** Gets the number of weeks according to locale in the current year. */
   weeksInYear() {
     return weeksInYear(this.year)
+  }
+
+  /** Gets the number of weeks in the current year, according to ISO weeks. */
+  isoWeeksInYear() {
+    return weeksInYear(this.year, 1, 4)
+  }
+
+  /** Returns the current week of the year. */
+  week() {
+    return weekOfYear(this.year, this.self.getDay(), this.dayOfYear()).week
+  }
+
+  /** Returns the ISO week of the year. */
+  isoWeek() {
+    return weekOfYear(this.year, this.self.getDay(), this.dayOfYear(), 1, 4).week
   }
 
   /**
@@ -163,7 +184,7 @@ export class IntlDate {
   }
 
   /**
-   * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as moments.
+   * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as {@link https://momentjs.com/docs/#/displaying/format/ moment}.
    * @param {string} str The format string to use
    * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
    * @example
@@ -414,11 +435,6 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     if (!exact) total = Math.trunc(total)
     return total
   }
-
-  // TODO: Parsing
-  // Parse String + Date Format
-  // Parse String + Time Format
-  // Parse String + Format + locale
 
   add(duration: TDuration, exact = false) {
     return this.clone(addDuration(this.self, duration, exact))

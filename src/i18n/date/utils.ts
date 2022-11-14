@@ -192,23 +192,6 @@ export function objToLocalTS(obj: DateParts) {
   return +d
 }
 
-/**
- * Gets the number of weeks according to locale in the current moment's year.
- * @param {number} weekYear The the date year
- * @returns {number}
- */
-export function weeksInYear(weekYear: number) {
-  const p1 =
-      (weekYear +
-        Math.floor(weekYear / 4) -
-        Math.floor(weekYear / 100) +
-        Math.floor(weekYear / 400)) %
-      7,
-    last = weekYear - 1,
-    p2 = (last + Math.floor(last / 4) - Math.floor(last / 100) + Math.floor(last / 400)) % 7
-  return p1 === 4 || p2 === 3 ? 53 : 52
-}
-
 export function untruncateYear(year: number) {
   if (year > 99) {
     return year
@@ -328,4 +311,100 @@ function parse(s, ...patterns) {
 
 export function parseISODuration(s) {
   return parse(s, [isoDuration, extractISODuration])
+}
+
+export function createUTCDate(...args) {
+  let date,
+    y = args[0]
+  // the Date.UTC function remaps years 0-99 to 1900-1999
+  if (y < 100 && y >= 0) {
+    args = Array.from(arguments)
+    // preserve leap years using a full 400 year cycle, then reset
+    args[0] = y + 400
+    date = new Date(Date.UTC.apply(null, args))
+    if (isFinite(date.getUTCFullYear())) {
+      date.setUTCFullYear(y)
+    }
+  } else {
+    date = new Date(Date.UTC.apply(null, arguments))
+  }
+
+  return date
+}
+
+function firstWeekOffset(year, dow, doy) {
+  var // first-week day -- which january is always in the first week (4 for iso, 1 for other)
+    fwd = 7 + dow - doy,
+    // first-week day local weekday -- which local weekday is fwd
+    fwdlw = (7 + createUTCDate(year, 0, fwd).getUTCDay() - dow) % 7
+
+  return -fwdlw + fwd - 1
+}
+
+// https://en.wikipedia.org/wiki/ISO_week_date#Calculating_a_date_given_the_year.2C_week_number_and_weekday
+export function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
+  var localWeekday = (7 + weekday - dow) % 7,
+    weekOffset = firstWeekOffset(year, dow, doy),
+    dayOfYear = 1 + 7 * (week - 1) + localWeekday + weekOffset,
+    resYear,
+    resDayOfYear
+
+  if (dayOfYear <= 0) {
+    resYear = year - 1
+    resDayOfYear = daysInYear(resYear) + dayOfYear
+  } else if (dayOfYear > daysInYear(year)) {
+    resYear = year + 1
+    resDayOfYear = dayOfYear - daysInYear(year)
+  } else {
+    resYear = year
+    resDayOfYear = dayOfYear
+  }
+
+  return {
+    year: resYear,
+    dayOfYear: resDayOfYear
+  }
+}
+
+export function weeksInYear(year, dow = 1, doy = 1) {
+  var weekOffset = firstWeekOffset(year, dow, doy),
+    weekOffsetNext = firstWeekOffset(year + 1, dow, doy)
+  return (daysInYear(year) - weekOffset + weekOffsetNext) / 7
+}
+
+export function weekOfYear(year: number, dow, doy, firstDayOfWeek = 1, firstDayOfYear = 1) {
+  let weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
+    week = Math.floor((doy - weekOffset - 1) / 7) + 1,
+    resWeek,
+    resYear
+
+  if (week < 1) {
+    resYear = year - 1
+    resWeek = week + weeksInYear(resYear, firstDayOfWeek, firstDayOfYear)
+  } else if (week > weeksInYear(year, firstDayOfWeek, firstDayOfYear)) {
+    resWeek = week - weeksInYear(year, firstDayOfWeek, firstDayOfYear)
+    resYear = year + 1
+  } else {
+    resYear = year
+    resWeek = week
+  }
+
+  return {
+    week: resWeek,
+    year: resYear
+  }
+}
+
+export function isoWeeksInYear(year) {
+  return weeksInYear(year, 1, 4)
+}
+
+export function dayOfYear(input) {
+  input = new Date(input)
+  input.setHours(0)
+  input.setMinutes(0)
+  input.setSeconds(0)
+  input.setMilliseconds(0)
+  let start = new Date(input.getFullYear(), 0, 1, 0, 0, 0, 0)
+  return Math.round((input - start.getTime()) / 864e5) + 1
 }

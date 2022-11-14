@@ -36,6 +36,8 @@ describe('IntlDate', () => {
   it('isValid', () => {
     assert(mockDate().isValid())
     assert(mockDate('').isValid() === false)
+    assert(mockDate(null).isValid() === false)
+    assert(Number.isNaN(mockDate(null).getTime()))
   })
 
   it('seconds', () => {
@@ -43,6 +45,8 @@ describe('IntlDate', () => {
     assert(date.year === 2000)
     assert(date.month === 1)
     assert(date.day === 1)
+    assert(date.dayOfWeek === 6)
+    assert(date.dayOfYear() === 1)
   })
 
   it('create from Object', () => {
@@ -104,6 +108,11 @@ describe('IntlDate', () => {
     assert(testDate.toString() === date.toLocaleString())
   })
 
+  it('inspect', () => {
+    let date = IntlDate.unix(946702800)
+    assert(date.inspect() === 'new IntlDate("2000-01-01T05:00:00.000Z")')
+  })
+
   it('toObject', () => {
     let date = new Date()
     let obj = mockDate().toObject()
@@ -125,6 +134,27 @@ describe('IntlDate', () => {
     assert(testDate.isLeapYear())
     assert(testDate.month == 2)
     assert(testDate.day == 29)
+  })
+
+  it('daysInMonth', () => {
+    let date = new Date(2020, 1, 1, 16, 1, 1, 1)
+    let d = mockDate(date, { utc: true })
+    assert(d.daysInMonth() === 29)
+  })
+
+  it('daysInYear', () => {
+    let date = new Date(2020, 1, 1, 16, 1, 1, 1)
+    let d = mockDate(date, { utc: true })
+    assert(d.daysInYear() === 366)
+  })
+
+  it('weeksInYear', () => {
+    let date = new Date(2020, 1, 1, 16, 1, 1, 1)
+    let d = mockDate(date, { utc: true })
+    assert(d.week() === 4)
+    assert(d.isoWeek() === d.week() + 1)
+    assert(d.weeksInYear() === 52)
+    assert(d.isoWeeksInYear() === d.weeksInYear() + 1)
   })
 
   it('isBefore', () => {
