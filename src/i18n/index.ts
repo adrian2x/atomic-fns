@@ -5,5 +5,4 @@
  */
 
 export * from './date/index.js'
-export * from './format.js'
-export * from './duration.js'
+export { Duration, TDuration, DurationUnit } from './duration.js'

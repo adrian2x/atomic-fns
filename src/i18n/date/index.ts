@@ -1,9 +1,8 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
-import { asDate, format, INVALID_DATE_STRING } from '../format.js'
+import { asDate, formatDate, strftime } from '../format.js'
 import {
   asNumber,
-  DateLike,
   DateParts,
   dayOfYear,
   daysInMonth,
@@ -15,14 +14,31 @@ import {
   weeksInYear
 } from './utils.js'
 
-export { daysInMonth, daysInYear, isLeapYear, maxDate, minDate, weeksInYear }
+// Export date functions
+export {
+  asDate,
+  daysInMonth,
+  daysInYear,
+  formatDate,
+  isLeapYear,
+  maxDate,
+  minDate,
+  strftime,
+  weeksInYear
+}
+
+type DateInput = number | string | Date
+type DateLike = DateInput | DateParts | IntlDate
+export { DateInput, DateParts, DateLike }
+
+const INVALID_DATE_STRING = 'Invalid Date'
 
 /**
  * Creates a date tied to a given locale (default system locale) which can be formatted in that locale's language using the native {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis} directly or using a formatting string.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis}
  */
 export class IntlDate {
-  private self: Date
+  private _date: Date
   readonly locale?: string
   intlRelativeFormat: Intl.RelativeTimeFormat
 
@@ -44,21 +60,21 @@ export class IntlDate {
   /**
    * Creates a new `IntlDate` in local time and specified locale (default is system locale).
    * **Note:** The allowed values for `month` start at 1, which is different from legacy `Date`
-   * @param {DateLike | IntlDate} obj The date value (default is current local time)
+   * @param {DateLike} obj The date value (default is current local time)
    * @param {Object} opts The options for this date
    * @param {boolean?} opts.utc Converts input or current time to UTC
    * @param {string?} opts.locale A locale string to use for this date
    * @returns
    */
-  constructor(obj?: DateLike | IntlDate, { locale, utc }: any = {}) {
+  constructor(obj?: DateLike, { locale, utc }: any = {}) {
     this.locale = locale
 
     if (obj instanceof IntlDate) {
-      obj = obj.self
+      obj = obj._date
     }
 
     if (typeof obj === 'string' || typeof obj === 'number' || obj instanceof Date) {
-      this.self = asDate(obj, utc)
+      this._date = asDate(obj, utc)
     } else if (isObject(obj)) {
       let { year, month, day, hour, minute, second, millisecond } = obj
 
@@ -69,11 +85,11 @@ export class IntlDate {
 
       if (utc) {
         // from UTC to current
-        this.self = new Date(
+        this._date = new Date(
           Date.UTC(year!, month!, day || 1, hour || 0, minute || 0, second || 0, millisecond || 0)
         )
       } else {
-        this.self = new Date(
+        this._date = new Date(
           year!,
           month!,
           day || 1,
@@ -84,7 +100,7 @@ export class IntlDate {
         )
       }
     } else {
-      this.self = asDate(obj, utc)
+      this._date = asDate(obj, utc)
     }
 
     return this
@@ -92,52 +108,52 @@ export class IntlDate {
 
   /** Get the date's year. */
   get year() {
-    return this.self.getFullYear()
+    return this._date.getFullYear()
   }
 
   /** Get the this date's month as a number from 1 to 12, inclusive. */
   get month() {
-    return this.self.getMonth() + 1
+    return this._date.getMonth() + 1
   }
 
   /** Returns the weekday as a number between 1 and 7, inclusive, where Monday is 1 and Sunday is 7. */
   get dayOfWeek() {
-    if (this.self.getDay() === 0) return 7
-    return this.self.getDay()
+    if (this._date.getDay() === 0) return 7
+    return this._date.getDay()
   }
 
   /** Get the this date's current day of the month. */
   get day() {
-    return this.self.getDate()
+    return this._date.getDate()
   }
 
   /** Get the this date's current hour. */
   get hour() {
-    return this.self.getHours()
+    return this._date.getHours()
   }
 
   /** Get the this date's current minute. */
   get minute() {
-    return this.self.getMinutes()
+    return this._date.getMinutes()
   }
 
   /** Get the this date's current second. */
   get second() {
-    return this.self.getSeconds()
+    return this._date.getSeconds()
   }
 
   /** Get the this date's current millisecond. */
   get millisecond() {
-    return this.self.getMilliseconds()
+    return this._date.getMilliseconds()
   }
 
   isValid() {
-    return this.self.toString() !== INVALID_DATE_STRING
+    return this._date.toString() !== INVALID_DATE_STRING
   }
 
   /** Get the number of days in this date's month. */
   daysInMonth() {
-    return daysInMonth(this.year, this.month)
+    return daysInMonth(this._date)
   }
 
   /** Get the number of days in this date's year. */
@@ -146,7 +162,7 @@ export class IntlDate {
   }
 
   dayOfYear() {
-    return dayOfYear(this.toDate())
+    return dayOfYear(this._date)
   }
 
   /** Returns `true` if this date's year is a leap year. */
@@ -166,12 +182,12 @@ export class IntlDate {
 
   /** Returns the current week of the year. */
   week() {
-    return weekOfYear(this.year, this.self.getDay(), this.dayOfYear()).week
+    return weekOfYear(this._date).week
   }
 
   /** Returns the ISO week of the year. */
   isoWeek() {
-    return weekOfYear(this.year, this.self.getDay(), this.dayOfYear(), 1, 4).week
+    return weekOfYear(this._date, 1, 4).week
   }
 
   /**
@@ -180,7 +196,7 @@ export class IntlDate {
    * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat Intl.DateTimeFormat()}
    */
   toString(opts?: Intl.DateTimeFormatOptions) {
-    return this.self.toLocaleString(this.locale, opts)
+    return this._date.toLocaleString(this.locale, opts)
   }
 
   /**
@@ -193,7 +209,7 @@ new IntlDate().format('MM/DD/YYYY') // '10/31/2022'
 ```
    */
   format(str: string) {
-    return format(str, this.self, this.locale)
+    return formatDate(str, this._date, this.locale)
   }
 
   /**
@@ -201,7 +217,7 @@ new IntlDate().format('MM/DD/YYYY') // '10/31/2022'
    * @returns {Date} A new `Date` object
    */
   toDate() {
-    return new Date(this.isValid() ? this.self : NaN)
+    return new Date(this.isValid() ? this._date : NaN)
   }
 
   /**
@@ -250,7 +266,7 @@ new IntlDate().toISOString() // '2022-10-31T22:44:30.652Z'
 ```
    */
   toISOString() {
-    return this.self.toISOString()
+    return this._date.toISOString()
   }
 
   /** Returns the date part formatted as ISO8601.
@@ -260,7 +276,7 @@ new IntlDate().toISODate() // '2022-10-31'
 ```
    */
   toISODate() {
-    return this.self.toISOString().slice(0, 10)
+    return this._date.toISOString().slice(0, 10)
   }
 
   /** Returns the time part formatted as ISO8601.
@@ -270,7 +286,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 ```
    */
   toISOTime() {
-    return this.self.toISOString().slice(11)
+    return this._date.toISOString().slice(11)
   }
 
   /**
@@ -291,7 +307,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   /** Returns the number of milliseconds since the Unix Epoch (January 1, 1970 UTC)  */
   getTime() {
-    return this.isValid() ? this.self.getTime() : NaN
+    return this.isValid() ? this._date.getTime() : NaN
   }
 
   /** Alias of {@link IntlDate.getTime}  */
@@ -311,15 +327,15 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   /** Returns the difference in `minutes` between this date and UTC  */
   utcOffset() {
-    return this.self.getTimezoneOffset()
+    return this._date.getTimezoneOffset()
   }
 
   /**
    * Check if this date is before another date. The other value will be parsed as an `IntlDate` if not already so.
-   * @param {string | number | Object | Date | IntlDate} other Another date or date like object
+   * @param {DateLike} other Another date or date like object
    * @returns {boolean} Returns `true` if this date is before the given value
    */
-  isBefore(other: DateLike | IntlDate) {
+  isBefore(other: DateLike) {
     if (other instanceof IntlDate) {
       return this.getTime() < other.getTime()
     }
@@ -328,20 +344,20 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   /**
    * Check if this date is strictly after the given `start` and before `stop` dates. The values will be parsed as an `IntlDate` if not already so.
-   * @param {string | number | Object | Date | IntlDate} start The smaller date
-   * @param {string | number | Object | Date | IntlDate} stop The larger date
+   * @param {DateLike} start The smaller date
+   * @param {DateLike} stop The larger date
    * @returns {boolean} Returns `true` if this date is greater than `start` and less than `stop`.
    */
-  isBetween(start: DateLike | IntlDate, stop: DateLike | IntlDate) {
+  isBetween(start: DateLike, stop: DateLike) {
     return this.isAfter(start) && this.isBefore(stop)
   }
 
   /**
    * Check if this date is after another date. The other value will be parsed as an `IntlDate` if not already so.
-   * @param {string | number | DateParts | Date | IntlDate} other Another date or date like object
+   * @param {DateLike} other Another date or date like object
    * @returns {boolean} Returns `true` if this date is after the given value
    */
-  isAfter(other: DateLike | IntlDate) {
+  isAfter(other: DateLike) {
     if (other instanceof IntlDate) {
       return this.getTime() > other.getTime()
     }
@@ -392,7 +408,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     // if we didn't set the day but we ended up on an overflow date,
     // use the last day of the right month
     if (normalized.day === undefined) {
-      mixed.day = Math.min(daysInMonth(mixed.year, mixed.month), mixed.day)
+      mixed.day = Math.min(daysInMonth(this._date), mixed.day)
     }
 
     return this.clone(mixed)
@@ -437,11 +453,11 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
   }
 
   add(duration: TDuration, exact = false) {
-    return this.clone(addDuration(this.self, duration, exact))
+    return this.clone(addDuration(this._date, duration, exact))
   }
 
   subtract(duration: TDuration, exact = false) {
-    return this.clone(subtract(this.self, duration, exact))
+    return this.clone(subDuration(this._date, duration, exact))
   }
 
   startOf(unit: DurationUnit) {
@@ -521,7 +537,7 @@ function fixOffset(startDate: Date, endDate: Date) {
 }
 
 export function addDuration(
-  date: string | number | Date,
+  date: DateInput,
   duration: number | TDuration | Duration,
   exact = false
 ) {
@@ -581,7 +597,14 @@ function setDateUnit(date: Date, unit: string, value: number) {
   return date
 }
 
-export function subtract(date: string | number | Date, duration: TDuration, exact = false) {
+/**
+ * Subtract the specified years, months, weeks, days, hours, minutes and seconds from the given date.
+ * @param date
+ * @param duration
+ * @param exact
+ * @returns
+ */
+export function subDuration(date: DateInput, duration: TDuration, exact = false) {
   return addDuration(date, new Duration(duration, exact).negated(), exact)
 }
 

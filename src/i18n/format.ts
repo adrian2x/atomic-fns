@@ -7,8 +7,6 @@ const REGEX_FORMAT =
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
 
-export const INVALID_DATE_STRING = 'Invalid Date'
-
 const padStart = (string, length, pad) => String(string).padStart(length, pad)
 
 const padZoneStr = (instance: Date) => {
@@ -178,7 +176,16 @@ const formatPart = (locale, t, date) => {
   return value.split(/\s+/g).slice(1).join(' ')
 }
 
-export function format(formatStr: string, date: Date, locale?: string) {
+/**
+ * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as {@link https://momentjs.com/docs/#/displaying/format/ moment}.
+ * @param {string} str The format string to use
+ * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
+ * @example
+```js
+formatDate(new Date(), 'MM/DD/YYYY') // '10/31/2022'
+```
+  */
+export function formatDate(formatStr: string, date: Date, locale?: string) {
   const str = formatStr || FORMAT_DEFAULT
   const zoneStr = padZoneStr(date)
 

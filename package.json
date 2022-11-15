@@ -1,7 +1,7 @@
 {
   "name": "atomic-fns",
   "description": "Like Lodash, but for ESNext and with types. Stop shipping code built for browsers from 2015.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "files": [
     "dist/*"
   ],
