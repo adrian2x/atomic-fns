@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { bool, id, isinstance, not, compare, shallowEqual } from '../core/operators/index.js'
+import { bool, id, isinstance, not, compare, shallowEqual } from '../src/operators/index.js'
 
 describe('operators', () => {
   it('id', () => {

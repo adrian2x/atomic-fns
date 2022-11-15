@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { Deque } from '../core/collections/deque.js'
+import { Deque } from '../src/collections/deque.js'
 
 describe('deque', () => {
   const print = (x) => console.log(x.toArray())

@@ -34,8 +34,8 @@ import {
   uniqueId,
   values,
   noop
-} from '../core/globals/index.js'
-import { enumerate } from '../core/itertools/index.js'
+} from '../src/globals/index.js'
+import { enumerate } from '../src/itertools/index.js'
 
 describe('globals', () => {
   it('CustomError', () => {

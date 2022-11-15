@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { max, min, round, sum } from '../core/math/index.js'
+import { max, min, round, sum } from '../src/math/index.js'
 
 describe('math', () => {
   it('min', () => {

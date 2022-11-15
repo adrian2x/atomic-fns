@@ -17,7 +17,7 @@
   ],
   "parserOptions": {
     "project": [
-      "./tsconfig.xo.json"
+      "./tsconfig.json"
     ],
     "ecmaVersion": "latest",
     "sourceType": "module"
@@ -29,7 +29,6 @@
     "@typescript-eslint/prefer-nullish-coalescing": "off",
     "@typescript-eslint/restrict-plus-operands": "off",
     "@typescript-eslint/space-before-function-paren": "off",
-    "@typescript-eslint/strict-boolean-expressions": "off",
-    "@typescript-eslint/triple-slash-reference": "off"
+    "@typescript-eslint/strict-boolean-expressions": "off"
   }
 }
