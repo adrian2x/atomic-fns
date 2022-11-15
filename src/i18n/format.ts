@@ -1,5 +1,27 @@
 const NATIVE_DATE =
   /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
+const REGEX_PARSE =
+  /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
+const REGEX_FORMAT =
+  /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
+
+const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
+
+export const INVALID_DATE_STRING = 'Invalid Date'
+
+const padStart = (string, length, pad) => String(string).padStart(length, pad)
+
+const padZoneStr = (instance: Date) => {
+  const negMinutes = -instance.getTimezoneOffset()
+  const minutes = Math.abs(negMinutes)
+  const hourOffset = Math.floor(minutes / 60)
+  const minuteOffset = minutes % 60
+  return `${negMinutes <= 0 ? '+' : '-'}${padStart(hourOffset, 2, '0')}:${padStart(
+    minuteOffset,
+    2,
+    '0'
+  )}`
+}
 
 /**
  * Returns a new Date from the given arguments.
@@ -7,29 +29,48 @@ const NATIVE_DATE =
  * @param {?boolean} [utc=false] Interprets the given value as a UTC date
  * @returns {Date} The new date object
  */
-export function getDate(date: string | number | Date, utc = false) {
-  if (date === null) return new Date(NaN)
-  if (!date) return new Date()
-  if (date instanceof Date) return new Date(date)
+export function asDate(date: string | number | Date, utc = false) {
+  if (date === null) {
+    return new Date(NaN)
+  }
+
+  if (date === undefined) {
+    date = Date.now()
+  }
+
   if (typeof date === 'string' && !/Z$/i.test(date)) {
     const d = date.match(NATIVE_DATE) as any
+
     if (d) {
       const m = d[2] - 1 || 0
       const ms = (d[7] || '0').slice(0, 3)
+
       if (utc) {
         return new Date(Date.UTC(d[1], m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms))
       }
+
       return new Date(d[1], m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms)
     }
   }
-  return new Date(date)
+
+  const fromDate = new Date(date)
+  if (utc) {
+    fromDate.setFullYear(fromDate.getUTCFullYear())
+    fromDate.setMonth(fromDate.getUTCMonth())
+    fromDate.setDate(fromDate.getUTCDate())
+    fromDate.setHours(fromDate.getUTCHours())
+    fromDate.setMinutes(fromDate.getUTCMinutes())
+    fromDate.setSeconds(fromDate.getUTCSeconds())
+    fromDate.setMilliseconds(fromDate.getUTCMilliseconds())
+  }
+  return fromDate
 }
 
 const n = 'numeric'
 const s = 'short'
 const l = 'long'
 const dd = '2-digit'
-const TOKEN_MAP = {
+const STRFTIME = {
   // weekday
   '%A': { weekday: l },
   '%a': { weekday: s },
@@ -68,12 +109,55 @@ const TOKEN_MAP = {
   '%n': { era: s, year: dd },
   '%nn': { era: n, year: 'narrow' },
   // timeZoneName
-  '%Z': { timeZoneName: 'longGeneric', year: dd },
-  '%-Z': { timeZoneName: 'shortGeneric', year: dd },
+  // '%Z': { timeZoneName: 'longGeneric', year: dd },
+  // '%-Z': { timeZoneName: 'shortGeneric', year: dd },
   '%z': { timeZoneName: 'longOffset', year: dd },
   '%-z': { timeZoneName: 'shortOffset', year: dd },
-  '%ZZ': { timeZoneName: l, year: dd },
-  '%-ZZ': { timeZoneName: s, year: dd }
+  '%Z': { timeZoneName: l, year: dd },
+  '%-Z': { timeZoneName: s, year: dd }
+}
+const TOKENS = {
+  // weekday
+  dddd: { weekday: l },
+  ddd: { weekday: s },
+  E: { weekday: n },
+  // day
+  DD: { day: dd },
+  D: { day: n },
+  // month
+  MM: { month: dd },
+  M: { month: n },
+  MMMM: { month: l },
+  MMM: { month: s },
+  // year
+  YYYY: { year: n },
+  YY: { year: dd },
+  // hour
+  hh: { hourCycle: 'h12', hour: dd },
+  h: { hourCycle: 'h12', hour: n },
+  HH: { hourCycle: 'h23', hour: dd },
+  H: { hourCycle: 'h23', hour: n },
+  kk: { hourCycle: 'h11', hour: dd },
+  k: { hourCycle: 'h24', hour: n },
+  // minutes
+  mm: { minute: dd },
+  m: { minute: n },
+  // seconds
+  ss: { second: dd },
+  s: { second: n },
+  // day period
+  A: { dayPeriod: l },
+  a: { dayPeriod: s },
+  // era
+  N: { era: s, year: dd },
+  NN: { era: s, year: dd },
+  NNN: { era: s, year: dd },
+  NNNN: { era: l, year: dd },
+  // timeZoneName
+  ZZ: { timeZoneName: 'longOffset', year: dd },
+  Z: { timeZoneName: 'shortOffset', year: dd },
+  zzz: { timeZoneName: l, year: dd },
+  z: { timeZoneName: s, year: dd }
 }
 
 const HOUR_PARTS = { '%I': 1, '%-I': 1, '%K': 1, '%k': 1 }
@@ -81,6 +165,75 @@ const ERA_PARTS = { '%n': 1, '%N': 1, '%nn': 1 }
 const TZ_PARTS = { '%ZZ': 1, '%-ZZ': 1, '%-z': 1, '%z': 1, '%-Z': 1, '%Z': 1 }
 
 const formatter = (locale: string, opts) => new Intl.DateTimeFormat(locale, opts)
+
+const formatHour = (h, maxLength) => String(h % 12 || 12).padStart(maxLength, '0')
+
+const formatMeridiem = (hour, isLowercase?) => {
+  const m = hour < 12 ? 'AM' : 'PM'
+  return isLowercase ? m.toLowerCase() : m
+}
+
+const formatPart = (locale, t, date) => {
+  const value = formatter(locale, TOKENS[t]).format(date)
+  return value.split(' ').slice(1).join(' ')
+}
+
+export function format(formatStr: string, date: Date, locale?: string) {
+  const str = formatStr || FORMAT_DEFAULT
+  const zoneStr = padZoneStr(date)
+
+  const time = {
+    H: date.getHours(),
+    HH: padStart(date.getHours(), 2, '0'),
+    h: formatHour(date.getHours(), 1),
+    hh: formatHour(date.getHours(), 2),
+    a: formatMeridiem(date.getHours(), true),
+    A: formatMeridiem(date.getHours()),
+    m: date.getMinutes(),
+    mm: padStart(date.getMinutes(), 2, '0'),
+    s: date.getSeconds(),
+    ss: padStart(date.getSeconds(), 2, '0'),
+    SSS: padStart(date.getMilliseconds(), 3, '0'),
+    X: Math.floor(date.getTime() / 1000),
+    x: date.getTime()
+  }
+
+  const matches = {
+    ...time,
+    N: formatPart(locale, 'N', date),
+    NN: formatPart(locale, 'NN', date),
+    NNN: formatPart(locale, 'NNN', date),
+    NNNN: formatPart(locale, 'NNNN', date),
+    YY: String(date.getFullYear()).slice(-2),
+    YYYY: date.getFullYear(),
+    M: date.getMonth() + 1,
+    MM: padStart(date.getMonth() + 1, 2, '0'),
+    MMM: formatter(locale, TOKENS.MMM).format(date),
+    MMMM: formatter(locale, TOKENS.MMMM).format(date),
+    Q: Math.ceil((date.getMonth() + 1) / 3),
+    D: date.getDate(),
+    DD: padStart(date.getDate(), 2, '0'),
+    d: date.getDay(),
+    ddd: formatter(locale, TOKENS.ddd).format(date),
+    dddd: formatter(locale, TOKENS.dddd).format(date),
+    Z: formatPart(locale, 'Z', date),
+    ZZ: formatPart(locale, 'ZZ', date),
+    z: formatPart(locale, 'z', date),
+    zzz: formatPart(locale, 'zzz', date),
+    LT: `${time.h}:${time.mm} ${time.A}`,
+    LTS: `${time.h}:${time.mm}:${time.ss} ${time.A}`,
+    L: formatter(locale, DATE_SHORT_DD).format(date),
+    LL: formatter(locale, DATE_FULL).format(date),
+    LLL: formatter(locale, DATE_LONG_TIME).format(date),
+    LLLL: formatter(locale, DATE_HUGE).format(date),
+    l: formatter(locale, DATE_SHORT).format(date),
+    ll: formatter(locale, DATE_MED).format(date),
+    lll: formatter(locale, DATE_MED_TIME).format(date),
+    llll: formatter(locale, DATE_MED_WITH_WEEKDAY).format(date)
+  }
+
+  return str.replace(REGEX_FORMAT, (match, $1) => $1 || matches[match] || zoneStr.replace(':', '')) // 'ZZ'
+}
 
 /**
  * Formats a date using a formatting string in the {@link https://strftime.org/ strftime} format, in any given locale.
@@ -90,7 +243,7 @@ const formatter = (locale: string, opts) => new Intl.DateTimeFormat(locale, opts
  * @returns {string} The string representation of date
  * @see {@link https://strftime.org/ strftime format}
  */
-export function format(fmt: string, date: number | Date, locale?) {
+export function strftime(fmt: string, date: number | Date, locale?) {
   const results: string[] = []
   let dayPeriod: string = ''
   let dayPeriodIndex = -1
@@ -112,7 +265,7 @@ export function format(fmt: string, date: number | Date, locale?) {
       while (i < fmt.length - 1 && fmt[i + 1] === fmt[i]) part += fmt[++i]
 
       if (HOUR_PARTS[part]) {
-        const res = formatter(locale, TOKEN_MAP[part]).format(date).split(' ')
+        const res = formatter(locale, STRFTIME[part]).format(date).split(' ')
         // save the AM/PM for the correct spot
         results.push(res[0])
         dayPeriod = res[1]
@@ -128,14 +281,15 @@ export function format(fmt: string, date: number | Date, locale?) {
 
       if (ERA_PARTS[part] || TZ_PARTS[part]) {
         // the formatting includes the date/year so we take what comes after
-        const res = formatter(locale, TOKEN_MAP[part]).format(date).split(' ')
+        const res = formatter(locale, STRFTIME[part]).format(date).split(' ')
         results.push(res.slice(1).join(' '))
         continue
       }
 
       // format any other parts
-      let res = formatter(locale, TOKEN_MAP[part]).format(date)
-      if (part === '%S' && res.length === 1) res = '0' + res
+      let res = formatter(locale, STRFTIME[part]).format(date)
+      // fix bugs in time formatter
+      if ((part === '%S' || part === '%M') && res.length === 1) res = '0' + res
       results.push(res)
     } else {
       // output as literal
@@ -146,59 +300,94 @@ export function format(fmt: string, date: number | Date, locale?) {
   // insert the AM/PM at the correct spot
   if (dayPeriodIndex >= 0) results[dayPeriodIndex] = dayPeriod || ''
 
-  return results.join('')
+  return results.join('').trim()
 }
 
 const DATETIME_DEFAULT = {}
 
-/** 10/14/1983 */
+/** L: 09/04/1983 */
+const DATE_SHORT_DD = {
+  year: n,
+  month: dd,
+  day: dd
+}
+
+/** l: 9/4/1983 */
 const DATE_SHORT = {
   year: n,
   month: n,
   day: n
 }
 
-/** Oct 14, 1983 */
+/** ll: Oct 14, 1983 */
 const DATE_MED = {
   year: n,
   month: s,
   day: n
 }
 
-/** Fri, Oct 14, 1983 */
-const DATE_MED_WITH_WEEKDAY = {
-  year: n,
-  month: s,
-  day: n,
-  weekday: s
-}
-
-/** October 14, 1983 */
+/** LL: October 14, 1983 */
 const DATE_FULL = {
   year: n,
   month: l,
   day: n
 }
 
-/** Tuesday, October 14, 1983 */
+/** lll: Oct 14, 1983 8:30 PM */
+const DATE_MED_TIME = {
+  year: n,
+  month: s,
+  day: n,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** LLL: October 14, 1983 8:30 PM */
+const DATE_LONG_TIME = {
+  year: n,
+  month: l,
+  day: n,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** llll: Fri, Oct 14, 1983, 8:30 PM */
+const DATE_MED_WITH_WEEKDAY = {
+  year: n,
+  month: s,
+  day: n,
+  weekday: s,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** LLLL: Tuesday, October 14, 1983, 8:30 PM */
 const DATE_HUGE = {
   year: n,
   month: l,
   day: n,
-  weekday: l
+  weekday: l,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
 }
 
-/** 09:30 AM */
+/** LT: 09:30 AM */
 const TIME_SIMPLE = {
   hour: n,
-  minute: n
+  minute: n,
+  hourCycle: 'h12'
 }
 
-/** 09:30:23 AM */
+/** LTS: 09:30:23 AM */
 const TIME_WITH_SECONDS = {
   hour: n,
   minute: n,
-  second: n
+  second: n,
+  hourCycle: 'h12'
 }
 
 /** 09:30:23 AM EDT */
@@ -206,7 +395,8 @@ const TIME_WITH_SHORT_OFFSET = {
   hour: n,
   minute: n,
   second: n,
-  timeZoneName: s
+  timeZoneName: s,
+  hourCycle: 'h12'
 }
 
 /** 09:30:23 AM Eastern Daylight Time */
@@ -214,7 +404,8 @@ const TIME_WITH_LONG_OFFSET = {
   hour: n,
   minute: n,
   second: n,
-  timeZoneName: l
+  timeZoneName: l,
+  hourCycle: 'h12'
 }
 
 /** 09:30 */
@@ -256,7 +447,8 @@ const DATETIME_SHORT = {
   month: n,
   day: n,
   hour: n,
-  minute: n
+  minute: n,
+  hourCycle: 'h12'
 }
 
 /** 10/14/1983, 9:30:33 AM */
@@ -266,7 +458,8 @@ const DATETIME_SHORT_WITH_SECONDS = {
   day: n,
   hour: n,
   minute: n,
-  second: n
+  second: n,
+  hourCycle: 'h12'
 }
 
 /** Oct 14, 1983, 9:30 AM */
@@ -275,7 +468,8 @@ const DATETIME_MED = {
   month: s,
   day: n,
   hour: n,
-  minute: n
+  minute: n,
+  hourCycle: 'h12'
 }
 
 /** Oct 14, 1983, 9:30:33 AM */
@@ -285,7 +479,8 @@ const DATETIME_MED_WITH_SECONDS = {
   day: n,
   hour: n,
   minute: n,
-  second: n
+  second: n,
+  hourCycle: 'h12'
 }
 
 /** Fri, 14 Oct 1983, 9:30 AM */
@@ -295,7 +490,8 @@ const DATETIME_MED_WITH_WEEKDAY = {
   day: n,
   weekday: s,
   hour: n,
-  minute: n
+  minute: n,
+  hourCycle: 'h12'
 }
 
 /** October 14, 1983, 9:30 AM EDT */
@@ -305,7 +501,8 @@ const DATETIME_FULL = {
   day: n,
   hour: n,
   minute: n,
-  timeZoneName: s
+  timeZoneName: s,
+  hourCycle: 'h12'
 }
 
 /** October 14, 1983, 9:30:33 AM EDT */
@@ -316,7 +513,8 @@ const DATETIME_FULL_WITH_SECONDS = {
   hour: n,
   minute: n,
   second: n,
-  timeZoneName: s
+  timeZoneName: s,
+  hourCycle: 'h12'
 }
 
 /** Friday, October 14, 1983, 9:30 AM Eastern Daylight Time */
@@ -327,7 +525,8 @@ const DATETIME_HUGE = {
   weekday: l,
   hour: n,
   minute: n,
-  timeZoneName: l
+  timeZoneName: l,
+  hourCycle: 'h12'
 }
 
 /** Friday, October 14, 1983, 9:30:33 AM Eastern Daylight Time */
@@ -339,5 +538,6 @@ const DATETIME_HUGE_WITH_SECONDS = {
   hour: n,
   minute: n,
   second: n,
-  timeZoneName: l
+  timeZoneName: l,
+  hourCycle: 'h12'
 }
