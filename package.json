@@ -11,11 +11,11 @@
   "types": "dist/index.d.ts",
   "sideEffects": false,
   "scripts": {
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm build",
     "test": "NODE_OPTIONS=--loader=ts-node/esm jasmine --config=jasmine.json",
-    "tsc": "tsc -p ./tsconfig.xo.json --declaration",
-    "tsc:w": "tsc -p ./tsconfig.xo.json --declaration --watch",
-    "lint": "eslint core/**/*.ts --fix",
+    "tsc": "tsc -p . --declaration",
+    "tsc:w": "tsc -p . --declaration --watch",
+    "lint": "eslint src/**/*.ts --fix",
     "build": "npm run lint && npm test && npm run tsc && npm run docs",
     "docs": "typedoc"
   },
