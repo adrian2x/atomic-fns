@@ -11,25 +11,7 @@ export type DateParts = {
   millisecond?: number
 }
 
-export type DateLike = number | string | Date | DateParts
-
-// CAPABILITIES
-
-export function hasRelative() {
-  try {
-    return typeof Intl !== 'undefined' && !!Intl.RelativeTimeFormat
-  } catch (e) {
-    return false
-  }
-}
-
-// OBJECTS AND ARRAYS
-
-export function maybeArray(thing) {
-  return Array.isArray(thing) ? thing : [thing]
-}
-
-export function bestBy(arr: Array<any>, by: Function, compare: Function<number>) {
+function bestBy(arr: Array<any>, by: Function, compare: Function<number>) {
   if (arr.length === 0) {
     return undefined
   }
@@ -47,7 +29,7 @@ export function bestBy(arr: Array<any>, by: Function, compare: Function<number>)
 
 // NUMBERS AND STRINGS
 
-export function integerBetween(thing: number, bottom: number, top: number) {
+function integerBetween(thing: number, bottom: number, top: number) {
   return isInteger(thing) && thing >= bottom && thing <= top
 }
 
@@ -57,11 +39,11 @@ export function integerBetween(thing: number, bottom: number, top: number) {
  * @param n
  * @returns {number}
  */
-export function floorMod(x: number, n: number) {
+function floorMod(x: number, n: number) {
   return x - n * Math.floor(x / n)
 }
 
-export function padStart(input: number, n = 2) {
+function padStart(input: number, n = 2) {
   const isNeg = input < 0
   let padded
   if (isNeg) {
@@ -72,25 +54,19 @@ export function padStart(input: number, n = 2) {
   return padded
 }
 
-export function parseInteger(str: string) {
+function parseInteger(str: string) {
   if (str != null && str !== '') return parseInt(str, 10)
 }
 
-export function parseFloating(str: string) {
+function parseFloating(str: string) {
   if (str != null && str !== '') return parseFloat(str)
 }
 
-export function parseMilliseconds(str: string) {
+function parseMilliseconds(str: string) {
   if (str != null && str !== '') {
     const f = parseFloat('0.' + str) * 1000
     return Math.floor(f)
   }
-}
-
-export function roundTo(number: number, digits: number, towardZero = false) {
-  const factor = 10 ** digits,
-    rounder = towardZero ? Math.trunc : Math.round
-  return rounder(number * factor) / factor
 }
 
 // DATE BASICS
@@ -156,15 +132,16 @@ export function daysInYear(year: number) {
 }
 
 /**
- * Get the number of days in the given month and year.
- * @param year The date year
- * @param month The date month as a number between 1 and 12, inclusive.
+ * Get the number of days in the given date's month and year.
+ * @param date The specified date
  * @returns {number} Number of days in month
  */
-export function daysInMonth(year: number, month: number) {
+export function daysInMonth(date: string | number | Date) {
+  const d = new Date(date),
+    year = d.getFullYear(),
+    month = d.getMonth() + 1
   const modMonth = floorMod(month - 1, 12) + 1,
     modYear = year + (month - modMonth) / 12
-
   if (modMonth === 2) {
     return isLeapYear(modYear) ? 29 : 28
   } else {
@@ -173,7 +150,7 @@ export function daysInMonth(year: number, month: number) {
 }
 
 // covert a calendar object to a local timestamp (epoch, but with the offset baked in)
-export function objToLocalTS(obj: DateParts) {
+function objToLocalTS(obj: DateParts) {
   let d = Date.UTC(
     obj.year,
     obj.month - 1,
@@ -192,7 +169,7 @@ export function objToLocalTS(obj: DateParts) {
   return +d
 }
 
-export function untruncateYear(year: number) {
+function untruncateYear(year: number) {
   if (year > 99) {
     return year
   } else return year > 60 ? 1900 + year : 2000 + year
@@ -200,7 +177,7 @@ export function untruncateYear(year: number) {
 
 // PARSING
 
-export function parseZoneInfo(ts: number | Date, offsetFormat, locale, timeZone?) {
+function parseZoneInfo(ts: number | Date, offsetFormat, locale, timeZone?) {
   const date = new Date(ts),
     intlOpts: Intl.DateTimeFormatOptions = {
       hourCycle: 'h23',
@@ -221,7 +198,7 @@ export function parseZoneInfo(ts: number | Date, offsetFormat, locale, timeZone?
 }
 
 // signedOffset('-5', '30') -> -330
-export function signedOffset(offHourStr: string, offMinuteStr: string) {
+function signedOffset(offHourStr: string, offMinuteStr: string) {
   let offHour = parseInt(offHourStr, 10)
 
   // don't || this because we want to preserve -0
@@ -243,7 +220,7 @@ export function asNumber(value) {
   return numericValue
 }
 
-export function formatOffset(offset: number, format: 'short' | 'narrow' | 'techie') {
+function formatOffset(offset: number, format: 'short' | 'narrow' | 'techie') {
   const hours = Math.trunc(Math.abs(offset / 60)),
     minutes = Math.trunc(Math.abs(offset % 60)),
     sign = offset >= 0 ? '+' : '-'
@@ -260,13 +237,12 @@ export function formatOffset(offset: number, format: 'short' | 'narrow' | 'techi
   }
 }
 
-export function timeObject(obj: DateParts) {
+function timeObject(obj: DateParts) {
   const { hour, minute, second, millisecond } = obj
   return { hour, minute, second, millisecond }
 }
 
-export const ianaRegex =
-  /[A-Za-z_+-]{1,256}(?::?\/[A-Za-z0-9_+-]{1,256}(?:\/[A-Za-z0-9_+-]{1,256})?)?/
+const ianaRegex = /[A-Za-z_+-]{1,256}(?::?\/[A-Za-z0-9_+-]{1,256}(?:\/[A-Za-z0-9_+-]{1,256})?)?/
 
 const isoDuration =
   /^-?P(?:(?:(-?\d{1,20}(?:\.\d{1,20})?)Y)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20}(?:\.\d{1,20})?)W)?(?:(-?\d{1,20}(?:\.\d{1,20})?)D)?(?:T(?:(-?\d{1,20}(?:\.\d{1,20})?)H)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20})(?:[.,](-?\d{1,20}))?S)?)?)$/
@@ -313,7 +289,7 @@ export function parseISODuration(s) {
   return parse(s, [isoDuration, extractISODuration])
 }
 
-export function createUTCDate(...args) {
+function createUTCDate(...args) {
   let date,
     y = args[0]
   // the Date.UTC function remaps years 0-99 to 1900-1999
@@ -342,7 +318,7 @@ function firstWeekOffset(year, dow, doy) {
 }
 
 // https://en.wikipedia.org/wiki/ISO_week_date#Calculating_a_date_given_the_year.2C_week_number_and_weekday
-export function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
+function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
   var localWeekday = (7 + weekday - dow) % 7,
     weekOffset = firstWeekOffset(year, dow, doy),
     dayOfYear = 1 + 7 * (week - 1) + localWeekday + weekOffset,
@@ -366,13 +342,29 @@ export function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
   }
 }
 
-export function weeksInYear(year, dow = 1, doy = 1) {
-  var weekOffset = firstWeekOffset(year, dow, doy),
-    weekOffsetNext = firstWeekOffset(year + 1, dow, doy)
+/**
+ * Returns the number of weeks in the specified year.
+ * @param year
+ * @param firstDayOfWeek
+ * @param firstDayOfYear
+ */
+export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1) {
+  var weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
+    weekOffsetNext = firstWeekOffset(year + 1, firstDayOfWeek, firstDayOfYear)
   return (daysInYear(year) - weekOffset + weekOffsetNext) / 7
 }
 
-export function weekOfYear(year: number, dow, doy, firstDayOfWeek = 1, firstDayOfYear = 1) {
+/**
+ * Returns the week of the year for the specified date
+ * @param year
+ * @param dayOfYear
+ * @param firstDayOfWeek
+ * @param firstDayOfYear
+ * @returns
+ */
+export function weekOfYear(date: string | number | Date, firstDayOfWeek = 1, firstDayOfYear = 1) {
+  const year = new Date(date).getFullYear()
+  const doy = dayOfYear(date)
   let weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
     week = Math.floor((doy - weekOffset - 1) / 7) + 1,
     resWeek,
@@ -399,12 +391,12 @@ export function isoWeeksInYear(year) {
   return weeksInYear(year, 1, 4)
 }
 
-export function dayOfYear(input) {
+export function dayOfYear(input: string | number | Date) {
   input = new Date(input)
   input.setHours(0)
   input.setMinutes(0)
   input.setSeconds(0)
   input.setMilliseconds(0)
   let start = new Date(input.getFullYear(), 0, 1, 0, 0, 0, 0)
-  return Math.round((input - start.getTime()) / 864e5) + 1
+  return Math.round((+input - start.getTime()) / 864e5) + 1
 }

@@ -1,8 +1,40 @@
 import { pick } from '../collections/index.js'
 import { isNumber, isObject, ValueError } from '../globals/index.js'
-import { parseISODuration, roundTo } from './date/utils.js'
+import { round } from '../math/index.js'
+import { parseISODuration } from './date/utils.js'
 
-export const lowOrderMatrix = {
+export type DurationUnit =
+  | 'year'
+  | 'years'
+  | 'quarter'
+  | 'quarters'
+  | 'month'
+  | 'months'
+  | 'week'
+  | 'weeks'
+  | 'day'
+  | 'days'
+  | 'hour'
+  | 'hours'
+  | 'minute'
+  | 'minutes'
+  | 'second'
+  | 'seconds'
+  | 'millisecond'
+  | 'milliseconds'
+
+export interface TDuration {
+  years?: number
+  months?: number
+  weeks?: number
+  days?: number
+  hours?: number
+  minutes?: number
+  seconds?: number
+  milliseconds?: number
+}
+
+const lowOrderMatrix = {
   weeks: {
     days: 7,
     hours: 7 * 24,
@@ -20,7 +52,7 @@ export const lowOrderMatrix = {
   minutes: { seconds: 60, milliseconds: 60 * 1000 },
   seconds: { milliseconds: 1000 }
 }
-export const casualMatrix = {
+const casualMatrix = {
   years: {
     quarters: 4,
     months: 12,
@@ -51,9 +83,9 @@ export const casualMatrix = {
 
   ...lowOrderMatrix
 }
-export const exactDaysInYear = 146097.0 / 400
-export const exactDaysInMonth = 146097.0 / 4800
-export const exactMatrix = {
+const exactDaysInYear = 146097.0 / 400
+const exactDaysInMonth = 146097.0 / 4800
+const exactMatrix = {
   years: {
     quarters: 4,
     months: 12,
@@ -84,7 +116,8 @@ export const exactMatrix = {
 
   ...lowOrderMatrix
 }
-export const UNITS_PLURAL = {
+
+export const UNITS_PLURAL: Record<DurationUnit, DurationUnit> = {
   year: 'years',
   years: 'years',
   quarter: 'quarters',
@@ -104,7 +137,8 @@ export const UNITS_PLURAL = {
   millisecond: 'milliseconds',
   milliseconds: 'milliseconds'
 }
-export const orderedUnits = [
+
+const orderedUnits = [
   'years',
   'quarters',
   'months',
@@ -115,28 +149,7 @@ export const orderedUnits = [
   'seconds',
   'milliseconds'
 ]
-export const reverseUnits = orderedUnits.slice(0).reverse()
-
-export type DurationUnit = keyof typeof UNITS_PLURAL
-
-export interface TDuration {
-  years?: number
-  months?: number
-  weeks?: number
-  days?: number
-  hours?: number
-  minutes?: number
-  seconds?: number
-  milliseconds?: number
-}
-
-function normalizeUnits(obj) {
-  const vals = {}
-  for (const unit of Object.keys(obj)) {
-    vals[UNITS_PLURAL[unit]] = obj[unit]
-  }
-  return vals
-}
+const reverseUnits = orderedUnits.slice(0).reverse()
 
 export class Duration {
   values: TDuration
@@ -381,7 +394,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
     if (this.seconds !== 0 || this.milliseconds !== 0)
       // this will handle "floating point madness" by removing extra decimal places
       // https://stackoverflow.com/questions/588004/is-floating-point-math-broken
-      s += roundTo(this.seconds + this.milliseconds / 1000, 3) + 'S'
+      s += round(this.seconds + this.milliseconds / 1000, 3) + 'S'
     if (s === 'P') s += 'T0S'
     return s
   }
@@ -409,6 +422,14 @@ Duration.fromISO('P5Y3M').toObject()
     if (parsed) return new Duration(parsed)
     throw new ValueError(`The input "${text}" can't be parsed as ISO 8601`)
   }
+}
+
+function normalizeUnits(obj) {
+  const vals = {}
+  for (const unit of Object.keys(obj)) {
+    vals[UNITS_PLURAL[unit]] = obj[unit]
+  }
+  return vals
 }
 
 function antiTrunc(n) {
