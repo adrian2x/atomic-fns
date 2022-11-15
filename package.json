@@ -8,13 +8,12 @@
   "module": "core/index.js",
   "sideEffects": false,
   "scripts": {
-    "prepublishOnly": "npm test",
+    "prepublishOnly": "npm run build",
     "test": "NODE_OPTIONS=--loader=ts-node/esm jasmine --config=jasmine.json",
     "tsc": "tsc -p ./tsconfig.xo.json --declaration",
     "tsc:w": "tsc -p ./tsconfig.xo.json --declaration --watch",
-    "lint": "eslint core/**/*.ts",
-    "lint:fix": "eslint core/**/*.ts --fix",
-    "build": "npm run lint:fix && npm run tsc && npm run docs",
+    "lint": "eslint core/**/*.ts --fix",
+    "build": "npm run lint && npm test && npm run tsc && npm run docs",
     "docs": "typedoc"
   },
   "devDependencies": {
