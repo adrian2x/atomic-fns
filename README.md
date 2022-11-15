@@ -47,17 +47,6 @@ uniqueId('user_')
 ...
 ```
 
-You could also import any individual module directly from an html page like this:
-
-```html
-<script type="module">
-  import {
-    namedtuple, FrozenSet, SortedSet, SortedMap
-  } from 'https://unpkg.com/atomic-fns/collections';
-  // your code goes here...
-</script>
-```
-
 See the full list of [modules](https://atomic-fns.dev/modules.html).
 
 ## Data model
