@@ -28,7 +28,7 @@ export const randomInt = (min = 0, max = 1) => Math.round(random(min, max))
  * @template T
  */
 export const choice = <T>(arr: T[]) => {
-  if (!arr || !arr.length) return
+  if (!arr?.length) return
   return arr[randomInt(0, arr.length - 1)]
 }
 
@@ -40,7 +40,7 @@ export const choice = <T>(arr: T[]) => {
  * @template T
  */
 export function sample<T>(arr: T[], size: number) {
-  if (!arr || !arr.length || arr.length < size) return []
+  if (!arr?.length || arr.length < size) return []
   return shuffle(arr.slice()).slice(-size)
 }
 
@@ -53,7 +53,7 @@ export function sample<T>(arr: T[], size: number) {
  * @template T
  */
 export function shuffle<T>(arr: T[], size?: number) {
-  if (!arr || !arr.length) return arr
+  if (!arr?.length) return arr
   if (isObject(arr)) arr = Object.values(arr)
   if (size == null) size = arr.length - 1
   for (let i = 0; i <= size; i++) {

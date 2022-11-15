@@ -175,7 +175,7 @@ const formatMeridiem = (hour, isLowercase?) => {
 
 const formatPart = (locale, t, date) => {
   const value = formatter(locale, TOKENS[t]).format(date)
-  return value.split(' ').slice(1).join(' ')
+  return value.split(/\s+/g).slice(1).join(' ')
 }
 
 export function format(formatStr: string, date: Date, locale?: string) {
@@ -265,7 +265,7 @@ export function strftime(fmt: string, date: number | Date, locale?) {
       while (i < fmt.length - 1 && fmt[i + 1] === fmt[i]) part += fmt[++i]
 
       if (HOUR_PARTS[part]) {
-        const res = formatter(locale, STRFTIME[part]).format(date).split(' ')
+        const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
         // save the AM/PM for the correct spot
         results.push(res[0])
         dayPeriod = res[1]
@@ -275,13 +275,16 @@ export function strftime(fmt: string, date: number | Date, locale?) {
       if (part === '%P' || part === '%p') {
         // leave this flag in place for later
         dayPeriodIndex = results.length
+        if (part === '%p' && dayPeriod) {
+          dayPeriod = dayPeriod.toLowerCase()
+        }
         results.push(part)
         continue
       }
 
       if (ERA_PARTS[part] || TZ_PARTS[part]) {
         // the formatting includes the date/year so we take what comes after
-        const res = formatter(locale, STRFTIME[part]).format(date).split(' ')
+        const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
         results.push(res.slice(1).join(' '))
         continue
       }
