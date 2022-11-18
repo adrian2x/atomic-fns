@@ -61,10 +61,27 @@ export function compact<T>(arr): T[] | Partial<T> {
   return result
 }
 
-export function count<T>(iterable: Iterable<T> | Object, func: Iteratee<T>) {
-  const counters = {}
-  forEach(iterable, (value: T, key) => {
-    const result = func(value, key)
+/**
+ * Creates an object composed of keys from the results of running elements of `collection` thru `iteratee`. The corresponding value of each key is the number of times the key was returned by `iteratee`.
+ * @param iterable
+ * @param func
+ * @returns {Object} Returns an Object with the frequency values
+ * @example
+```js
+count([6.1, 4.2, 6.3], Math.floor);
+// => { '4': 1, '6': 2 }
+
+// property iteratee shorthand.
+count(['one', 'two', 'three'], x => x.length);
+// => { '3': 2, '5': 1 }
+```
+ */
+export function count<T>(obj: T[], fn: Iteratee<T>): Record<string, number>
+export function count<T>(obj: Object, fn: Iteratee<T>): Record<string, number>
+export function count<T>(obj, func: Iteratee<T>) {
+  const counters: Record<string, number> = {}
+  forEach(obj, (value, key) => {
+    const result = func(value as T, key)
     counters[result] = get(result, counters, 0) + 1
   })
   return counters
@@ -74,9 +91,9 @@ export function count<T>(iterable: Iterable<T> | Object, func: Iteratee<T>) {
  * Creates a function that can be used to create named tuple-like objects.
  * @example
 ```js
- * let Point = namedtuple('x', 'y', 'z')
- * let userObj = User(0, 0, 0)
- * // => {x: 0, y: 0, z: 0}
+let Point = namedtuple('x', 'y', 'z')
+let userObj = User(0, 0, 0)
+// => {x: 0, y: 0, z: 0}
 ```
  * @param fields - A list of field names
  * @returns A function that can be called with the field values
@@ -92,7 +109,7 @@ export function namedtuple(...fields: string[]) {
  *
  * @example
 ```js
- * let users = [
+let users = [
   { 'user': 'barney', 'age': 36, 'active': true },
   { 'user': 'fred',   'age': 40, 'active': false }
 ]
@@ -124,7 +141,7 @@ export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
  * Iterates over elements of collection, returning the first element where predicate returns truthy value. The predicate is invoked with three arguments: `(value, index|key, collection)`.
  * @example
 ```js
- let users = [
+let users = [
   { 'user': 'barney',  'age': 36, 'active': true },
   { 'user': 'fred',    'age': 40, 'active': false },
   { 'user': 'pebbles', 'age': 1,  'active': true }

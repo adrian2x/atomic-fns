@@ -31,6 +31,10 @@ describe('collections', () => {
     let counters = count([0, 1, false, 2, '', 3], (x) => !!x)
     assert(counters['true'] === 3)
     assert(counters['false'] === 3)
+    assert.deepEqual(
+      count(['one', 'two', 'three'], (x) => x.length),
+      { '3': 2, '5': 1 }
+    )
   })
 
   it('clone array', () => {
