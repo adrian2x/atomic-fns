@@ -144,7 +144,7 @@ find(users, 'active')
  * @param {Array} arr The collection to iterate over.
  * @param {Function} fn The function invoked per iteration.
  * @returns {*} The matched element, else `undefined`.
- * @see {@link findRight}
+ * @see {@link findLast}
  */
 export function find(arr, fn: Iteratee | PropertyKey | Object) {
   if (Array.isArray(arr)) {
@@ -153,11 +153,12 @@ export function find(arr, fn: Iteratee | PropertyKey | Object) {
     if (isObject(fn)) return arr.find(matches(fn))
   }
 }
+
 /**
  * This method is like {@link find} except that it iterates from right to left.
  * @example
 ```js
-findRight([1, 2, 3, 4], (n) => n % 2 === 1)
+findLast([1, 2, 3, 4], (n) => n % 2 === 1)
 //  => 3
 ```
  * @param {Array} arr The collection to iterate over.
@@ -165,7 +166,7 @@ findRight([1, 2, 3, 4], (n) => n % 2 === 1)
  * @returns {*} The matched element, else `undefined`.
  * @see {@link find}
  */
-export function findRight(arr, fn: Iteratee | PropertyKey | Object) {
+export function findLast(arr, fn: Iteratee | PropertyKey | Object) {
   if (Array.isArray(arr)) {
     for (let i = arr.length - 1; i >= 0; i--) {
       const x = arr[i]

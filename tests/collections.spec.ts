@@ -6,7 +6,7 @@ import {
   difference,
   filter,
   find,
-  findRight,
+  findLast,
   flatten,
   forEach,
   groupBy,
@@ -117,31 +117,31 @@ describe('collections', () => {
     assert(find(users, 'active') === users[0])
   })
 
-  it('findRight', () => {
+  it('findLast', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false },
       { user: 'barney', age: 36, active: true }
     ]
-    assert(findRight(users, { age: 36 }) === users[2])
+    assert(findLast(users, { age: 36 }) === users[2])
   })
 
-  it('findRight matches', () => {
+  it('findLast matches', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false },
       { user: 'barney', age: 36, active: true }
     ]
-    assert(findRight(users, { age: 36 }) === users[2])
+    assert(findLast(users, { age: 36 }) === users[2])
   })
 
-  it('findRight property', () => {
+  it('findLast property', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false },
       { user: 'barney', age: 36, active: true }
     ]
-    assert(findRight(users, 'active') === users[2])
+    assert(findLast(users, 'active') === users[2])
   })
 
   it('forEach', () => {
