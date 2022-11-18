@@ -24,6 +24,7 @@ export class Currency extends BigNum {
     let systemLocale = new Intl.NumberFormat(locale, defaults(opts, { currency }, this.options))
     const resolved = systemLocale.resolvedOptions()
     this.numberFormat = systemLocale
+    this.options.currency = currency
     this.currency = resolved.currency
     this.locale = resolved.locale
   }
@@ -75,21 +76,25 @@ export class Currency extends BigNum {
   format(opts: Intl.NumberFormatOptions = {}, locale?: string) {
     let number = this.toNumber()
     opts = defaults(opts, this.options)
-    return new Intl.NumberFormat(locale ?? this.locale).format(number)
+    return new Intl.NumberFormat(locale ?? this.locale, opts).format(number)
   }
 
-  fraction(_min: number, _max?: number) {
-    this.options.minimumFractionDigits = _min
-    this.options.maximumFractionDigits = _max
+  displayName() {
+    return this.format({ currencyDisplay: 'name' })
   }
 
-  integer(n: number) {
-    this.options.minimumIntegerDigits = n
+  accounting() {
+    return this.format({ currencySign: 'accounting' })
+  }
+
+  precision(digits?: number) {
+    return this.format({ maximumFractionDigits: digits })
   }
 
   eq(x) {
-    if (x instanceof Currency) {
-      return this.currency === x.currency && super.eq(Decimal(x))
+    if (x?.currency && x.currency !== this.currency) {
+      return false
     }
+    return BigNum.prototype.eq.call(this, x)
   }
 }

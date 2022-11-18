@@ -51,4 +51,23 @@ describe('Money', () => {
     let b = Money('3')
     assert(a.div(b).toString() === '$0.3333333333333333')
   })
+
+  it('precision', () => {
+    let a = Money('1')
+    let b = Money('3')
+    assert(a.div(b).precision(4) === '$0.3333')
+  })
+
+  it('displayName', () => {
+    let a = Money('1')
+    assert(a.displayName() === '1.00 US dollars')
+  })
+
+  it('accounting', () => {
+    assert(Money(0).accounting() === '$0.00')
+    assert(Money(1).accounting() === '$1.00')
+    assert(Money(-0).accounting() === '$0.00')
+    assert(Money(-1).accounting() === '($1.00)')
+    assert(Money(-100).accounting() === '($100.00)')
+  })
 })
