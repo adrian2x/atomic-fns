@@ -40,17 +40,17 @@ export * from './SplayTree.js'
 /**
  * Creates a new array with all falsy and empty values removed.
  * @param arr The array to compact
- * @returns A new array with the filtered values.
  * @example
 ```js
 compact([0, 1, false, 2, '', 3])
 // => [1, 2, 3]
 ```
+ * @returns A new array with the filtered values
  */
-export function compact(arr: any[])
-export function compact(arr: Object)
-export function compact(arr) {
-  if (arr == null) return
+export function compact<T>(arr: T[]): T[]
+export function compact<T>(arr: T): Partial<T>
+export function compact<T>(arr): T[] | Partial<T> {
+  if (!arr) return
   if (Array.isArray(arr)) return arr.filter((x) => !isEmpty(x))
   const result = {}
   for (const key of Object.keys(arr)) {
