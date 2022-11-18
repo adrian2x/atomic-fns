@@ -4,6 +4,8 @@
  * @module Globals
  */
 
+export * from './decimal.js'
+
 /** This is just a noop function. */
 export const noop = () => {}
 

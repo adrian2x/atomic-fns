@@ -1,11 +1,11 @@
 import { defaults } from '../collections/index.js'
 import { isObject } from '../globals/index.js'
-import { Decimal, BigNum } from '../globals/decimal.js'
+import { Decimal } from '../globals/decimal.js'
 
 /**
  * Currency represents a local currency amount that can be formatted using the `Intl` apis.
  */
-export class Currency extends BigNum {
+export class Currency extends Decimal {
   locale: string
   currency: string
   numberFormat: Intl.NumberFormat
@@ -21,7 +21,7 @@ export class Currency extends BigNum {
       opts = locale as any
       locale = undefined
     }
-    let systemLocale = new Intl.NumberFormat(locale, defaults(opts, { currency }, this.options))
+    const systemLocale = new Intl.NumberFormat(locale, defaults(opts, { currency }, this.options))
     const resolved = systemLocale.resolvedOptions()
     this.numberFormat = systemLocale
     this.options.currency = currency
@@ -31,50 +31,50 @@ export class Currency extends BigNum {
 
   // @ts-expect-error overrides
   clone(n) {
-    return new Currency(n, this.currency, this.locale)
+    return new Currency(n, this.currency, this.locale, this.options)
   }
 
   // @ts-expect-error overrides
   negated() {
-    let n = BigNum.negated(this as any)
+    const n = super.negated.call(this)
     return this.clone(n)
   }
 
   // @ts-expect-error overrides
   add(x) {
-    let n = BigNum.add(this.toDecimal(), x)
+    const n = super.add.call(this.toDecimal(), x)
     return this.clone(n)
   }
 
   // @ts-expect-error overrides
   sub(x) {
-    let n = BigNum.sub(this.toDecimal(), x)
+    const n = super.sub.call(this.toDecimal(), x)
     return this.clone(n)
   }
 
   // @ts-expect-error overrides
   div(x) {
-    let n = BigNum.div(this.toDecimal(), x)
+    const n = super.div.call(this.toDecimal(), x)
     return this.clone(n)
   }
 
   // @ts-expect-error overrides
   mul(x) {
-    let n = BigNum.mul(this.toDecimal(), x)
+    const n = super.mul.call(this.toDecimal(), x)
     return this.clone(n)
   }
 
   toDecimal() {
-    return BigNum.prototype.clone.call(this)
+    return super.clone.call(this)
   }
 
   toString() {
-    let number = this.toNumber()
+    const number = this.toNumber()
     return this.numberFormat.format(number)
   }
 
   format(opts: Intl.NumberFormatOptions = {}, locale?: string) {
-    let number = this.toNumber()
+    const number = this.toNumber()
     opts = defaults(opts, this.options)
     return new Intl.NumberFormat(locale ?? this.locale, opts).format(number)
   }
@@ -95,6 +95,6 @@ export class Currency extends BigNum {
     if (x?.currency && x.currency !== this.currency) {
       return false
     }
-    return BigNum.prototype.eq.call(this, x)
+    return super.eq.call(this, x)
   }
 }
