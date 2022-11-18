@@ -1,9 +1,13 @@
 import assert from 'assert'
-import { Money as Currency } from '../src/i18n/index.js'
+import { Currency } from '../src/i18n/index.js'
 
 describe('Money', () => {
   const locale = 'en-US'
-  const Money = (x) => Currency(x, 'USD', locale)
+  const Money = (x) => new Currency(x, 'USD', locale)
+
+  it('throws wrong currency', () => {
+    assert.throws(() => new Currency(100, 'invalid', 'en'))
+  })
 
   it('from number', () => {
     assert(Money(0).toString() === '$0.00')
@@ -69,5 +73,13 @@ describe('Money', () => {
     assert(Money(-0).accounting() === '$0.00')
     assert(Money(-1).accounting() === '($1.00)')
     assert(Money(-100).accounting() === '($100.00)')
+  })
+
+  it('equals', () => {
+    assert(Money('1').eq(Money('1.00')))
+    assert(Money(10).eq(Money('10.00')))
+    assert(Money(100).eq(Money('100.00000000000000000000')))
+    assert(Money(100).eq(new Currency(100, 'USD')))
+    assert(!Money(100).eq(new Currency(100, 'EUR')))
   })
 })
