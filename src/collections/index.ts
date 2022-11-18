@@ -513,22 +513,22 @@ let users = [
   { 'user': 'pebbles', 'active': true }
 ]
 
-index(users, (o) => o.user == 'barney')
+findIndex(users, (o) => o.user == 'barney')
 // => 0
 
 // The `shape` iteratee shorthand.
-index(users, { 'user': 'fred', 'active': false })
+findIndex(users, { 'user': 'fred', 'active': false })
 // => 1
 
 // The `property` iteratee shorthand.
-index(users, 'active')
+findIndex(users, 'active')
 // => 2
 ```
  * @see {@link indexOf}
  * @see {@link lastIndex}
  *
  */
-export function index(obj, fn: Iteratee | string | Object, start = 0) {
+export function findIndex(obj, fn: Iteratee | string | Object, start = 0) {
   if (obj == null) return
   const length = obj.length
   if (length && start < 0) {
@@ -549,7 +549,7 @@ export function index(obj, fn: Iteratee | string | Object, start = 0) {
 }
 
 /**
- * This method is like {@link index} except that it searches for a given value directly, instead of using a predicate function.
+ * This method is like {@link findIndex} except that it searches for a given value directly, instead of using a predicate function.
  * @param {Array} obj The array to inspect.
  * @param {*} value The value to find
  * @param {number} [start=0] The index to search from.
@@ -563,7 +563,7 @@ indexOf([1, 2, 1, 2], 2)
 indexOf([1, 2, 1, 2], 2, 2)
 // => 3
 ```
- * @see {@link index}
+ * @see {@link findIndex}
  * @see {@link lastIndexOf}
  */
 export function indexOf(obj, value, start = 0) {
@@ -582,7 +582,7 @@ export function indexOf(obj, value, start = 0) {
 }
 
 /**
- * This method is like {@link index} except that it iterates the collection from right to left.
+ * This method is like {@link findIndex} except that it iterates the collection from right to left.
  * @param {Array} obj The array to inspect.
  * @param {string|Iteratee|Object} fn The function invoked per iteration.
  * @param {number} [start] The index to search from.
@@ -606,7 +606,7 @@ findLastIndex(users, { 'user': 'barney', 'active': true })
 findLastIndex(users, 'active')
 // => 0
 ```
- * @see {@link index}
+ * @see {@link findIndex}
  * @see {@link lastIndexOf}
  */
 export function lastIndex(obj: any[], fn: string | Iteratee | Object, start?) {
