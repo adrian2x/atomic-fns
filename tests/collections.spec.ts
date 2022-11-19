@@ -1,5 +1,8 @@
 import assert from 'assert'
 import {
+  binarySearch,
+  bisect,
+  bisectLeft,
   clone,
   compact,
   count,
@@ -10,6 +13,8 @@ import {
   flatten,
   forEach,
   groupBy,
+  insort,
+  insortLeft,
   intersection,
   map,
   merge,
@@ -287,5 +292,43 @@ describe('collections', () => {
     let arr = [4, 7, 1, 1, 9, 4, 7]
     let distinct = uniq(arr, (x) => x * 2)
     assert.deepEqual(distinct, [8, 14, 2, 18])
+  })
+
+  it('binarySearch', () => {
+    let arr = [1, 1, 4, 4, 7, 7, 9]
+    assert(binarySearch(arr, 1) === 1)
+    assert(binarySearch(arr, 4) === 3)
+    assert(binarySearch(arr, 7) === 5)
+    assert(binarySearch(arr, 9) === 6)
+  })
+
+  it('bisect', () => {
+    assert(bisect([1], 2) === 1)
+    let arr = [1, 1, 4, 4, 7, 7, 9]
+    assert(bisect(arr, 1) === 2)
+    assert(bisect(arr, 4) === 4)
+    assert(bisect(arr, 7) === 6)
+    assert(bisect(arr, 9) === 7)
+  })
+
+  it('insort', () => {
+    assert.deepEqual(insort([1], 2), [1, 2])
+    assert.deepEqual(insort([1, 1, 4, 4, 7, 7, 9], 5), [1, 1, 4, 4, 5, 7, 7, 9])
+    assert.deepEqual(insort([1, 1, 4, 4, 7, 7, 9], 10), [1, 1, 4, 4, 7, 7, 9, 10])
+  })
+
+  it('bisectLeft', () => {
+    assert(bisectLeft([1], 2) === 1)
+    let arr = [1, 1, 4, 4, 7, 7, 9]
+    assert(bisectLeft(arr, 1) === 0)
+    assert(bisectLeft(arr, 4) === 2)
+    assert(bisectLeft(arr, 7) === 4)
+    assert(bisectLeft(arr, 9) === 6)
+  })
+
+  it('insortLeft', () => {
+    assert.deepEqual(insortLeft([1], 2), [1, 2])
+    assert.deepEqual(insortLeft([1, 1, 4, 4, 7, 7, 9], 5), [1, 1, 4, 4, 5, 7, 7, 9])
+    assert.deepEqual(insortLeft([1, 1, 4, 4, 7, 7, 9], 10), [1, 1, 4, 4, 7, 7, 9, 10])
   })
 })

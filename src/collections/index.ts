@@ -4,7 +4,6 @@
  * @module Collections
  */
 
-import { partial } from '../functools/index.js'
 import {
   call,
   get,
@@ -18,7 +17,6 @@ import {
   isNumber,
   isObject,
   isString,
-  isSymbol,
   Iteratee,
   keys,
   set
@@ -32,8 +30,8 @@ export * from './deque.js'
 export * from './frozenset.js'
 export * from './Heap.js'
 export * from './LRUCache.js'
-export * from './SortedSet.js'
 export * from './SortedMap.js'
+export * from './SortedSet.js'
 export * from './SortedTree.js'
 export * from './SplayTree.js'
 
@@ -198,8 +196,8 @@ export function find<T>(arr: any, fn: Function | PropertyKey): T | undefined {
  * @param {*} value The value to insert in the array at the given `index`.
  * @returns {Array<*>} The given array.
  */
-export function insert(arr: any[], index: number, value) {
-  if (!arr || arr.length <= index || index < 0) return arr
+export function insert<T>(arr: T[], index: number, value: any): T[] {
+  if (!arr || index < 0) return arr
   arr.splice(index, 0, value)
   return arr
 }
@@ -1043,5 +1041,96 @@ export function remove<T>(arr: T[], func: T | T[] | Iteratee<T>): T[] {
   return arr.filter((x, i) => !it(x, i, arr))
 }
 
-// TODO: binary search utils
-// TODO: Counter
+/**
+ * Returns the index of `x` in a **sorted** array if found, in `O(log n)` using binary search.
+ * If the element is not found, returns a negative integer.
+ * @param arr The array to sort
+ * @param x The element to find
+ * @param lo The starting index
+ * @param hi The end index to search within
+ * @param comp The compare function to check for `x`
+ * @returns {number} The index if the element is found or a negative integer.
+ */
+export function binarySearch(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
+  hi = hi ?? arr.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    const check = comp(x, arr[mid])
+    if (check === 0) return mid
+    if (check > 0) lo = mid + 1
+    else hi = mid - 1
+  }
+  if (comp(x, arr[lo]) === 0) return lo
+  // Returns (-lo - 1) where n is the insertion point for new element in the range
+  return -lo - 1
+}
+
+/**
+ * Returns an insertion index which comes after any existing entries of `x` in a **sorted** array, using binary search.
+ * @param arr The array to sort
+ * @param x The element to find
+ * @param lo The starting index
+ * @param hi The end index to search within
+ * @param comp The compare function to check for `x`
+ * @returns {number}
+ */
+export function bisect(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
+  hi = hi ?? arr.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    const check = comp(x, arr[mid])
+    if (check >= 0) lo = mid + 1
+    else hi = mid - 1
+  }
+  return lo
+}
+
+/**
+ * Returns an insertion index which comes before any existing entries of `x` in a **sorted** array, using binary search.
+ * @param arr The array to sort
+ * @param x The element to find
+ * @param lo The starting index
+ * @param hi The end index to search within
+ * @param comp The compare function to check for `x`
+ * @returns {number}
+ */
+export function bisectLeft(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
+  hi = hi ?? arr.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    const check = comp(x, arr[mid])
+    if (check <= 0) hi = mid - 1
+    else lo = mid + 1
+  }
+  return lo
+}
+
+/**
+ * Runs {@link bisect} first to locate an insertion point, and inserts the value `x` in the sorted array after any existing entries of `x` to maintain sort order.
+ * Please note this method is `O(n)` because insertion resizes the array.
+ * @param arr The array to insert into
+ * @param x The element to insert
+ * @param lo The starting index
+ * @param hi The end index to search within
+ * @param comp The compare function to check for `x`
+ * @returns {Array}
+ */
+export function insort<T>(arr: T[], x: any, lo = 0, hi?, comp = compare): T[] {
+  const index = bisect(arr, x, lo, hi, comp)
+  return insert(arr, index, x)
+}
+
+/**
+ * Runs {@link bisectLeft} first to locate an insertion point, and inserts the value `x` in the sorted array before any existing entries of `x` to maintain sort order.
+ * Please note this method is `O(n)` because insertion resizes the array.
+ * @param arr The array to insert into
+ * @param x The element to insert
+ * @param lo The starting index
+ * @param hi The end index to search within
+ * @param comp The compare function to check for `x`
+ * @returns {Array}
+ */
+export function insortLeft<T>(arr: T[], x: any, lo = 0, hi?, comp = compare): T[] {
+  const index = bisectLeft(arr, x, lo, hi, comp)
+  return insert(arr, index, x)
+}
