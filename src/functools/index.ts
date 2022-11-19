@@ -98,11 +98,8 @@ export const compose = (...args) => flow(args.reverse())
  * @param {Function} [resolver] The function to resolve the cache key.
  * @return {Function} Returns the new memoized function.
  */
-export function memoize<T>(
-  func: Function<T>,
-  resolver?: Function
-): Function<ReturnType<typeof func>> {
-  const cache = new Map()
+export function memoize<T>(func: Function<T>, resolver?: Function): Function<T> {
+  const cache = new Map<any, T>()
   return (...args) => {
     const key = resolver ? resolver(...args) : args[0]
     const prev = cache.get(key)
@@ -198,14 +195,14 @@ single(3) // 1
 // `func` is invoked only once.
 ```
  */
-export function once<T>(func: Function<T>) {
-  let result, isCalled
+export function once<T>(func: Function<T>): Function<T> {
+  let result: T, isCalled
   return (...args) => {
     if (!isCalled) {
       result = func(...args)
       isCalled = true
     }
-    return result as T
+    return result
   }
 }
 
@@ -250,7 +247,7 @@ export function resultAsync<T = any, E = unknown>(
   awaitable: Promise<T> | Function<Promise<T>>,
   onFinally?: (err: E, res: T) => any
 ) {
-  return async (...args): Promise<Result<T, E>> => {
+  return async (...args) => {
     let value, err
     try {
       const promise = isPromise(awaitable) ? awaitable : awaitable(...args)
@@ -271,8 +268,8 @@ export function resultAsync<T = any, E = unknown>(
  * @param {*} thisArg
  * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a Promise.
  */
-export function promisify<T = any>(fun: Function<T>, thisArg) {
-  const original = fun.bind(thisArg)
+export function promisify<T = any>(fun: Function<T>, thisArg?) {
+  const original = thisArg ? fun.bind(thisArg) : fun
   return async (...args) => {
     return await new Promise<T>((resolve, reject) =>
       original(...args, (err, result: T) => {

@@ -65,7 +65,7 @@ export function compare(x, y): number {
  * @param {*} y
  * @returns {boolean} `true` if `x` and `y` are equal or `false` otherwise.
  */
-export function eq(x, y) {
+export function eq(x, y): boolean {
   return Object.is(x, y) || call(x, 'eq', y) != null
 }
 
@@ -76,7 +76,7 @@ export function eq(x, y) {
  * @param {*} y
  * @returns {boolean} `true` if `x` is strictly less than `y` or `false` otherwise.
  */
-export function lt(x, y) {
+export function lt(x, y): boolean {
   return x < y || call(x, 'lt', y) != null
 }
 
@@ -89,7 +89,7 @@ export function lt(x, y) {
  * @see {@link eq}
  * @see {@link lt}
  */
-export function lte(x, y) {
+export function lte(x, y): boolean {
   if (x <= y || call(x, 'lte', y)) return true
   if (x === y || eq(x, y)) return true
   if (x < y || lt(x, y)) return true
@@ -103,7 +103,7 @@ export function lte(x, y) {
  * @param {*} y
  * @returns {boolean} `true` if `x` is strictly greater than `y` or `false` otherwise.
  */
-export function gt(x, y) {
+export function gt(x, y): boolean {
   return x > y || call(x, 'gt', y)
 }
 
@@ -116,7 +116,7 @@ export function gt(x, y) {
  * @see {@link eq}
  * @see {@link gt}
  */
-export function gte(x, y) {
+export function gte(x, y): boolean {
   if (x <= y || call(x, 'gte', y)) return true
   if (x === y || eq(x, y)) return true
   if (x > y || gt(x, y)) return true
@@ -206,7 +206,7 @@ export function pow(x, y) {
  * @returns `true` if the objects are considered equal.
  * @see {@link deepEqual}
  */
-export function shallowEqual(obj, other) {
+export function shallowEqual(obj, other): boolean {
   if (obj === other) return true
 
   if (!obj || !other) return false
@@ -245,7 +245,8 @@ export function shallowEqual(obj, other) {
  * @param other
  * @returns `true` if the objects are considered equal.
  */
-export function deepEqual(obj, other, checker = eq, seen = new WeakSet()) {
+export function deepEqual(obj, other, checker?: Function, seen?): boolean
+export function deepEqual(obj, other, checker = eq, seen = new WeakSet()): boolean {
   if (checker(obj, other)) return true
   if (!obj || !other) return false
   if (obj.prototype !== other.prototype) return false

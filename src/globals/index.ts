@@ -12,7 +12,7 @@ export const noop = () => {}
 /**
  * A generic function type with arbitrary arguments and return.
  */
-export type Function<T = any> = (...args: any) => T
+export type Function<TReturn = any> = (...args: any) => TReturn
 
 /**
  * An iteratee function used for collection methods.
@@ -97,12 +97,12 @@ export class ValueError extends CustomError {}
 export class ZeroDivisionError extends CustomError {}
 
 /**
- * Returns the true type of any value with correct detection for null, Array,
- * Object, Promise, Symbol, and NaN. The correct values are inferred from {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/toStringTag | Symbol.toStringTag} and the value's prototype.
+ * Returns the true type of any value with correct detection for `null`, `Array`,
+ * `Object`, `Promise`, `Symbol`, and `NaN`. The correct values are inferred from {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/toStringTag | Symbol.toStringTag} and the value's prototype.
  * @param value
  * @returns The value type.
  */
-export function type(value) {
+export function type(value: any): string {
   const result = typeof value
   if (result === 'object') {
     if (value) {
@@ -238,16 +238,16 @@ export const isWeakMap = <K extends object, V>(x): x is WeakMap<K, V> => x insta
  * @param value
  * @returns The number of elements in the collection or `undefined`.
  */
-export function len(value) {
+export function len(value): number {
   if (value == null) return
   if (isNumber(value.length)) {
     return value.length
   }
-  if (isFunction(value.size)) {
-    return value.size()
-  }
   if (isNumber(value.size)) {
     return value.size
+  }
+  if (isFunction(value.size)) {
+    return value.size()
   }
   if (isObject(value)) {
     return Object.keys(value).length
@@ -267,7 +267,7 @@ uniqueId('user_')
 // 'user_1033763188'
 ```
  */
-export const uniqueId = (pre: string = '') =>
+export const uniqueId = (pre: string = ''): string =>
   // @ts-expect-error
   (pre || 0) + ((Math.random() * 1e10) >>> 0)
 
@@ -335,7 +335,9 @@ export const has = (obj, attr: PropertyKey) => obj && attr in obj
  * @param {*} [value=undefined]
  * @return The property value or default value.
  */
-export function get(key: PropertyKey | PropertyKey[], obj, value: any = undefined) {
+export function get<T>(key: PropertyKey, obj: T, value?: any): any
+export function get<T>(key: PropertyKey[], obj: T, value?: any): any
+export function get(key: PropertyKey | PropertyKey[], obj, value: any): any {
   if (obj == null) return value
 
   let paths = Array.isArray(key) ? key : [key]
@@ -360,7 +362,7 @@ export function get(key: PropertyKey | PropertyKey[], obj, value: any = undefine
  * @param x The given object.
  * @returns The modified object.
  */
-export function del(attr: PropertyKey, x) {
+export function del<T>(attr: PropertyKey, x: T): T {
   if (x != null) delete x[attr]
   return x
 }
@@ -374,7 +376,13 @@ export function del(attr: PropertyKey, x) {
  * @param {boolean} [enumerable=false] If `true` this property shows up during enumeration of the properties in the object. Defaults to `false`.
  * @returns
  */
-export function set(attr: PropertyKey, obj, value, writable = false, enumerable = false) {
+export function set(
+  attr: PropertyKey,
+  obj: any,
+  value: any,
+  writable = false,
+  enumerable = false
+): any {
   return Object.defineProperty(obj, attr, {
     value,
     enumerable,
@@ -389,7 +397,9 @@ export const HASH_KEY = Symbol.for('HASH_KEY')
  * @param obj The given object.
  * @returns The hash value.
  */
-export function hash(obj) {
+export function hash(obj: string): number
+export function hash<T>(obj: T): T
+export function hash<T>(obj: T): number | T {
   if (typeof obj === 'string') {
     return hashCode(obj)
   }
@@ -411,7 +421,7 @@ export function hash(obj) {
  * @returns {number} The hash value of the string.
  * @see {@link http://isthe.com/chongo/tech/comp/fnv/ FNV hash}
  */
-export function hashCode(str: string) {
+export function hashCode(str: string): number {
   const FNV1_32A_INIT = 0x811c9dc5
   let hval = FNV1_32A_INIT
   for (let i = 0; i < str.length; ++i) {
@@ -448,7 +458,7 @@ export const oct = (n: number) => n.toString(8)
  * @returns A floating point number parsed from the given value or `NaN`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseFloat parseFloat}
  */
-export const float = (x) => parseFloat(x)
+export const float = (x: string) => parseFloat(x)
 
 /**
  * Returns an integer number constructed from a number or string `x`.
@@ -456,7 +466,7 @@ export const float = (x) => parseFloat(x)
  * @returns An integer number parsed from the given value or `NaN`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt parseInt}
  */
-export const int = (x, base = 10) => parseInt(x, base)
+export const int = (x: string, base = 10) => parseInt(x, base)
 
 /**
  * Converts the value to an array using `Array.from()`.
@@ -464,11 +474,15 @@ export const int = (x, base = 10) => parseInt(x, base)
  * @returns A new array value.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/from Array.from()}
  */
-export const list = (value?) => (value ? Array.from(value) : [])
+export const list = <T>(value?: any): T[] => (value ? Array.from(value) : [])
 
 /**
  * Retrieve the next item from the iterator by calling its `next()` method.
  * @param iter The iterator.
  * @returns The next value from the iterator.
  */
-export const next = (iter: Iterator<any> | Generator) => iter.next().value
+export function next<T>(iter: Iterator<T>): T | undefined
+export function next<T>(iter: Generator<any, T>): T | undefined
+export function next(iter) {
+  return iter.next().value
+}

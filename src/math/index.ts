@@ -58,18 +58,18 @@ export const ceil = (x: number) => Math.ceil(x)
  * @param y
  * @returns
  */
-export function divmod(x: number, y: number) {
+export function divmod(x: number, y: number): [number, number] {
   return [Math.floor(x / y), x % y]
 }
 
-export function log2(x) {
+export function log2(x): number {
   if (x > 0) {
     return Math.log(x) * 1.442695
   }
   return Number.NaN
 }
 
-export function logBase(x, y) {
+export function logBase(x, y): number {
   if (x > 0 && y > 0) {
     return Math.log(y) / Math.log(x)
   }
@@ -84,7 +84,7 @@ export function logBase(x, y) {
  */
 export function min(iterable: number[]): number
 export function min<T>(iterable: Iterable<T>, key?: Predicate<T>): T
-export function min<T>(iterable: Iterable<T>, key = id) {
+export function min<T>(iterable: Iterable<T>, key = id): T {
   return reduce(iterable, (x, y) => (lt(key(x), key(y)) ? x : y))
 }
 
@@ -96,7 +96,7 @@ export function min<T>(iterable: Iterable<T>, key = id) {
  */
 export function max(iterable: number[]): number
 export function max<T>(iterable: Iterable<T>, key?: Predicate<T>): T
-export function max<T>(iterable: Iterable<T>, key = id) {
+export function max<T>(iterable: Iterable<T>, key = id): T {
   return reduce(iterable, (x, y) => (gt(key(x), key(y)) ? x : y))
 }
 
@@ -104,7 +104,7 @@ export function max<T>(iterable: Iterable<T>, key = id) {
  * Computes the mean of the values in `iterable` and accepts an optional `key` function which is invoked for each element to generate the values to be averaged.
  * @param {Array<number>|Iterable<T>} iterable
  * @param {Function} [key] Optional iteratee invoked per element.
- * @returns Returns the mean value or `false` if no elements.
+ * @returns Returns the mean value or `NaN` if no elements.
  * @template T
  * @example
 ```js
@@ -114,16 +114,17 @@ mean(objects, (o) => o.n)
 // 5
 ```
  */
-export function mean(iterable: number[]): false | number
-export function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): false | number
-export function mean<T>(iterable: Iterable<T>, key = id): false | number {
+export function mean(iterable: number[]): number
+export function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): number
+export function mean<T>(iterable: Iterable<T>, key = id): number {
   let total = 0
   let count = 0
   for (const value of iterable) {
     total += key(value)
     count++
   }
-  return count !== 0 && total / count
+  if (count !== 0) return total / count
+  return Number.NaN
 }
 
 /**
@@ -140,10 +141,9 @@ sum([1, 2, 3, 4], 5)
 // 15
 ```
  */
-export function sum(iterable: number[]): number
-export function sum<T>(iterable: Iterable<T>, key?: Predicate<T>): T
-export function sum<T>(iterable: Iterable<T>, key?: Predicate<T>): T
-export function sum<T>(args: Iterable<T>, key: Predicate<T> = id) {
+export function sum(args: number[]): number
+export function sum<T>(args: Iterable<T>, key?: Predicate<T>): number
+export function sum<T>(args: Iterable<T>, key: Predicate<T> = id): number {
   let initial = 0
   for (const x of args) {
     initial += key(x)
