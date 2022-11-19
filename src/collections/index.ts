@@ -78,8 +78,8 @@ count(['one', 'two', 'three'], x => x.length);
  */
 export function count<T>(obj: T[], fn: Iteratee<T>): Record<string, number>
 export function count<T>(obj: Object, fn: Iteratee<T>): Record<string, number>
-export function count<T>(obj, func: Iteratee<T>) {
-  const counters: Record<string, number> = {}
+export function count<T>(obj, func: Iteratee<T>): Record<string, number> {
+  const counters = {}
   forEach(obj, (value, key) => {
     const result = func(value as T, key)
     counters[result] = get(result, counters, 0) + 1
@@ -129,9 +129,9 @@ filter(users, 'active')
  * @param {Function} fn The predicate function invoked for each item
  * @returns {Array} The new filtered array
  */
-export function filter<T>(arr: Iterable<T> | Object, fn: Iteratee<T> | Object = isNull) {
+export function filter<T>(arr: Iterable<T> | Object, fn: Iteratee<T> | Object = isNull): T[] {
   if (!arr) return
-  const predicate = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : get.bind(this, fn)
+  const predicate = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
   const results: T[] = []
   forEach(arr, (value: T, key) => {
     if (predicate(value, key, arr)) results.push(value)
@@ -165,11 +165,22 @@ find(users, 'active')
  * @returns {*} The matched element, else `undefined`.
  * @see {@link findLast}
  */
-export function find(arr, fn: Iteratee | PropertyKey | Object) {
+export function find<T>(arr: T[], fn: Iteratee<T>): T | undefined
+export function find<T>(arr: T[], fn: Object): T | undefined
+export function find<T>(arr: T[], fn: PropertyKey): T | undefined
+export function find<T>(arr: Object, fn: Iteratee<T>): T | undefined
+export function find<T>(arr: Object, fn: Object): T | undefined
+export function find<T>(arr: Object, fn: PropertyKey): T | undefined
+export function find<T>(arr, fn): T | undefined {
+  const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
   if (Array.isArray(arr)) {
-    if (isFunction(fn)) return arr.find(fn)
-    if (isNumber(fn) || isString(fn) || isSymbol(fn)) return arr.find((x) => x?.[fn])
-    if (isObject(fn)) return arr.find(matches(fn))
+    return arr.find(it)
+  } else if (isObject(arr)) {
+    for (const key of Object.keys(arr)) {
+      if (it(arr[key], key, arr)) {
+        return arr[key]
+      }
+    }
   }
 }
 

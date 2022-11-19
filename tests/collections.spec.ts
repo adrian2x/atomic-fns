@@ -110,7 +110,7 @@ describe('collections', () => {
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
-    assert(find(users, { age: 36 }) === users[0])
+    assert(find(users, { age: 40 }) === users[1])
   })
 
   it('find property', () => {
@@ -119,6 +119,14 @@ describe('collections', () => {
       { user: 'fred', age: 40, active: false }
     ]
     assert(find(users, 'active') === users[0])
+  })
+
+  it('find Object', () => {
+    let users = {
+      '0': { user: 'barney', age: 36, active: true },
+      '1': { user: 'fred', age: 40, active: false }
+    }
+    assert(find(users, { active: false }) === users['1'])
   })
 
   it('findLast', () => {
