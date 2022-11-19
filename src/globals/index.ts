@@ -27,7 +27,7 @@ export type Function<T = any> = (...args: any) => T
  * @see {@link Collections.sortedUniq}
  * @see {@link Collections.groupBy}
  */
-export type Iteratee<T = any, K = any> = (value: T, key?: K, arr?) => any
+export type Iteratee<T = any, K = any, TResult = any> = (value: T, key?: K, arr?) => TResult
 
 export type Predicate<T = any> = (value: T) => any
 

@@ -11,6 +11,7 @@ import {
   forEach,
   groupBy,
   intersection,
+  map,
   merge,
   omit,
   pick,
@@ -68,7 +69,6 @@ describe('collections', () => {
   })
 
   it('filter', () => {
-    assert(filter(null) == undefined)
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
@@ -80,7 +80,6 @@ describe('collections', () => {
   })
 
   it('filter matches', () => {
-    assert(filter(null) == undefined)
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
@@ -89,7 +88,6 @@ describe('collections', () => {
   })
 
   it('filter property', () => {
-    assert(filter(null) == undefined)
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
@@ -111,14 +109,6 @@ describe('collections', () => {
       { user: 'fred', age: 40, active: false }
     ]
     assert(find(users, { age: 40 }) === users[1])
-  })
-
-  it('find property', () => {
-    let users = [
-      { user: 'barney', age: 36, active: true },
-      { user: 'fred', age: 40, active: false }
-    ]
-    assert(find(users, 'active') === users[0])
   })
 
   it('find Object', () => {
@@ -145,15 +135,6 @@ describe('collections', () => {
       { user: 'barney', age: 36, active: true }
     ]
     assert(findLast(users, { age: 36 }) === users[2])
-  })
-
-  it('findLast property', () => {
-    let users = [
-      { user: 'barney', age: 36, active: true },
-      { user: 'fred', age: 40, active: false },
-      { user: 'barney', age: 36, active: true }
-    ]
-    assert(findLast(users, 'active') === users[2])
   })
 
   it('forEach', () => {
@@ -215,6 +196,17 @@ describe('collections', () => {
 
   it('groupBy', () => {
     assert.deepEqual(groupBy([6.1, 4.2, 6.3], Math.floor), { '4': [4.2], '6': [6.1, 6.3] })
+  })
+
+  it('map', () => {
+    let users = [
+      { user: 'barney', age: 36, active: true },
+      { user: 'fred', age: 40, active: false }
+    ]
+    const square = (x) => x * x
+    assert.deepEqual(map([4, 8], square), [16, 64])
+    assert.deepEqual(map({ a: 4, b: 8 }, square), [16, 64])
+    assert.deepEqual(map(users, 'user'), ['barney', 'fred'])
   })
 
   it('merge', () => {
