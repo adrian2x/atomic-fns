@@ -129,12 +129,14 @@ filter(users, 'active')
  * @param {Function} fn The predicate function invoked for each item
  * @returns {Array} The new filtered array
  */
-export function filter(arr, fn: Iteratee | PropertyKey | Object = isNull) {
-  if (Array.isArray(arr)) {
-    if (isFunction(fn)) return arr.filter(fn)
-    if (isNumber(fn) || isString(fn) || isSymbol(fn)) return arr.filter((x) => get(fn, x))
-    if (isObject(fn)) return arr.filter(matches(fn))
-  }
+export function filter<T>(arr: Iterable<T> | Object, fn: Iteratee<T> | Object = isNull) {
+  if (!arr) return
+  const predicate = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : get.bind(this, fn)
+  const results: T[] = []
+  forEach(arr, (value: T, key) => {
+    if (predicate(value, key, arr)) results.push(value)
+  })
+  return results
 }
 
 /**
