@@ -29,7 +29,7 @@ export type Function<TReturn = any> = (...args: any) => TReturn
  */
 export type Iteratee<T = any, K = any, TResult = any> = (value: T, key?: K, arr?) => TResult
 
-export type Predicate<T = any> = (value: T) => any
+export type Predicate<T = any, TReturn = any> = (value: T) => TReturn
 
 /** A function that always returns `true`. */
 export const True = () => true
@@ -399,7 +399,7 @@ export const HASH_KEY = Symbol.for('HASH_KEY')
  */
 export function hash(obj: string): number
 export function hash<T>(obj: T): T
-export function hash<T>(obj: T): number | T {
+export function hash<T>(obj: T): T | number {
   if (typeof obj === 'string') {
     return hashCode(obj)
   }
@@ -483,6 +483,6 @@ export const list = <T>(value?: any): T[] => (value ? Array.from(value) : [])
  */
 export function next<T>(iter: Iterator<T>): T | undefined
 export function next<T>(iter: Generator<any, T>): T | undefined
-export function next(iter) {
+export function next<T>(iter: any): T | undefined {
   return iter.next().value
 }

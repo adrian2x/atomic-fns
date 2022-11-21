@@ -41,7 +41,7 @@ export * from './SplayTree.js'
  * @example
 ```js
 compact([0, 1, false, 2, '', 3])
-// => [1, 2, 3]
+// [1, 2, 3]
 ```
  * @returns A new array with the filtered values
  */
@@ -67,11 +67,11 @@ export function compact<T>(arr: T | T[]): T[] | Partial<T> {
  * @example
 ```js
 count([6.1, 4.2, 6.3], Math.floor);
-// => { '4': 1, '6': 2 }
+// { '4': 1, '6': 2 }
 
 // property iteratee shorthand.
 count(['one', 'two', 'three'], x => x.length);
-// => { '3': 2, '5': 1 }
+// { '3': 2, '5': 1 }
 ```
  */
 export function count<T>(obj: T[], fn: Iteratee<T>): Record<string, number>
@@ -91,14 +91,15 @@ export function count<T>(obj: T[] | Object, func: Iteratee<T>): Record<string, n
 ```js
 let Point = namedtuple('x', 'y', 'z')
 let userObj = User(0, 0, 0)
-// => {x: 0, y: 0, z: 0}
+// {x: 0, y: 0, z: 0}
 ```
  * @param fields - A list of field names
  * @returns A function that can be called with the field values
  */
-export function namedtuple(...fields: string[]) {
-  return (...args) => fields.reduce((prev, f, i) => set(f, prev, args[i], false, true), {})
-}
+export const namedtuple =
+  (...fields: string[]) =>
+  (...args) =>
+    fields.reduce((prev, f, i) => set(f, prev, args[i], false, true), {})
 
 /**
  * Iterates over elements of collection, returning an array of all elements where predicate returns truthy value.
@@ -113,15 +114,15 @@ let users = [
 ]
 
 filter(users, o => !o.active)
- // => objects for ['fred']
+ // objects for ['fred']
 
 // The shape iteratee shorthand.
 filter(users, { age: 36, active: true })
-// => objects for ['barney']
+// objects for ['barney']
 
 // The property iteratee shorthand.
 filter(users, 'active')
-// => objects for ['barney']
+// objects for ['barney']
 ```
  * @param {Array} arr The collection to iterate over
  * @param {Function} fn The predicate function invoked for each item
@@ -152,15 +153,15 @@ let users = [
 ]
 
 find(users, (o) => o.age < 40)
-// => object for 'barney'
+// object for 'barney'
 
 // The shape iteratee shorthand.
 find(users, { 'age': 1, 'active': true })
-// => object for 'pebbles'
+// object for 'pebbles'
 
 // The `property` iteratee shorthand.
 find(users, 'active')
-// => object for 'barney'
+// object for 'barney'
 ```
  * @param {Array} arr The collection to iterate over.
  * @param {Function} fn The function invoked per iteration.
@@ -212,7 +213,7 @@ let objects = [
 ]
 
 filter(objects, matches({ a: 4, c: 6 }))
-// => [{ a: 4, b: 5, c: 6 }]
+// [{ a: 4, b: 5, c: 6 }]
 ```
  * @param shape
  * @returns
@@ -232,12 +233,12 @@ export const matches = (shape) => (obj) => {
 forEach([1, 2], (value) => {
   console.log(value)
 })
-// => Logs `1` then `2`.
+// Logs `1` then `2`.
 
 forEach({ 'a': 1, 'b': 2 }, (value, key) => {
   console.log(key)
 })
-// => Logs 'a' then 'b' (iteration order is not guaranteed).
+// Logs 'a' then 'b' (iteration order is not guaranteed).
 ```
  * @param {Array|Object} collection The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
@@ -303,7 +304,7 @@ export function findLast<T>(arr: Iterable<T> | Object, fn: Iteratee<T> | Object)
 forEachRight([1, 2], (value) => {
   console.log(value)
 })
-// => Logs `2` then `1`.
+// Logs `2` then `1`.
 ```
  * @param {Array|Object} collection The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
@@ -337,7 +338,7 @@ export function forEachRight<T>(collection: T[] | Object, fn: Iteratee<T>): void
  * @example
 ```js
 flatten([1, [2, [3, [4]], 5]])
-// => [1, 2, [3, [4]], 5]
+// [1, 2, [3, [4]], 5]
 
 flatten({
   dates: {
@@ -355,7 +356,7 @@ flatten({
     value: 1500
   }
 })
-// => {
+// {
   'dates.expiry_date': '30 sep 2018',
   'dates.available': '30 sep 2017',
   'dates.min_contract_period[0].id': 1,
@@ -424,10 +425,10 @@ function square(n) {
 }
 
 map([4, 8], square)
-// => [16, 64]
+// [16, 64]
 
 map({ a: 4, b: 8 }, square)
-// => [16, 64] (iteration order is not guaranteed)
+// [16, 64] (iteration order is not guaranteed)
 
 let users = [
   { user: 'barney' },
@@ -436,7 +437,7 @@ let users = [
 
 // The `property` iteratee shorthand.
 map(users, 'user')
-// => ['barney', 'fred']
+// ['barney', 'fred']
 ```
  * @param {Array|Object} arr The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
@@ -470,10 +471,10 @@ export function map<T, TResult>(
 let object = { a: 1, b: '2', c: 3 }
 
 pick(object, ['a', 'c'])
-// => { a: 1, c: 3 }
+// { a: 1, c: 3 }
 
 pick(object, (x) => isNumber(x))
-// => { a: 1, c: 3 }
+// { a: 1, c: 3 }
 ```
  *
  * @see {@link omit}
@@ -507,10 +508,10 @@ export function pick<T>(obj: T, paths: Iteratee | PropertyKey[]): Partial<T> {
 let object = { 'a': 1, 'b': '2', 'c': 3 }
 
 omit(object, ['a', 'c'])
-// => { 'b': '2' }
+// { 'b': '2' }
 
 omit(object, (x) => isNumber(x))
-// => { 'b': '2' }
+// { 'b': '2' }
 ```
  * @param {Object} obj The source object.
  * @param {Iteratee|PropertyKey[]} paths The property paths to omit.
@@ -555,15 +556,15 @@ let users = [
 ]
 
 findIndex(users, (o) => o.user == 'barney')
-// => 0
+// 0
 
 // The `shape` iteratee shorthand.
 findIndex(users, { 'user': 'fred', 'active': false })
-// => 1
+// 1
 
 // The `property` iteratee shorthand.
 findIndex(users, 'active')
-// => 2
+// 2
 ```
  * @see {@link indexOf}
  * @see {@link findLastIndex}
@@ -595,11 +596,11 @@ export function findIndex<T>(obj: T[], fn: Iteratee<T> | Object | PropertyKey, s
  * @example
 ```js
 indexOf([1, 2, 1, 2], 2)
-// => 1
+// 1
 
 // Search from a `start` index.
 indexOf([1, 2, 1, 2], 2, 2)
-// => 3
+// 3
 ```
  * @see {@link findIndex}
  * @see {@link lastIndexOf}
@@ -634,15 +635,15 @@ let users = [
 ]
 
 findLastIndex(users, (o) => o.user == 'pebbles')
-// => 2
+// 2
 
 // The `shape` iteratee shorthand.
 findLastIndex(users, { 'user': 'barney', 'active': true })
-// => 0
+// 0
 
 // The `property` iteratee shorthand.
 findLastIndex(users, 'active')
-// => 0
+// 0
 ```
  * @see {@link findIndex}
  * @see {@link lastIndexOf}
@@ -674,11 +675,11 @@ export function findLastIndex<T>(
  * @example
 ```js
 lastIndexOf([1, 2, 1, 2], 2)
-// => 3
+// 3
 
 // Search from the `fromIndex`.
 lastIndexOf([1, 2, 1, 2], 2, 2)
-// => 1
+// 1
 ```
  * @see {@link findLastIndex}
  * @see {@link indexOf}
@@ -762,10 +763,10 @@ export function cloneTypedArray(typedArray, isDeep = false) {
  * @example
 ```js
 uniq([2, 1, 2])
-// => [2, 1]
+// [2, 1]
 
 uniq([2.1, 1.2, 2.3], Math.floor)
-// => [2.1, 1.2]
+// [2.1, 1.2]
 ```
  *
  * @see {@link sortedUniq}
@@ -789,7 +790,7 @@ export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = id): T
  * @example
 ```js
 uniq([2, 1, 2])
-// => [1, 2]
+// [1, 2]
 ```
  * @see {@link uniq}
  */
@@ -878,7 +879,7 @@ let other = {
 }
 
 merge(object, other)
-// => { 'a': [{ 'b': 2, 'c': 3 }, { 'd': 4, 'e': 5 }] }
+// { 'a': [{ 'b': 2, 'c': 3 }, { 'd': 4, 'e': 5 }] }
 ```
  */
 export function merge(object: Object, ...sources: Object[]): Object {
@@ -898,7 +899,7 @@ export function merge(object: Object, ...sources: Object[]): Object {
  * @example
 ```js
 defaults({ 'a': 1 }, { 'b': 2 }, { 'a': 3 })
-// => { 'a': 1, 'b': 2 }
+// { 'a': 1, 'b': 2 }
 ```
  */
 export function defaults(object: Object, ...sources: Object[]) {
@@ -918,7 +919,7 @@ export function defaults(object: Object, ...sources: Object[]) {
  * @example
 ```js
 [...difference([2, 1], [2, 3])]
-// => [1]
+// [1]
 ```
  * @see {@link union}
  * @see {@link intersection}
@@ -944,7 +945,7 @@ export function* difference<T>(...args: Array<Iterable<T>>) {
  * @example
 ```js
 [...intersection([2, 1], [2, 3])]
-// => [2]
+// [2]
 ```
 * @see {@link difference}
  * @see {@link union}
@@ -973,7 +974,7 @@ export function* intersection<T>(...args: Array<Iterable<T>>) {
  * @example
 ```js
 [...union([2], [1, 2])]
-// => [2, 1]
+// [2, 1]
 ```
  * @see {@link difference}
  * @see {@link intersection}
@@ -1000,11 +1001,11 @@ export function* union<T>(...args: Array<Iterable<T>>) {
  * @example
 ```js
 groupBy([6.1, 4.2, 6.3], Math.floor)
-// => { '4': [4.2], '6': [6.1, 6.3] }
+// { '4': [4.2], '6': [6.1, 6.3] }
 
 // The `property` iteratee shorthand.
 groupBy(['one', 'two', 'three'], 'length')
-// => { '3': ['one', 'two'], '5': ['three'] }
+// { '3': ['one', 'two'], '5': ['three'] }
 ```
  */
 export function groupBy<T>(arr: Iterable<T>, fn: Iteratee<T>): Record<PropertyKey, T[]>
@@ -1037,11 +1038,11 @@ export function groupBy<T>(
  * @example
 ```js
 groupByMap([6.1, 4.2, 6.3], Math.floor)
-// => Map { 4: [4.2], 6: [6.1, 6.3] }
+// Map { 4: [4.2], 6: [6.1, 6.3] }
 
 // The `property` iteratee shorthand.
 groupByMap(['one', 'two', 'three'], 'length')
-// => Map { 3: ['one', 'two'], 5: ['three'] }
+// Map { 3: ['one', 'two'], 5: ['three'] }
 ```
  */
 export function groupByMap<V>(arr: Iterable<V>, fn: Iteratee<V>): Map<any, V[]>

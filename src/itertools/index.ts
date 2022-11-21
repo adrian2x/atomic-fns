@@ -119,16 +119,14 @@ export function contains(collection: Iterable<any>, value) {
   return any(collection, (x) => eq(value, x))
 }
 
-const compKey = (compare: Comparer, key) => (x, y) => compare(key(x), key(y))
-
 /**
  * Returns a generator that drops elements from the iterable as long as the predicate is `true`; afterwards, returns every remaining element. Note, the generator does not produce any output until the predicate first becomes `false`.
  * @param iterable The iterable to inspect.
  * @param predicate A function invoked per element to check if it should be dropped.
  * @returns Elements
  */
-export function* dropWhile<T>(iterable: Iterable<T>, predicate: Predicate) {
-  const it = iter(iterable)
+export function* dropWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
+  const it = iter<T>(iterable)
   while (true) {
     const head = it.next()
     if (!predicate(head.value)) {
@@ -146,20 +144,19 @@ export function* dropWhile<T>(iterable: Iterable<T>, predicate: Predicate) {
 
 export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
   for (const [index, value] of enumerate(iterable)) {
-    if (fun(value as T, index, iterable) === false) {
+    if (fun(value, index, iterable) === false) {
       return
     }
   }
 }
 
-export function IterableIterator<T = any>(next) {
-  const it: Iterator<T> & Iterable<T> = {
+export function IterableIterator<T = any>(next: Function<{ done?: boolean; value?: T }>) {
+  return {
     next,
     [Symbol.iterator]() {
       return this
     }
-  }
-  return it
+  } as Iterator<T> & Iterable<T>
 }
 
 /**
@@ -178,10 +175,10 @@ console.log([...enumerate(['hello', 'world'], 1)])
 // [[1, 'hello'], [2, 'world']]
 ```
  */
-export function* enumerate<T = any>(iterable: Iterable<T>, start = 0) {
+export function* enumerate<T>(iterable: Iterable<T>, start = 0) {
   let index = start
   for (const item of iterable) {
-    yield [index++, item]
+    yield [index++, item] as [number, T]
   }
 }
 
@@ -191,7 +188,7 @@ export function* enumerate<T = any>(iterable: Iterable<T>, start = 0) {
  * @returns The first element found or undefined if iterable is empty.
  */
 export function first<T>(iterable: Iterable<T>) {
-  return iter(iterable).next().value
+  return iter(iterable).next().value as T
 }
 
 /**
@@ -213,13 +210,13 @@ export function* icompact<T>(iterable: Iterable<T>) {
 /**
  * Iterates over elements of collection, producing only those elements where predicate returns a `truthy` value.
  */
-export function* ifilter<T>(iterable: Iterable<T>, predicate: Predicate) {
+export function* ifilter<T>(iterable: Iterable<T>, predicate: Predicate<T, boolean>) {
   for (const value of iterable) {
     if (predicate(value)) yield value
   }
 }
 
-export function* imap<T, TReturn = any>(iterable: Iterable<T>, mapFn: (x: T) => TReturn) {
+export function* imap<T, TReturn = any>(iterable: Iterable<T>, mapFn: Predicate<T, TReturn>) {
   for (const item of iterable) {
     yield mapFn(item)
   }
@@ -261,7 +258,7 @@ export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, 
 }
 
 export function* itake<T>(n: number, iterable: Iterable<T>) {
-  const it = iter(iterable)
+  const it = iter<T>(iterable)
   while (n-- > 0) {
     const item = it.next()
     if (!item.done) yield item.value
@@ -274,13 +271,13 @@ export function* itake<T>(n: number, iterable: Iterable<T>) {
  * @param obj The given collection to iterate over.
  * @returns An Iterator type.
  */
-export function iter<T>(obj): Iterator<T> {
+export function iter<T>(obj): Iterator<T, T> {
   const iterable = call(obj, Symbol.iterator)
   if (notNull(iterable)) return iterable as Iterator<T>
   return Object.keys(obj)[Symbol.iterator]() as Iterator<T>
 }
 
-export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
+export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T, boolean>): [T[], T[]] {
   const left = [] as T[]
   const right = [] as T[]
   for (const value of iterable) {
@@ -349,12 +346,12 @@ reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0)
 export function reduce<T>(
   iterable: Iterable<T>,
   reducer: (prev: T, value: T, index: any) => T,
-  initial?: any
+  initial?
 ) {
   const it = iter<T>(iterable)
   let output = initial ?? it.next().value
   for (const [index, value] of enumerate(it as any)) {
-    output = reducer(output, value as T, index as number)
+    output = reducer(output, value as T, index)
   }
   return output
 }
@@ -364,15 +361,11 @@ export function reduce<T>(
  * @param iterable The iterable to inspect.
  * @returns A new array with the elements reversed.
  */
-export function reversed<T>(iterable: Iterable<T>) {
+export function reversed<T>(iterable: Iterable<T>): T[] {
   return Array.from(iterable).reverse()
 }
 
-export function sorted(args: any[]): any[]
-export function sorted(args: any[], reverse: boolean): any[]
-export function sorted(args: any[], reverse: boolean, comp: Comparer): any[]
-export function sorted(args: any[], key: Function): any[]
-export function sorted(args: any[], key: Function, reverse: boolean): any[]
+const compKey = (compare: Comparer, key) => (x, y) => compare(key(x), key(y))
 
 /**
  * Creates a new sorted list from the elements in the array. This can be called many ways:
@@ -391,13 +384,20 @@ export function sorted(args: any[], key: Function, reverse: boolean): any[]
  * @param {Comparer} [compareFn]
  * @return
  */
-export function sorted(
-  args,
+export function sorted<T>(args: T[]): T[]
+export function sorted<T>(args: T[], reverse: boolean): T[]
+export function sorted<T>(args: T[], reverse: boolean, comp: Comparer): T[]
+export function sorted<T>(args: T[], key: Function): T[]
+export function sorted<T>(args: T[], key: Function, reverse: boolean): T[]
+export function sorted<T>(
+  args: T[] | Object,
   key?: boolean | Function,
   reverse?: boolean | Comparer,
   compareFn?: Comparer
-) {
-  if (isObject(args)) args = Object.keys(args)
+): T[] {
+  if (isObject(args)) {
+    args = Object.keys(args) as T[]
+  }
   if (typeof key === 'boolean') {
     if (typeof reverse === 'function') {
       compareFn = reverse
@@ -407,17 +407,12 @@ export function sorted(
     }
     key = id
   }
-  const copy = Array.from(args)
+  const copy = Array.from(args as T[])
   const _compare = compKey(compareFn || compare, key || id)
   copy.sort(_compare)
   if (reverse) copy.reverse()
   return copy
 }
-
-export function sort(args: any[]): any[]
-export function sort(args: any[], reverse: boolean): any[]
-export function sort(args: any[], compareFn: Comparer): any[]
-export function sort(args: any[], reverse: boolean, compareFn: Comparer): any[]
 
 /**
  * Sort `args` in place. Can be called like this:
@@ -430,7 +425,11 @@ export function sort(args: any[], reverse: boolean, compareFn: Comparer): any[]
  * @param {Comparer} [compareFn]
  * @return
  */
-export function sort(args: any[], reverse?: boolean | Comparer, compareFn?: Comparer) {
+export function sort<T>(args: T[]): T[]
+export function sort<T>(args: T[], reverse: boolean): T[]
+export function sort<T>(args: T[], compareFn: Comparer): T[]
+export function sort<T>(args: T[], reverse: boolean, compareFn: Comparer): T[]
+export function sort<T>(args: T[], reverse?: boolean | Comparer, compareFn?: Comparer): T[] {
   if (typeof reverse === 'function') {
     compareFn = reverse
     reverse = false
@@ -440,7 +439,7 @@ export function sort(args: any[], reverse?: boolean | Comparer, compareFn?: Comp
   return args
 }
 
-export function take<T>(n: number, iterable: Iterable<T>) {
+export function take<T>(n: number, iterable: Iterable<T>): T[] {
   return [...itake<T>(n, iterable)]
 }
 
@@ -450,7 +449,7 @@ export function take<T>(n: number, iterable: Iterable<T>) {
  * @param predicate A function invoked per element to check if it should be taken.
  * @returns Elements
  */
-export function* takeWhile<T>(iterable: Iterable<T>, predicate: Predicate) {
+export function* takeWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
   for (const value of iterable) {
     if (!predicate(value)) return
     yield value

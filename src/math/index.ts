@@ -28,7 +28,7 @@ export function abs(x): number {
  *
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round Math.round()}
  */
-export function round(x: number, digits = 0) {
+export function round(x: number, digits = 0): number {
   const base = 10 ** digits
   return Math.round(x * base) / base
 }

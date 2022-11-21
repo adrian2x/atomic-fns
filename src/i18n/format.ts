@@ -27,7 +27,7 @@ const padZoneStr = (instance: Date) => {
  * @param {?boolean} [utc=false] Interprets the given value as a UTC date
  * @returns {Date} The new date object
  */
-export function asDate(date: string | number | Date, utc = false) {
+export function asDate(date: string | number | Date, utc = false): Date {
   if (date === null) {
     return new Date(NaN)
   }
@@ -185,7 +185,7 @@ const formatPart = (locale, t, date) => {
 formatDate(new Date(), 'MM/DD/YYYY') // '10/31/2022'
 ```
   */
-export function formatDate(formatStr: string, date: Date, locale?: string) {
+export function formatDate(formatStr: string, date: Date, locale?: string): string {
   const str = formatStr || FORMAT_DEFAULT
   const zoneStr = padZoneStr(date)
 
@@ -245,12 +245,12 @@ export function formatDate(formatStr: string, date: Date, locale?: string) {
 /**
  * Formats a date using a formatting string in the {@link https://strftime.org/ strftime} format, in any given locale.
  * @param {string} fmt The format string to apply
- * @param {number | Date} date The date value
+ * @param {Date} date The date value
  * @param {?string} locale The locale to use when formatting (default is system locale).
  * @returns {string} The string representation of date
  * @see {@link https://strftime.org/ strftime format}
  */
-export function strftime(fmt: string, date: number | Date, locale?) {
+export function strftime(fmt: string, date: Date, locale?: string): string {
   const results: string[] = []
   let dayPeriod: string = ''
   let dayPeriodIndex = -1

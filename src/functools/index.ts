@@ -268,7 +268,7 @@ export function resultAsync<T = any, E = unknown>(
  * @param {*} thisArg
  * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a Promise.
  */
-export function promisify<T = any>(fun: Function<T>, thisArg?) {
+export function promisify<T>(fun: Function, thisArg?): Function<Promise<T>> {
   const original = thisArg ? fun.bind(thisArg) : fun
   return async (...args) => {
     return await new Promise<T>((resolve, reject) =>
