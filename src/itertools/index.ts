@@ -150,13 +150,13 @@ export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
   }
 }
 
-export function IterableIterator<T = any>(next: Function<{ done?: boolean; value?: T }>) {
+export function IterableIterator<T = any>(next: Iterator<T>['next']): Iterable<T> & Iterator<T> {
   return {
     next,
     [Symbol.iterator]() {
       return this
     }
-  } as Iterator<T> & Iterable<T>
+  }
 }
 
 /**

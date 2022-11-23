@@ -258,7 +258,8 @@ export class Deque<T = any> extends Sequence<T> {
     return IterableIterator(() => {
       if (j >= l)
         return {
-          done: true
+          done: true,
+          value: undefined
         }
 
       const value = items[i]
@@ -268,10 +269,7 @@ export class Deque<T = any> extends Sequence<T> {
 
       if (i === c) i = 0
 
-      return {
-        value,
-        done: false
-      }
+      return { value }
     })
   }
 
@@ -296,7 +294,8 @@ export class Deque<T = any> extends Sequence<T> {
     return IterableIterator<[number, T]>(() => {
       if (j >= l)
         return {
-          done: true
+          done: true,
+          value: undefined
         }
 
       const value = items[i]
@@ -306,8 +305,7 @@ export class Deque<T = any> extends Sequence<T> {
       if (i === c) i = 0
 
       return {
-        value: [j++, value],
-        done: false
+        value: [j++, value]
       }
     })
   }
