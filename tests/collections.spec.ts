@@ -1,16 +1,22 @@
 import assert from 'assert'
 import {
+  binarySearch,
+  bisect,
+  bisectLeft,
   clone,
   compact,
   count,
   difference,
   filter,
   find,
-  findRight,
+  findLast,
   flatten,
   forEach,
   groupBy,
+  insort,
+  insortLeft,
   intersection,
+  map,
   merge,
   omit,
   pick,
@@ -31,6 +37,10 @@ describe('collections', () => {
     let counters = count([0, 1, false, 2, '', 3], (x) => !!x)
     assert(counters['true'] === 3)
     assert(counters['false'] === 3)
+    assert.deepEqual(
+      count(['one', 'two', 'three'], (x) => x.length),
+      { '3': 2, '5': 1 }
+    )
   })
 
   it('clone array', () => {
@@ -64,7 +74,6 @@ describe('collections', () => {
   })
 
   it('filter', () => {
-    assert(filter(null) == undefined)
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
@@ -76,7 +85,6 @@ describe('collections', () => {
   })
 
   it('filter matches', () => {
-    assert(filter(null) == undefined)
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
@@ -85,7 +93,6 @@ describe('collections', () => {
   })
 
   it('filter property', () => {
-    assert(filter(null) == undefined)
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
@@ -106,42 +113,33 @@ describe('collections', () => {
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
-    assert(find(users, { age: 36 }) === users[0])
+    assert(find(users, { age: 40 }) === users[1])
   })
 
-  it('find property', () => {
-    let users = [
-      { user: 'barney', age: 36, active: true },
-      { user: 'fred', age: 40, active: false }
-    ]
-    assert(find(users, 'active') === users[0])
+  it('find Object', () => {
+    let users = {
+      '0': { user: 'barney', age: 36, active: true },
+      '1': { user: 'fred', age: 40, active: false }
+    }
+    assert(find(users, { active: false }) === users['1'])
   })
 
-  it('findRight', () => {
-    let users = [
-      { user: 'barney', age: 36, active: true },
-      { user: 'fred', age: 40, active: false },
-      { user: 'barney', age: 36, active: true }
-    ]
-    assert(findRight(users, { age: 36 }) === users[2])
-  })
-
-  it('findRight matches', () => {
+  it('findLast', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false },
       { user: 'barney', age: 36, active: true }
     ]
-    assert(findRight(users, { age: 36 }) === users[2])
+    assert(findLast(users, { age: 36 }) === users[2])
   })
 
-  it('findRight property', () => {
+  it('findLast matches', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false },
       { user: 'barney', age: 36, active: true }
     ]
-    assert(findRight(users, 'active') === users[2])
+    assert(findLast(users, { age: 36 }) === users[2])
   })
 
   it('forEach', () => {
@@ -203,6 +201,17 @@ describe('collections', () => {
 
   it('groupBy', () => {
     assert.deepEqual(groupBy([6.1, 4.2, 6.3], Math.floor), { '4': [4.2], '6': [6.1, 6.3] })
+  })
+
+  it('map', () => {
+    let users = [
+      { user: 'barney', age: 36, active: true },
+      { user: 'fred', age: 40, active: false }
+    ]
+    const square = (x) => x * x
+    assert.deepEqual(map([4, 8], square), [16, 64])
+    assert.deepEqual(map({ a: 4, b: 8 }, square), [16, 64])
+    assert.deepEqual(map(users, 'user'), ['barney', 'fred'])
   })
 
   it('merge', () => {
@@ -283,5 +292,43 @@ describe('collections', () => {
     let arr = [4, 7, 1, 1, 9, 4, 7]
     let distinct = uniq(arr, (x) => x * 2)
     assert.deepEqual(distinct, [8, 14, 2, 18])
+  })
+
+  it('binarySearch', () => {
+    let arr = [1, 1, 4, 4, 7, 7, 9]
+    assert(binarySearch(arr, 1) === 1)
+    assert(binarySearch(arr, 4) === 3)
+    assert(binarySearch(arr, 7) === 5)
+    assert(binarySearch(arr, 9) === 6)
+  })
+
+  it('bisect', () => {
+    assert(bisect([1], 2) === 1)
+    let arr = [1, 1, 4, 4, 7, 7, 9]
+    assert(bisect(arr, 1) === 2)
+    assert(bisect(arr, 4) === 4)
+    assert(bisect(arr, 7) === 6)
+    assert(bisect(arr, 9) === 7)
+  })
+
+  it('insort', () => {
+    assert.deepEqual(insort([1], 2), [1, 2])
+    assert.deepEqual(insort([1, 1, 4, 4, 7, 7, 9], 5), [1, 1, 4, 4, 5, 7, 7, 9])
+    assert.deepEqual(insort([1, 1, 4, 4, 7, 7, 9], 10), [1, 1, 4, 4, 7, 7, 9, 10])
+  })
+
+  it('bisectLeft', () => {
+    assert(bisectLeft([1], 2) === 1)
+    let arr = [1, 1, 4, 4, 7, 7, 9]
+    assert(bisectLeft(arr, 1) === 0)
+    assert(bisectLeft(arr, 4) === 2)
+    assert(bisectLeft(arr, 7) === 4)
+    assert(bisectLeft(arr, 9) === 6)
+  })
+
+  it('insortLeft', () => {
+    assert.deepEqual(insortLeft([1], 2), [1, 2])
+    assert.deepEqual(insortLeft([1, 1, 4, 4, 7, 7, 9], 5), [1, 1, 4, 4, 5, 7, 7, 9])
+    assert.deepEqual(insortLeft([1, 1, 4, 4, 7, 7, 9], 10), [1, 1, 4, 4, 7, 7, 9, 10])
   })
 })

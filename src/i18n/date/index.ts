@@ -3,7 +3,7 @@ import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
 import { asDate, formatDate, strftime } from '../format.js'
 import {
   asNumber,
-  DateParts,
+  DateObject,
   dayOfYear,
   daysInMonth,
   daysInYear,
@@ -27,9 +27,9 @@ export {
   weeksInYear
 }
 
-type DateInput = number | string | Date
-type DateLike = DateInput | DateParts | IntlDate
-export { DateInput, DateParts, DateLike }
+export { DateObject }
+export type DateInput = number | string | Date
+export type DateLike = DateInput | IntlDate | DateObject
 
 const INVALID_DATE_STRING = 'Invalid Date'
 
@@ -293,7 +293,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
    * Returns an object containing year, month, day-of-month, hours, minutes, seconds, milliseconds.
    * @returns {Object} An object like `{year, month, date, hours, minutes, seconds, ms}`
    */
-  toObject(): DateParts {
+  toObject(): DateObject {
     return {
       year: this.year,
       month: this.month,
@@ -398,7 +398,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     return this.getTime() - dt.getTime()
   }
 
-  set(values: DateParts) {
+  set(values: DateObject) {
     if (!this.isValid()) return this
 
     const normalized = normalizeObject(values, normalizeUnit)
@@ -462,7 +462,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   startOf(unit: DurationUnit) {
     if (!this.isValid()) return this
-    const obj = {} as DateParts,
+    const obj = {} as DateObject,
       normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
     switch (normalizedUnit) {
       case 'years':
@@ -538,9 +538,9 @@ function fixOffset(startDate: Date, endDate: Date) {
 
 export function addDuration(
   date: DateInput,
-  duration: number | TDuration | Duration,
+  duration: number | Duration | TDuration,
   exact = false
-) {
+): Date {
   // Get the current offset of this date timezone
   let newDate = new Date(date)
   // Get the number of ticks forward
@@ -604,7 +604,11 @@ function setDateUnit(date: Date, unit: string, value: number) {
  * @param exact
  * @returns
  */
-export function subDuration(date: DateInput, duration: TDuration, exact = false) {
+export function subDuration(
+  date: DateInput,
+  duration: number | Duration | TDuration,
+  exact = false
+): Date {
   return addDuration(date, new Duration(duration, exact).negated(), exact)
 }
 

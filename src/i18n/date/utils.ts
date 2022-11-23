@@ -1,6 +1,4 @@
-import { Function, isInteger, ValueError } from '../../globals/index.js'
-
-export type DateParts = {
+export type DateObject = {
   year?: number
   month?: number
   day?: number
@@ -9,28 +7,6 @@ export type DateParts = {
   minute?: number
   second?: number
   millisecond?: number
-}
-
-function bestBy(arr: Array<any>, by: Function, compare: Function<number>) {
-  if (arr.length === 0) {
-    return undefined
-  }
-  return arr.reduce((best, next) => {
-    const pair = [by(next), next]
-    if (!best) {
-      return pair
-    } else if (compare(best[0], pair[0]) === best[0]) {
-      return best
-    } else {
-      return pair
-    }
-  }, null)[1]
-}
-
-// NUMBERS AND STRINGS
-
-function integerBetween(thing: number, bottom: number, top: number) {
-  return isInteger(thing) && thing >= bottom && thing <= top
 }
 
 /**
@@ -78,7 +54,7 @@ function parseMilliseconds(str: string) {
  * @returns {T} The smallest date of `dates`
  */
 export function minDate<T>(dates: Array<T>): T
-export function minDate<T>(...dates: Array<T>) {
+export function minDate<T>(...dates: Array<T>): T {
   let ans = dates[0]
   if (Array.isArray(ans)) {
     dates = ans
@@ -99,7 +75,7 @@ export function minDate<T>(...dates: Array<T>) {
  * @returns {T} The largest date of `dates`
  */
 export function maxDate<T>(dates: Array<T>): T
-export function maxDate<T>(...dates: Array<T>) {
+export function maxDate<T>(...dates: Array<T>): T {
   let ans = dates[0]
   if (Array.isArray(ans)) {
     dates = ans
@@ -118,7 +94,7 @@ export function maxDate<T>(...dates: Array<T>) {
  * @param year The date year
  * @returns {boolean} `true` if is a leap year
  */
-export function isLeapYear(year: number) {
+export function isLeapYear(year: number): boolean {
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
 }
 
@@ -127,7 +103,7 @@ export function isLeapYear(year: number) {
  * @param year The date year
  * @returns {number} Number of days in year
  */
-export function daysInYear(year: number) {
+export function daysInYear(year: number): number {
   return isLeapYear(year) ? 366 : 365
 }
 
@@ -136,7 +112,7 @@ export function daysInYear(year: number) {
  * @param date The specified date
  * @returns {number} Number of days in month
  */
-export function daysInMonth(date: string | number | Date) {
+export function daysInMonth(date: string | number | Date): number {
   const d = new Date(date),
     year = d.getFullYear(),
     month = d.getMonth() + 1
@@ -150,7 +126,7 @@ export function daysInMonth(date: string | number | Date) {
 }
 
 // covert a calendar object to a local timestamp (epoch, but with the offset baked in)
-function objToLocalTS(obj: DateParts) {
+function objToLocalTS(obj: DateObject): number {
   let d = Date.UTC(
     obj.year,
     obj.month - 1,
@@ -169,7 +145,7 @@ function objToLocalTS(obj: DateParts) {
   return +d
 }
 
-function untruncateYear(year: number) {
+function untruncateYear(year: number): number {
   if (year > 99) {
     return year
   } else return year > 60 ? 1900 + year : 2000 + year
@@ -186,15 +162,13 @@ function parseZoneInfo(ts: number | Date, offsetFormat, locale, timeZone?) {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      timeZone
+      timeZone,
+      timeZoneName: offsetFormat
     }
-
-  const modified = { timeZoneName: offsetFormat, ...intlOpts }
-
-  const parsed = new Intl.DateTimeFormat(locale, modified)
+  const parsed = new Intl.DateTimeFormat(locale, intlOpts)
     .formatToParts(date)
-    .find((m) => m.type.toLowerCase() === 'timezonename')
-  return parsed ? parsed.value : null
+    .find((m) => m.type === 'timeZoneName')
+  return parsed?.value
 }
 
 // signedOffset('-5', '30') -> -330
@@ -216,7 +190,7 @@ function signedOffset(offHourStr: string, offMinuteStr: string) {
 export function asNumber(value) {
   const numericValue = Number(value)
   if (typeof value === 'boolean' || value === '' || Number.isNaN(numericValue))
-    throw new ValueError(`Invalid unit value ${value}`)
+    throw new Error(`Invalid unit value ${value}`)
   return numericValue
 }
 
@@ -237,7 +211,7 @@ function formatOffset(offset: number, format: 'short' | 'narrow' | 'techie') {
   }
 }
 
-function timeObject(obj: DateParts) {
+function timeObject(obj: DateObject) {
   const { hour, minute, second, millisecond } = obj
   return { hour, minute, second, millisecond }
 }
@@ -348,7 +322,7 @@ function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
  * @param firstDayOfWeek
  * @param firstDayOfYear
  */
-export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1) {
+export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1): number {
   var weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
     weekOffsetNext = firstWeekOffset(year + 1, firstDayOfWeek, firstDayOfYear)
   return (daysInYear(year) - weekOffset + weekOffsetNext) / 7
@@ -387,11 +361,11 @@ export function weekOfYear(date: string | number | Date, firstDayOfWeek = 1, fir
   }
 }
 
-export function isoWeeksInYear(year) {
+export function isoWeeksInYear(year: number): number {
   return weeksInYear(year, 1, 4)
 }
 
-export function dayOfYear(input: string | number | Date) {
+export function dayOfYear(input: string | number | Date): number {
   input = new Date(input)
   input.setHours(0)
   input.setMinutes(0)
