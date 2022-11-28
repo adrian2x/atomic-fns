@@ -12,8 +12,8 @@ export function decimal(x) {
  */
 export class Decimal {
   static PRECISION = 20
-  i = 0n
-  e = 0
+  private i = 0n
+  private e = 0
 
   /**
    * Returns a new `Decimal` instance from the value or `0`.
@@ -252,7 +252,7 @@ a.div(b)  // 0.333333333333333333333333333333
   /**
    * Remove zeroes in the least-significant digit of this `Decimal`
    */
-  _normalize() {
+  private _normalize() {
     while (this.i % 10n === 0n && this.i !== 0n) {
       this.i /= 10n
       this.e++
@@ -263,7 +263,7 @@ a.div(b)  // 0.333333333333333333333333333333
   /**
    * Truncate this `Decimal` to the configured precision
    */
-  _truncate() {
+  private _truncate() {
     // TODO: Make this better
     // TODO: Rounding
     const trunc = -this.e - Decimal.PRECISION
