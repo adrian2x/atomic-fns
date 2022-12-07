@@ -19,44 +19,17 @@ export const bind = (fn: Function, thisArg, ...partials) => fn.bind(thisArg, ...
 /**
  * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least arity number of arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on. The arity of `func` may be specified if `func.length` is not sufficient.
  * @param {Function} func The function to curry.
- * @param {number} [arity=func.length]
  * @returns Returns the new curried function.
  */
-export const curry = (func: Function, arity?: number) => {
-  if (typeof func !== 'function' || func.length < 2) return func
-  if (typeof arity !== 'number') arity = func.length
-  switch (arity) {
-    case 2:
-      return (arg0) => (arg1) => func(arg0, arg1)
-    case 3:
-      return (arg0) => (arg1) => (arg2) => func(arg0, arg1, arg2)
-    case 4:
-      return (arg0) => (arg1) => (arg2) => (arg3) => func(arg0, arg1, arg2, arg3)
-    case 5:
-      return (arg0) => (arg1) => (arg2) => (arg3) => (arg4) => func(arg0, arg1, arg2, arg3, arg4)
-    case 6:
-      return (arg0) => (arg1) => (arg2) => (arg3) => (arg4) => (arg5) =>
-        func(arg0, arg1, arg2, arg3, arg4, arg5)
-    case 7:
-      return (arg0) => (arg1) => (arg2) => (arg3) => (arg4) => (arg5) => (arg6) =>
-        func(arg0, arg1, arg2, arg3, arg4, arg5, arg6)
-    case 8:
-      return (arg0) => (arg1) => (arg2) => (arg3) => (arg4) => (arg5) => (arg6) => (arg7) =>
-        func(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-    case 9:
-      return (arg0) =>
-        (arg1) =>
-        (arg2) =>
-        (arg3) =>
-        (arg4) =>
-        (arg5) =>
-        (arg6) =>
-        (arg7) =>
-        (arg8) =>
-          func(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+export const curry = (func: Function) => {
+  return function curried(...args) {
+    if (args.length >= func.length) {
+      return func.apply(this, args)
+    }
 
-    default:
-      throw Error('The specified function uses too many arguments. Consider refactoring it.')
+    return (...args2) => {
+      return curried.apply(this, args.concat(args2))
+    }
   }
 }
 
