@@ -186,60 +186,49 @@ export type Result<T, E = any> = [Maybe<T>, Maybe<E>]
 export type Optional<T> = Maybe<T>
 
 /**
- * Wraps a function to catch any exceptions inside and return a `go` style error-return type {@link Result}.
+ * Wraps a function to catch any exceptions inside and return a {@link Result} tuple with the value and error, if any.
  * @template T,E
- * @param {Function} fun The function to wrap and catch if it throws.
- * @param {Function} [onFinally] Optional callback that will be invoked with `(err?, value)` on the `finally` clause.
- * @returns {Function} A new function that wraps `fun`.
+ * @param {Function<T>} fn The function to wrap.
+ * @returns {Function} A new function that wraps `fn` and returns the result tuple.
  */
-export function result<T = any, E = unknown>(
-  fun: Function<T>,
-  onFinally?: (err: E, res: T) => any
-) {
-  return (...args): Result<T, E> => {
+export function result<T = any, E = unknown>(fn: Function<T>): Function<Result<T, E>> {
+  return (...args) => {
     let value, err
     try {
-      value = fun(...args)
+      value = fn(...args)
     } catch (error) {
       err = error
-    } finally {
-      onFinally?.(err, value)
     }
-    return [value as T, err]
+    return [value as T, err as E]
   }
 }
 
 /**
- * Wraps a function or promise to catch any exceptions inside and return a `go` style error-return type. This is like {@link result} but it deals with async functions or promises.
+ * Wraps an async function to catch any exceptions inside and return a {@link Result} tuple with the value and error, if any.
  * @template T,E
- * @param {Function<T>|Promise<T>} awaitable The function or promise to await.
- * @param {Function} [onFinally] Optional callback that will be invoked with `(err?, value)` on the `finally` clause.
- * @returns {Function<Promise<Result<T, E>>>} A new function that awaits the `awaitable` param and returns a {@link Result} type.
+ * @param {Function<Promise<T>>} fn The async function to await.
+ * @returns {Function<Promise<Result<T, E>>>} A new function that awaits the given function and returns the result tuple.
  */
 export function resultAsync<T = any, E = unknown>(
-  awaitable: Promise<T> | Function<Promise<T>>,
-  onFinally?: (err: E, res: T) => any
-) {
+  fn: Function<Promise<T>>
+): Function<Promise<Result<T, E>>> {
   return async (...args) => {
     let value, err
     try {
-      const promise = isPromise(awaitable) ? awaitable : awaitable(...args)
-      value = await promise
+      value = await fn(...args)
     } catch (error) {
       err = error
-    } finally {
-      onFinally?.(err, value)
     }
-    return [value as T, err]
+    return [value as T, err as E]
   }
 }
 
 /**
- * Converts a function that expects a node-style callback argument like `(err, result)` to return a Promise instead.
+ * Converts a function that expects a node-style callback argument like `(err, result)` to return a `Promise` instead.
  * @template T
- * @param {Function<T>} fun The given function to convert from callback style to Promise.
+ * @param {Function<T>} fun The given function to convert from callback style to `Promise`.
  * @param {*} thisArg
- * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a Promise.
+ * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a `Promise`.
  */
 export function promisify<T>(fun: Function, thisArg?): Function<Promise<T>> {
   const original = thisArg ? fun.bind(thisArg) : fun
