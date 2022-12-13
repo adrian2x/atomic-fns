@@ -4,7 +4,7 @@
  * @module Functions
  */
 
-import { Function, isPromise } from '../globals/index.js'
+import { Function } from '../globals/index.js'
 
 /**
  * Creates a function that invokes `fn` with the this binding of `thisArg` and `partials` as partially applied arguments.
@@ -62,6 +62,11 @@ export const flow =
  */
 export const pipe = flow
 
+/**
+ * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from right to left.
+ * @param {...*} [args] The set of functions to apply.
+ * @returns {Function} A new function that applies each given function on the result of the previous step.
+ */
 export const compose = (...args) => flow(args.reverse())
 
 /**
