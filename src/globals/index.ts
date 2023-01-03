@@ -310,7 +310,7 @@ export const ord = (x: string) => x.charCodeAt(0)
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
  */
-export const keys = (object: Object) => Object.keys(object)
+export const keys = <T>(object: T) => Object.keys(object) as Array<keyof T>
 
 /**
  * Returns an array of the own enumerable property values of `object`.
