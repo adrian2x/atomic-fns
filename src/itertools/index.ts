@@ -4,17 +4,9 @@
  * @module Iterators
  */
 
-import {
-  call,
-  Function,
-  isEmpty,
-  isObject,
-  Iteratee,
-  notNull,
-  Predicate,
-  ValueError
-} from '../globals/index.js'
+import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js'
 import { add, bool, compare, Comparer, eq, id } from '../operators/index.js'
+import { Function, Iteratee, Predicate } from '../types'
 
 /**
  * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
