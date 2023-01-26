@@ -268,15 +268,16 @@ describe('IntlDate', () => {
   })
 
   it('toNow', () => {
-    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    let date = new Date(1964, 0, 1, 2, 30, 0, 0)
     let start = mockDate(date)
     let end = new Date()
     let years = end.getFullYear() - start.year
+    console.log('years', years, start.toNow('years'))
     assert(start.toNow('years') === `in ${years} years`)
   })
 
   it('fromNow', () => {
-    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    let date = new Date(1964, 0, 1, 2, 30, 0, 0)
     let start = mockDate(date)
     let end = new Date()
     let years = end.getFullYear() - start.year

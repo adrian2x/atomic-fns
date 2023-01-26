@@ -1,6 +1,7 @@
-import { Iteratee, KeyError } from '../globals/index.js'
+import { KeyError } from '../globals/index.js'
 import { compare, Comparer } from '../operators/index.js'
 import { Mapping } from './abc.js'
+import { Iteratee } from '../types'
 
 const Delete = { delete: true }
 const DeleteRange = () => Delete

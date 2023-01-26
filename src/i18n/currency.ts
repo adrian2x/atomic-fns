@@ -1,15 +1,15 @@
 import { defaults } from '../collections/index.js'
 import { isObject } from '../globals/index.js'
-import { Decimal } from '../globals/decimal.js'
+import { Decimal } from '../decimal/index.js'
 
 /**
  * Currency represents a local currency amount that can be formatted using the `Intl` apis.
  */
 export class Currency extends Decimal {
-  locale: string
-  currency: string
-  numberFormat: Intl.NumberFormat
-  options: Intl.NumberFormatOptions = {
+  private readonly locale: string
+  private readonly currency: string
+  private readonly numberFormat: Intl.NumberFormat
+  private readonly options: Intl.NumberFormatOptions = {
     style: 'currency',
     currencyDisplay: 'symbol',
     maximumFractionDigits: 20

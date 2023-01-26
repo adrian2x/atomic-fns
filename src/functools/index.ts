@@ -4,7 +4,7 @@
  * @module Functions
  */
 
-import { Function, isPromise } from '../globals/index.js'
+import { Function } from '../globals/index.js'
 
 /**
  * Creates a function that invokes `fn` with the this binding of `thisArg` and `partials` as partially applied arguments.
@@ -19,44 +19,17 @@ export const bind = (fn: Function, thisArg, ...partials) => fn.bind(thisArg, ...
 /**
  * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least arity number of arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on. The arity of `func` may be specified if `func.length` is not sufficient.
  * @param {Function} func The function to curry.
- * @param {number} [arity=func.length]
  * @returns Returns the new curried function.
  */
-export const curry = (func: Function, arity?: number) => {
-  if (typeof func !== 'function' || func.length < 2) return func
-  if (typeof arity !== 'number') arity = func.length
-  switch (arity) {
-    case 2:
-      return (arg0) => (arg1) => func(arg0, arg1)
-    case 3:
-      return (arg0) => (arg1) => (arg2) => func(arg0, arg1, arg2)
-    case 4:
-      return (arg0) => (arg1) => (arg2) => (arg3) => func(arg0, arg1, arg2, arg3)
-    case 5:
-      return (arg0) => (arg1) => (arg2) => (arg3) => (arg4) => func(arg0, arg1, arg2, arg3, arg4)
-    case 6:
-      return (arg0) => (arg1) => (arg2) => (arg3) => (arg4) => (arg5) =>
-        func(arg0, arg1, arg2, arg3, arg4, arg5)
-    case 7:
-      return (arg0) => (arg1) => (arg2) => (arg3) => (arg4) => (arg5) => (arg6) =>
-        func(arg0, arg1, arg2, arg3, arg4, arg5, arg6)
-    case 8:
-      return (arg0) => (arg1) => (arg2) => (arg3) => (arg4) => (arg5) => (arg6) => (arg7) =>
-        func(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
-    case 9:
-      return (arg0) =>
-        (arg1) =>
-        (arg2) =>
-        (arg3) =>
-        (arg4) =>
-        (arg5) =>
-        (arg6) =>
-        (arg7) =>
-        (arg8) =>
-          func(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+export const curry = (func: Function) => {
+  return function curried(...args) {
+    if (args.length >= func.length) {
+      return func.apply(this, args)
+    }
 
-    default:
-      throw Error('The specified function uses too many arguments. Consider refactoring it.')
+    return (...args2) => {
+      return curried.apply(this, args.concat(args2))
+    }
   }
 }
 
@@ -89,6 +62,11 @@ export const flow =
  */
 export const pipe = flow
 
+/**
+ * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from right to left.
+ * @param {...*} [args] The set of functions to apply.
+ * @returns {Function} A new function that applies each given function on the result of the previous step.
+ */
 export const compose = (...args) => flow(args.reverse())
 
 /**
@@ -213,60 +191,49 @@ export type Result<T, E = any> = [Maybe<T>, Maybe<E>]
 export type Optional<T> = Maybe<T>
 
 /**
- * Wraps a function to catch any exceptions inside and return a `go` style error-return type {@link Result}.
+ * Wraps a function to catch any exceptions inside and return a {@link Result} tuple with the value and error, if any.
  * @template T,E
- * @param {Function} fun The function to wrap and catch if it throws.
- * @param {Function} [onFinally] Optional callback that will be invoked with `(err?, value)` on the `finally` clause.
- * @returns {Function} A new function that wraps `fun`.
+ * @param {Function<T>} fn The function to wrap.
+ * @returns {Function} A new function that wraps `fn` and returns the result tuple.
  */
-export function result<T = any, E = unknown>(
-  fun: Function<T>,
-  onFinally?: (err: E, res: T) => any
-) {
-  return (...args): Result<T, E> => {
+export function result<T = any, E = unknown>(fn: Function<T>): Function<Result<T, E>> {
+  return (...args) => {
     let value, err
     try {
-      value = fun(...args)
+      value = fn(...args)
     } catch (error) {
       err = error
-    } finally {
-      onFinally?.(err, value)
     }
-    return [value as T, err]
+    return [value as T, err as E]
   }
 }
 
 /**
- * Wraps a function or promise to catch any exceptions inside and return a `go` style error-return type. This is like {@link result} but it deals with async functions or promises.
+ * Wraps an async function to catch any exceptions inside and return a {@link Result} tuple with the value and error, if any.
  * @template T,E
- * @param {Function<T>|Promise<T>} awaitable The function or promise to await.
- * @param {Function} [onFinally] Optional callback that will be invoked with `(err?, value)` on the `finally` clause.
- * @returns {Function<Promise<Result<T, E>>>} A new function that awaits the `awaitable` param and returns a {@link Result} type.
+ * @param {Function<Promise<T>>} fn The async function to await.
+ * @returns {Function<Promise<Result<T, E>>>} A new function that awaits the given function and returns the result tuple.
  */
 export function resultAsync<T = any, E = unknown>(
-  awaitable: Promise<T> | Function<Promise<T>>,
-  onFinally?: (err: E, res: T) => any
-) {
+  fn: Function<Promise<T>>
+): Function<Promise<Result<T, E>>> {
   return async (...args) => {
     let value, err
     try {
-      const promise = isPromise(awaitable) ? awaitable : awaitable(...args)
-      value = await promise
+      value = await fn(...args)
     } catch (error) {
       err = error
-    } finally {
-      onFinally?.(err, value)
     }
-    return [value as T, err]
+    return [value as T, err as E]
   }
 }
 
 /**
- * Converts a function that expects a node-style callback argument like `(err, result)` to return a Promise instead.
+ * Converts a function that expects a node-style callback argument like `(err, result)` to return a `Promise` instead.
  * @template T
- * @param {Function<T>} fun The given function to convert from callback style to Promise.
+ * @param {Function<T>} fun The given function to convert from callback style to `Promise`.
  * @param {*} thisArg
- * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a Promise.
+ * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a `Promise`.
  */
 export function promisify<T>(fun: Function, thisArg?): Function<Promise<T>> {
   const original = thisArg ? fun.bind(thisArg) : fun
@@ -278,4 +245,15 @@ export function promisify<T>(fun: Function, thisArg?): Function<Promise<T>> {
       })
     )
   }
+}
+
+/**
+ * Invokes a given function that accepts callback arguments for success, error and returns a `Promise` of the results.
+ * @param {Function} fn A function that accepts callback arguments for success, error.
+ * @returns {Promise<T>} A `Promise` that will be resolved when `successCallback` is called or rejected when `errorCallback` is called.
+ */
+export async function callAsync<T = any>(
+  fn: (successCallback: (data: T) => any, errorCallback: Function) => any
+) {
+  return await new Promise<T>(fn)
 }

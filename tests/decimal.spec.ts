@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { decimal, Decimal } from '../src/globals/decimal.js'
+import { decimal, Decimal } from '../src/decimal/index.js'
 
 describe('Decimal', () => {
   it('from number', () => {

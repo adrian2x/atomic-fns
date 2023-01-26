@@ -17,12 +17,12 @@ import {
   isNumber,
   isObject,
   isString,
-  Iteratee,
   keys,
   set
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, eq, id } from '../operators/index.js'
+import { Iteratee } from '../types'
 
 export * from './abc.js'
 export * from './BTree.js'
