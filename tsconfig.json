@@ -107,6 +107,7 @@
   "typedocOptions": {
     "entryPoints": [
       "./src/collections/index.ts",
+      "./src/decimal/index.ts",
       "./src/functools/index.ts",
       "./src/globals/index.ts",
       "./src/i18n/index.ts",

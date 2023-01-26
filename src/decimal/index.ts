@@ -1,3 +1,9 @@
+/**
+ * `Decimal` provides support for correct rounded floating point arithmetic.
+ *
+ * @module decimal
+ */
+
 const NUMBER_REGEX = /^(-?)([0-9]+)(\.([0-9]+))?$/
 
 /**

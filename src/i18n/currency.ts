@@ -1,6 +1,6 @@
 import { defaults } from '../collections/index.js'
 import { isObject } from '../globals/index.js'
-import { Decimal } from '../globals/decimal.js'
+import { Decimal } from '../decimal/index.js'
 
 /**
  * Currency represents a local currency amount that can be formatted using the `Intl` apis.

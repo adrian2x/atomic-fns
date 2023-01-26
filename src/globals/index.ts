@@ -4,8 +4,6 @@
  * @module Globals
  */
 
-export * from './decimal.js'
-
 /**
  * A generic function type with arbitrary arguments and return.
  */
