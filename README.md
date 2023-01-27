@@ -72,14 +72,14 @@ When working with objects, functions in this library use these custom operators 
 Some common base interfaces and typing patterns you may have seen like `Optional`, `Result`, `Comparable`, `Iterator`, and others.
 
 ### Sorted Containers
-  - [SortedSet](https://atomic-fns.dev/classes/Collections.SortedSet.html)
-  - [SortedMap](https://atomic-fns.dev/classes/Collections.SortedMap.html)
-  - [SortedTree](https://atomic-fns.dev/classes/Collections.SortedTree.html)
+  - [SortedSet](https://atomic-fns.dev/classes/collections.SortedSet.html)
+  - [SortedMap](https://atomic-fns.dev/classes/collections.SortedMap.html)
+  - [SortedTree](https://atomic-fns.dev/classes/collections.SortedTree.html)
 
 ### Other Containers
-  - [Deque](https://atomic-fns.dev/classes/Collections.Deque.html)
-  - [FrozenSet](https://atomic-fns.dev/classes/Collections.FrozenSet.html)
-  - [LRUCache](https://atomic-fns.dev/classes/Collections.LRUCache.html)
+  - [Deque](https://atomic-fns.dev/classes/collections.Deque.html)
+  - [FrozenSet](https://atomic-fns.dev/classes/collections.FrozenSet.html)
+  - [LRUCache](https://atomic-fns.dev/classes/collections.LRUCache.html)
 
 
 ## Contributing
