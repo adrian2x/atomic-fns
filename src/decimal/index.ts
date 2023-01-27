@@ -14,7 +14,9 @@ export function decimal(x) {
 }
 
 /**
- * `Decimal` provides support for correct rounded floating point arithmetic, unlike the standard Number type. It also supports user-defined precision (default is 20 decimal places) which can be as large as needed.
+ * `Decimal` provides support for correct rounded floating point arithmetic, unlike the standard
+ * `Number` type. It also supports user-defined precision (default is 20 decimal places), which
+ * can be as large as needed.
  */
 export class Decimal {
   static PRECISION = 20
@@ -90,7 +92,7 @@ export class Decimal {
    * @example
 ```js
 let a = decimal('5')
-a.minus()  // -5
+a.negated()  // -5
 ```
    * @returns {Decimal}
    */
