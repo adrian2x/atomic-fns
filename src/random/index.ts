@@ -1,7 +1,7 @@
 /**
  * This module implements pseudo-random generators for various distributions.
  *
- * @module Random
+ * @module random
  */
 
 import { isObject } from '../globals/index.js'

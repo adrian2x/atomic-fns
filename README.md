@@ -2,7 +2,7 @@
 
 [Read the Docs](https://atomic-fns.dev)
 
-## Like Lodash, but in TypeScript and for ESnext.
+## Like Lodash, but in TypeScript and for ESNext.
 
 Stop shipping code built for browsers from 2015. Really though, look at all the [issues](https://github.com/lodash/lodash/issues/2930).
 
@@ -10,10 +10,10 @@ You may prefer this because it's:
 
 * **TypeScript & docs**: Includes type declaration files and js with JSDocs for best in class experience.
 * **Zero deps**: Built from scratch with no runtime dependencies or polyfills.
-* **ESnext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
-* **Modular**: Pick what you need. Supports tree-shaking, no side effects and works with all bundlers.
+* **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
+* **Modular**: Pick what you need. Supports tree-shaking, no side effects, and works with all bundlers.
 * **Lazy**: Leverage generators, iterators, and functional composition.
-* **Well tested**: All modules have comprehensive test suites and public apis are 100% coverage.
+* **Tests**: All modules have comprehensive test suites and public apis are 100% covered.
 
 ## Docs
 
@@ -52,7 +52,7 @@ See the full list of [modules](https://atomic-fns.dev/modules.html).
 ## Data model
 This library features a data model similar to [Python](https://docs.python.org/3/reference/datamodel.html#special-method-names) but not always. Only the missing parts have been implemented, while respecting the JS standards.
 
-For example in Python collections `size()` is a method while in JS its just a property. So this library uses `size` property instead of methods. Similarly, the `len` function implementation checks for both `length` and `size` since many JS objects have a `length` property.
+For example, in Python collections, `size()` is a method, while in JS it's just a property. So this library uses `size` property instead of method. Similarly, the `len` function implementation checks for both `length` and `size` since many JS objects have a `length` property.
 
 ## Special method names
 This library adds support for operators using object methods such as:
@@ -63,11 +63,13 @@ This library adds support for operators using object methods such as:
   - `obj.gte(other)`  adds custom `obj >= other`.
   - `obj.compare(other)`  overloads sorting operations.
 
-When you implement those, you can also apply operators to values like `eq(x, y), lte(x, y), compare(x, y)`, etc. to get the result of `x.<operator>(y)`.
+When working with objects, functions in this library use these custom operators for equality and sorting. You can also apply operators to values like `eq(x, y)`, `lte(x, y)`, `compare(x, y)`, etc.
 
 ## New Types
 
-Introduces some common base interfaces and typing patterns you may have seen like `Optional`, `Result`, `Comparable`, `Iterator`, and others.
+[`Decimal`](https://atomic-fns.dev/classes/decimal.Decimal.html) provides support for correct rounded floating point arithmetic, with arbitrary precision.
+
+Some common base interfaces and typing patterns you may have seen like `Optional`, `Result`, `Comparable`, `Iterator`, and others.
 
 ### Sorted Containers
   - [SortedSet](https://atomic-fns.dev/classes/Collections.SortedSet.html)

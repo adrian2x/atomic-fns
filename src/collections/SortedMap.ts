@@ -3,8 +3,8 @@ import { SplayTree } from './SplayTree.js'
 
 /**
  * A `SortedMap` is a map that holds key value pairs ordered by keys. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as keys or values.
- * @see {@link Operators.compare}
- * @see {@link Operators.lt}
+ * @see {@link operators.compare}
+ * @see {@link operators.lt}
  * @template K, V
  */
 export class SortedMap<K, V> extends Mapping<K, V> {

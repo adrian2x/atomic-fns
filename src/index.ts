@@ -1,4 +1,5 @@
 export * from './collections/index.js'
+export * from './decimal/index.js'
 export * from './functools/index.js'
 export * from './globals/index.js'
 export * from './i18n/index.js'

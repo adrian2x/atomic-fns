@@ -1,7 +1,7 @@
 /**
  * Math and algebraic operations.
  *
- * @module Math
+ * @module math
  */
 
 import { call } from '../globals/index.js'
