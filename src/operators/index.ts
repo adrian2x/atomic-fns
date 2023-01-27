@@ -1,7 +1,7 @@
 /**
  * Generic operations for both values and objects.
  *
- * @module Operators
+ * @module operators
  */
 
 import { call, isObject } from '../globals/index.js'
@@ -47,8 +47,8 @@ export type Comparer<T = any> = (x: T, y: T) => number
  * @param {*} y Other value to compare
  * @returns {number} The comparison result
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#parameters Array.sort()}
- * @see {@link Operators.eq}
- * @see {@link Operators.lt}
+ * @see {@link operators.eq}
+ * @see {@link operators.lt}
  */
 export function compare(x, y): number {
   if (x === y || eq(x, y)) return 0

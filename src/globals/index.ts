@@ -1,7 +1,7 @@
 /**
  * This module includes global functions and constants.
  *
- * @module Globals
+ * @module globals
  */
 
 /**

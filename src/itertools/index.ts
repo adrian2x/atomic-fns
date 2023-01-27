@@ -1,7 +1,7 @@
 /**
  * This module includes functions that deal with or produce iterators.
  *
- * @module Iterators
+ * @module itertools
  */
 
 import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js'
@@ -102,7 +102,7 @@ contains('abcd', 'bc')
 // true
 ```
  *
- * @see {@link Collections.find}
+ * @see {@link collections.find}
  */
 export function contains(collection: Iterable<any>, value) {
   if (!collection) return false

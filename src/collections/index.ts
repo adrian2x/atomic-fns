@@ -1,7 +1,7 @@
 /**
  * This module includes classes and functions to work with Container types.
  *
- * @module Collections
+ * @module collections
  */
 
 import {
@@ -34,6 +34,7 @@ export * from './SortedMap.js'
 export * from './SortedSet.js'
 export * from './SortedTree.js'
 export * from './SplayTree.js'
+export * from './Trie.js'
 
 /**
  * Creates a new array with all falsy and empty values removed.

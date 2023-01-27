@@ -1,7 +1,7 @@
 /**
  * This module includes functions that promote a more functional programming style.
  *
- * @module Functions
+ * @module functools
  */
 
 import { Function } from '../globals/index.js'

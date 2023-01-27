@@ -5,16 +5,16 @@ export type Function<TReturn = any> = (...args: any) => TReturn
 
 /**
  * An iteratee function used for collection methods.
- * @see {@link Collections.filter}
- * @see {@link Collections.find}
- * @see {@link Collections.forEach}
- * @see {@link Collections.index}
- * @see {@link Collections.map}
- * @see {@link Collections.pick}
- * @see {@link Collections.omit}
- * @see {@link Collections.uniq}
- * @see {@link Collections.sortedUniq}
- * @see {@link Collections.groupBy}
+ * @see {@link collections.filter}
+ * @see {@link collections.find}
+ * @see {@link collections.forEach}
+ * @see {@link collections.index}
+ * @see {@link collections.map}
+ * @see {@link collections.pick}
+ * @see {@link collections.omit}
+ * @see {@link collections.uniq}
+ * @see {@link collections.sortedUniq}
+ * @see {@link collections.groupBy}
  */
 export type Iteratee<T = any, K = any, TResult = any> = (value: T, key?: K, arr?) => TResult
 
