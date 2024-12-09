@@ -272,7 +272,6 @@ describe('IntlDate', () => {
     let start = mockDate(date)
     let end = new Date()
     let years = end.getFullYear() - start.year
-    console.log('years', years, start.toNow('years'))
     assert(start.toNow('years') === `in ${years} years`)
   })
 

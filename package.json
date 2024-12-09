@@ -1,7 +1,7 @@
 {
   "name": "atomic-fns",
   "description": "Like Lodash, but for ESNext and with types. Stop shipping code built for browsers from 2015.",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "files": [
     "dist/*"
   ],
@@ -11,12 +11,15 @@
   "types": "dist/index.d.ts",
   "sideEffects": false,
   "scripts": {
+    "preversion": "npm test",
+    "version": "npm run build && npm run docs && git add -A dist",
+    "postversion": "git push && git push --tags",
     "prepublishOnly": "npm run build",
     "test": "NODE_OPTIONS=--loader=ts-node/esm jasmine --config=jasmine.json",
     "tsc": "tsc -p . --declaration",
     "tsc:w": "tsc -p . --declaration --watch",
     "lint": "eslint src/**/*.ts --fix",
-    "build": "npm run lint && npm test && npm run tsc",
+    "build": "npm run lint && npm test && npm run tsc && npm run docs",
     "docs": "typedoc"
   },
   "devDependencies": {
@@ -67,5 +70,5 @@
   "bugs": {
     "url": "https://github.com/adrian2x/atomic-fns/issues"
   },
-  "homepage": "https://atomic-fns.dev"
+  "homepage": "https://atomic-stack.github.io/atomic-fns/"
 }

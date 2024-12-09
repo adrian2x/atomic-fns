@@ -7,14 +7,16 @@
 import { call, isObject } from '../globals/index.js'
 
 /** This is the identity function. It always returns the same value that was passed in */
-export const id = (x) => x
+export function id(x) {
+  return x
+}
 
 /**
  * Called to implement truth value testing.
  * @param x
  * @returns {boolean} `x.bool()` if exists or `!!x`.
  */
-export const bool = (x) => {
+export function bool(x) {
   const r = call(x, 'bool')
   if (r != null) return r
   return !!x
@@ -24,7 +26,9 @@ export const bool = (x) => {
  * Returns `true` if `x` is a falsy value.
  * @see {@link bool}
  */
-export const not = (x) => !bool(x)
+export function not(x) {
+  return !bool(x)
+}
 
 /**
  * Returns `true` if `x` is an instance of class `y`
@@ -32,7 +36,9 @@ export const not = (x) => !bool(x)
  * @param y The parent class
  * @returns {boolean}
  */
-export const isinstance = (x, y) => x instanceof y
+export function isinstance(x, y) {
+  return x instanceof y
+}
 
 /** Describes a function used to compare two values.
  *

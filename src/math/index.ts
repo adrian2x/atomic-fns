@@ -41,7 +41,9 @@ export function round(x: number, digits = 0): number {
  *
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor Math.floor()}
  */
-export const floor = (x: number) => Math.floor(x)
+export function floor(x: number) {
+  return Math.floor(x)
+}
 
 /**
  * Rounds up and returns the largest integer greater than or equal to a given number.
@@ -50,7 +52,9 @@ export const floor = (x: number) => Math.floor(x)
  *
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
  */
-export const ceil = (x: number) => Math.ceil(x)
+export function ceil(x: number) {
+  return Math.ceil(x)
+}
 
 /**
  * Returns a tuple like `[x / y, x % y]`.

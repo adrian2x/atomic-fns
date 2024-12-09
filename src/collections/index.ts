@@ -87,22 +87,6 @@ export function count<T>(obj: T[] | Object, func: Iteratee<T>): Record<string, n
 }
 
 /**
- * Creates a function that can be used to create named tuple-like objects.
- * @example
-```js
-let Point = namedtuple('x', 'y', 'z')
-let userObj = User(0, 0, 0)
-// {x: 0, y: 0, z: 0}
-```
- * @param fields - A list of field names
- * @returns A function that can be called with the field values
- */
-export const namedtuple =
-  (...fields: string[]) =>
-  (...args) =>
-    fields.reduce((prev, f, i) => set(f, prev, args[i], false, true), {})
-
-/**
  * Iterates over elements of collection, returning an array of all elements where predicate returns truthy value.
  *
  * The predicate is invoked with three arguments: `(value, index|key, arr)`.
@@ -219,12 +203,14 @@ filter(objects, matches({ a: 4, c: 6 }))
  * @param shape
  * @returns
  */
-export const matches = (shape) => (obj) => {
-  if (!shape || !obj) return false
-  for (const key in shape) {
-    if (obj[key] !== shape[key]) return false
+export function matches(shape) {
+  return function (obj) {
+    if (!shape || !obj) return false
+    for (const key in shape) {
+      if (obj[key] !== shape[key]) return false
+    }
+    return true
   }
-  return true
 }
 
 /**

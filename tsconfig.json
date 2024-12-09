@@ -116,7 +116,7 @@
       "./src/operators/index.ts",
       "./src/random/index.ts",
     ],
-    "out": "docs",
+    "out": "../atomic-stack.github.io/atomic-fns",
     "exclude": [
       "node_modules"
     ],
