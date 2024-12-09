@@ -10,7 +10,7 @@
 export type Function<TReturn = any> = (...args: any) => TReturn
 
 /** This is just a noop function. */
-export const noop = () => {}
+export function noop() {}
 
 /** A function that always returns `true`. */
 export const True = () => true
@@ -123,93 +123,139 @@ export function type(value: any): string {
  * @returns `obj.toString()` or `''` if `obj` is `null` or `undefined`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString | Object.toString }
  */
-export const str = (obj) => (obj != null ? obj.toString() : '')
+export function str(obj) {
+  return obj?.toString() ?? ''
+}
 
 /** Check if value is a boolean type. */
-export const isBool = (x): x is boolean => type(x) === 'boolean'
+export function isBool(x): x is boolean {
+  return type(x) === 'boolean'
+}
 
 /** Check if value is an `Error` type. */
-export const isError = (x): x is Error => x instanceof Error
+export function isError(x): x is Error {
+  return x instanceof Error
+}
 
 /** Check if value is an iterable type. */
-export const isIterable = (x): x is IterableIterator<any> => {
+export function isIterable(x): x is IterableIterator<any> {
   if (x == null) return false
   return typeof x[Symbol.iterator] === 'function'
 }
 
 /** Check if value is a native `Date` type. */
-export const isDate = (x): x is Date => x instanceof Date
+export function isDate(x): x is Date {
+  return x instanceof Date
+}
 
 /** Check if value is an object type. */
-export const isObject = (x): x is Object => type(x) === 'object'
+export function isObject(x): x is Object {
+  return type(x) === 'object'
+}
 
 /** Check if value is a string type. */
-export const isString = (x): x is string => type(x) === 'string'
+export function isString(x): x is string {
+  return type(x) === 'string'
+}
 
 /** Check if value is an Array type. */
-export const isArray = (x): x is any[] => Array.isArray(x)
+export function isArray(x): x is any[] {
+  return Array.isArray(x)
+}
 
 /**
  * Check if value is Array-like type.
  * A value is considered array-like if it's not a function and has a `.length` number property.
  */
-export const isArrayLike = (x) => {
+export function isArrayLike(x) {
   const T = type(x)
   return T === 'array' || (T === 'object' && isNumber(x.length))
 }
 
 /** Check if value is a number type. */
-export const isNumber = (x): x is number => type(x) === 'number'
+export function isNumber(x): x is number {
+  return type(x) === 'number'
+}
 
 /** Check if value is an integer number type. */
-export const isInteger = (x): x is number => type(x) === 'number' && Math.trunc(x) === x
+export function isInteger(x): x is number {
+  return type(x) === 'number' && Math.trunc(x) === x
+}
 
 /** Check if value is a bigint type. */
-export const isBigint = (x): x is BigInt => type(x) === 'bigint'
+export function isBigint(x): x is BigInt {
+  return type(x) === 'bigint'
+}
 
 /** Check if value is a Promise type. */
-export const isPromise = (x): x is Promise<any> => type(x) === 'Promise'
+export function isPromise(x): x is Promise<any> {
+  return type(x) === 'Promise'
+}
 
 /** Check if value is a function type. */
-export const isFunction = (x): x is Function => x?.constructor === Function
+export function isFunction(x): x is Function {
+  return x?.constructor === Function
+}
 
 /** Check if value is an async function type. */
-export const isAsyncFunction = (x) => x?.constructor.name === 'AsyncFunction'
+export function isAsyncFunction(x) {
+  return x?.constructor.name === 'AsyncFunction'
+}
 
 /** Check if value is a generator function type. */
-export const isGenerator = (x): x is Generator => {
+export function isGenerator(x): x is Generator {
   return x?.constructor.constructor?.name === 'GeneratorFunction'
 }
 
 /** Check if value is `null` or `undefined`. */
-export const isNull = (x): x is null | undefined => x == null
+export function isNull(x): x is null | undefined {
+  return x == null
+}
 
 /** Check if value === `undefined`. */
-export const isUndefined = (x): x is undefined => x === undefined
+export function isUndefined(x): x is undefined {
+  return x === undefined
+}
 
 /** Check if value is not `null` or `undefined`. */
-export const notNull = (x) => x != null
+export function notNull(x) {
+  return x != null
+}
 
 /** Returns `true` for objects without length or falsy values. */
-export const isEmpty = (x) => (len(x) === 0 ? true : !x)
+export function isEmpty(x) {
+  return len(x) === 0 ? true : !x
+}
 
 /** Check if value is a `RegExp` type */
-export const isRegExp = (x): x is RegExp => x instanceof RegExp
+export function isRegExp(x): x is RegExp {
+  return x instanceof RegExp
+}
 
 /** Check if value is a `Symbol` type */
-export const isSymbol = (x): x is symbol => type(x) === 'symbol'
+export function isSymbol(x): x is symbol {
+  return type(x) === 'symbol'
+}
 
 /** Check if value is a `Set` type. */
-export const isSet = <T>(x): x is Set<T> => x instanceof Set
+export function isSet<T>(x): x is Set<T> {
+  return x instanceof Set
+}
 
 /** Check if value is a `Map` type. */
-export const isMap = <K, V>(x): x is Map<K, V> => x instanceof Map
+export function isMap<K, V>(x): x is Map<K, V> {
+  return x instanceof Map
+}
 
 /** Check if value is a `WeakSet` type. */
-export const isWeakSet = <T extends object>(x): x is WeakSet<T> => x instanceof WeakSet
+export function isWeakSet<T extends object>(x): x is WeakSet<T> {
+  return x instanceof WeakSet
+}
 
 /** Check if value is a `WeakMap` type. */
-export const isWeakMap = <K extends object, V>(x): x is WeakMap<K, V> => x instanceof WeakMap
+export function isWeakMap<K extends object, V>(x): x is WeakMap<K, V> {
+  return x instanceof WeakMap
+}
 
 /**
  * Returns the number of elements in a collection type.
@@ -248,9 +294,10 @@ uniqueId('user_')
 // 'user_1033763188'
 ```
  */
-export const uniqueId = (pre: string = ''): string =>
+export function uniqueId(pre: string = ''): string {
   // @ts-expect-error
-  (pre || 0) + ((Math.random() * 1e10) >>> 0)
+  return (pre || 0) + ((Math.random() * 1e10) >>> 0)
+}
 
 /**
  * Generates a monotonically increasing, pseudo-random based uuid-v4 string. These are sortable, url-friendly and are 100% unique if the IDs are generated more than 1 millisecond apart. If two IDs are generated at the same millisecond, the chance of collision is still pretty low (1 in 10^15).
@@ -261,7 +308,7 @@ uuid()
 // '183f8ef3-b8f0-4000-81f5-89234c836d00'
 ```
  */
-export const uuid = () => {
+export function uuid() {
   const u = Date.now().toString(16) + Math.random().toString(16) + '0'.repeat(16)
   return [u.substr(0, 8), u.substr(8, 4), '4000-8' + u.substr(13, 3), u.substr(16, 12)].join('-')
 }
@@ -280,10 +327,14 @@ export function call(obj: any, key: PropertyKey, ...args: any[]) {
 }
 
 /** Convert number to unicode character */
-export const chr = (x: number) => String.fromCodePoint(x)
+export function chr(x: number) {
+  return String.fromCodePoint(x)
+}
 
 /** Convert character to Unicode code point */
-export const ord = (x: string) => x.charCodeAt(0)
+export function ord(x: string) {
+  return x.charCodeAt(0)
+}
 
 /**
  * Returns an array of the own enumerable property names of `object`.
@@ -291,7 +342,9 @@ export const ord = (x: string) => x.charCodeAt(0)
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
  */
-export const keys = <T>(object: T) => Object.keys(object) as Array<keyof T>
+export function keys<T>(object: T) {
+  return Object.keys(object) as Array<keyof T>
+}
 
 /**
  * Returns an array of the own enumerable property values of `object`.
@@ -299,7 +352,9 @@ export const keys = <T>(object: T) => Object.keys(object) as Array<keyof T>
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values Object.values()}
  */
-export const values = (object) => Object.values(object)
+export function values(object) {
+  return Object.values(object)
+}
 
 /**
  * Check if a given property is present in a given object.
@@ -307,7 +362,9 @@ export const values = (object) => Object.values(object)
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
  */
-export const has = (obj, attr: PropertyKey) => obj && attr in obj
+export function has(obj, attr: PropertyKey) {
+  return obj && attr in obj
+}
 
 /**
  * Check if the attribute is present in the object or return a default value instead.
@@ -417,21 +474,27 @@ export function hashCode(str: string): number {
  * @param n The given number.
  * @returns The binary string representation of `n`.
  */
-export const bin = (n: number) => n.toString(2)
+export function bin(n: number) {
+  return n.toString(2)
+}
 
 /**
  * Converts a number to a hexadecimal string.
  * @param n The given number.
  * @returns The hexadecimal string representation of `n`.
  */
-export const hex = (n: number) => n.toString(16)
+export function hex(n: number) {
+  return n.toString(16)
+}
 
 /**
  * Converts a number to an octal string.
  * @param n The given number.
  * @returns The octal string representation of `n`.
  */
-export const oct = (n: number) => n.toString(8)
+export function oct(n: number) {
+  return n.toString(8)
+}
 
 /**
  * Returns a floating point number constructed from a number or string `x`.
@@ -439,7 +502,9 @@ export const oct = (n: number) => n.toString(8)
  * @returns A floating point number parsed from the given value or `NaN`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseFloat parseFloat}
  */
-export const float = (x: string) => parseFloat(x)
+export function float(x: string) {
+  return parseFloat(x)
+}
 
 /**
  * Returns an integer number constructed from a number or string `x`.
@@ -447,7 +512,9 @@ export const float = (x: string) => parseFloat(x)
  * @returns An integer number parsed from the given value or `NaN`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt parseInt}
  */
-export const int = (x: string, base = 10) => parseInt(x, base)
+export function int(x: string, base = 10) {
+  return parseInt(x, base)
+}
 
 /**
  * Converts the value to an array using `Array.from()`.
@@ -455,7 +522,10 @@ export const int = (x: string, base = 10) => parseInt(x, base)
  * @returns A new array value.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/from Array.from()}
  */
-export const list = <T>(value?: any): T[] => (value ? Array.from(value) : [])
+export function list<T>(value?: any): T[] {
+  if (value != null) return Array.from(value)
+  return []
+}
 
 /**
  * Retrieve the next item from the iterator by calling its `next()` method.

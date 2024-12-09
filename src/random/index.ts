@@ -12,7 +12,9 @@ import { isObject } from '../globals/index.js'
  * @param {number} max
  * @returns {number}
  */
-export const random = (min = 0, max = 1) => Math.random() * (max - min) + min
+export function random(min = 0, max = 1) {
+  return Math.random() * (max - min) + min
+}
 
 /**
  * Returns a random integer between a [min, max] value (inclusive).
@@ -20,7 +22,9 @@ export const random = (min = 0, max = 1) => Math.random() * (max - min) + min
  * @param {number} max
  * @returns {number}
  */
-export const randomInt = (min = 0, max = 1) => Math.round(random(min, max))
+export function randomInt(min = 0, max = 1) {
+  return Math.round(random(min, max))
+}
 
 /**
  * Returns the item at some random index in a sequence.

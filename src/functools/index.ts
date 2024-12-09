@@ -14,14 +14,16 @@ import { Function } from '../globals/index.js'
  * @returns {Function} Returns the new bound function.
  * @see {@link partial}
  */
-export const bind = (fn: Function, thisArg, ...partials) => fn.bind(thisArg, ...partials)
+export function bind(fn: Function, thisArg, ...partials) {
+  return fn.bind(thisArg, ...partials)
+}
 
 /**
  * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least arity number of arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on. The arity of `func` may be specified if `func.length` is not sufficient.
  * @param {Function} func The function to curry.
  * @returns Returns the new curried function.
  */
-export const curry = (func: Function) => {
+export function curry(func: Function) {
   return function curried(...args) {
     if (args.length >= func.length) {
       return func.apply(this, args)
@@ -40,21 +42,23 @@ export const curry = (func: Function) => {
  * @param {...*} [args] The arguments to apply to `fn`.
  * @returns {Function} Returns the new partially applied function
  */
-export const partial = (fn, ...args) => bind(fn, undefined, ...args)
+export function partial(fn, ...args) {
+  return bind(fn, undefined, ...args)
+}
 
 /**
  * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from left to right.
  * @param {...*} [args] The set of functions to apply.
  * @returns {Function} A new function that applies each given function on the result of the previous one.
  */
-export const flow =
-  (...args) =>
-  (x) => {
+export function flow(...args) {
+  return (x) => {
     for (const fn of args) {
       x = fn(x)
     }
     return x
   }
+}
 
 /**
  * This is just an alias for the {@link flow} function.
@@ -67,7 +71,9 @@ export const pipe = flow
  * @param {...*} [args] The set of functions to apply.
  * @returns {Function} A new function that applies each given function on the result of the previous step.
  */
-export const compose = (...args) => flow(args.reverse())
+export function compose(...args) {
+  return flow(args.reverse())
+}
 
 /**
  * Creates a function that memoizes the result of `func`. If `resolver` is provided, it determines the cache key for storing the result based on the arguments provided to the memoized function. By default, the first argument provided to the memoized function is used as the map cache key.

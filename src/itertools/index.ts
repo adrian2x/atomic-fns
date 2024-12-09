@@ -46,7 +46,7 @@ all([2, 4, 6] => (n) => n > 1)
 ```
 @see {@link any}
  */
-export const all = <T>(iterable: Iterable<T>, fn: Predicate<T> = bool) => {
+export function all<T>(iterable: Iterable<T>, fn: Predicate<T> = bool) {
   for (const item of iterable) {
     if (!fn(item)) return false
   }
@@ -71,7 +71,7 @@ any([1, 4, 5] => (n) => n % 2 === 0)
 ```
 @see {@link all}
  */
-export const any = <T>(iterable: Iterable<T>, fn: Predicate<T> = bool) => {
+export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool) {
   for (const item of iterable) {
     if (fn(item)) return true
   }
