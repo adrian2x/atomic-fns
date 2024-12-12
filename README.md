@@ -6,18 +6,18 @@
 
 Stop shipping code built for browsers from 2015.
 
-You may prefer this because it's:
+You may prefer this library because:
 
 * **TypeScript & docs**: Includes type declaration files and js with JSDocs for best in class experience.
 * **Zero deps**: Built from scratch with no runtime dependencies or polyfills.
 * **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
 * **Modular**: Pick what you need. Supports tree-shaking, no side effects, and works with all bundlers.
 * **Lazy**: Leverage generators, iterators, and functional composition.
-* **Tests**: All modules have comprehensive test suites and public apis are 100% covered.
+* **Tests**: All modules have comprehensive test suites and 100% test coverage.
 
 ## Docs
 
-📖 Available at [https://atomic-stack.github.io/atomic-fns/](atomic-stack.github.io/atomic-fns)
+📖 Available at [atomic-fns](atomic-stack.github.io/atomic-fns)
 
 ## Get Started
 
@@ -68,6 +68,15 @@ When working with objects, functions in this library use these custom operators 
 ## New Types
 
 [`Decimal`](https://atomic-stack.github.io/atomic-fns/classes/decimal.Decimal.html) provides support for correct rounded floating point arithmetic, with arbitrary precision.
+
+This fixes precision issues with float arithmetic, for example:
+```
+0.1 + 0.1 + 0.1
+// 0.30000000000000004
+
+decimal('0.1').add('0.1').add('0.1').toNumber()
+// 0.3
+```
 
 Some common base interfaces and typing patterns you may have seen like `Optional`, `Result`, `Comparable`, `Iterator`, and others.
 

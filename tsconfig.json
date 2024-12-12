@@ -115,6 +115,7 @@
       "./src/math/index.ts",
       "./src/operators/index.ts",
       "./src/random/index.ts",
+      "./src/string/index.ts",
     ],
     "out": "../atomic-stack.github.io/atomic-fns",
     "exclude": [

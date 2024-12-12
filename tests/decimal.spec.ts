@@ -25,8 +25,9 @@ describe('Decimal', () => {
 
   it('add', () => {
     let a = decimal('50000000000')
-    let b = decimal('0.000000005')
-    assert(a.add(b).toString() === '50000000000.000000005')
+    let b = decimal('0.00000000000000000005')
+    assert(a.add(b).toString() === '50000000000.00000000000000000005')
+    assert(decimal('0.1').add('0.1').add('0.1').toNumber() === 0.3)
   })
 
   it('sub', () => {
