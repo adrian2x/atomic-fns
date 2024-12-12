@@ -17,7 +17,7 @@ You may prefer this library because:
 
 ## Docs
 
-📖 Available at [atomic-fns](atomic-stack.github.io/atomic-fns)
+📖 Available at [atomic-fns](https://atomic-stack.github.io/atomic-fns/)
 
 ## Get Started
 
