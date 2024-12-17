@@ -443,7 +443,7 @@ export function hash<T>(obj: T): T | number {
   }
 
   if (typeof obj === 'object') {
-    if (get(HASH_KEY, obj) == null) {
+    if (get(HASH_KEY, obj) != null) {
       return obj[HASH_KEY]
     }
     obj[HASH_KEY] = uniqueId()

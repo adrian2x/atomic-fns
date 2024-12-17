@@ -28,8 +28,7 @@ export {
 }
 
 export { DateObject }
-export type DateInput = number | string | Date
-export type DateLike = DateInput | IntlDate | DateObject
+export type DateLike = number | string | Date | IntlDate | DateObject
 
 const INVALID_DATE_STRING = 'Invalid Date'
 
@@ -47,7 +46,7 @@ export class IntlDate {
     return new IntlDate(value, { utc: true, locale })
   }
 
-  /** Returns the current local date and time.*/
+  /** Returns the current local date and time. */
   static now() {
     return new IntlDate()
   }
@@ -86,12 +85,12 @@ export class IntlDate {
       if (utc) {
         // from UTC to current
         this._date = new Date(
-          Date.UTC(year!, month!, day || 1, hour || 0, minute || 0, second || 0, millisecond || 0)
+          Date.UTC(year, month, day || 1, hour || 0, minute || 0, second || 0, millisecond || 0)
         )
       } else {
         this._date = new Date(
-          year!,
-          month!,
+          year,
+          month,
           day || 1,
           hour || 0,
           minute || 0,
@@ -392,7 +391,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
   compare(other: Date | IntlDate) {
     if (!this.isValid()) return 1
 
-    let dt = new IntlDate(other)
+    const dt = new IntlDate(other)
     if (!dt.isValid()) return -1
 
     return this.getTime() - dt.getTime()
@@ -403,7 +402,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
     const normalized = normalizeObject(values, normalizeUnit)
 
-    let mixed = { ...this.toObject(), ...normalized }
+    const mixed = { ...this.toObject(), ...normalized }
 
     // if we didn't set the day but we ended up on an overflow date,
     // use the last day of the right month
@@ -425,28 +424,28 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
   }
 
   fromNow(unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    let diff = this.diff(new Date(), unit) as number
+    const diff = this.diff(new Date(), unit)
     return this.relativeTime(diff, unit)
   }
 
   from(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    let diff = this.diff(other, unit) as number
+    const diff = this.diff(other, unit)
     return this.relativeTime(diff, unit)
   }
 
   toNow(unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    let diff = this.diff(new Date(), unit)
+    const diff = this.diff(new Date(), unit)
     return this.relativeTime(-diff, unit)
   }
 
   to(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    let diff = this.diff(other, unit)
+    const diff = this.diff(other, unit)
     return this.relativeTime(-diff, unit)
   }
 
   diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false) {
-    let dt = new IntlDate(other)
-    let dur = new Duration(this.getTime() - dt.getTime(), exact)
+    const dt = new IntlDate(other)
+    const dur = new Duration(this.getTime() - dt.getTime(), exact)
     let total = dur.total(unit)
     if (!exact) total = Math.trunc(total)
     return total
@@ -462,8 +461,8 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   startOf(unit: DurationUnit) {
     if (!this.isValid()) return this
-    const obj = {} as DateObject,
-      normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
+    const obj: DateObject = {}
+    const normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
     switch (normalizedUnit) {
       case 'years':
         obj.month = 1
@@ -529,22 +528,22 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
 // Check if the new offset is different because we crossed to DST
 function fixOffset(startDate: Date, endDate: Date) {
-  let startOffset = startDate.getTimezoneOffset()
-  let endOffset = endDate.getTimezoneOffset()
+  const startOffset = startDate.getTimezoneOffset()
+  const endOffset = endDate.getTimezoneOffset()
   if (startOffset === endOffset) return new Date(endDate)
-  let postoffset = (startOffset - endOffset) * 60 * 1000
+  const postoffset = (startOffset - endOffset) * 60 * 1000
   return new Date(+endDate + postoffset)
 }
 
 export function addDuration(
-  date: DateInput,
+  date: number | string | Date,
   duration: number | Duration | TDuration,
   exact = false
 ): Date {
   // Get the current offset of this date timezone
-  let newDate = new Date(date)
+  const newDate = new Date(date)
   // Get the number of ticks forward
-  let { values } = new Duration(duration, exact).normalize()
+  const { values } = new Duration(duration, exact).normalize()
   // Apply any time changes that may have happened
   for (const unit in values) {
     setDateUnit(newDate, unit, Math.floor(values[unit]))
@@ -605,7 +604,7 @@ function setDateUnit(date: Date, unit: string, value: number) {
  * @returns
  */
 export function subDuration(
-  date: DateInput,
+  date: number | string | Date,
   duration: number | Duration | TDuration,
   exact = false
 ): Date {
@@ -639,7 +638,7 @@ const UNITS_SINGULAR = {
   ordinal: 'ordinal'
 }
 
-function normalizeUnit(unit) {
+function normalizeUnit(unit: keyof typeof UNITS_SINGULAR) {
   const normalized = UNITS_SINGULAR[unit.toLowerCase()]
   if (!normalized) throw new ValueError(`Invalid unit ${unit}`)
   return normalized

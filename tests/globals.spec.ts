@@ -212,8 +212,9 @@ describe('globals', () => {
   it('hash', () => {
     let obj = { a: 1, b: 2 }
     let h = hash(obj)
-    assert(h === hash(obj))
-    assert(obj[HASH_KEY] === h)
+    assert(h != undefined, String(h))
+    assert(h === hash(obj), String(hash(obj)))
+    assert(obj[HASH_KEY] === h, String(obj[HASH_KEY]))
   })
 
   it('hashCode', () => {
