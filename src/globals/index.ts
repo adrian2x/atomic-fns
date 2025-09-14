@@ -123,7 +123,7 @@ export function type(value: any): string {
  * @returns `obj.toString()` or `''` if `obj` is `null` or `undefined`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString | Object.toString }
  */
-export function str(obj) {
+export function str(obj): string {
   return obj?.toString() ?? ''
 }
 
@@ -167,7 +167,7 @@ export function isArray(x): x is any[] {
  * Check if value is Array-like type.
  * A value is considered array-like if it's not a function and has a `.length` number property.
  */
-export function isArrayLike(x) {
+export function isArrayLike(x): boolean {
   const T = type(x)
   return T === 'array' || (T === 'object' && isNumber(x.length))
 }
@@ -198,7 +198,7 @@ export function isFunction(x): x is Function {
 }
 
 /** Check if value is an async function type. */
-export function isAsyncFunction(x) {
+export function isAsyncFunction(x): boolean {
   return x?.constructor.name === 'AsyncFunction'
 }
 
@@ -218,12 +218,12 @@ export function isUndefined(x): x is undefined {
 }
 
 /** Check if value is not `null` or `undefined`. */
-export function notNull(x) {
+export function notNull(x): boolean {
   return x != null
 }
 
 /** Returns `true` for objects without length or falsy values. */
-export function isEmpty(x) {
+export function isEmpty(x): boolean {
   return len(x) === 0 ? true : !x
 }
 
@@ -308,7 +308,7 @@ uuid()
 // '183f8ef3-b8f0-4000-81f5-89234c836d00'
 ```
  */
-export function uuid() {
+export function uuid(): string {
   const u = Date.now().toString(16) + Math.random().toString(16) + '0'.repeat(16)
   return [u.substr(0, 8), u.substr(8, 4), '4000-8' + u.substr(13, 3), u.substr(16, 12)].join('-')
 }
@@ -320,19 +320,19 @@ export function uuid() {
  * @param {...any[]} args
  * @return `obj.key(...args)` or `undefined`.
  */
-export function call(obj: any, key: PropertyKey, ...args: any[]) {
+export function call<T = any>(obj: any, key: PropertyKey, ...args: any[]): T {
   if (isFunction(get(key, obj))) {
     return obj[key](...args)
   }
 }
 
 /** Convert number to unicode character */
-export function chr(x: number) {
+export function chr(x: number): string {
   return String.fromCodePoint(x)
 }
 
 /** Convert character to Unicode code point */
-export function ord(x: string) {
+export function ord(x: string): number {
   return x.charCodeAt(0)
 }
 
@@ -342,7 +342,7 @@ export function ord(x: string) {
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
  */
-export function keys<T>(object: T) {
+export function keys<T>(object: T): Array<keyof T> {
   return Object.keys(object) as Array<keyof T>
 }
 
@@ -352,7 +352,7 @@ export function keys<T>(object: T) {
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values Object.values()}
  */
-export function values(object) {
+export function values<T = any>(object): T[] {
   return Object.values(object)
 }
 
@@ -362,7 +362,7 @@ export function values(object) {
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
  */
-export function has(obj, attr: PropertyKey) {
+export function has(obj, attr: PropertyKey): boolean {
   return obj && attr in obj
 }
 
@@ -474,7 +474,7 @@ export function hashCode(str: string): number {
  * @param n The given number.
  * @returns The binary string representation of `n`.
  */
-export function bin(n: number) {
+export function bin(n: number): string {
   return n.toString(2)
 }
 
@@ -483,7 +483,7 @@ export function bin(n: number) {
  * @param n The given number.
  * @returns The hexadecimal string representation of `n`.
  */
-export function hex(n: number) {
+export function hex(n: number): string {
   return n.toString(16)
 }
 
@@ -492,7 +492,7 @@ export function hex(n: number) {
  * @param n The given number.
  * @returns The octal string representation of `n`.
  */
-export function oct(n: number) {
+export function oct(n: number): string {
   return n.toString(8)
 }
 
@@ -502,7 +502,7 @@ export function oct(n: number) {
  * @returns A floating point number parsed from the given value or `NaN`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseFloat parseFloat}
  */
-export function float(x: string) {
+export function float(x: string): number {
   return parseFloat(x)
 }
 
@@ -512,7 +512,7 @@ export function float(x: string) {
  * @returns An integer number parsed from the given value or `NaN`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt parseInt}
  */
-export function int(x: string, base = 10) {
+export function int(x: string, base = 10): number {
   return parseInt(x, base)
 }
 

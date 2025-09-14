@@ -23,7 +23,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @param {V} value
    * @returns {this}
    */
-  set(key: K, value: V) {
+  set(key: K, value: V): this {
     if (this.items.size === this.maxSize) {
       // Because ES6 maps remember insertion order, we can evict the first key
       const lastKey = this.items.keys().next().value
@@ -40,7 +40,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @param {K} key The key to add (note value will be `undefined`)
    * @returns {this}
    */
-  add(key: K) {
+  add(key: K): this {
     return this.set(key, undefined as V)
   }
 
@@ -49,7 +49,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @param {K} key
    * @returns {boolean}
    */
-  contains(key: K) {
+  contains(key: K): boolean {
     return this.items.has(key)
   }
 
@@ -58,7 +58,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @param {K} key
    * @returns {?V} The associated value or `undefined`
    */
-  get(key: K) {
+  get(key: K): V | undefined {
     if (this.items.has(key)) {
       const value = this.items.get(key)
       // Delete the previous key to update the new insertion order
@@ -72,7 +72,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * Removes all keys and values from the cache.
    * @returns {this}
    */
-  clear() {
+  clear(): this {
     this.items.clear()
     return this
   }
@@ -82,7 +82,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @param {K} key
    * @returns {boolean} `true` if the key existed and was removed
    */
-  delete(key: K) {
+  delete(key: K): boolean {
     return this.items.delete(key)
   }
 
@@ -91,7 +91,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @param {K} key
    * @returns {?V} The value if it was removed or `undefined`.
    */
-  remove(key: K) {
+  remove(key: K): V | undefined {
     const value = this.items.get(key)
     this.items.delete(key)
     return value
@@ -100,14 +100,14 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
   /**
    * Returns the total number of elements in the cache.
    */
-  get size() {
+  get size(): number {
     return this.items.size
   }
 
   /**
    * Returns the total capacity of the cache.
    */
-  get capacity() {
+  get capacity(): number {
     return this.maxSize
   }
 
@@ -115,7 +115,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * Returns an iterable of all the keys in the cache, in insertion order.
    * @returns {IterableIterator<K>}
    */
-  keys() {
+  keys(): IterableIterator<K> {
     return this.items.keys()
   }
 
@@ -123,7 +123,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * Returns an iterable of all the values in the cache, in insertion order.
    * @returns {IterableIterator<V>}
    */
-  values() {
+  values(): IterableIterator<V> {
     return this.items.values()
   }
 
@@ -131,11 +131,11 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * Returns an iterable of all the [key, value] pairs in the cache, in insertion order.
    * @returns {IterableIterator<[K, V]>}
    */
-  entries() {
+  entries(): IterableIterator<[K, V]> {
     return this.items.entries()
   }
 
-  [Symbol.iterator]() {
+  [Symbol.iterator](): IterableIterator<[K, V]> {
     return this.entries()
   }
 }

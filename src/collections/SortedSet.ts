@@ -29,7 +29,7 @@ export class SortedSet<T> extends Collection {
    * @param {T} value
    * @returns {this} Returns the Set object.
    */
-  add(value: T) {
+  add(value: T): this {
     this.store.add(value)
     return this
   }
@@ -38,7 +38,7 @@ export class SortedSet<T> extends Collection {
    * Returns the smallest value in the set.
    * @returns {?T}
    */
-  min() {
+  min(): T | undefined {
     return this.store.min()
   }
 
@@ -46,7 +46,7 @@ export class SortedSet<T> extends Collection {
    * Returns the largest value in the set.
    * @returns {?T}
    */
-  max() {
+  max(): T | undefined {
     return this.store.max()
   }
 
@@ -55,14 +55,14 @@ export class SortedSet<T> extends Collection {
    * @param {T} value
    * @returns {boolean} `true` if the value was found and removed.
    */
-  delete(value: T) {
+  delete(value: T): boolean {
     return this.store.remove(value) !== undefined
   }
 
   /**
    * Removes all values in the set.
    */
-  clear() {
+  clear(): void {
     return this.store.clear()
   }
 
@@ -70,7 +70,7 @@ export class SortedSet<T> extends Collection {
    * Returns the total number of elements in the set.
    * @returns {number}
    */
-  get size() {
+  get size(): number {
     return this.store.size
   }
 
@@ -78,7 +78,7 @@ export class SortedSet<T> extends Collection {
    * Check if there are no values in the set.
    * @returns {boolean} `true` if is empty.
    */
-  empty() {
+  empty(): boolean {
     return this.store.empty()
   }
 
@@ -87,7 +87,7 @@ export class SortedSet<T> extends Collection {
    * @param {T} value
    * @returns {boolean} `true` if value is found, otherwise `false`.
    */
-  contains(value: T) {
+  contains(value: T): boolean {
     return this.store.contains(value)
   }
 
@@ -96,7 +96,7 @@ export class SortedSet<T> extends Collection {
    * @param {T} value
    * @returns {boolean} `true` if value is found, otherwise `false`.
    */
-  has(value: T) {
+  has(value: T): boolean {
     return this.store.contains(value)
   }
 
@@ -104,7 +104,7 @@ export class SortedSet<T> extends Collection {
    * Returns a new iterator of all values **in-order**.
    * @returns {Iterable<T>}
    */
-  values() {
+  values(): Iterable<T> {
     return this.store.keys()
   }
 }

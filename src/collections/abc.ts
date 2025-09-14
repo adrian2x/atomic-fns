@@ -73,7 +73,7 @@ export abstract class Collection implements Container {
    */
   abstract get size(): number
 
-  get length() {
+  get length(): number {
     return this.size
   }
 
@@ -81,7 +81,7 @@ export abstract class Collection implements Container {
    * Check if there are no items.
    * @returns {boolean} `true` if is empty.
    */
-  empty() {
+  empty(): boolean {
     return !this.size
   }
 }

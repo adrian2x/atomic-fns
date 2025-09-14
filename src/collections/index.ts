@@ -137,7 +137,7 @@ let users = [
   { 'user': 'pebbles', 'age': 1,  'active': true }
 ]
 
-find(users, (o) => o.age < 40)
+find(users, o => o.age < 40)
 // object for 'barney'
 
 // The shape iteratee shorthand.
@@ -203,7 +203,7 @@ filter(objects, matches({ a: 4, c: 6 }))
  * @param shape
  * @returns
  */
-export function matches(shape) {
+export function matches(shape): (obj) => boolean {
   return function (obj) {
     if (!shape || !obj) return false
     for (const key in shape) {
@@ -220,12 +220,14 @@ export function matches(shape) {
 forEach([1, 2], (value) => {
   console.log(value)
 })
-// Logs `1` then `2`.
+// 1
+// 2
 
 forEach({ 'a': 1, 'b': 2 }, (value, key) => {
   console.log(key)
 })
-// Logs 'a' then 'b' (iteration order is not guaranteed).
+// 'a'
+// 'b'
 ```
  * @param {Array|Object} collection The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
@@ -259,8 +261,8 @@ export function forEach<T>(collection: Iterable<T> | Object, fn: Iteratee<T>): v
  * This method is like {@link find} except that it iterates from right to left.
  * @example
 ```js
-findLast([1, 2, 3, 4], (n) => n % 2 === 1)
-//  => 3
+findLast([1, 2, 3, 4], n => n % 2 === 1)
+//  3
 ```
  * @param {Array} arr The collection to iterate over.
  * @param {Function} fn The function invoked per iteration.
@@ -288,10 +290,9 @@ export function findLast<T>(arr: Iterable<T> | Object, fn: Iteratee<T> | Object)
 
  * @example
 ```js
-forEachRight([1, 2], (value) => {
-  console.log(value)
-})
-// Logs `2` then `1`.
+forEachRight([1, 2], console.log)
+// 2
+// 1
 ```
  * @param {Array|Object} collection The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
@@ -460,7 +461,7 @@ let object = { a: 1, b: '2', c: 3 }
 pick(object, ['a', 'c'])
 // { a: 1, c: 3 }
 
-pick(object, (x) => isNumber(x))
+pick(object, x => isNumber(x))
 // { a: 1, c: 3 }
 ```
  *
@@ -497,7 +498,7 @@ let object = { 'a': 1, 'b': '2', 'c': 3 }
 omit(object, ['a', 'c'])
 // { 'b': '2' }
 
-omit(object, (x) => isNumber(x))
+omit(object, x => isNumber(x))
 // { 'b': '2' }
 ```
  * @param {Object} obj The source object.
@@ -542,7 +543,7 @@ let users = [
   { 'user': 'pebbles', 'active': true }
 ]
 
-findIndex(users, (o) => o.user == 'barney')
+findIndex(users, o => o.user == 'barney')
 // 0
 
 // The `shape` iteratee shorthand.
@@ -621,7 +622,7 @@ let users = [
   { 'user': 'pebbles', 'active': false }
 ]
 
-findLastIndex(users, (o) => o.user == 'pebbles')
+findLastIndex(users, o => o.user == 'pebbles')
 // 2
 
 // The `shape` iteratee shorthand.
@@ -889,7 +890,7 @@ defaults({ 'a': 1 }, { 'b': 2 }, { 'a': 3 })
 // { 'a': 1, 'b': 2 }
 ```
  */
-export function defaults(object: Object, ...sources: Object[]) {
+export function defaults(object: Object, ...sources: Object[]): Object {
   for (const source of sources) {
     for (const key in source) {
       if (object[key] === undefined) {
@@ -911,7 +912,7 @@ export function defaults(object: Object, ...sources: Object[]) {
  * @see {@link union}
  * @see {@link intersection}
  */
-export function* difference<T>(...args: Array<Iterable<T>>) {
+export function* difference<T>(...args: Array<Iterable<T>>): Generator<T> {
   const sets = args.map((arr) => new Set(arr))
   const setA = sets[0]
 
@@ -937,7 +938,7 @@ export function* difference<T>(...args: Array<Iterable<T>>) {
 * @see {@link difference}
  * @see {@link union}
  */
-export function* intersection<T>(...args: Array<Iterable<T>>) {
+export function* intersection<T>(...args: Array<Iterable<T>>): Generator<T> {
   const sets = args.map((arr) => new Set(arr))
   // build a counter map to find items in all
   const results = new Map<T, number>()
@@ -966,7 +967,7 @@ export function* intersection<T>(...args: Array<Iterable<T>>) {
  * @see {@link difference}
  * @see {@link intersection}
  */
-export function* union<T>(...args: Array<Iterable<T>>) {
+export function* union<T>(...args: Array<Iterable<T>>): Generator<T> {
   const results = new Set<T>()
   for (const arr of args) {
     for (const item of arr) {

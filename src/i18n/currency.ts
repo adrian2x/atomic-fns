@@ -30,68 +30,68 @@ export class Currency extends Decimal {
   }
 
   // @ts-expect-error overrides
-  clone(n) {
+  clone(n: Currency): Currency {
     return new Currency(n, this.currency, this.locale, this.options)
   }
 
   // @ts-expect-error overrides
-  negated() {
+  negated(): Currency {
     const n = super.negated.call(this)
     return this.clone(n)
   }
 
   // @ts-expect-error overrides
-  add(x) {
+  add(x: Currency | string): Currency {
     const n = super.add.call(this.toDecimal(), x)
     return this.clone(n)
   }
 
   // @ts-expect-error overrides
-  sub(x) {
+  sub(x: Currency | string): Currency {
     const n = super.sub.call(this.toDecimal(), x)
     return this.clone(n)
   }
 
   // @ts-expect-error overrides
-  div(x) {
+  div(x: Currency | Decimal | string | number): Currency {
     const n = super.div.call(this.toDecimal(), x)
     return this.clone(n)
   }
 
   // @ts-expect-error overrides
-  mul(x) {
+  mul(x: Currency | Decimal): Currency {
     const n = super.mul.call(this.toDecimal(), x)
     return this.clone(n)
   }
 
-  toDecimal() {
+  toDecimal(): Decimal {
     return super.clone.call(this)
   }
 
-  toString() {
+  toString(): string {
     const number = this.toNumber()
     return this.numberFormat.format(number)
   }
 
-  format(opts: Intl.NumberFormatOptions = {}, locale?: string) {
+  format(opts: Intl.NumberFormatOptions = {}, locale?: string): string {
     const number = this.toNumber()
     opts = defaults(opts, this.options)
     return new Intl.NumberFormat(locale ?? this.locale, opts).format(number)
   }
 
-  displayName() {
+  displayName(): string {
     return this.format({ currencyDisplay: 'name' })
   }
 
-  accounting() {
+  accounting(): string {
     return this.format({ currencySign: 'accounting' })
   }
 
-  precision(digits?: number) {
+  precision(digits?: number): string {
     return this.format({ maximumFractionDigits: digits })
   }
 
-  eq(x) {
+  eq(x: any): boolean {
     if (x?.currency && x.currency !== this.currency) {
       return false
     }

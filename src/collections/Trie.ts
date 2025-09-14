@@ -4,7 +4,7 @@ type TrieNode = {
   isWord?: boolean
 } & { [key: string]: TrieNode }
 
-function* traverse(node: TrieNode, path: string, total = 20, count = 0) {
+function* traverse(node: TrieNode, path: string, total = 20, count = 0): Generator<string> {
   if (node.isWord) {
     count++
     yield path
@@ -36,7 +36,7 @@ export class Trie extends Collection {
    * Adds the given string to the tree.
    * @param word A string
    */
-  add(word: string) {
+  add(word: string): this {
     let current = this.root
     for (let i = 0; i < word.length; i++) {
       const c = word[i]
@@ -58,7 +58,7 @@ export class Trie extends Collection {
    * @param word The string to remove
    * @returns {boolean} Returns `true` if the string was found and removed.
    */
-  remove(word: string) {
+  remove(word: string): boolean {
     for (let i = 0, node = this.root; i < word.length && node; i++) {
       node = node[word[i]]
       if (i === word.length - 1 && node.isWord) {
@@ -84,7 +84,7 @@ export class Trie extends Collection {
    * @param word A prefix string
    * @param {number} [limit=20] The number of results to return.
    */
-  matches = function* (word: string, limit = 20) {
+  matches = function* (word: string, limit = 20): Generator<string> {
     const node = this.findNode(word)
     if (node) {
       yield* traverse(node, word, limit)
@@ -95,7 +95,7 @@ export class Trie extends Collection {
    * Returns `true` if the given string is found in the tree.
    * @param {string} word
    */
-  contains(word: string) {
+  contains(word: string): boolean {
     const node = this.findNode(word)
     return node?.isWord
   }
@@ -111,7 +111,7 @@ export class Trie extends Collection {
   /**
    * Returns the total number of strings in the tree.
    */
-  get size() {
+  get size(): number {
     return this.count
   }
 }
