@@ -2,7 +2,7 @@
  * Object utilities: merge, pick, omit, clone.
  */
 
-import { isCanonicalArrayIndex, walkArray } from '../internal/arrayKeys.js'
+import { assertNotHugeSparse, isCanonicalArrayIndex, walkArray } from '../internal/arrayKeys.js'
 import {
   assertNestingDepth,
   enterNesting,
@@ -155,6 +155,8 @@ function mergeInto(
     if (t === Object.prototype || t === Function.prototype) return
     const rec = s as Record<string, unknown>
     if (Array.isArray(s) && Array.isArray(t)) {
+      // Refuse huge sparse sources before extending the target (caller's array would hang on map/forEach).
+      assertNotHugeSparse(s)
       // Extend first so source indices never trip the beyond-length rule; holes stay holes.
       if (t.length < s.length) t.length = s.length
       walkArray(s, (ev) => {
@@ -189,9 +191,11 @@ function mergeInto(
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
  * Array sources extend the target array to at least the source length (holes preserved) before
- * merging indices, so holey arrays copy cleanly. Non-array sources that write a canonical
- * array-index key beyond the target array's length throw `RangeError('array index beyond length')`
- * (same rule as `set` / `defaults`).
+ * merging indices, so holey arrays copy cleanly. A huge sparse source array
+ * (`length > 2^24` and `length > 2 * filled + 1024`) throws
+ * `RangeError('sparse array too large')` before any extension, leaving the target unchanged for
+ * that key. Non-array sources that write a canonical array-index key beyond the target array's
+ * length throw `RangeError('array index beyond length')` (same rule as `set` / `defaults`).
  * Nesting deeper than 1000 levels throws `RangeError`. Each key gets its own fresh copy of a
  * shared source (the seen map is path-scoped for cycle protection only). Within one top-level
  * source argument, (source, target) pairs already merged are skipped (merging the same source

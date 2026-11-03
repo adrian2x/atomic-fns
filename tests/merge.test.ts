@@ -152,4 +152,31 @@ describe('merge', () => {
       'array index beyond length'
     )
   })
+
+  it('POL-27: merge refuses huge sparse source arrays without mutating target', () => {
+    const huge: unknown[] = []
+    huge.length = 4294967295
+    huge[0] = 'x'
+    const target = { items: ['keep-me'] as unknown[] }
+    expect(() => merge(target, { items: huge })).toThrow(RangeError)
+    expect(() => merge(target, { items: huge })).toThrow('sparse array too large')
+    expect(target.items).toEqual(['keep-me'])
+    expect(target.items.length).toBe(1)
+
+    const byId: unknown[] = []
+    byId[3] = 'x'
+    const nested = merge({}, { byId }) as { byId: unknown[] }
+    expect(nested.byId).toHaveLength(4)
+    expect(3 in nested.byId).toBe(true)
+    expect(nested.byId[3]).toBe('x')
+
+    const holey: unknown[] = [1]
+    holey.length = 3
+    holey[2] = 3
+    const out = merge({}, { a: holey }) as { a: unknown[] }
+    expect(out.a).toHaveLength(3)
+    expect(1 in out.a).toBe(false)
+    expect(out.a[0]).toBe(1)
+    expect(out.a[2]).toBe(3)
+  })
 })
