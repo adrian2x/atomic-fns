@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { BTree } from '../src/collections/BTree.js'
 import { Deque } from '../src/collections/deque.js'
 import { FrozenSet } from '../src/collections/frozenset.js'
@@ -144,6 +144,15 @@ describe('SPEC-R75 collection protocol (M8 classes)', () => {
   it('SPEC-R75 SortedSet.union with Set interoperates', () => {
     const out = new Set([1]).union(new SortedSet([2]))
     expect([...out].sort()).toEqual([1, 2])
+  })
+
+  it('SetCollection key types stay precise (SortedSet values; Deque indices)', () => {
+    expectTypeOf(new SortedSet<number>().keys()).toEqualTypeOf<IteratorObject<number>>()
+    expectTypeOf(new SortedSet<number>().entries()).toEqualTypeOf<
+      IteratorObject<[number, number]>
+    >()
+    expectTypeOf(new Deque<string>().keys()).toEqualTypeOf<IteratorObject<number>>()
+    expectTypeOf(new Deque<string>().entries()).toEqualTypeOf<IteratorObject<[number, string]>>()
   })
 
   it('SPEC-R75 Collection Mapping Sequence not exported from collections', async () => {

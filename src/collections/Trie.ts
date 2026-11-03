@@ -1,4 +1,4 @@
-import { SetCollection } from './abc.js'
+import { ValueCollection } from './abc.js'
 
 type TrieNode = {
   children: Map<string, TrieNode>
@@ -14,7 +14,7 @@ function newNode(): TrieNode {
  *
  * @see {@link https://en.wikipedia.org/wiki/Trie Trie}
  */
-export class Trie extends SetCollection<string> {
+export class Trie extends ValueCollection<string> {
   #root: TrieNode = newNode()
   #count = 0
 

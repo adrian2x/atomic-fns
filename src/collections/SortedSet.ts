@@ -1,5 +1,5 @@
 import type { Comparer } from '../operators/index.js'
-import { SetCollection } from './abc.js'
+import { ValueCollection } from './abc.js'
 import { BTree } from './BTree.js'
 
 /**
@@ -8,7 +8,7 @@ import { BTree } from './BTree.js'
  *
  * @template T
  */
-export class SortedSet<T> extends SetCollection<T> {
+export class SortedSet<T> extends ValueCollection<T> {
   readonly #tree: BTree<T, true>
 
   /**

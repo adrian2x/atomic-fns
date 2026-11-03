@@ -22,7 +22,7 @@ import { compare, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
 import { isPlainObject } from './object.js'
 
-export { SetCollection, MapCollection } from './abc.js'
+export { SetCollection, ValueCollection, MapCollection } from './abc.js'
 export * from './BTree.js'
 export * from './deque.js'
 export * from './frozenset.js'

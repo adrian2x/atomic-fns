@@ -1,6 +1,6 @@
 import type { Comparer } from '../operators/index.js'
 import { compare, sameValueZero } from '../operators/index.js'
-import { SetCollection } from './abc.js'
+import { ValueCollection } from './abc.js'
 
 /**
  * Binary min-heap (or max-heap with a custom comparator).
@@ -8,7 +8,7 @@ import { SetCollection } from './abc.js'
  *
  * @template T
  */
-export class Heap<T> extends SetCollection<T> {
+export class Heap<T> extends ValueCollection<T> {
   readonly #heap: T[]
   readonly #compare: Comparer<T>
 

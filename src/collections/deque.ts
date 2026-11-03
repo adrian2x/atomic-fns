@@ -14,7 +14,7 @@ function nextPow2(n: number): number {
  *
  * @template T
  */
-export class Deque<T> extends SetCollection<T> {
+export class Deque<T> extends SetCollection<T, number> {
   #buf: { [i: number]: T; length: number }
   #cap: number
   #head = 0
@@ -166,7 +166,7 @@ export class Deque<T> extends SetCollection<T> {
     return undefined
   }
 
-  override forEach(cb: (value: T, key: unknown, coll: this) => void, thisArg?: unknown): void {
+  override forEach(cb: (value: T, key: number, coll: this) => void, thisArg?: unknown): void {
     for (let i = 0; i < this.#size; i++) {
       cb.call(thisArg, this.#buf[this.#phys(i)], i, this)
     }
