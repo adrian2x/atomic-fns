@@ -1,3 +1,4 @@
+import { describe, it } from 'vitest'
 import assert from 'assert'
 import { IntlDate, strftime } from '../src/i18n/index.js'
 
@@ -268,13 +269,13 @@ describe('IntlDate', () => {
 
   it('toNow', () => {
     let now = mockDate()
-    let start = now.subtract({years: 33})
+    let start = now.subtract({ years: 33 })
     assert(start.toNow('years') === `in 33 years`)
   })
 
   it('fromNow', () => {
     let now = mockDate()
-    let start = now.subtract({years: 33})
+    let start = now.subtract({ years: 33 })
     assert(start.fromNow('years') === `33 years ago`)
   })
 

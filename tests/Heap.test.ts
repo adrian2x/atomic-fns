@@ -1,3 +1,4 @@
+import { describe, it } from 'vitest'
 import assert from 'assert'
 import { Heap } from '../src/collections/Heap.js'
 import { sorted } from '../src/itertools/index.js'

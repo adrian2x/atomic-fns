@@ -27,7 +27,7 @@ export {
   weeksInYear
 }
 
-export { DateObject }
+export type { DateObject }
 export type DateLike = number | string | Date | IntlDate | DateObject
 
 const INVALID_DATE_STRING = 'Invalid Date'

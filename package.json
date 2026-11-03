@@ -15,7 +15,7 @@
     "version": "npm run build && npm run docs && git add -A dist",
     "postversion": "git push && git push --tags",
     "prepublishOnly": "npm run build",
-    "test": "NODE_OPTIONS=--loader=ts-node/esm jasmine --config=jasmine.json",
+    "test": "vitest run",
     "tsc": "tsc -p . --declaration",
     "tsc:w": "tsc -p . --declaration --watch",
     "lint": "eslint src/**/*.ts --fix",
@@ -23,19 +23,17 @@
     "docs": "typedoc"
   },
   "devDependencies": {
-    "@types/jasmine": "^4.3.0",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
+    "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^8.25.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-config-standard-with-typescript": "^23.0.0",
     "eslint-plugin-n": "^15.3.0",
     "eslint-plugin-prettier": "^4.2.1",
-    "jasmine": "^4.4.0",
-    "jasmine-spec-reporter": "^7.0.0",
     "prettier": "^2.7.1",
-    "ts-node": "^10.9.1",
     "typedoc": "^0.23.16",
-    "typescript": "^4.8.4"
+    "typescript": "^4.8.4",
+    "vitest": "^5.0.5"
   },
   "repository": {
     "type": "git",

@@ -1,3 +1,4 @@
+import { describe, it } from 'vitest'
 import assert from 'assert'
 import { bool, id, isinstance, not, compare, shallowEqual } from '../src/operators/index.js'
 

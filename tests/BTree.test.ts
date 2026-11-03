@@ -1,3 +1,4 @@
+import { describe, it } from 'vitest'
 import assert from 'assert'
 import { BTree } from '../src/collections/BTree.js'
 import { times } from '../src/itertools/index.js'

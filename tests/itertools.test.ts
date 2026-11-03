@@ -1,3 +1,4 @@
+import { describe, it } from 'vitest'
 import assert from 'assert'
 import {
   accumulate,
@@ -30,7 +31,7 @@ import { max } from '../src/math/index.js'
 
 const Falsy = (x) => !x
 
-describe('operators', () => {
+describe('itertools', () => {
   it('accumulate', () => {
     assert.deepEqual([...accumulate([1, 2, 3, 4])], [1, 3, 6, 10])
     assert.deepEqual(
