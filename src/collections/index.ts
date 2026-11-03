@@ -732,7 +732,7 @@ export function defaults<T extends object>(object: T, ...sources: object[]): T {
   for (const source of sources) {
     for (const key of Object.keys(source)) {
       if (!Object.hasOwn(object, key) || target[key] === undefined) {
-        target[key] = (source as Record<string, unknown>)[key]
+        defineData(target, key, (source as Record<string, unknown>)[key])
       }
     }
   }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   compact,
   count,
+  defaults,
   difference,
   filter,
   find,
@@ -135,6 +136,29 @@ describe('collections', () => {
     expect(matches({ tags: ['b'] })({ tags: ['a', 'b'] })).toBe(true)
     expect(matches({})(1)).toBe(true)
     expect(matches([])('x')).toBe(true)
+  })
+
+  it('defaults never assigns __proto__ as a prototype', () => {
+    const opts = defaults(
+      { name: undefined },
+      JSON.parse('{"__proto__":{"isAdmin":true,"role":"root"},"name":"eve"}') as object
+    ) as { name?: string; isAdmin?: boolean; role?: string; __proto__?: unknown }
+    expect(Object.getPrototypeOf(opts)).toBe(Object.prototype)
+    expect(Object.getOwnPropertyDescriptor(Object.prototype, 'isAdmin')).toBeUndefined()
+    expect(Object.hasOwn(opts, '__proto__')).toBe(true)
+    expect(opts.name).toBe('eve')
+
+    class Config {
+      readonly secure = true
+      check(): string {
+        return 'ok'
+      }
+    }
+    const cfg = defaults(new Config(), JSON.parse('{"__proto__":{"secure":false}}') as object)
+    expect(cfg).toBeInstanceOf(Config)
+    expect(Object.getPrototypeOf(cfg)).toBe(Config.prototype)
+    expect(cfg.secure).toBe(true)
+    expect(typeof cfg.check).toBe('function')
   })
 
   it('SPEC-R32 pick omit nested and pollution', () => {
