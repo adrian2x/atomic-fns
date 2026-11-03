@@ -3,7 +3,7 @@ on:
   release:
     types: [created]
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -15,19 +15,47 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version: 24.22.2
+      - name: Require npm >= 11.5.1
+        run: |
+          npm -v
+          node -e "const v=require('child_process').execSync('npm -v',{encoding:'utf8'}).trim();const[a,b,c]=v.split('.').map(Number);const ok=a>11||(a===11&&(b>5||(b===5&&c>=1)));if(!ok){console.error('npm '+v+' < 11.5.1');process.exit(1)}"
       - run: npm ci --ignore-scripts
       - run: npm run check
+  pack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.22.2
+      - name: Require npm >= 11.5.1
+        run: |
+          npm -v
+          node -e "const v=require('child_process').execSync('npm -v',{encoding:'utf8'}).trim();const[a,b,c]=v.split('.').map(Number);const ok=a>11||(a===11&&(b>5||(b===5&&c>=1)));if(!ok){console.error('npm '+v+' < 11.5.1');process.exit(1)}"
+      - run: npm ci --ignore-scripts
+      - run: npm run build
       - run: npm pack
+      - name: Write SHA256SUMS
+        run: sha256sum atomic-fns-*.tgz > SHA256SUMS
       - name: Upload package tarball
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: package
-          path: atomic-fns-*.tgz
+          path: |
+            atomic-fns-*.tgz
+            SHA256SUMS
           if-no-files-found: error
   publish:
-    needs: build
+    needs: [check, pack]
     runs-on: ubuntu-latest
+    environment: npm
     permissions:
       contents: read
       id-token: write
@@ -39,8 +67,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version: 24.22.2
           registry-url: 'https://registry.npmjs.org'
-      - name: Install npm for trusted publishing
-        run: npm install -g npm@11.21.1 --ignore-scripts
+      - name: Require npm >= 11.5.1
+        run: |
+          npm -v
+          node -e "const v=require('child_process').execSync('npm -v',{encoding:'utf8'}).trim();const[a,b,c]=v.split('.').map(Number);const ok=a>11||(a===11&&(b>5||(b===5&&c>=1)));if(!ok){console.error('npm '+v+' < 11.5.1');process.exit(1)}"
+      - name: Verify package checksum
+        run: sha256sum -c SHA256SUMS
       - run: npm publish ./atomic-fns-*.tgz --provenance --access public

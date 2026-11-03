@@ -184,6 +184,10 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 
 Node >= 24; ESM `exports` subpaths; jasmine replaced by vitest.
 
+## Releasing
+
+One-time owner setup: create a GitHub environment named `npm` with a required reviewer and a deployment branch/tag rule of `v*`. On npm, bind a trusted publisher to this repository, workflow `publish.yml`, environment `npm`.
+
 ## Contributing
 
 If you want to contribute to the project and make it better, your help is very welcome. Contributing is also a great way to learn more about social coding on Github, new technologies and their ecosystems and how to make constructive, helpful bug reports, feature requests and the noblest of all contributions: a good, clean pull request. You will be listed as a **Champion** on the official site as well.
