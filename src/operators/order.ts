@@ -19,10 +19,10 @@ function seqId(v: object | symbol): number {
   return n
 }
 
+const cmp3 = <T>(a: T, b: T): -1 | 0 | 1 => (a < b ? -1 : a > b ? 1 : 0)
+
 function seqCompare(a: object | symbol, b: object | symbol): -1 | 0 | 1 {
-  const sa = seqId(a)
-  const sb = seqId(b)
-  return sa < sb ? -1 : sa > sb ? 1 : 0
+  return cmp3(seqId(a), seqId(b))
 }
 
 function rankOf(v: unknown): number {
@@ -85,7 +85,7 @@ function compareSymbols(x: symbol, y: symbol): -1 | 0 | 1 {
   const kx = Symbol.keyFor(x)
   const ky = Symbol.keyFor(y)
   if (kx !== undefined && ky !== undefined) {
-    return kx < ky ? -1 : kx > ky ? 1 : 0
+    return cmp3(kx, ky)
   }
   if (kx !== undefined) return -1
   if (ky !== undefined) return 1
@@ -94,7 +94,7 @@ function compareSymbols(x: symbol, y: symbol): -1 | 0 | 1 {
   if (dx === undefined && dy !== undefined) return -1
   if (dx !== undefined && dy === undefined) return 1
   if (dx !== undefined && dy !== undefined && dx !== dy) {
-    return dx < dy ? -1 : 1
+    return cmp3(dx, dy)
   }
   return seqCompare(x, y)
 }
@@ -103,22 +103,13 @@ function nativeCompare(x: unknown, y: unknown, rank: number): -1 | 0 | 1 {
   switch (rank) {
     case 1: {
       if (typeof x === typeof y) {
-        return (x as number | bigint) < (y as number | bigint)
-          ? -1
-          : (x as number | bigint) > (y as number | bigint)
-            ? 1
-            : 0
+        return cmp3(x as number | bigint, y as number | bigint)
       }
-      return (x as number | bigint) < (y as number | bigint)
-        ? -1
-        : (x as number | bigint) > (y as number | bigint)
-          ? 1
-          : typeof x === 'number'
-            ? -1
-            : 1
+      const c = cmp3(x as number | bigint, y as number | bigint)
+      return c !== 0 ? c : typeof x === 'number' ? -1 : 1
     }
     case 2:
-      return (x as string) < (y as string) ? -1 : (x as string) > (y as string) ? 1 : 0
+      return cmp3(x as string, y as string)
     case 3:
       return x === y ? 0 : x ? 1 : -1
     case 4:
@@ -129,7 +120,7 @@ function nativeCompare(x: unknown, y: unknown, rank: number): -1 | 0 | 1 {
       const nx = Number.isNaN(tx)
       const ny = Number.isNaN(ty)
       if (nx !== ny) return nx ? 1 : -1
-      if (!nx && tx !== ty) return tx < ty ? -1 : 1
+      if (!nx && tx !== ty) return cmp3(tx, ty)
       return x === y ? 0 : seqCompare(x as object, y as object)
     }
     case 6:

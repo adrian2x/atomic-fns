@@ -32,14 +32,8 @@ export function hash(x: unknown): number {
   if (typeof x === 'symbol') {
     const key = Symbol.keyFor(x)
     if (key !== undefined) return hashCode('Symbol(' + key + ')')
-    let h = hashes.get(x)
-    if (h === undefined) {
-      h = hashCounter++
-      hashes.set(x, h)
-    }
-    return h
   }
-  if (typeof x === 'object' || typeof x === 'function') {
+  if (typeof x === 'object' || typeof x === 'function' || typeof x === 'symbol') {
     let h = hashes.get(x)
     if (h === undefined) {
       h = hashCounter++

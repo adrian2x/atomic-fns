@@ -92,39 +92,23 @@ function defineCompareFromOrdering(proto: object): void {
   if (!hasLt && !hasGt) return
   if ((proto as Record<symbol, unknown>)[protocol.compare] !== undefined) return
 
-  if (hasLt) {
-    Object.defineProperty(proto, protocol.compare, {
-      value: function (o: unknown) {
-        const self = this as Record<string, (...a: unknown[]) => unknown>
-        if (typeof self.eq === 'function' && self.eq(o)) return 0
-        if (self.lt(o)) return -1
-        const greater =
-          typeof self.gt === 'function'
-            ? self.gt(o)
-            : typeof (o as { lt?: (x: unknown) => unknown } | null)?.lt === 'function'
-              ? (o as { lt: (x: unknown) => unknown }).lt(this)
-              : false
-        if (greater) return 1
-        return typeof self.eq === 'function' ? undefined : 0
-      },
-      enumerable: false,
-      configurable: true
-    })
-    return
-  }
+  const ahead = hasLt ? 'lt' : 'gt'
+  const aheadVal = hasLt ? -1 : 1
+  const behind = hasLt ? 'gt' : 'lt'
+  const behindVal = hasLt ? 1 : -1
 
   Object.defineProperty(proto, protocol.compare, {
     value: function (o: unknown) {
       const self = this as Record<string, (...a: unknown[]) => unknown>
       if (typeof self.eq === 'function' && self.eq(o)) return 0
-      if (self.gt(o)) return 1
-      const lesser =
-        typeof self.lt === 'function'
-          ? self.lt(o)
-          : typeof (o as { gt?: (x: unknown) => unknown } | null)?.gt === 'function'
-            ? (o as { gt: (x: unknown) => unknown }).gt(this)
+      if (self[ahead](o)) return aheadVal
+      const opposite =
+        typeof self[behind] === 'function'
+          ? self[behind](o)
+          : typeof (o as Record<string, unknown> | null)?.[ahead] === 'function'
+            ? (o as Record<string, (...a: unknown[]) => unknown>)[ahead](this)
             : false
-      if (lesser) return -1
+      if (opposite) return behindVal
       return typeof self.eq === 'function' ? undefined : 0
     },
     enumerable: false,

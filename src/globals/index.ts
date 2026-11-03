@@ -262,17 +262,7 @@ export function uuid(): string {
     for (const byte of bytes) {
       out += byte.toString(16).padStart(2, '0')
     }
-    return (
-      out.slice(0, 8) +
-      '-' +
-      out.slice(8, 12) +
-      '-' +
-      out.slice(12, 16) +
-      '-' +
-      out.slice(16, 20) +
-      '-' +
-      out.slice(20)
-    )
+    return out.replace(/^(.{8})(.{4})(.{4})(.{4})/, '$1-$2-$3-$4-')
   }
   throw new NotImplementedError('crypto.getRandomValues unavailable')
 }
@@ -333,10 +323,7 @@ export function has(obj: unknown, attr: PropertyKey): boolean {
 export function get<V = unknown>(key: PropertyKey | PropertyKey[], obj: unknown, value?: V): V {
   if (obj == null) return value as V
 
-  let paths: PropertyKey[] = Array.isArray(key) ? key : [key]
-  if (typeof key === 'string') {
-    paths = key.split('.')
-  }
+  const paths = typeof key === 'string' ? key.split('.') : Array.isArray(key) ? key : [key]
 
   try {
     let result: unknown = obj

@@ -29,14 +29,16 @@ function tagOf(v: object): string {
   return Object.prototype.toString.call(v)
 }
 
-function bytesEqual(a: ArrayBuffer, b: ArrayBuffer): boolean {
-  if (a.byteLength !== b.byteLength) return false
-  const ua = new Uint8Array(a)
-  const ub = new Uint8Array(b)
-  for (let i = 0; i < ua.length; i++) {
-    if (ua[i] !== ub[i]) return false
-  }
-  return true
+function bytes(v: ArrayBuffer | ArrayBufferView): Uint8Array {
+  return v instanceof ArrayBuffer
+    ? new Uint8Array(v)
+    : new Uint8Array(v.buffer, v.byteOffset, v.byteLength)
+}
+
+function bytesEqual(a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBufferView): boolean {
+  const ua = bytes(a)
+  const ub = bytes(b)
+  return ua.length === ub.length && ua.every((byte, i) => byte === ub[i])
 }
 
 function deepEqualInner(a: unknown, b: unknown, pending: Pending): boolean {
@@ -72,19 +74,8 @@ function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
   if (a instanceof RegExp) {
     return a.source === (b as RegExp).source && a.flags === (b as RegExp).flags
   }
-  if (a instanceof ArrayBuffer) {
-    return bytesEqual(a, b as ArrayBuffer)
-  }
-  if (ArrayBuffer.isView(a)) {
-    const va = a
-    const vb = b as ArrayBufferView
-    if (va.byteLength !== vb.byteLength) return false
-    const ua = new Uint8Array(va.buffer, va.byteOffset, va.byteLength)
-    const ub = new Uint8Array(vb.buffer, vb.byteOffset, vb.byteLength)
-    for (let i = 0; i < ua.length; i++) {
-      if (ua[i] !== ub[i]) return false
-    }
-    return true
+  if (a instanceof ArrayBuffer || ArrayBuffer.isView(a)) {
+    return bytesEqual(a, b as ArrayBuffer | ArrayBufferView)
   }
   if (a instanceof Map) {
     const mb = b as Map<unknown, unknown>
@@ -116,7 +107,7 @@ function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
   const keysB = Object.keys(b)
   if (keysA.length !== keysB.length) return false
   for (const k of keysA) {
-    if (!Object.prototype.hasOwnProperty.call(b, k)) return false
+    if (!Object.hasOwn(b, k)) return false
     if (
       !deepEqualInner((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], pending)
     ) {
@@ -151,7 +142,7 @@ export function shallowEqual(a: unknown, b: unknown): boolean {
   const keysB = Object.keys(b)
   if (keysA.length !== keysB.length) return false
   for (const k of keysA) {
-    if (!Object.prototype.hasOwnProperty.call(b, k)) return false
+    if (!Object.hasOwn(b, k)) return false
     if (!sameValueZero((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) {
       return false
     }
