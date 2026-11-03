@@ -750,6 +750,16 @@ defaults({ 'a': 1 }, { 'b': 2 }, { 'a': 3 })
 // { 'a': 1, 'b': 2 }
 ```
  */
+function propertyDescriptorAlongChain(object: object, key: string): PropertyDescriptor | undefined {
+  let cur: object | null = object
+  while (cur) {
+    const desc = Object.getOwnPropertyDescriptor(cur, key)
+    if (desc) return desc
+    cur = Object.getPrototypeOf(cur) as object | null
+  }
+  return undefined
+}
+
 export function defaults<T extends object>(object: T, ...sources: object[]): T {
   const target = object as Record<string, unknown>
   for (const source of sources) {
@@ -760,6 +770,8 @@ export function defaults<T extends object>(object: T, ...sources: object[]): T {
         (!Object.hasOwn(object, key) &&
           value === (Object.prototype as Record<string, unknown>)[key])
       if (!fill) continue
+      const desc = propertyDescriptorAlongChain(object, key)
+      if (desc && 'get' in desc && desc.set === undefined) continue
       const srcVal = (source as Record<string, unknown>)[key]
       if (key === '__proto__') {
         defineData(target, key, srcVal)

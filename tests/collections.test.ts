@@ -245,6 +245,28 @@ describe('collections', () => {
     expect(() => defaults(new Srv(), { port: 22 })).toThrow('port 22 blocked')
     const s = defaults(new Srv(), { port: 443 })
     expect(s.port).toBe(443)
+
+    class GetterOnly {
+      get x(): undefined {
+        return undefined
+      }
+    }
+    const go = new GetterOnly()
+    expect(() => defaults(go, { x: 1 })).not.toThrow()
+    expect(go.x).toBeUndefined()
+    expect(Object.hasOwn(go, 'x')).toBe(false)
+
+    class WithSetter {
+      #y: number | undefined
+      get y(): number | undefined {
+        return this.#y
+      }
+      set y(v: number | undefined) {
+        this.#y = v
+      }
+    }
+    const ws = defaults(new WithSetter(), { y: 7 })
+    expect(ws.y).toBe(7)
   })
 
   it('SPEC-R32 pick omit nested and pollution', () => {
