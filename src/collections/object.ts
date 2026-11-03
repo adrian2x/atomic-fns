@@ -2,7 +2,7 @@
  * Object utilities: merge, pick, omit, clone.
  */
 
-import { walkArray } from '../internal/arrayKeys.js'
+import { isCanonicalArrayIndex, walkArray } from '../internal/arrayKeys.js'
 import {
   assertNestingDepth,
   enterNesting,
@@ -73,6 +73,12 @@ function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown 
 /** Pairs (source, target) already merged within one top-level source argument. */
 type MergedPairs = WeakMap<object, WeakSet<object>>
 
+function assertArrayIndexInRange(t: object, key: PropertyKey): void {
+  if (!Array.isArray(t) || typeof key !== 'string' || !isCanonicalArrayIndex(key)) return
+  const idx = Number(key)
+  if (idx > t.length) throw new RangeError('array index beyond length')
+}
+
 function mergeKey(
   t: object,
   key: PropertyKey,
@@ -81,6 +87,7 @@ function mergeKey(
   pairs: MergedPairs,
   depth: number
 ): void {
+  assertArrayIndexInRange(t, key)
   const tv = Object.hasOwn(t, key) ? (t as Record<PropertyKey, unknown>)[key] : undefined
   if (key === 'constructor' && typeof tv === 'function') return
   if (sv === undefined && tv !== undefined) return

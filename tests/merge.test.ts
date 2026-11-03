@@ -110,4 +110,12 @@ describe('merge', () => {
     }
     expect(out.http.timeout).toBe(30)
   })
+
+  it('R13-D3: merge refuses array index keys beyond length', () => {
+    expect(() => merge([], JSON.parse('{"4294967294":1}') as object)).toThrow(RangeError)
+    expect(() => merge([], JSON.parse('{"4294967294":1}') as object)).toThrow(
+      'array index beyond length'
+    )
+    expect(merge([], JSON.parse('{"0":1}') as object)).toEqual([1])
+  })
 })

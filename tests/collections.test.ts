@@ -178,6 +178,14 @@ describe('collections', () => {
     }, 250)
   })
 
+  it('R13-D3: defaults refuses array index keys beyond length', () => {
+    expect(() => defaults([], JSON.parse('{"4294967294":1}') as object)).toThrow(RangeError)
+    expect(() => defaults([], JSON.parse('{"4294967294":1}') as object)).toThrow(
+      'array index beyond length'
+    )
+    expect(defaults([] as unknown[], JSON.parse('{"0":1}') as object)).toEqual([1])
+  })
+
   it('defaults never assigns __proto__ as a prototype', () => {
     const opts = defaults(
       { name: undefined },

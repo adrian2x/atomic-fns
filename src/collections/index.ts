@@ -8,6 +8,7 @@ import { get, isIterable, isObject, keys, ValueError } from '../globals/index.js
 import {
   assertNotHugeSparse,
   arrayOwnIndices,
+  isCanonicalArrayIndex,
   isHugeSparse,
   walkArray,
   type ArrayWalkEvent
@@ -991,6 +992,10 @@ export function defaults<T extends object>(object: T, ...sources: object[]): T {
   const target = object as Record<string, unknown>
   for (const source of sources) {
     for (const key of Object.keys(source)) {
+      if (Array.isArray(object) && isCanonicalArrayIndex(key)) {
+        const idx = Number(key)
+        if (idx > object.length) throw new RangeError('array index beyond length')
+      }
       const value = target[key]
       const fill =
         value === undefined ||
