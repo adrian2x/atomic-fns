@@ -1,3 +1,6 @@
+import { asDate } from '../format.js'
+
+/** Calendar fields for IntlDate object construction and `set`. */
 export interface DateObject {
   year?: number
   month?: number
@@ -10,33 +13,8 @@ export interface DateObject {
 }
 
 /**
- * Returns x % n but takes the sign of n instead of x
- * @param x
- * @param n
- * @returns {number}
- */
-function floorMod(x: number, n: number) {
-  return x - n * Math.floor(x / n)
-}
-
-function parseFloating(str: string) {
-  if (str != null && str !== '') return parseFloat(str)
-}
-
-function parseMilliseconds(str: string) {
-  if (str != null && str !== '') {
-    const f = parseFloat('0.' + str) * 1000
-    return Math.floor(f)
-  }
-}
-
-// DATE BASICS
-
-/**
  * Returns the minimum (most distant past) of the given date values.
- * @template T
- * @param {Array<T>} dates
- * @returns {T} The smallest date of `dates`
+ * @param dates Date-like values.
  */
 export function minDate<T>(dates: Array<T>): T
 export function minDate<T>(...dates: Array<T>): T {
@@ -46,7 +24,7 @@ export function minDate<T>(...dates: Array<T>): T {
     ans = ans[0]
   }
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i].valueOf() < ans.valueOf()) {
+    if (Number(dates[i]) < Number(ans)) {
       ans = dates[i]
     }
   }
@@ -55,9 +33,7 @@ export function minDate<T>(...dates: Array<T>): T {
 
 /**
  * Returns the maximum (most distant future) of the given date values.
- * @template T
- * @param {Array<T>} dates
- * @returns {T} The largest date of `dates`
+ * @param dates Date-like values.
  */
 export function maxDate<T>(dates: Array<T>): T
 export function maxDate<T>(...dates: Array<T>): T {
@@ -67,7 +43,7 @@ export function maxDate<T>(...dates: Array<T>): T {
     ans = ans[0]
   }
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i].valueOf() > ans.valueOf()) {
+    if (Number(dates[i]) > Number(ans)) {
       ans = dates[i]
     }
   }
@@ -75,9 +51,8 @@ export function maxDate<T>(...dates: Array<T>): T {
 }
 
 /**
- * Returns `true` if the year is a leap year, otherwise `false`.
- * @param year The date year
- * @returns {boolean} `true` if is a leap year
+ * Returns `true` if the year is a leap year.
+ * @param year The calendar year.
  */
 export function isLeapYear(year: number): boolean {
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
@@ -85,8 +60,7 @@ export function isLeapYear(year: number): boolean {
 
 /**
  * Get the number of days in the given year.
- * @param year The date year
- * @returns {number} Number of days in year
+ * @param year The calendar year.
  */
 export function daysInYear(year: number): number {
   return isLeapYear(year) ? 366 : 365
@@ -94,42 +68,63 @@ export function daysInYear(year: number): number {
 
 /**
  * Get the number of days in the given date's month and year.
- * @param date The specified date
- * @returns {number} Number of days in month
+ * String input is parsed as local time via `asDate`.
+ * @param date The specified date.
  */
 export function daysInMonth(date: string | number | Date): number {
-  const d = new Date(date),
-    year = d.getFullYear(),
-    month = d.getMonth() + 1
-  const modMonth = floorMod(month - 1, 12) + 1,
-    modYear = year + (month - modMonth) / 12
-  if (modMonth === 2) {
-    return isLeapYear(modYear) ? 29 : 28
-  } else {
-    return [31, null, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][modMonth - 1]
-  }
+  const d = typeof date === 'string' ? asDate(date) : new Date(date)
+  const year = d.getFullYear()
+  const month = d.getMonth()
+  const end = new Date(0)
+  end.setFullYear(year, month + 1, 0)
+  return end.getDate()
 }
 
-// COERCION
-
-export function asNumber(value) {
+/**
+ * Coerces a unit value to a finite number.
+ * @param value The unit value.
+ */
+export function asNumber(value: unknown): number {
   const numericValue = Number(value)
-  if (typeof value === 'boolean' || value === '' || Number.isNaN(numericValue))
+  if (typeof value === 'boolean' || value === '' || Number.isNaN(numericValue)) {
     throw new Error(`Invalid unit value ${value}`)
+  }
   return numericValue
 }
 
 const isoDuration =
   /^-?P(?:(?:(-?\d{1,20}(?:\.\d{1,20})?)Y)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20}(?:\.\d{1,20})?)W)?(?:(-?\d{1,20}(?:\.\d{1,20})?)D)?(?:T(?:(-?\d{1,20}(?:\.\d{1,20})?)H)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20})(?:[.,](-?\d{1,20}))?S)?)?)$/
 
-function extractISODuration(match) {
+function parseFloating(str: string | undefined) {
+  if (str != null && str !== '') return parseFloat(str)
+}
+
+function parseMilliseconds(str: string | undefined) {
+  if (str != null && str !== '') {
+    const f = parseFloat('0.' + str) * 1000
+    return Math.floor(f)
+  }
+}
+
+type ISODurationFields = {
+  years?: number
+  months?: number
+  weeks?: number
+  days?: number
+  hours?: number
+  minutes?: number
+  seconds?: number
+  milliseconds?: number
+}
+
+function extractISODuration(match: RegExpExecArray): [ISODurationFields] {
   const [s, yearStr, monthStr, weekStr, dayStr, hourStr, minuteStr, secondStr, millisecondsStr] =
     match
 
   const hasNegativePrefix = s[0] === '-'
   const negativeSeconds = secondStr && secondStr[0] === '-'
 
-  const maybeNegate = (num, force = false) =>
+  const maybeNegate = (num: number | undefined, force = false) =>
     num !== undefined && (force || (num && hasNegativePrefix)) ? -num : num
 
   return [
@@ -141,108 +136,102 @@ function extractISODuration(match) {
       hours: maybeNegate(parseFloating(hourStr)),
       minutes: maybeNegate(parseFloating(minuteStr)),
       seconds: maybeNegate(parseFloating(secondStr), secondStr === '-0'),
-      milliseconds: maybeNegate(parseMilliseconds(millisecondsStr), negativeSeconds)
+      milliseconds: maybeNegate(parseMilliseconds(millisecondsStr), Boolean(negativeSeconds))
     }
   ]
 }
 
-function parse(s, ...patterns) {
+/** Parses an ISO-8601 duration string into a duration object. */
+export function parseISODuration(s: string): [ISODurationFields] | [null, null] {
   if (s == null) {
     return [null, null]
   }
-
-  for (const [regex, extractor] of patterns) {
-    const m = regex.exec(s)
-    if (m) {
-      return extractor(m)
-    }
+  const m = isoDuration.exec(s)
+  if (m) {
+    return extractISODuration(m)
   }
   return [null, null]
 }
 
-export function parseISODuration(s) {
-  return parse(s, [isoDuration, extractISODuration])
-}
-
 function createUTCDate(y: number, m = 0, d = 1, h = 0, min = 0, s = 0, ms = 0) {
   let date: Date
-  // the Date.UTC function remaps years 0-99 to 1900-1999
   if (y < 100 && y >= 0) {
-    // preserve leap years using a full 400 year cycle, then reset
     date = new Date(Date.UTC(y + 400, m, d, h, min, s, ms))
-    if (isFinite(date.getUTCFullYear())) {
+    if (Number.isFinite(date.getUTCFullYear())) {
       date.setUTCFullYear(y)
     }
   } else {
     date = new Date(Date.UTC(y, m, d, h, min, s, ms))
   }
-
   return date
 }
 
-function firstWeekOffset(year, dow, doy) {
-  const // first-week day -- which january is always in the first week (4 for iso, 1 for other)
-    fwd = 7 + dow - doy,
-    // first-week day local weekday -- which local weekday is fwd
-    fwdlw = (7 + createUTCDate(year, 0, fwd).getUTCDay() - dow) % 7
-
+function firstWeekOffset(year: number, dow: number, doy: number) {
+  const fwd = 7 + dow - doy
+  const fwdlw = (7 + createUTCDate(year, 0, fwd).getUTCDay() - dow) % 7
   return -fwdlw + fwd - 1
 }
 
 /**
  * Returns the number of weeks in the specified year.
- * @param year
- * @param firstDayOfWeek
- * @param firstDayOfYear
+ * @param year Calendar year.
+ * @param firstDayOfWeek First day of week (0=Sun..6=Sat, default Mon=1).
+ * @param firstDayOfYear Day-of-year threshold for week 1 (default 1).
  */
 export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1): number {
-  const weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
-    weekOffsetNext = firstWeekOffset(year + 1, firstDayOfWeek, firstDayOfYear)
+  const weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear)
+  const weekOffsetNext = firstWeekOffset(year + 1, firstDayOfWeek, firstDayOfYear)
   return (daysInYear(year) - weekOffset + weekOffsetNext) / 7
 }
 
 /**
- * Returns the week of the year for the specified date
- * @param year
- * @param dayOfYear
- * @param firstDayOfWeek
- * @param firstDayOfYear
- * @returns
+ * Returns the week of the year for the specified date.
+ * String input is parsed as local time via `asDate`.
+ * @param date The date.
+ * @param firstDayOfWeek First day of week (default Monday=1).
+ * @param firstDayOfYear Day-of-year threshold for week 1 (default 1).
  */
-export function weekOfYear(date: string | number | Date, firstDayOfWeek = 1, firstDayOfYear = 1) {
-  const year = new Date(date).getFullYear()
-  const doy = dayOfYear(date)
+export function weekOfYear(
+  date: string | number | Date,
+  firstDayOfWeek = 1,
+  firstDayOfYear = 1
+): { week: number; year: number } {
+  const d = typeof date === 'string' ? asDate(date) : new Date(date)
+  const year = d.getFullYear()
+  const doy = dayOfYear(d)
   const weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear)
   const week = Math.floor((doy - weekOffset - 1) / 7) + 1
-  let resWeek, resYear
 
   if (week < 1) {
-    resYear = year - 1
-    resWeek = week + weeksInYear(resYear, firstDayOfWeek, firstDayOfYear)
-  } else if (week > weeksInYear(year, firstDayOfWeek, firstDayOfYear)) {
-    resWeek = week - weeksInYear(year, firstDayOfWeek, firstDayOfYear)
-    resYear = year + 1
-  } else {
-    resYear = year
-    resWeek = week
+    const resYear = year - 1
+    return {
+      week: week + weeksInYear(resYear, firstDayOfWeek, firstDayOfYear),
+      year: resYear
+    }
   }
-
-  return {
-    week: resWeek,
-    year: resYear
+  if (week > weeksInYear(year, firstDayOfWeek, firstDayOfYear)) {
+    return {
+      week: week - weeksInYear(year, firstDayOfWeek, firstDayOfYear),
+      year: year + 1
+    }
   }
+  return { week, year }
 }
 
+/** ISO weeks in year (Monday start, first week contains Jan 4). */
 export function isoWeeksInYear(year: number): number {
   return weeksInYear(year, 1, 4)
 }
 
+/**
+ * Day of year (1-366). String input is parsed as local time via `asDate`.
+ * @param input The date.
+ */
 export function dayOfYear(input: string | number | Date): number {
-  input = new Date(input)
-  input.setHours(0)
-  input.setMinutes(0)
-  input.setSeconds(0)
-  input.setMilliseconds(0)
-  const start = new Date(input.getFullYear(), 0, 1, 0, 0, 0, 0)
-  return Math.round((+input - start.getTime()) / 864e5) + 1
+  const d = typeof input === 'string' ? asDate(input) : new Date(input)
+  d.setHours(0, 0, 0, 0)
+  const start = new Date(0)
+  start.setFullYear(d.getFullYear(), 0, 1)
+  start.setHours(0, 0, 0, 0)
+  return Math.round((d.getTime() - start.getTime()) / 864e5) + 1
 }
