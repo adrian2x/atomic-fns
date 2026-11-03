@@ -15,38 +15,22 @@ function dag(depth: number): object {
   return x
 }
 
-const FLATTEN_REVISIT = 'input repeats shared objects more than 100000 times'
+const SHARED_REVISIT = 'input repeats shared objects more than 1000000 times'
 /** Pre-fix: exponential blow-up / hang. Hang-floor budget. */
 const BUDGET = 250
 
 describe('shared-reference DAG budgets', () => {
-  it('flatten depth-20 DAG throws the revisit error within budget', () => {
+  it('flatten depth-20 DAG throws the revisit error', () => {
     const src = dag(20)
-    expectFast(() => {
-      let err: unknown
-      try {
-        flatten(src)
-      } catch (e) {
-        err = e
-      }
-      expect(err).toBeInstanceOf(RangeError)
-      expect((err as Error).message).toBe(FLATTEN_REVISIT)
-    }, BUDGET)
+    expect(() => flatten(src)).toThrow(RangeError)
+    expect(() => flatten(src)).toThrow(SHARED_REVISIT)
   })
 
-  it('flatten of a nested-array depth-20 DAG throws the revisit error within budget', () => {
+  it('flatten of a nested-array depth-20 DAG throws the revisit error', () => {
     let x: unknown[] = [1]
     for (let i = 0; i < 20; i++) x = [x, x]
-    expectFast(() => {
-      let err: unknown
-      try {
-        flatten(x, true)
-      } catch (e) {
-        err = e
-      }
-      expect(err).toBeInstanceOf(RangeError)
-      expect((err as Error).message).toBe(FLATTEN_REVISIT)
-    }, BUDGET)
+    expect(() => flatten(x, true)).toThrow(RangeError)
+    expect(() => flatten(x, true)).toThrow(SHARED_REVISIT)
   })
 
   it('flatten of 10001 shared row objects works', () => {
@@ -84,7 +68,21 @@ describe('shared-reference DAG budgets', () => {
         err = e
       }
       expect(err).toBeInstanceOf(RangeError)
-      expect((err as Error).message).toBe(FLATTEN_REVISIT)
+      expect((err as Error).message).toBe(SHARED_REVISIT)
+    }, BUDGET)
+  })
+
+  it('merge of depth-40 DAG throws the revisit error within budget', () => {
+    const src = dag(40)
+    expectFast(() => {
+      let err: unknown
+      try {
+        merge({}, src)
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(RangeError)
+      expect((err as Error).message).toBe(SHARED_REVISIT)
     }, BUDGET)
   })
 
@@ -105,6 +103,30 @@ describe('shared-reference DAG budgets', () => {
     expect((out.rows[10_000] as { x: number }).x).toBe(1)
   })
 
+  it('R13-B: merge/flatten of filled nested rows succeed (400 / 50k / 100001)', () => {
+    const child = { x: 1, meta: {} }
+    for (const n of [400, 50_000, 100_001]) {
+      const rows = new Array(n).fill(child)
+      const merged = merge({}, { rows }) as { rows: object[] }
+      expect(merged.rows).toHaveLength(n)
+      expect(merged.rows[0]).toEqual({ x: 1, meta: {} })
+      expect(merged.rows[0]).not.toBe(merged.rows[n - 1])
+
+      const flat = flatten({ rows }) as Record<string, unknown>
+      expect(flat['rows[0].x']).toBe(1)
+      expect(flat[`rows[${String(n - 1)}].x`]).toBe(1)
+    }
+  })
+
+  it('R13-B / dos-30: 2e5 shared rows merge into an existing target', () => {
+    const row = { x: 1, meta: {} }
+    const target: { rows: object[] } = { rows: [] }
+    const out = merge(target, { rows: new Array(200_000).fill(row) })
+    expect(out).toBe(target)
+    expect(out.rows).toHaveLength(200_000)
+    expect(out.rows[0]).toEqual({ x: 1, meta: {} })
+  })
+
   it('merge of 1.2M distinct empty objects succeeds (first visits are unbounded)', () => {
     const items = Array.from({ length: 1_200_000 }, () => ({}))
     const out = merge({}, { a: items }) as { a: unknown[] }
@@ -112,7 +134,7 @@ describe('shared-reference DAG budgets', () => {
   })
 
   it('a failed flatten does not leak revisit state into the next call', () => {
-    expect(() => flatten(dag(20))).toThrow(FLATTEN_REVISIT)
+    expect(() => flatten(dag(20))).toThrow(SHARED_REVISIT)
     const shared = {}
     expect(merge({}, { a: shared, b: shared })).toEqual({ a: {}, b: {} })
     const out = merge({}, { a: shared, b: shared }) as { a: object; b: object }

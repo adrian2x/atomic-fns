@@ -20,8 +20,7 @@ import {
   exitNesting,
   guardFlattenSharedRevisits,
   guardNesting,
-  noteExpanded,
-  wasExpanded
+  noteExpanded
 } from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
 import { enumerate } from '../itertools/index.js'
@@ -622,32 +621,20 @@ function flattenObj(root: unknown): Record<string, unknown> {
     index: number
   }
   const path: object[] = []
+  const onPath = new Set<object>()
   const stack: Frame[] = []
 
   const pushContainer = (obj: object, prefix: string, nesting: number): void => {
     assertNestingDepth(nesting)
-    for (const p of path) {
-      if (p === obj) throw new ValueError('cyclic structure')
-    }
+    if (onPath.has(obj)) throw new ValueError('cyclic structure')
     if (!isPlainObject(obj) && !Array.isArray(obj)) {
       if (prefix) setFlatKey(result, prefix, obj)
       return
     }
+    // Count before Object.keys so a budget throw skips key alloc.
+    noteExpanded(obj)
     const keys = Object.keys(obj)
-    // DAG fan-in: re-expanding a node whose children were already expanded would walk
-    // exponentially many paths. Charge those edges heavily so the shared-revisit budget
-    // trips before the walk becomes a multi-second DoS; tree-shaped and shallow shared
-    // leaves (e.g. 10001 identical row objects) keep weight 1.
-    let weight = 1
-    if (wasExpanded(obj)) {
-      for (const k of keys) {
-        const child = (obj as Record<string, unknown>)[k]
-        if (child !== null && typeof child === 'object' && wasExpanded(child)) {
-          weight += 256
-        }
-      }
-    }
-    noteExpanded(obj, weight)
+    onPath.add(obj)
     path.push(obj)
     stack.push({ obj, prefix, nesting, keys, index: 0 })
   }
@@ -658,7 +645,7 @@ function flattenObj(root: unknown): Record<string, unknown> {
     const frame = stack[stack.length - 1]
     if (frame.index >= frame.keys.length) {
       stack.pop()
-      path.pop()
+      onPath.delete(path.pop() as object)
       continue
     }
     const key = frame.keys[frame.index++]

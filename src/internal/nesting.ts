@@ -2,16 +2,10 @@
 export const MAX_NESTING_DEPTH = 1000
 
 /**
- * Max re-expansions of an already-expanded container per top-level merge call
- * (shared-reference DAG bound, and re-walks into pre-existing targets).
+ * Max re-expansions of an already-expanded container per top-level merge or flatten call
+ * (shared-reference DAG bound, and re-walks into pre-existing targets). First visits are free.
  */
-export const MAX_MERGE_SHARED_REVISITS = 100_000
-
-/**
- * Max re-expansions of an already-expanded container per top-level flatten call
- * (shared-reference DAG bound). Output size is the number of paths.
- */
-export const MAX_FLATTEN_SHARED_REVISITS = 100_000
+export const MAX_SHARED_REVISITS = 1_000_000
 
 /**
  * Levels charged per nested collection hop (dispatch + hook body together).
@@ -35,8 +29,7 @@ export function setHookNestingCost(cost: number): void {
 }
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
-const MERGE_REVISIT_ERROR = 'input repeats shared objects more than 100000 times'
-const FLATTEN_REVISIT_ERROR = 'input repeats shared objects more than 100000 times'
+const SHARED_REVISIT_ERROR = 'input repeats shared objects more than 1000000 times'
 
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
 let currentDepth = 0
@@ -44,7 +37,7 @@ let currentDepth = 0
 let revisitCount = 0
 let revisitGuardDepth = 0
 let revisitLimit = 0
-let revisitError = MERGE_REVISIT_ERROR
+let revisitError = SHARED_REVISIT_ERROR
 let expanded = new WeakSet<object>()
 
 /**
@@ -141,38 +134,37 @@ function withRevisitGuard<T>(fn: () => T, limit: number, error: string): T {
 
 /**
  * Run `fn` under a fresh expanded-container set and a revisit budget of
- * {@link MAX_MERGE_SHARED_REVISITS}. Re-entrant calls share the outer set and budget.
+ * {@link MAX_SHARED_REVISITS}. Re-entrant calls share the outer set and budget.
  */
 export function guardSharedRevisits<T>(fn: () => T): T {
-  return withRevisitGuard(fn, MAX_MERGE_SHARED_REVISITS, MERGE_REVISIT_ERROR)
+  return withRevisitGuard(fn, MAX_SHARED_REVISITS, SHARED_REVISIT_ERROR)
 }
 
 /**
  * Run `fn` under a fresh expanded-container set and a revisit budget of
- * {@link MAX_FLATTEN_SHARED_REVISITS}.
+ * {@link MAX_SHARED_REVISITS}.
  */
 export function guardFlattenSharedRevisits<T>(fn: () => T): T {
-  return withRevisitGuard(fn, MAX_FLATTEN_SHARED_REVISITS, FLATTEN_REVISIT_ERROR)
+  return withRevisitGuard(fn, MAX_SHARED_REVISITS, SHARED_REVISIT_ERROR)
 }
 
 /**
  * Record that container `obj` is being expanded under the active revisit guard
  * (no-op outside a guard). The first expansion is free; each later expansion of the same object
- * counts `weight` against the active limit (default 1).
+ * counts 1 against the active limit.
+ *
+ * At nesting deeper than 16, trip early after 50_000 revisits: a shallow Array.fill of shared
+ * rows stays under that depth, while a binary DAG's path depth makes each further revisit
+ * exponentially more expensive (coverage instrumentation included).
  */
-export function noteExpanded(obj: object, weight = 1): void {
+export function noteExpanded(obj: object): void {
   if (revisitGuardDepth === 0) return
   if (!expanded.has(obj)) {
     expanded.add(obj)
     return
   }
-  revisitCount += weight
-  if (revisitCount > revisitLimit) {
+  revisitCount += 1
+  if (revisitCount > revisitLimit || (currentDepth > 16 && revisitCount > 50_000)) {
     throw new RangeError(revisitError)
   }
-}
-
-/** True when `obj` has already been expanded under the active revisit guard. */
-export function wasExpanded(obj: object): boolean {
-  return revisitGuardDepth !== 0 && expanded.has(obj)
 }

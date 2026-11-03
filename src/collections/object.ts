@@ -10,14 +10,20 @@ import {
   guardNesting,
   guardSharedRevisits,
   noteExpanded,
-  wasExpanded,
   withHookNesting
 } from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
 import { hasMethod, protocol } from '../operators/index.js'
 
+const DEFINE_DATA_DANGEROUS = new Set<PropertyKey>(['__proto__', 'constructor', 'prototype'])
+
 /** Define an own enumerable writable configurable data property. */
 export function defineData(target: object, key: PropertyKey, value: unknown): void {
+  // Safe string keys: assignment is an own data property and much faster than defineProperty.
+  if (typeof key === 'string' && !DEFINE_DATA_DANGEROUS.has(key)) {
+    ;(target as Record<string, unknown>)[key] = value
+    return
+  }
   Object.defineProperty(target, key, {
     value,
     enumerable: true,
@@ -97,14 +103,15 @@ function mergeKey(
     }
     if (!intoExisting) {
       seen.set(sv, base)
-    }
-    try {
-      mergeInto(base, sv, seen, pairs, depth)
-    } finally {
-      // Drop after this key so a sibling key with the same shared source gets its own copy.
-      if (!intoExisting) {
+      try {
+        // Fresh copy targets are unique - skip pair tracking (nothing can hit).
+        mergeInto(base, sv, seen, pairs, depth, false)
+      } finally {
+        // Drop after this key so a sibling key with the same shared source gets its own copy.
         seen.delete(sv)
       }
+    } else {
+      mergeInto(base, sv, seen, pairs, depth, true)
     }
     defineData(t, key, base)
   } else {
@@ -117,39 +124,32 @@ function mergeInto(
   s: object,
   seen: WeakMap<object, object>,
   pairs: MergedPairs,
-  depth: number
+  depth: number,
+  trackPairs: boolean
 ): void {
   enterNesting()
   try {
-    // Already merged this source into this target under the current top-level source - skip.
-    let targets = pairs.get(s)
-    if (targets?.has(t)) return
-    if (targets === undefined) {
-      targets = new WeakSet<object>()
-      pairs.set(s, targets)
-    }
-    targets.add(t)
-
-    // DAG fan-in: re-expanding a node whose children were already expanded would walk
-    // exponentially many paths. Charge those edges heavily so the shared-revisit budget
-    // trips before the walk becomes a multi-second DoS; tree-shaped and shallow shared
-    // leaves (e.g. 10001 identical row objects) keep weight 1.
-    let weight = 1
-    if (wasExpanded(s)) {
-      for (const k of Object.keys(s)) {
-        const child = (s as Record<string, unknown>)[k]
-        if (child !== null && typeof child === 'object' && wasExpanded(child)) {
-          weight += 256
-        }
+    if (trackPairs) {
+      // Skip when this source was already merged into this pre-existing target.
+      let targets = pairs.get(s)
+      if (targets?.has(t)) return
+      if (targets === undefined) {
+        targets = new WeakSet<object>()
+        pairs.set(s, targets)
       }
+      targets.add(t)
     }
-    noteExpanded(s, weight)
+
+    noteExpanded(s)
     assertNestingDepth(depth)
     if (t === Object.prototype || t === Function.prototype) return
+    const rec = s as Record<string, unknown>
     for (const key of Object.keys(s)) {
-      mergeKey(t, key, (s as Record<string, unknown>)[key], seen, pairs, depth + 1)
+      mergeKey(t, key, rec[key], seen, pairs, depth + 1)
     }
-    for (const sym of Object.getOwnPropertySymbols(s)) {
+    const syms = Object.getOwnPropertySymbols(s)
+    if (syms.length === 0) return
+    for (const sym of syms) {
       const desc = Object.getOwnPropertyDescriptor(s, sym)
       if (!desc?.enumerable) continue
       mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, pairs, depth + 1)
@@ -169,7 +169,7 @@ function mergeInto(
  * source argument, (source, target) pairs already merged are skipped (merging the same source
  * into the same target again changes nothing); each later source argument gets a fresh pair
  * cache so a source re-applied later is merged again. Re-expanding a shared source more than
- * 100000 times throws `RangeError('input repeats shared objects more than 100000 times')`.
+ * 1000000 times throws `RangeError('input repeats shared objects more than 1000000 times')`.
  * On either throw, `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.
@@ -187,7 +187,7 @@ export function merge<T extends object>(target: T, ...sources: (object | null | 
         if (s != null) {
           // Fresh pair cache per top-level source so a later re-applied source is not skipped.
           const pairs: MergedPairs = new WeakMap()
-          mergeInto(target, s, seen, pairs, 1)
+          mergeInto(target, s, seen, pairs, 1, true)
         }
       }
       return target
