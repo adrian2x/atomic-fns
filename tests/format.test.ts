@@ -140,6 +140,15 @@ describe('SPEC-R85 formatDate localized tokens', () => {
     expect(formatDate('Do', new Date(2022, 0, 1), 'de')).toBe('1')
     expect(formatDate('[Do] D', new Date(2022, 0, 2), 'en')).toBe('Do 2')
   })
+
+  it('Do token computed once per formatDate call (5000 under 50ms)', () => {
+    const d = new Date(2024, 0, 2)
+    const pattern = 'Do'.repeat(5000)
+    const start = performance.now()
+    const out = formatDate(pattern, d, 'en')
+    expect(performance.now() - start).toBeLessThan(50)
+    expect(out).toBe('2nd'.repeat(5000))
+  })
 })
 
 describe('SPEC-R85 formatDate and strftime UTC view America/New_York', () => {

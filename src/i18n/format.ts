@@ -206,12 +206,30 @@ class FormatterCache {
 
 const formatterCache = new FormatterCache()
 
+/** Cached ordinal PluralRules per resolved locale tag; `null` means non-English (bare day). */
+const ordinalPluralCache = new Map<string, Intl.PluralRules | null>()
+
 function cachedFormatter(
   locale: string | undefined,
   opts: Intl.DateTimeFormatOptions,
   utc: boolean
 ): Intl.DateTimeFormat {
   return formatterCache.get(locale, opts, utc)
+}
+
+function cachedOrdinalPlural(tag: string): Intl.PluralRules | null {
+  const hit = ordinalPluralCache.get(tag)
+  if (hit !== undefined) return hit
+  let language: string
+  try {
+    language = new Intl.Locale(tag).language
+  } catch {
+    ordinalPluralCache.set(tag, null)
+    return null
+  }
+  const rules = language === 'en' ? new Intl.PluralRules(tag, { type: 'ordinal' }) : null
+  ordinalPluralCache.set(tag, rules)
+  return rules
 }
 
 function partValue(
@@ -252,18 +270,13 @@ function zoneOffset(offsetMinutes: number): { sign: string; hh: string; mm: stri
 
 /**
  * English ordinal suffix for a day of month (`1st`, `2nd`, `3rd`, `4th`, `11th`, `21st`).
- * Other languages return the bare number.
+ * Other languages return the bare number. PluralRules are cached per resolved locale.
  */
 function ordinalDay(day: number, locale: string | undefined): string {
   const tag = locale ?? new Intl.DateTimeFormat().resolvedOptions().locale
-  let language: string
-  try {
-    language = new Intl.Locale(tag).language
-  } catch {
-    return String(day)
-  }
-  if (language !== 'en') return String(day)
-  const category = new Intl.PluralRules(tag, { type: 'ordinal' }).select(day)
+  const rules = cachedOrdinalPlural(tag)
+  if (rules === null) return String(day)
+  const category = rules.select(day)
   const suffixes: Record<string, string> = { one: 'st', two: 'nd', few: 'rd' }
   return `${String(day)}${suffixes[category] ?? 'th'}`
 }
@@ -549,7 +562,13 @@ function buildValues(date: Date, opts: ResolvedFormatOptions): Map<string, () =>
     ['MMMM', () => partValue(opts, { month: 'long' }, date, 'month')],
     ['Q', () => String(Math.ceil(month / 3))],
     ['D', () => String(day)],
-    ['Do', () => ordinalDay(day, locale)],
+    [
+      'Do',
+      (() => {
+        let cached: string | undefined
+        return () => (cached ??= ordinalDay(day, locale))
+      })()
+    ],
     ['DD', () => pad2(day)],
     ['d', () => String(dow)],
     ['E', () => String(isoDow)],
