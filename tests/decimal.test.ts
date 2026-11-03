@@ -367,6 +367,36 @@ describe('isqrt precision-doubling', () => {
   })
 })
 
+describe('Decimal.MAX_PRECISION', () => {
+  it('rejects huge precision before scaling in under 10ms', () => {
+    let start = performance.now()
+    expect(() => decimal('1').div('3', { precision: 1e8 })).toThrow(RangeError)
+    expect(performance.now() - start).toBeLessThan(10)
+    start = performance.now()
+    expect(() => decimal('2').sqrt({ precision: 1e7 })).toThrow(RangeError)
+    expect(performance.now() - start).toBeLessThan(10)
+    start = performance.now()
+    expect(() => decimal('1.5').round(-3e8)).toThrow(RangeError)
+    expect(performance.now() - start).toBeLessThan(10)
+  })
+
+  it('round(-5) of 1.5 short-circuits by mode', () => {
+    const modes: RoundingMode[] = ['halfEven', 'halfUp', 'halfDown', 'down', 'up', 'floor', 'ceil']
+    for (const rounding of modes) {
+      const got = decimal('1.5').round(-5, rounding).toString()
+      if (rounding === 'up' || rounding === 'ceil') expect(got).toBe('100000')
+      else expect(got).toBe('0')
+    }
+  })
+
+  it('div at precision MAX_PRECISION finishes under 100ms', { timeout: 2000 }, () => {
+    const start = performance.now()
+    const s = decimal('1').div('3', { precision: Decimal.MAX_PRECISION }).toString()
+    expect(performance.now() - start).toBeLessThan(100)
+    expect(s.length).toBeGreaterThan(Decimal.MAX_PRECISION)
+  })
+})
+
 describe('Decimal ValueError truncation and immutable defaultPrecision', () => {
   it('truncates long invalid inputs in ValueError messages', () => {
     const bad = '1'.repeat(40) + 'x'

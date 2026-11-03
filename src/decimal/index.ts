@@ -143,8 +143,36 @@ export class Decimal {
   /** Maximum absolute stored exponent; larger values throw {@link ValueError}. */
   static readonly MAX_EXPONENT = 1_000_000
 
+  /** Maximum fractional precision for {@link Decimal.div}, {@link Decimal.sqrt}, and {@link Decimal.round}. */
+  static readonly MAX_PRECISION = 100_000
+
   #i = 0n
   #e = 0
+
+  static #assertDivPrecision(precision: number): void {
+    if (!Number.isInteger(precision) || precision < 0 || precision > Decimal.MAX_PRECISION) {
+      throw new RangeError('precision must be an integer from 0 to 100000')
+    }
+  }
+
+  static #assertRoundPrecision(precision: number): void {
+    if (
+      !Number.isInteger(precision) ||
+      precision < -Decimal.MAX_EXPONENT ||
+      precision > Decimal.MAX_PRECISION
+    ) {
+      throw new RangeError(
+        `precision must be an integer from ${String(-Decimal.MAX_EXPONENT)} to ${String(Decimal.MAX_PRECISION)}`
+      )
+    }
+  }
+
+  /** Digit count of a non-zero bigint; 0 for 0n. */
+  static #digitLength(n: bigint): number {
+    const a = n < 0n ? -n : n
+    if (a === 0n) return 0
+    return a.toString().length
+  }
 
   /**
    * Creates a Decimal from a number, bigint, string, or another Decimal.
@@ -286,9 +314,7 @@ export class Decimal {
   div(x: DecimalInput, opts?: DivOptions): Decimal {
     const precision = opts?.precision ?? Decimal.defaultPrecision
     const rounding = opts?.rounding ?? 'halfEven'
-    if (!Number.isInteger(precision) || precision < 0) {
-      throw new RangeError('precision must be a non-negative integer')
-    }
+    Decimal.#assertDivPrecision(precision)
     const b = decimal(x)
     if (b.#i === 0n) {
       throw new ZeroDivisionError('division by zero')
@@ -298,17 +324,68 @@ export class Decimal {
 
   /**
    * Rounds to `precision` fractional digits (negative precision rounds to tens, hundreds, ...).
+   * `precision` must be an integer in `[-MAX_EXPONENT, MAX_PRECISION]`. When the rounding
+   * unit is larger than this value's magnitude, returns 0 or `±10^(-precision)` without
+   * building a huge power of ten.
    * @param precision Fractional digits (may be negative).
    * @param rounding Rounding mode (default halfEven).
    */
   round(precision: number, rounding: RoundingMode = 'halfEven'): Decimal {
-    if (!Number.isInteger(precision)) {
-      throw new RangeError('precision must be an integer')
-    }
+    Decimal.#assertRoundPrecision(precision)
     if (-this.#e <= precision) {
       return Decimal.#fromIE(this.#i, this.#e)
     }
+    const digs = Decimal.#digitLength(this.#i)
+    if (digs === 0) return Decimal.#fromIE(0n, 0)
+    const msdExp = this.#e + digs - 1
+    const unitExp = -precision
+    if (msdExp < unitExp) {
+      return this.#roundBelowUnit(precision, rounding)
+    }
     return this.#scaleRound(this.#i, 1n, this.#e, precision, rounding)
+  }
+
+  /**
+   * Round when `|this| < 10^(-precision)`: result is 0 or `±10^(-precision)`.
+   */
+  #roundBelowUnit(precision: number, mode: RoundingMode): Decimal {
+    const sign = this.#i < 0n ? -1n : 1n
+    const absI = this.#i < 0n ? -this.#i : this.#i
+    const p = -precision - this.#e
+    let cmpHalf: -1 | 0 | 1
+    if (p > Decimal.MAX_EXPONENT || p > absI.toString().length + 2) {
+      cmpHalf = -1
+    } else {
+      const twice = absI << 1n
+      const threshold = pow10(p)
+      cmpHalf = twice < threshold ? -1 : twice > threshold ? 1 : 0
+    }
+    let up = false
+    switch (mode) {
+      case 'halfEven':
+        up = cmpHalf > 0
+        break
+      case 'halfUp':
+        up = cmpHalf >= 0
+        break
+      case 'halfDown':
+        up = cmpHalf > 0
+        break
+      case 'up':
+        up = true
+        break
+      case 'down':
+        up = false
+        break
+      case 'ceil':
+        up = sign > 0n
+        break
+      case 'floor':
+        up = sign < 0n
+        break
+    }
+    if (!up) return Decimal.#fromIE(0n, 0)
+    return Decimal.#fromIE(sign, -precision)
   }
 
   /**
@@ -318,9 +395,7 @@ export class Decimal {
   sqrt(opts?: DivOptions): Decimal {
     const precision = opts?.precision ?? Decimal.defaultPrecision
     const rounding = opts?.rounding ?? 'halfEven'
-    if (!Number.isInteger(precision) || precision < 0) {
-      throw new RangeError('precision must be a non-negative integer')
-    }
+    Decimal.#assertDivPrecision(precision)
     if (this.#i < 0n) {
       throw new ValueError('square root of a negative number')
     }
