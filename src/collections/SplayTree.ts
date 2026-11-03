@@ -21,7 +21,8 @@ class Node<K, V> {
  * amortized time.
  *
  * Iterators capture a structural version; splaying bumps it. A stale iterator re-seeks from its
- * last yielded key, so an abandoned iterator can never disable splaying.
+ * last yielded key with one BST descent to its successor (O(log n) for a balanced tree), so an
+ * abandoned iterator can never disable splaying.
  *
  * @see {@link https://en.wikipedia.org/wiki/Splay_tree Splay tree}
  * @see {@link https://web.archive.org/web/20220930173835/http://www14.in.tum.de/personen/albers/papers/ipl02.pdf Randomized Splay Trees}
@@ -106,6 +107,7 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     if (!this.#root) {
       this.#root = new Node(key, value)
       this.#size = 1
+      this.#version++
       return this
     }
     this.splay(key)
@@ -273,28 +275,39 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     const stack: Node<K, V>[] = []
     let n: Node<K, V> | undefined = this.#root
 
-    const resetFromLast = (): void => {
+    // Splaying or mutating restructures the tree, so the stack is stale. Rebuild it with one
+    // BST descent to the successor of the last yielded key: O(height), not O(n).
+    const reseek = (): void => {
       stack.length = 0
-      n = this.#root
       version = this.#version
+      if (!haveLast) {
+        n = this.#root
+        return
+      }
+      n = undefined
+      let node = this.#root
+      while (node) {
+        if (this.#cmp(node.key, lastKey as K) > 0) {
+          stack.push(node)
+          node = node.left
+        } else {
+          node = node.right
+        }
+      }
     }
 
-    while (stack.length > 0 || n) {
-      if (version !== this.#version) resetFromLast()
+    for (;;) {
+      if (version !== this.#version) reseek()
       while (n) {
         stack.push(n)
         n = n.left
       }
       const current = stack.pop()
       if (current === undefined) return
-      if (haveLast && lastKey !== undefined && this.#cmp(current.key, lastKey) <= 0) {
-        n = current.right
-        continue
-      }
-      yield current
       lastKey = current.key
       haveLast = true
       n = current.right
+      yield current
     }
   }
 

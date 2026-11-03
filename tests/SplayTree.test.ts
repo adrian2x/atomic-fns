@@ -262,4 +262,59 @@ describe('SplayTree', () => {
     }
     expect(seen).toEqual(Array.from({ length: 64 }, (_, i) => i + 1))
   })
+
+  it('R10-D3 iterate while get re-seeks in O(log n) comparator calls', () => {
+    const n = 20_000
+    let calls = 0
+    const tree = new SplayTree<number, number>((a, b) => {
+      calls++
+      return a < b ? -1 : a > b ? 1 : 0
+    }, 1)
+    for (let i = 0; i < n; i++) tree.set(i, i)
+    calls = 0
+    const seen: number[] = []
+    for (const k of tree.keys()) {
+      seen.push(k)
+      tree.get(k)
+    }
+    expect(seen).toHaveLength(n)
+    expect(seen).toEqual(Array.from({ length: n }, (_, i) => i))
+    expect(calls).toBeLessThan(40 * n * Math.log2(n))
+  })
+
+  it('R10-D3 iterator survives inserts and deletes between yields', () => {
+    const tree = new SplayTree<number, number>(undefined, 1)
+    for (const k of [10, 20, 30, 40]) tree.set(k, k)
+    const seen: number[] = []
+    for (const k of tree.keys()) {
+      seen.push(k)
+      if (k === 20) {
+        tree.delete(20)
+        tree.set(25, 25)
+        tree.set(5, 5)
+      }
+    }
+    expect(seen).toEqual([10, 20, 25, 30, 40])
+  })
+
+  it('R10-D3 iterator started on an empty tree sees later keys', () => {
+    const tree = new SplayTree<number, number>()
+    const it = tree.keys()
+    tree.set(1, 1)
+    expect([...it]).toEqual([1])
+  })
+
+  it('R10-D3 undefined keys do not confuse the re-seek', () => {
+    const tree = new SplayTree<number | undefined, number>(
+      (a, b) => (a === b ? 0 : a === undefined ? 1 : b === undefined ? -1 : a < b ? -1 : 1),
+      1
+    )
+    for (const k of [1, 2, undefined]) tree.set(k, 0)
+    const seen: (number | undefined)[] = []
+    for (const k of tree.keys()) {
+      seen.push(k)
+      tree.get(2)
+    }
+    expect(seen).toEqual([1, 2, undefined])
+  })
 })
