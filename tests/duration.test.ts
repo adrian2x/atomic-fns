@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { ValueError } from '../src/globals/index.js'
-import { Duration, type DurationObject, type DurationUnit } from '../src/i18n/duration.js'
+import {
+  Duration,
+  durationField,
+  type DurationObject,
+  type DurationUnit
+} from '../src/i18n/duration.js'
 
 describe('Duration', () => {
   it('SPEC-R94 total quarters from years', () => {
@@ -44,6 +49,19 @@ describe('Duration', () => {
   it('SPEC-R94 constructor rejects ISO strings with ValueError', () => {
     expect(() => new Duration('P1D' as unknown as number)).toThrow(ValueError)
     expect(() => new Duration('P1D' as unknown as number)).toThrow(/use Duration\.from/)
+  })
+
+  it('error messages truncate echoed input (no raw newlines)', () => {
+    const unit = 'x'.repeat(100_000) + '\n'
+    expect(() => durationField(unit)).toThrow(ValueError)
+    try {
+      durationField(unit)
+    } catch (e) {
+      const msg = (e as Error).message
+      expect(msg.length).toBeLessThan(120)
+      expect(msg.includes('\n')).toBe(false)
+      expect(msg).toContain('...')
+    }
   })
 
   it('SPEC-R94 constructor rejects unsupported input', () => {
@@ -322,8 +340,9 @@ describe('Duration', () => {
     } catch (e) {
       message = e instanceof Error ? e.message : ''
     }
-    expect(message.length).toBe(71)
-    expect(message.endsWith('..."')).toBe(true)
+    expect(message.length).toBeLessThan(120)
+    expect(message).toContain('...')
+    expect(message.startsWith('invalid ISO 8601 duration ')).toBe(true)
   })
 
   it('SPEC-R94 from round trip', () => {

@@ -1,3 +1,4 @@
+import { truncateForError } from '../internal/truncate.js'
 import { sameValueZero } from '../operators/index.js'
 import { SetCollection } from './abc.js'
 
@@ -129,7 +130,9 @@ export class Deque<T> extends SetCollection<T, number> {
   set(i: number, v: T): this {
     let idx = Number.isNaN(i) ? 0 : Math.trunc(i)
     if (idx < 0) idx += this.#size
-    if (idx < 0 || idx >= this.#size) throw new RangeError(`index ${String(idx)} out of range`)
+    if (idx < 0 || idx >= this.#size) {
+      throw new RangeError(`index ${truncateForError(idx)} out of range`)
+    }
     this.#buf[this.#phys(idx)] = v
     return this
   }

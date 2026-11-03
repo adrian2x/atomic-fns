@@ -5,6 +5,7 @@
  */
 
 import { ValueError, ZeroDivisionError } from '../globals/errors.js'
+import { truncateForError } from '../internal/truncate.js'
 import { protocol } from '../operators/protocol.js'
 import { isqrtRoot } from './isqrt.js'
 
@@ -174,10 +175,6 @@ export class Decimal {
     throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
   }
 
-  static #truncateForError(value: string): string {
-    return value.length > 32 ? `${value.slice(0, 32)}...` : value
-  }
-
   static #parseExponent(expRaw: string | undefined): number {
     if (expRaw === undefined) return 0
     const n = Number(expRaw)
@@ -208,7 +205,7 @@ export class Decimal {
       const i = BigInt(sign + (frac || '0'))
       return Decimal.#checked(normalizeIE(i, -frac.length + exp))
     }
-    throw new ValueError(`invalid Decimal string: ${Decimal.#truncateForError(value)}`)
+    throw new ValueError(`invalid Decimal string: ${truncateForError(value)}`)
   }
 
   static #checked(ie: { i: bigint; e: number }): { i: bigint; e: number } {

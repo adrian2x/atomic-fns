@@ -1,4 +1,5 @@
 import { isObject, ValueError } from '../../globals/index.js'
+import { truncateForError } from '../../internal/truncate.js'
 import { protocol, type Comparable, type Equatable } from '../../operators/protocol.js'
 import {
   Duration,
@@ -206,7 +207,7 @@ function resolveStartUnit(unit: string): DurationField | 'isoWeek' {
       return undefined
     }
   })()
-  if (field === undefined) throw new ValueError(`unknown date field "${unit}"`)
+  if (field === undefined) throw new ValueError(`unknown date field ${truncateForError(unit)}`)
   return field
 }
 
@@ -605,7 +606,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
       const field = dateFieldKey(key) as keyof DateObject
       if (raw === undefined || raw === null) continue
       if (typeof raw !== 'number' || !Number.isFinite(raw) || !Number.isInteger(raw)) {
-        throw new ValueError(`date field ${key} must be a finite number`)
+        throw new ValueError(`date field ${truncateForError(key)} must be a finite number`)
       }
       patch[field] = raw
     }
@@ -949,5 +950,5 @@ function dateFieldKey(unit: string): string {
     const singular = lower.slice(0, -1)
     if (DATE_OBJECT_KEYS.has(singular)) return singular
   }
-  throw new ValueError(`unknown date field "${unit}"`)
+  throw new ValueError(`unknown date field ${truncateForError(unit)}`)
 }

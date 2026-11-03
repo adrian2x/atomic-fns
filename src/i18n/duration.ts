@@ -1,4 +1,5 @@
 import { ValueError } from '../globals/index.js'
+import { truncateForError } from '../internal/truncate.js'
 
 export type DurationField =
   | 'years'
@@ -231,12 +232,12 @@ function nz(v: number): number {
  */
 export function durationField(unit: string): DurationField {
   if (typeof unit !== 'string') {
-    throw new ValueError(`unknown duration unit "${String(unit)}"`)
+    throw new ValueError(`unknown duration unit ${truncateForError(unit)}`)
   }
   if (isDurationField(unit)) return unit
   const plural = `${unit}s`
   if (isDurationField(plural)) return plural
-  throw new ValueError(`unknown duration unit "${unit}"`)
+  throw new ValueError(`unknown duration unit ${truncateForError(unit)}`)
 }
 
 function roundingFields(largestUnit: DurationUnit, smallestUnit?: DurationUnit): DurationField[] {
@@ -262,8 +263,7 @@ function roundingFields(largestUnit: DurationUnit, smallestUnit?: DurationUnit):
 }
 
 function isoError(text: string): ValueError {
-  const shown = text.length > 40 ? `${text.slice(0, 40)}...` : text
-  return new ValueError(`invalid ISO 8601 duration "${shown}"`)
+  return new ValueError(`invalid ISO 8601 duration ${truncateForError(text)}`)
 }
 
 function isDigit(c: string): boolean {
@@ -390,12 +390,12 @@ export class Duration {
       const out: DurationObject = {}
       for (const key of Object.keys(dur)) {
         if (!isDurationField(key)) {
-          throw new ValueError(`unknown duration field "${key}"`)
+          throw new ValueError(`unknown duration field ${truncateForError(key)}`)
         }
         const v: unknown = Reflect.get(dur, key)
         if (v === undefined) continue
         if (typeof v !== 'number' || !Number.isFinite(v)) {
-          throw new ValueError(`duration field ${key} must be a finite number`)
+          throw new ValueError(`duration field ${truncateForError(key)} must be a finite number`)
         }
         out[key] = nz(v)
       }

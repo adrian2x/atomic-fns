@@ -1,4 +1,5 @@
 import { ValueError } from '../../globals/index.js'
+import { truncateForError } from '../../internal/truncate.js'
 import type { DurationField, DurationObject } from '../duration.js'
 import {
   civilFromDayNumber,
@@ -63,14 +64,14 @@ function readField(dur: DurationObject, key: DurationField): number {
 export function addDuration(date: Date, dur: DurationObject, sign: 1 | -1 = 1, utc = false): Date {
   for (const key of Object.keys(dur)) {
     if (!DURATION_FIELDS.has(key)) {
-      throw new ValueError(`unknown duration field "${key}"`)
+      throw new ValueError(`unknown duration field ${truncateForError(key)}`)
     }
     const value = dur[key as DurationField]
     if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
-      throw new ValueError(`duration field ${key} must be a finite number`)
+      throw new ValueError(`duration field ${truncateForError(key)} must be a finite number`)
     }
     if (CALENDAR_FIELDS.has(key) && value !== undefined && !Number.isInteger(value)) {
-      throw new ValueError(`calendar unit ${key} must be an integer`)
+      throw new ValueError(`calendar unit ${truncateForError(key)} must be an integer`)
     }
   }
 
