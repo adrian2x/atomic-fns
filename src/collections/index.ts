@@ -322,7 +322,8 @@ function matchDeep(
         ok = false
       } else {
         ok = true
-        for (const item of shape) {
+        walkArray(shape, (sev) => {
+          const item = sev.kind === 'value' ? sev.value : undefined
           const state = { found: false }
           walkArray(obj, (ev) => {
             const candidate = ev.kind === 'value' ? ev.value : undefined
@@ -333,9 +334,9 @@ function matchDeep(
           })
           if (!state.found) {
             ok = false
-            break
+            return false
           }
-        }
+        })
       }
     } else if (isPlainObject(shape)) {
       const shapeKeys = Object.keys(shape)

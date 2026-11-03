@@ -147,6 +147,30 @@ describe('R12-E sparse-safe array walker', () => {
     expect(() => map(dense, (x) => x)).not.toThrow()
   })
 
+  it('R13-E1: matches walks sparse shapes and spaced values within budget', () => {
+    const shapeTags: unknown[] = []
+    shapeTags.length = 4_294_967_294
+    shapeTags[0] = 'x'
+    shapeTags[4e9] = 'admin'
+    const shape = { tags: shapeTags }
+    expectFast(() => {
+      expect(filter([{ tags: ['x', undefined, 'admin'] }], shape).length).toBe(1)
+      const withHole: unknown[] = ['x']
+      withHole.length = 3
+      withHole[2] = 'admin'
+      expect(filter([{ tags: withHole }], shape).length).toBe(1)
+      expect(filter([{ tags: ['x', 'admin'] }], shape).length).toBe(0)
+    }, BUDGET)
+
+    const spaced: unknown[] = []
+    for (let i = 0; i < 600; i++) spaced[i * 1023] = i
+    spaced[600 * 1023] = 'z'
+    const ampShape = { tags: Array(600).fill('z') }
+    expectFast(() => {
+      expect(matches(ampShape)({ tags: spaced })).toBe(true)
+    }, BUDGET)
+  })
+
   it('R13-D2: iterator helpers finish or reject huge sparse within budget', () => {
     const a = hugeSparse()
     const labels: string[] = []

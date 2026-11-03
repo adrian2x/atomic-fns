@@ -14,7 +14,8 @@ export type ArrayWalkEvent =
   | { readonly kind: 'value'; readonly index: number; readonly value: unknown }
   | { readonly kind: 'holeRun'; readonly start: number; readonly end: number }
 
-const HOLE_STREAK_BEFORE_KEYS = 1024
+/** Switch to Object.keys after this many consecutive holes (keeps 1023-spaced walks own-element). */
+const HOLE_STREAK_BEFORE_KEYS = 256
 
 /**
  * Walk `arr` without expanding huge hole runs index-by-index.
