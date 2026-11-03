@@ -183,7 +183,7 @@ describe('collections edge coverage', () => {
     expect(matches([1, { a: 1 }])([1, { a: 1, b: 2 }])).toBe(true)
     expect(matches([1])({})).toBe(false)
     expect(matches([1, 2])([1, 3])).toBe(false)
-    expect(matches(new Set([1]))(new Set([1]))).toBe(false)
+    expect(matches(new Set([1]))(new Set([1]))).toBe(true)
     const seen: number[] = []
     forEachRight([1, 2, 3], (v) => {
       seen.push(v)

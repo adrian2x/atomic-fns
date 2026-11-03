@@ -6,7 +6,7 @@
 
 import { get, isEmpty, isIterable, isObject, keys, ValueError } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
-import { compare, eq, identity } from '../operators/index.js'
+import { compare, deepEqual, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
 import { defineData, isPlainObject } from './object.js'
 
@@ -199,7 +199,11 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
 }
 
 /**
- * Creates a function that performs a partial deep comparison between a given object and `shape`, returning `true` if the given object has equivalent property values, else `false`.
+ * Creates a function that performs a Lodash-style partial deep comparison (`isMatch`) between a
+ * given value and `shape`. Empty plain-object or empty-array shapes match any value. Arrays in the
+ * shape match as subsets (each shape element must match some target element). Shape keys whose
+ * value is `undefined` require that own key on the target. Non-plain shape values (Date, RegExp,
+ * Map, Set, typed arrays) compare with {@link deepEqual}.
  * @example
 ```js
 const objects = [
@@ -209,9 +213,15 @@ const objects = [
 
 filter(objects, matches({ a: 4, c: 6 }))
 // [{ a: 4, b: 5, c: 6 }]
+
+matches({ tags: ['b'] })({ tags: ['a', 'b'] })
+// true
+
+matches({ a: undefined })({})
+// false
 ```
- * @param shape
- * @returns
+ * @param shape Partial shape to match against.
+ * @returns Predicate that returns true when its argument matches `shape`.
  */
 export function matches(shape: unknown): (obj: unknown) => boolean {
   if (shape === null || typeof shape !== 'object') {
@@ -224,23 +234,36 @@ export function matches(shape: unknown): (obj: unknown) => boolean {
 
 function matchDeep(shape: unknown, obj: unknown): boolean {
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
-  if (obj === null || typeof obj !== 'object') return false
   if (Array.isArray(shape)) {
+    if (shape.length === 0) return true
     if (!Array.isArray(obj)) return false
-    for (let i = 0; i < shape.length; i++) {
-      if (!matchDeep(shape[i], obj[i])) return false
+    for (const item of shape) {
+      let found = false
+      for (const candidate of obj) {
+        if (matchDeep(item, candidate)) {
+          found = true
+          break
+        }
+      }
+      if (!found) return false
     }
     return true
   }
   if (isPlainObject(shape)) {
-    for (const key of Object.keys(shape)) {
-      if (!matchDeep(shape[key], (obj as Record<string, unknown>)[key])) {
-        return false
+    const shapeKeys = Object.keys(shape)
+    if (shapeKeys.length === 0) return true
+    if (obj === null || typeof obj !== 'object') return false
+    const record = obj as Record<string, unknown>
+    for (const key of shapeKeys) {
+      const expected = shape[key]
+      if (expected === undefined) {
+        if (!Object.hasOwn(obj, key)) return false
       }
+      if (!matchDeep(expected, record[key])) return false
     }
     return true
   }
-  return eq(obj, shape)
+  return deepEqual(shape, obj)
 }
 
 /**

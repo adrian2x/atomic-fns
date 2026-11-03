@@ -118,6 +118,21 @@ describe('collections', () => {
     expect(matches(null)({ a: 1 })).toBe(false)
   })
 
+  it('matches: Date/Map/Set/RegExp by deepEqual; undefined keys; array subset; empty shape', () => {
+    expect(matches({ d: new Date(0) })({ d: new Date(0) })).toBe(true)
+    expect(matches({ m: new Map([[1, 1]]) })({ m: new Map([[1, 1]]) })).toBe(true)
+    expect(matches({ s: new Set([1]) })({ s: new Set([1]) })).toBe(true)
+    expect(matches({ r: /a/g })({ r: /a/g })).toBe(true)
+    expect(filter([{ d: new Date(0) }], { d: new Date(0) })).toHaveLength(1)
+
+    expect(matches({ a: undefined })({})).toBe(false)
+    expect(matches({ a: undefined })({ a: undefined })).toBe(true)
+
+    expect(matches({ tags: ['b'] })({ tags: ['a', 'b'] })).toBe(true)
+    expect(matches({})(1)).toBe(true)
+    expect(matches([])('x')).toBe(true)
+  })
+
   it('SPEC-R32 pick omit nested and pollution', () => {
     expect(pick({ a: 1 }, ['b'])).toEqual({})
     const picked = pick(JSON.parse('{"__proto__":{"x":1}}'), ['__proto__'])

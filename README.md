@@ -156,6 +156,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 - Decimal exponent bound `|e| <= 1e6`. `range(NaN)` throws. `uuid` throws without Web Crypto. `difference` is set difference. `strftime %Y` / `%y` follow C/POSIX. Decimal `valueOf` throws.
 - `IntlDate.set` accepts only `DateObject` field names (singular or plural). Unknown units throw `ValueError`. Keys that 1.x silently ignored via `UNITS_SINGULAR` (`weeknumber`, `weekyear`, `ordinal`, `quarter`, and their plurals) now throw.
 - `IntlDate.min` / `IntlDate.max` take one `readonly DateLike[]` (no varargs); empty or all-invalid still returns `undefined`.
+- `matches` follows Lodash `isMatch`: empty `{}` / `[]` match any value; arrays in the shape are subsets; `{ a: undefined }` requires own key `a`; Date/RegExp/Map/Set/typed-array shape values use deep equality (not reference).
 
 ### Platform
 
