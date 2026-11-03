@@ -34,12 +34,18 @@ export function accumulate<T>(
     let total: unknown
     if (hasInitial) {
       total = initial
-      yield total
     } else {
-      const first = it.next()
-      if (first.done) return
-      total = first.value
+      const head = it.next()
+      if (head.done) return
+      total = head.value
+    }
+    // The source is still open while the consumer holds the seed; close it if they stop here.
+    let seeded = false
+    try {
       yield total
+      seeded = true
+    } finally {
+      if (!seeded) it.return?.()
     }
     for (const value of it) {
       total = func(total, value)
@@ -178,8 +184,11 @@ export function enumerate<T>(iterable: Iterable<T>, start = 0): IteratorObject<[
  * @returns The first element found or undefined if iterable is empty.
  */
 export function first<T>(iterable: Iterable<T>): T | undefined {
-  const result = Iterator.from(iterable).next()
-  return result.done ? undefined : result.value
+  const it = Iterator.from(iterable)
+  const result = it.next()
+  if (result.done) return undefined
+  it.return?.()
+  return result.value
 }
 
 /**
@@ -488,15 +497,52 @@ export function zip<T extends unknown[]>(
 ): IteratorObject<T> {
   return (function* () {
     if (args.length === 0) return
-    const iterables = (args as Iterable<unknown>[]).map((a) => Iterator.from(a))
-    for (;;) {
-      const items: unknown[] = []
-      for (const iterator of iterables) {
-        const result = iterator.next()
-        if (result.done) return
-        items.push(result.value)
+    const iterators: Iterator<unknown>[] = []
+    // Sources that are neither exhausted nor threw; closed on every exit path.
+    const open = new Set<Iterator<unknown>>()
+    try {
+      for (const a of args as Iterable<unknown>[]) {
+        const iterator = Iterator.from(a)
+        iterators.push(iterator)
+        open.add(iterator)
       }
-      yield items as T
+      for (;;) {
+        const items: unknown[] = []
+        for (const iterator of iterators) {
+          let result: IteratorResult<unknown>
+          try {
+            result = iterator.next()
+          } catch (error) {
+            open.delete(iterator)
+            throw error
+          }
+          if (result.done) {
+            open.delete(iterator)
+            return
+          }
+          items.push(result.value)
+        }
+        yield items as T
+      }
+    } finally {
+      closeAll(open)
     }
   })()
+}
+
+/** Calls `return()` on each iterator; later iterators still close when an earlier one throws. */
+function closeAll(iterators: Iterable<Iterator<unknown>>): void {
+  let failed = false
+  let failure: unknown
+  for (const iterator of iterators) {
+    try {
+      iterator.return?.()
+    } catch (error) {
+      if (!failed) {
+        failed = true
+        failure = error
+      }
+    }
+  }
+  if (failed) throw failure
 }
