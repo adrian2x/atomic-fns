@@ -166,9 +166,10 @@ describe('R12-E sparse-safe array walker', () => {
     for (let i = 0; i < 600; i++) spaced[i * 1023] = i
     spaced[600 * 1023] = 'z'
     const ampShape = { tags: Array(600).fill('z') }
+    // dos-29 / r8.mjs matchesSpacedAmp: subset scan must not re-walk holes per shape item.
     expectFast(() => {
       expect(matches(ampShape)({ tags: spaced })).toBe(true)
-    }, BUDGET)
+    }, 100)
   })
 
   it('R13-D2: iterator helpers finish or reject huge sparse within budget', () => {

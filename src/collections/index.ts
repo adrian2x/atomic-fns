@@ -318,18 +318,27 @@ function matchDeep(
       } else if (!Array.isArray(obj)) {
         ok = false
       } else {
+        // One walk of the value: present elements plus a has-hole flag (holes match as undefined).
+        const valueEls: unknown[] = []
+        let hasHole = false
+        walkArray(obj, (ev) => {
+          if (ev.kind === 'value') valueEls.push(ev.value)
+          else hasHole = true
+        })
         ok = true
         walkArray(shape, (sev) => {
           const item = sev.kind === 'value' ? sev.value : undefined
-          const state = { found: false }
-          walkArray(obj, (ev) => {
-            const candidate = ev.kind === 'value' ? ev.value : undefined
+          let found = false
+          for (const candidate of valueEls) {
             if (matchDeep(item, candidate, false, depth + 1, pending, proven)) {
-              state.found = true
-              return false
+              found = true
+              break
             }
-          })
-          if (!state.found) {
+          }
+          if (!found && hasHole && matchDeep(item, undefined, false, depth + 1, pending, proven)) {
+            found = true
+          }
+          if (!found) {
             ok = false
             return false
           }
