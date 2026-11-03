@@ -203,6 +203,30 @@ function buildOmitTrie(paths: string[][]): OmitTrie {
   return root
 }
 
+/** Built-ins with internal state: omit keeps them by reference and does not descend. */
+function isOmitOpaque(value: object): boolean {
+  if (ArrayBuffer.isView(value)) return true
+  if (value instanceof Error) return true
+  const tag = Object.prototype.toString.call(value)
+  switch (tag) {
+    case '[object Date]':
+    case '[object RegExp]':
+    case '[object Map]':
+    case '[object Set]':
+    case '[object WeakMap]':
+    case '[object WeakSet]':
+    case '[object WeakRef]':
+    case '[object Promise]':
+    case '[object ArrayBuffer]':
+    case '[object SharedArrayBuffer]':
+    case '[object DataView]':
+    case '[object Error]':
+      return true
+    default:
+      return false
+  }
+}
+
 function omitWithTrie(value: unknown, trie: OmitTrie): unknown {
   if (value === null || typeof value !== 'object') return value
   if (Array.isArray(value)) {
@@ -219,8 +243,7 @@ function omitWithTrie(value: unknown, trie: OmitTrie): unknown {
     }
     return out
   }
-  // Paths stop at non-plain objects (Date, Map, class instances, typed arrays): keep by reference.
-  if (!isPlainObject(value)) return value
+  if (isOmitOpaque(value)) return value
   return omitFromObject(value, trie)
 }
 
@@ -274,8 +297,11 @@ export function pick<T extends object>(
  * Never mutates `obj`. Builds a path trie once so cost is O(keys + total path length). Never
  * invokes getters of omitted keys (copies kept keys via property descriptors). String paths
  * split on `.`; an array of segments addresses literal keys. An omit path that ends at an array
- * index leaves a hole (`delete` semantics) on the copy. Descent only continues through plain
- * objects and arrays; any other value is kept by reference.
+ * index leaves a hole (`delete` semantics) on the copy. Descent continues through any object
+ * except built-ins with internal state (Date, RegExp, Map, Set, WeakMap, WeakSet, WeakRef,
+ * Promise, ArrayBuffer, SharedArrayBuffer, DataView, typed arrays, Error), which are kept by
+ * reference. Class instances are copied like a top-level omit of a class instance (own
+ * enumerable string keys via property descriptors into a plain object).
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */

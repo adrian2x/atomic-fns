@@ -259,10 +259,24 @@ describe('collections', () => {
       y = 2
     }
     const box = new Box()
-    const throughBox = omit({ box, z: 3 }, ['box.x']) as { box: Box; z: number }
-    expect(throughBox.box).toBe(box)
+    const throughBox = omit({ box, z: 3 }, ['box.x']) as { box: { y: number }; z: number }
+    expect(throughBox.box).not.toBe(box)
+    expect(throughBox.box).toEqual({ y: 2 })
     expect(box.x).toBe(1)
     expect(throughBox.z).toBe(3)
+
+    class Entity {
+      passwordHash = 'secret'
+      name = 'ada'
+    }
+    const entity = new Entity()
+    const scrubbed = omit({ user: entity }, ['user.passwordHash']) as {
+      user: { name: string; passwordHash?: string }
+    }
+    expect(scrubbed.user).not.toBe(entity)
+    expect(scrubbed.user.passwordHash).toBeUndefined()
+    expect(scrubbed.user.name).toBe('ada')
+    expect(entity.passwordHash).toBe('secret')
 
     const ta = new Uint8Array([1, 2, 3])
     expect((omit({ ta }, ['ta.0']) as { ta: Uint8Array }).ta).toBe(ta)
@@ -439,7 +453,7 @@ describe('collections', () => {
     expect(typeof [].includes).toBe('function')
   })
 
-  it('omit does not mutate class instances or nested non-plain values', () => {
+  it('omit does not mutate class instances; nested instances are copied, Date/Map kept by ref', () => {
     class P {
       a = 1
       b = 2
@@ -452,10 +466,17 @@ describe('collections', () => {
     expect(Object.getPrototypeOf(out)).toBe(Object.prototype)
 
     const nested = { x: new P() }
-    const out2 = omit(nested, ['x.a']) as { x: P }
+    const out2 = omit(nested, ['x.a']) as { x: { b: number; a?: number } }
     expect(nested.x.a).toBe(1)
-    expect(out2.x).toBe(nested.x)
-    expect(out2.x.a).toBe(1)
+    expect(out2.x).not.toBe(nested.x)
+    expect(out2.x).toEqual({ b: 2 })
+    expect(out2.x.a).toBeUndefined()
+
+    const d = new Date(0)
+    const m = new Map([['k', 1]])
+    const opaque = omit({ d, m }, ['d.x', 'm.k']) as { d: Date; m: Map<string, number> }
+    expect(opaque.d).toBe(d)
+    expect(opaque.m).toBe(m)
   })
 
   it('pick never defines on objects reachable from a frozen source', () => {
