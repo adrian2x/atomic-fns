@@ -145,6 +145,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 | SortedMap `reversed`                                                                                                                            | `entriesDescending`                                                                                                                                                       |
 | type `Function`                                                                                                                                 | `AnyFunction`                                                                                                                                                             |
 | `omit(instance, keys)` on a class instance / Array subclass / value with own `toJSON`                                                           | `omit({ ...instance }, keys)` after deciding which fields are safe                                                                                                        |
+| `flatten` silently overwriting when a dotted key collided with a nested path                                                                    | throw `TypeError`; rename one of the colliding source keys                                                                                                                |
 
 ### Added
 

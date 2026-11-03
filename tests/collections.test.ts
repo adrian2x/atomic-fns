@@ -554,6 +554,18 @@ describe('collections', () => {
     })
   })
 
+  it('POL-18 flatten rejects colliding dotted keys in either order', () => {
+    const nestedFirst = JSON.parse('{"user":{"role":"user"},"user.role":"admin"}') as object
+    const flatFirst = JSON.parse('{"user.role":"admin","user":{"role":"user"}}') as object
+    expect(() => flatten(nestedFirst)).toThrow(TypeError)
+    expect(() => flatten(nestedFirst)).toThrow(/flatten produced duplicate key "user\.role"/)
+    expect(() => flatten(flatFirst)).toThrow(/flatten produced duplicate key "user\.role"/)
+    expect(flatten({ 'user.name': 'ada', 'user.role': 'admin' })).toEqual({
+      'user.name': 'ada',
+      'user.role': 'admin'
+    })
+  })
+
   it('pick omit key lists and predicates', () => {
     const target = { user: 'fred', age: 40, active: false }
     expect(pick(target, ['user'])).toEqual({ user: 'fred' })

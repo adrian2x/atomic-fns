@@ -457,6 +457,13 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
   return result
 }
 
+function setFlatKey(result: Record<string, unknown>, key: string, value: unknown): void {
+  if (Object.hasOwn(result, key)) {
+    throw new TypeError(`flatten produced duplicate key "${key}"`)
+  }
+  defineData(result, key, value)
+}
+
 function flattenObj(
   obj: unknown,
   prefix = '',
@@ -471,7 +478,7 @@ function flattenObj(
       assertNestingDepth(nesting)
       if (seen.has(obj)) throw new ValueError('cyclic structure')
       if (!isPlainObject(obj) && !Array.isArray(obj)) {
-        if (prefix) defineData(result, prefix, obj)
+        if (prefix) setFlatKey(result, prefix, obj)
         return result
       }
       seen.add(obj)
@@ -493,7 +500,7 @@ function flattenObj(
     }
   }
 
-  if (prefix) defineData(result, prefix, obj)
+  if (prefix) setFlatKey(result, prefix, obj)
   return result
 }
 
