@@ -207,6 +207,8 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
  * (each shape element must match some target element). Shape keys whose value is `undefined`
  * require that own key on the target. Non-plain shape values (Date, RegExp, Map, Set, typed arrays)
  * compare with {@link deepEqual}. Nesting deeper than 1000 levels throws `RangeError`.
+ * Array subset matching costs O(shape size x value size); untrusted shapes should be
+ * size-limited by the caller.
  * @example
 ```js
 const objects = [
