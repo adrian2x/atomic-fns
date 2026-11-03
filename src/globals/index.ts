@@ -340,15 +340,28 @@ export function keys<T extends object>(object: T): (keyof T & string)[] {
 
 const DANGEROUS_SEGMENTS = new Set<PropertyKey>(['__proto__', 'constructor', 'prototype'])
 
+const PATH_SEGMENT_TYPE_ERROR = 'path segments must be strings, numbers or symbols'
+
+/**
+ * Normalize one path segment: symbols kept; every other allowed type stringified before checks.
+ * Nested arrays, booleans, null, objects, etc. throw {@link TypeError}.
+ */
+function normalizePathSegment(seg: unknown): PropertyKey {
+  if (typeof seg === 'symbol') return seg
+  if (typeof seg === 'string') return seg
+  if (typeof seg === 'number') return String(seg)
+  throw new TypeError(PATH_SEGMENT_TYPE_ERROR)
+}
+
 /**
  * Normalize a path once at parse time: string paths split on `.`; array / single segments
- * stringify numbers (so index and dangerous-name checks apply identically) and keep symbols.
+ * accept only string, number, or symbol (non-symbols become strings so index and dangerous-name
+ * checks apply identically).
  */
-function pathSegments(key: PropertyKey | PropertyKey[]): PropertyKey[] {
-  const normalize = (seg: PropertyKey): PropertyKey => (typeof seg === 'number' ? String(seg) : seg)
+function pathSegments(key: PropertyKey | readonly unknown[]): PropertyKey[] {
   if (typeof key === 'string') return key.split('.')
-  if (Array.isArray(key)) return key.map(normalize)
-  return [normalize(key)]
+  if (Array.isArray(key)) return key.map(normalizePathSegment)
+  return [normalizePathSegment(key)]
 }
 
 function isPlainObjectOrArray(base: object): boolean {
@@ -479,11 +492,29 @@ function isInheritedKey(base: object, key: PropertyKey): boolean {
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
  */
-export function has(obj: unknown, attr: PropertyKey): boolean {
+export function has(obj: unknown, attr: PropertyKey | readonly unknown[]): boolean {
   if (obj == null) return false
+  if (Array.isArray(attr)) {
+    const paths = pathSegments(attr)
+    if (paths.length === 0) return false
+    let cur: unknown = obj
+    for (const k of paths) {
+      if (cur == null) return false
+      const t = typeof cur
+      if (t !== 'object' && t !== 'function' && t !== 'string') return false
+      const base = Object(cur) as object
+      if (isForbiddenPathSegment(base, k)) return false
+      if (!Reflect.has(base, k)) return false
+      cur = (cur as Record<PropertyKey, unknown>)[k]
+    }
+    return true
+  }
+  const paths = pathSegments(attr)
+  if (paths.length !== 1) return false
+  const key = paths[0]
   const base = Object(obj) as object
-  if (isForbiddenPathSegment(base, attr)) return false
-  return Reflect.has(base, attr)
+  if (isForbiddenPathSegment(base, key)) return false
+  return Reflect.has(base, key)
 }
 
 /**
@@ -499,7 +530,11 @@ export function has(obj: unknown, attr: PropertyKey): boolean {
  * @param value
  * @return The property value or default value.
  */
-export function get<V = unknown>(key: PropertyKey | PropertyKey[], obj: unknown, value?: V): V {
+export function get<V = unknown>(
+  key: PropertyKey | readonly unknown[],
+  obj: unknown,
+  value?: V
+): V {
   if (obj == null) return value as V
 
   const paths = pathSegments(key)
@@ -530,7 +565,7 @@ export function get<V = unknown>(key: PropertyKey | PropertyKey[], obj: unknown,
  * @returns The modified object.
  */
 export function del<T extends object | null | undefined>(
-  attr: PropertyKey | PropertyKey[],
+  attr: PropertyKey | readonly unknown[],
   x: T
 ): T {
   if (x == null) return x
@@ -577,7 +612,7 @@ export function del<T extends object | null | undefined>(
  * @returns The object.
  */
 export function set<T extends object>(
-  attr: PropertyKey | PropertyKey[],
+  attr: PropertyKey | readonly unknown[],
   obj: T,
   value: unknown,
   writable = false,

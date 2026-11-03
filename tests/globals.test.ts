@@ -454,6 +454,27 @@ describe('globals', () => {
     assert.equal(d.tags[1], 'b')
   })
 
+  it('R13-D1: path segments must be strings, numbers or symbols', () => {
+    const d = { tags: ['a'] as unknown[] }
+    const err = 'path segments must be strings, numbers or symbols'
+    for (const path of [
+      ['tags', ['4294967294']],
+      ['tags', [4294967294]],
+      ['tags', [['4294967294']]],
+      [['tags'], '4294967294'],
+      ['tags', true],
+      ['tags', null]
+    ]) {
+      assert.throws(() => set(path, d, 'x', true, true), TypeError, err)
+      assert.throws(() => get(path, d, 'D'), TypeError, err)
+      assert.throws(() => del(path, d), TypeError, err)
+      assert.throws(() => has(d, path), TypeError, err)
+    }
+    assert.equal(d.tags.length, 1)
+    assert.throws(() => set([['__proto__']], {}, { p: 1 }, true, true), TypeError, err)
+    assert.throws(() => set([['constructor'], 'prototype', 'x'], {}, 1, true, true), TypeError, err)
+  })
+
   it('R12-D: path segment checks apply to every path form', () => {
     const d = { tags: ['a'] as unknown[] }
     assert.throws(
