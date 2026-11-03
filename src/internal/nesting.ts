@@ -8,12 +8,22 @@ export const MAX_VISITED_NODES = 1_000_000
  * Levels charged per nested collection hop (dispatch + hook body together).
  * Chosen so a 1500-deep collection walk hits this cap while >= 40% of the native stack remains
  * free under Node 24.22.2 with and without coverage instrumentation.
- * Effective self-nested collection limit: {@link MAX_NESTING_DEPTH} / {@link HOOK_NESTING_COST}.
+ * Effective self-nested collection limit: {@link MAX_NESTING_DEPTH} / hook cost (default 8 -> 125).
  */
+let hookNestingCost = 8
+
+/** Default / current levels charged per nested collection hop. */
 export const HOOK_NESTING_COST = 8
 
-/** Half of {@link HOOK_NESTING_COST}: charged at protocol dispatch and again inside the hook. */
-const HOOK_NESTING_HALF = HOOK_NESTING_COST / 2
+/** Read the live hook nesting cost (may differ from {@link HOOK_NESTING_COST} when patched in tests). */
+export function getHookNestingCost(): number {
+  return hookNestingCost
+}
+
+/** Test-only: patch the live hook nesting cost (always restore after). */
+export function setHookNestingCost(cost: number): void {
+  hookNestingCost = cost
+}
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
 const VISIT_ERROR = 'input exceeds 1000000 nodes'
@@ -46,11 +56,12 @@ export function exitNesting(cost = 1): void {
  * Used at protocol dispatch and inside collection equals/clone hooks.
  */
 export function withHookNesting<T>(fn: () => T): T {
-  enterNesting(HOOK_NESTING_HALF)
+  const half = hookNestingCost / 2
+  enterNesting(half)
   try {
     return fn()
   } finally {
-    exitNesting(HOOK_NESTING_HALF)
+    exitNesting(half)
   }
 }
 

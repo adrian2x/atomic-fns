@@ -104,6 +104,36 @@ export function sameSequenceItems<C extends object & { readonly size: number }>(
   return sameItems(a, b, items)
 }
 
+/**
+ * Ordered map entry-sequence equality without boxing each pair as an array (avoids an extra
+ * nesting charge per entry so self-nested SortedMaps hit the documented 125-level hook cap).
+ */
+export function sameEntrySequence<C extends object & { readonly size: number }>(
+  a: C,
+  b: unknown,
+  entries: (collection: C) => Iterator<[unknown, unknown]>
+): boolean {
+  if (a === b) return true
+  if (typeof b !== 'object' || b?.constructor !== a.constructor) return false
+  const other = b as C
+  if (a.size !== other.size) return false
+  if (beginCompare(a, other)) return true
+  try {
+    const ia = entries(a)
+    const ib = entries(other)
+    for (;;) {
+      const x = ia.next()
+      const y = ib.next()
+      if (x.done || y.done) return Boolean(x.done) === Boolean(y.done)
+      const [kx, vx] = x.value
+      const [ky, vy] = y.value
+      if (!deepEqual(kx, ky) || !deepEqual(vx, vy)) return false
+    }
+  } finally {
+    endCompare(a, other)
+  }
+}
+
 abstract class BaseCollection {
   abstract get size(): number
   abstract clear(): void

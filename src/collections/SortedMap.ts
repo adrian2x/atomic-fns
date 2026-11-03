@@ -1,7 +1,7 @@
 import { withHookNesting } from '../internal/nesting.js'
 import type { Comparer } from '../operators/index.js'
 import { protocol } from '../operators/index.js'
-import { MapCollection, sameSequenceItems } from './abc.js'
+import { MapCollection, sameEntrySequence } from './abc.js'
 import { BTree } from './BTree.js'
 import { clone } from './object.js'
 
@@ -35,7 +35,7 @@ export class SortedMap<K, V> extends MapCollection<K, V> {
 
   /** Sequence equality: key order is part of meaning. */
   override [protocol.equals](other: unknown): boolean {
-    return withHookNesting(() => sameSequenceItems(this, other, (c) => c.entries()))
+    return withHookNesting(() => sameEntrySequence(this, other, (c) => c.entries()))
   }
 
   /** Deep clone keeps keys by reference (comparator owns key identity) and deep-clones values. */

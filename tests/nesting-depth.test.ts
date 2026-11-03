@@ -15,7 +15,12 @@ import {
   SplayTree,
   Trie
 } from '../src/collections/index.js'
-import { getNestingDepth, HOOK_NESTING_COST } from '../src/internal/nesting.js'
+import {
+  getHookNestingCost,
+  getNestingDepth,
+  HOOK_NESTING_COST,
+  setHookNestingCost
+} from '../src/internal/nesting.js'
 import { deepEqual } from '../src/operators/index.js'
 
 function nestArray(depth: number): unknown {
@@ -198,6 +203,55 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
     }
     expect(deepEqual(1, 1)).toBe(true)
     expect(deepEqual([1], [1])).toBe(true)
+  })
+
+  it('POL-4c: Deque/SortedSet/SortedMap/FrozenSet 125 deep work; 126 throw without cause', () => {
+    const eqNests: [string, (d: number) => unknown][] = [
+      ['Deque', nestDeque],
+      ['SortedSet', nestSortedSet],
+      ['SortedMap', nestSortedMap]
+    ]
+    for (const [name, nest] of eqNests) {
+      expect(deepEqual(nest(125), nest(125)), `${name} 125`).toBe(true)
+      let err: unknown
+      try {
+        deepEqual(nest(126), nest(126))
+      } catch (e) {
+        err = e
+      }
+      expect(err, `${name} 126`).toBeInstanceOf(RangeError)
+      expect((err as Error).message).toBe(NESTING_MSG)
+      expect((err as Error).cause, `${name} 126 must be counter not backstop`).toBeUndefined()
+    }
+    // FrozenSet membership is not structural; self-nested values are checked via deep clone.
+    expect(() => clone(nestFrozen(125), true)).not.toThrow()
+    let frozenErr: unknown
+    try {
+      clone(nestFrozen(126), true)
+    } catch (e) {
+      frozenErr = e
+    }
+    expect(frozenErr).toBeInstanceOf(RangeError)
+    expect((frozenErr as Error).message).toBe(NESTING_MSG)
+    expect((frozenErr as Error).cause).toBeUndefined()
+  })
+
+  it('POL-4c: HOOK_NESTING_COST patched to 0 fails the 126-no-cause gate', () => {
+    const saved = getHookNestingCost()
+    setHookNestingCost(0)
+    try {
+      let err: unknown
+      try {
+        deepEqual(nestDeque(126), nestDeque(126))
+      } catch (e) {
+        err = e
+      }
+      const gateHolds =
+        err instanceof RangeError && err.message === NESTING_MSG && err.cause === undefined
+      expect(gateHolds).toBe(false)
+    } finally {
+      setHookNestingCost(saved)
+    }
   })
 
   it('omit cyclic deep path hits nesting cap, not stack overflow', () => {
