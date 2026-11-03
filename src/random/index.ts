@@ -58,7 +58,7 @@ export function sample<T>(arr: T[], size: number): T[] {
  */
 export function shuffle<T>(arr: T[], size?: number): T[] {
   if (!arr?.length) return arr
-  if (isObject(arr)) arr = Object.values(arr)
+  if (isObject(arr)) arr = Object.values(arr) as T[]
   if (size == null) size = arr.length - 1
   for (let i = 0; i <= size; i++) {
     const j = randomInt(i, size)

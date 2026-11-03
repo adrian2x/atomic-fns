@@ -1,5 +1,5 @@
-import { describe, it } from 'vitest'
-import assert from 'assert'
+import { describe, it, vi } from 'vitest'
+import assert from 'node:assert/strict'
 import {
   bin,
   call,
@@ -9,15 +9,14 @@ import {
   get,
   hash,
   hashCode,
-  HASH_KEY,
   hex,
-  isArray,
   isArrayLike,
   isAsyncFunction,
   isBigint,
   isBool,
   isEmpty,
   isFunction,
+  isGenerator,
   isNull,
   isNumber,
   isObject,
@@ -27,28 +26,37 @@ import {
   keys,
   list,
   next,
+  NotImplementedError,
   oct,
   ord,
+  set,
   str,
   True,
   type,
   uniqueId,
-  values,
-  noop
+  uuid,
+  noop,
+  ValueError,
+  KeyError,
+  has,
+  int,
+  len
 } from '../src/globals/index.js'
 import { enumerate } from '../src/itertools/index.js'
 
 describe('globals', () => {
-  it('CustomError', () => {
+  it('SPEC-R27 CustomError and subclasses keep cause and literal name', () => {
     const err = new CustomError('custom')
     assert.equal(err.message, 'custom')
+    assert.equal(new ValueError('x', { cause: 1 }).cause, 1)
+    assert.equal(new KeyError().name, 'KeyError')
   })
 
   it('True', () => assert(True() === true))
 
   it('False', () => assert(False() === false))
 
-  it('type', () => {
+  it('SPEC-R20 type uses tags without calling user methods', () => {
     assert(type(null) === 'null')
     assert(type(undefined) === 'undefined')
     assert(type(true) === 'boolean')
@@ -86,6 +94,24 @@ describe('globals', () => {
     assert(type(new Float64Array()) === 'Float64Array')
     assert(type(new ArrayBuffer(8)) === 'ArrayBuffer')
     assert(type(new DataView(new ArrayBuffer(8))) === 'DataView')
+    assert(type(Object.create(null)) === 'object')
+    assert(type(new Date()) === 'Date')
+    assert(type(/x/) === 'RegExp')
+    assert(type({ call() {} }) === 'object')
+    assert(
+      type({
+        toString() {
+          return '[object Array]'
+        }
+      }) === 'object'
+    )
+  })
+
+  it('SPEC-R20 isObject is type === object', () => {
+    assert(isObject({}))
+    assert(isObject(Object.create(null)))
+    assert(!isObject(''))
+    assert(!isObject([]))
   })
 
   it('isBool', () => {
@@ -96,33 +122,39 @@ describe('globals', () => {
     assert(!isBool(undefined))
   })
 
-  it('isObject', () => {
-    assert(isObject({}))
-    assert(!isObject(''))
-    assert(!isObject([]))
-  })
-
   it('isString', () => {
     assert(isString(''))
     assert(!isString([]))
   })
 
-  it('isArray', () => {
-    assert(isArray([]))
+  it('SPEC-R25 isArrayLike: strings return false', () => {
     assert(isArrayLike([]))
-    assert(!isArray(''))
+    assert(isArrayLike({ length: 0 }))
     assert(!isArrayLike(''))
+    assert(!isArrayLike('abc'))
   })
 
-  it('isFunction', () => {
+  it('SPEC-R21 isFunction typeof function', () => {
     assert(isFunction(noop))
+    assert(isFunction(async () => {}))
+    assert(isFunction(function* () {}))
     assert(!isFunction([]))
   })
 
-  it('isAsyncFunction', () => {
+  it('SPEC-R21 isAsyncFunction', () => {
     assert(isAsyncFunction(async function () {}))
     assert(isAsyncFunction(async () => {}))
     assert(!isAsyncFunction(noop))
+    assert(!isAsyncFunction(Object.create(null)))
+  })
+
+  it('SPEC-R21 isGenerator is generator object only', () => {
+    function* gen() {
+      yield 1
+    }
+    assert(isGenerator(gen()))
+    assert(!isGenerator(gen))
+    assert(!isGenerator(Object.create(null)))
   })
 
   it('isNumber', () => {
@@ -166,20 +198,81 @@ describe('globals', () => {
     assert(str({}) === '[object Object]')
   })
 
-  it('uniqueId', () => {
-    const uid = uniqueId()
-    assert(isNumber(uid))
+  it('SPEC-R26 uniqueId returns distinct strings with counter', () => {
+    const seen = new Set<string>()
+    for (let i = 0; i < 1e5; i++) {
+      const id = uniqueId()
+      assert.equal(typeof id, 'string')
+      seen.add(id)
+    }
+    assert.equal(seen.size, 1e5)
     const userId = uniqueId('user_')
     assert(typeof userId === 'string' && userId.startsWith('user_'))
   })
 
-  it('call', () => {
+  it('SPEC-R26 uuid via randomUUID matches v4 regex', () => {
+    const re = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    assert.match(uuid(), re)
+  })
+
+  it('SPEC-R26 uuid fallback via getRandomValues matches v4 regex', () => {
+    const real = globalThis.crypto
+    vi.stubGlobal('crypto', {
+      getRandomValues: (a: Uint8Array) => real.getRandomValues(a)
+    })
+    try {
+      const re = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      assert.match(uuid(), re)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('SPEC-R26 uuid without crypto throws NotImplementedError', () => {
+    vi.stubGlobal('crypto', undefined)
+    try {
+      assert.throws(
+        () => uuid(),
+        (e: unknown) => {
+          assert(e instanceof NotImplementedError)
+          assert.equal(e.message, 'crypto.getRandomValues unavailable')
+          return true
+        }
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('SPEC-R22 call reads key once and binds this', async () => {
     const obj = {
       foo() {
         return 42
+      },
+      async m() {
+        return 1
+      },
+      'a.b'() {
+        return 2
       }
     }
     assert(call(obj, 'foo') === 42)
+    assert.equal(await call(obj, 'm'), 1)
+    assert.equal(call(obj, 'a.b'), 2)
+    assert.equal(call(null, 'x'), undefined)
+  })
+
+  it('SPEC-R23 set is configurable so a second call replaces', () => {
+    const o: { x?: number } = {}
+    set('x', o, 1)
+    assert.equal(o.x, 1)
+    set('x', o, 2, true, true)
+    assert.equal(o.x, 2)
+    const desc = Object.getOwnPropertyDescriptor(o, 'x')
+    assert(desc)
+    assert.equal(desc.configurable, true)
+    assert.equal(desc.writable, true)
+    assert.equal(desc.enumerable, true)
   })
 
   it('chr', () => {
@@ -187,9 +280,24 @@ describe('globals', () => {
     assert(chr(8364) === '€')
   })
 
-  it('ord', () => {
+  it('SPEC-R24 ord uses codePointAt', () => {
     assert(ord('a') === 97)
     assert(ord('€') === 8364)
+    assert(ord(chr(0x1f600)) === 0x1f600)
+  })
+
+  it('SPEC-R24 has uses Reflect.has', () => {
+    assert(has('abc', 'length') === true)
+    assert(has(0, 'x') === false)
+    assert(has({ a: 1 }, 'a') === true)
+    assert(has(null, 'a') === false)
+  })
+
+  it('SPEC-R24 int truncates numbers and parseInt strings', () => {
+    assert(int(5e-7) === 0)
+    assert(int(1e21) === 1e21)
+    assert(int('12abc') === 12)
+    assert(int('ff', 16) === 255)
   })
 
   it('keys', () => {
@@ -197,24 +305,34 @@ describe('globals', () => {
     assert.deepEqual(keys(obj), Object.keys(obj))
   })
 
-  it('values', () => {
-    const obj = { a: 1, b: 2 }
-    assert.deepEqual(values(obj), Object.values(obj))
-  })
-
-  it('next', () => {
+  it('SPEC-R25 next returns dflt when done, ignores return value', () => {
     const iter = enumerate([1, 2, 3])
     assert.deepEqual(next(iter), [0, 1])
     assert.deepEqual(next(iter), [1, 2])
     assert.deepEqual(next(iter), [2, 3])
+    assert.equal(next([][Symbol.iterator](), 0), 0)
+    assert.equal(
+      next(
+        (function* () {
+          yield
+          return 5
+        })()
+      ),
+      undefined
+    )
   })
 
-  it('hash', () => {
+  it('SPEC-R28 hash WeakMap identity, null is 0, no own symbols', () => {
+    assert.equal(hash(null), 0)
+    assert.equal(hash(undefined), 0)
     const obj = { a: 1, b: 2 }
     const h = hash(obj)
-    assert(h != undefined, String(h))
-    assert(h === hash(obj), String(hash(obj)))
-    assert(obj[HASH_KEY] === h, String(obj[HASH_KEY]))
+    assert.equal(typeof h, 'number')
+    assert.equal(h, hash(obj))
+    assert.notEqual(hash({ ...obj }), h)
+    assert.equal(Object.getOwnPropertySymbols(obj).length, 0)
+    assert.equal(hash('abc'), hashCode('abc'))
+    assert.equal(hash(Symbol.for('k')), hashCode('Symbol(k)'))
   })
 
   it('hashCode', () => {
@@ -244,13 +362,15 @@ describe('globals', () => {
     const arr = [1, 2, 3]
     assert(get('2', arr) === 3)
     assert(get('3', arr, false) === false)
-    assert(get('3', arr, false) === false)
     const obj = { foo: { bar: true } }
-    const h = hash(obj)
     assert(get('foo.bar', obj))
     assert(get(['foo', 'bar'], obj))
-    assert(get(HASH_KEY, obj) === h)
-    assert(get([HASH_KEY], obj) === h)
+  })
+
+  it('len', () => {
+    assert.equal(len(null), undefined)
+    assert.equal(len([1, 2]), 2)
+    assert.equal(len({ a: 1 }), 1)
   })
 
   it('isEmpty', () => {
@@ -262,5 +382,26 @@ describe('globals', () => {
     assert(isEmpty(0))
     assert(isEmpty(false))
     assert(!isEmpty(1))
+  })
+
+  it('SPEC-R29 removed names are absent; keys remains', async () => {
+    const mod = await import('../src/index.js')
+    const names = Object.keys(mod)
+    for (const gone of [
+      'bind',
+      'callAsync',
+      'isArray',
+      'values',
+      'floor',
+      'ceil',
+      'isInteger',
+      'log2',
+      'id',
+      'HASH_KEY',
+      'IterableIterator'
+    ]) {
+      assert(!names.includes(gone), gone)
+    }
+    assert(names.includes('keys'))
   })
 })

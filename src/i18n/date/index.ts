@@ -75,8 +75,9 @@ export class IntlDate {
     if (typeof obj === 'string' || typeof obj === 'number' || obj instanceof Date) {
       this._date = asDate(obj, utc)
     } else if (isObject(obj)) {
-      const { year, day, hour, minute, second, millisecond } = obj
-      let { month } = obj
+      const fields = obj as DateObject
+      const { year, day, hour, minute, second, millisecond } = fields
+      let { month } = fields
 
       // NOTE month is from 1-12, not from 0-11
       if (typeof month === 'number') {
@@ -86,12 +87,20 @@ export class IntlDate {
       if (utc) {
         // from UTC to current
         this._date = new Date(
-          Date.UTC(year, month, day || 1, hour || 0, minute || 0, second || 0, millisecond || 0)
+          Date.UTC(
+            year ?? 0,
+            month ?? 0,
+            day || 1,
+            hour || 0,
+            minute || 0,
+            second || 0,
+            millisecond || 0
+          )
         )
       } else {
         this._date = new Date(
-          year,
-          month,
+          year ?? 0,
+          month ?? 0,
           day || 1,
           hour || 0,
           minute || 0,
@@ -100,7 +109,7 @@ export class IntlDate {
         )
       }
     } else {
-      this._date = asDate(obj, utc)
+      this._date = asDate(obj as string | number | Date | null | undefined, utc)
     }
 
     return this

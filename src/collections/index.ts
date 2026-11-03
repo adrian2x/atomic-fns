@@ -7,7 +7,6 @@
 import {
   call,
   get,
-  isArray,
   isArrayLike,
   isBool,
   isEmpty,
@@ -118,7 +117,11 @@ export function filter<T>(arr: Object, fn?: Iteratee<T>): T[]
 export function filter<T>(arr: Object, fn?: Object): T[]
 export function filter<T>(arr: T[] | Object, fn: Iteratee<T> | Object = isNull): T[] {
   if (!arr) return
-  const predicate = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
+  const predicate = isFunction(fn)
+    ? fn
+    : isObject(fn)
+      ? matches(fn)
+      : (obj) => get(fn as PropertyKey, obj)
   const results: T[] = []
   forEach(arr, (value: T, key) => {
     if (predicate(value, key, arr)) results.push(value)
@@ -159,13 +162,13 @@ export function find<T>(arr: Object, fn: Iteratee<T>): T | undefined
 export function find<T>(arr: Object, fn: Object): T | undefined
 export function find<T>(arr: Object, fn: PropertyKey): T | undefined
 export function find<T>(arr: T[] | Object, fn: Iteratee<T> | Object | PropertyKey): T | undefined {
-  const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
+  const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn as PropertyKey, obj)
   if (Array.isArray(arr)) {
     return arr.find(it)
   } else if (isObject(arr)) {
     for (const key of Object.keys(arr)) {
       if (it(arr[key], key, arr)) {
-        return arr[key]
+        return arr[key] as T
       }
     }
   }
@@ -249,8 +252,9 @@ export function forEach<T>(collection: Iterable<T> | Object, fn: Iteratee<T>): v
       if (res === false) return
     }
   } else {
-    for (const key of keys(collection)) {
-      const res = fn(collection[key], key, collection)
+    const obj = collection as Record<PropertyKey, T>
+    for (const key of keys(obj)) {
+      const res = fn(obj[key], key, collection)
       if (res === false) return
     }
   }
@@ -310,10 +314,11 @@ export function forEachRight<T>(collection: T[] | Object, fn: Iteratee<T>): void
       if (res === false) return
     }
   } else if (isObject(collection)) {
-    const keys = Object.keys(collection)
-    for (let i = keys.length - 1; i >= 0; i--) {
-      const key = keys[i]
-      const value = collection[key]
+    const obj = collection as Record<PropertyKey, T>
+    const ks = Object.keys(obj)
+    for (let i = ks.length - 1; i >= 0; i--) {
+      const key = ks[i]
+      const value = obj[key]
       const res = fn(value, key, collection)
       if (res === false) return
     }
@@ -383,10 +388,10 @@ function flattenObj(obj, prefix = '', result = {}, keepNull = false) {
     return result
   }
 
-  if (isArray(obj) || isObject(obj)) {
+  if (Array.isArray(obj) || isObject(obj)) {
     for (const i of Object.keys(obj)) {
       let pref = prefix
-      if (isArray(obj)) {
+      if (Array.isArray(obj)) {
         pref = `${pref}[${i}]`
       } else {
         if (prefix) {
@@ -439,12 +444,13 @@ export function map<T, TResult>(
   arr: T[] | Object,
   fn: Iteratee<T, PropertyKey, TResult> | PropertyKey
 ): TResult[] {
-  const it = isFunction(fn) ? fn : (obj) => get(fn, obj)
+  const it = isFunction(fn) ? fn : (obj) => get<TResult>(fn as PropertyKey, obj)
   if (Array.isArray(arr)) {
     return arr.map((x, i) => it(x, i, arr))
   }
   if (isObject(arr)) {
-    return Object.keys(arr).map((key) => it(arr[key], key, arr))
+    const obj = arr as Record<PropertyKey, T>
+    return Object.keys(obj).map((key) => it(obj[key], key, arr))
   }
 }
 
@@ -567,7 +573,11 @@ export function findIndex<T>(obj: T[], fn: Iteratee<T> | Object | PropertyKey, s
     start = Math.max(start + length, 0)
   }
   if (!length || start >= length) return -1
-  const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
+  const it = isFunction(fn)
+    ? fn
+    : isObject(fn)
+      ? matches(fn)
+      : (item) => get(fn as PropertyKey, item)
   for (; start < length; start++) {
     if (it(obj[start], start, obj)) return start
   }
@@ -594,7 +604,7 @@ indexOf([1, 2, 1, 2], 2, 2)
  */
 export function indexOf<T>(obj: T[], value: T, start = 0): number {
   if (!obj) return -1
-  const op = call(obj, 'indexOf', value, start)
+  const op = call<number>(obj, 'indexOf', value, start)
   if (op != null) return op
   const length = obj.length
   if (length && start < 0) {
@@ -647,7 +657,11 @@ export function findLastIndex<T>(
   const length = arr.length
   if (start == null) start = length - 1
   if (!length || start < 0) return -1
-  const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
+  const it = isFunction(fn)
+    ? fn
+    : isObject(fn)
+      ? matches(fn)
+      : (item) => get(fn as PropertyKey, item)
   for (; start >= 0; start--) {
     if (it(arr[start], start, arr)) return start
   }
@@ -673,7 +687,7 @@ lastIndexOf([1, 2, 1, 2], 2, 2)
  */
 export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
   if (obj == null) return -1
-  const op = call(obj, 'lastIndexOf', value, start)
+  const op = call<number>(obj, 'lastIndexOf', value, start)
   if (op != null) return op
   const length = obj.length
   if (start == null) start = length - 1
@@ -698,7 +712,7 @@ export function clone(value, deep = false) {
   if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
     return cloneTypedArray(value, deep)
   }
-  if (isArray(value) || isArrayLike(value)) {
+  if (Array.isArray(value) || isArrayLike(value)) {
     return cloneArray(value, deep)
   }
   if (isObject(value)) {
@@ -1061,7 +1075,11 @@ export function remove<T>(arr: T[], func: T): T[]
 export function remove<T>(arr: T[], func: T[]): T[]
 export function remove<T>(arr: T[], func: Iteratee<T>): T[]
 export function remove<T>(arr: T[], func: T | T[] | Iteratee<T>): T[] {
-  const it = isFunction(func) ? func : isArray(func) ? (x) => func.includes(x) : (x) => func === x
+  const it = isFunction(func)
+    ? func
+    : Array.isArray(func)
+      ? (x) => func.includes(x)
+      : (x) => func === x
   return arr.filter((x, i) => !it(x, i, arr))
 }
 

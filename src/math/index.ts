@@ -15,7 +15,7 @@ import type { Predicate } from '../types.js'
  * @returns The absolute value.
  */
 export function abs(x: any): number {
-  const op = call(x, 'abs')
+  const op = call<number>(x, 'abs')
   if (op != null) return op
   return Math.abs(x)
 }
@@ -35,28 +35,6 @@ export function round(x: number, digits = 0): number {
 }
 
 /**
- * Rounds down and returns the largest integer less than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer less than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor Math.floor()}
- */
-export function floor(x: number) {
-  return Math.floor(x)
-}
-
-/**
- * Rounds up and returns the largest integer greater than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer greater than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
- */
-export function ceil(x: number) {
-  return Math.ceil(x)
-}
-
-/**
  * Returns a tuple like `[x / y, x % y]`.
  *
  * @param x
@@ -65,13 +43,6 @@ export function ceil(x: number) {
  */
 export function divmod(x: number, y: number): [number, number] {
   return [Math.floor(x / y), x % y]
-}
-
-export function log2(x: number): number {
-  if (x > 0) {
-    return Math.log(x) * 1.442695
-  }
-  return Number.NaN
 }
 
 export function logBase(x: number, y: number): number {

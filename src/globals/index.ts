@@ -14,6 +14,10 @@ export {
   ValueError,
   ZeroDivisionError
 } from './errors.js'
+export { hash, hashCode } from './hash.js'
+
+import type { AnyFunction } from '../types.js'
+import { NotImplementedError } from './errors.js'
 
 /** This is just a noop function. */
 export function noop() {}
@@ -26,42 +30,26 @@ export const False = () => false
 
 /**
  * Returns the true type of any value with correct detection for `null`, `Array`,
- * `Object`, `Promise`, `Symbol`, and `NaN`. The correct values are inferred from {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/toStringTag | Symbol.toStringTag} and the value's prototype.
+ * `Object`, `Promise`, `Symbol`, and `NaN`. Uses `typeof`, `Array.isArray`,
+ * `instanceof Error`, and `Object.prototype.toString` only - never user methods.
  * @param value
  * @returns The value type.
  */
-export function type(value: any): string {
-  const result = typeof value
-  if (result === 'object') {
-    if (value) {
-      if (value instanceof String) return 'string'
-      if (value instanceof Boolean) return 'boolean'
-      if (value instanceof Function) return 'function'
-      if (value instanceof Array) return 'array'
-      if (value instanceof Error) return 'error'
-      if (value[Symbol.toStringTag]) return value[Symbol.toStringTag]
-
-      const className = str(value)
-      if (className === '[object Window]') return 'object'
-      if (className.endsWith('Array]') || Array.isArray(value)) {
-        return 'array'
-      }
-
-      if (className.endsWith('Function]') || typeof value.call === 'function') {
-        return 'function'
-      }
-
-      // Other primitive types
-      if (className === '[object Promise]' || value instanceof Promise) {
-        return 'Promise'
-      }
-    } else {
-      return 'null'
-    }
-  } else if (result === 'function' && typeof value.call === 'undefined') {
-    return 'object'
-  } else if (Number.isNaN(value)) return 'NaN'
-  return result
+export function type(value: unknown): string {
+  const t = typeof value
+  if (value === null) return 'null'
+  if (t === 'undefined') return 'undefined'
+  if (t === 'boolean') return 'boolean'
+  if (t === 'number') return Number.isNaN(value) ? 'NaN' : 'number'
+  if (t === 'bigint') return 'bigint'
+  if (t === 'string') return 'string'
+  if (t === 'symbol') return 'symbol'
+  if (t === 'function') return 'function'
+  if (Array.isArray(value)) return 'array'
+  if (value instanceof Error) return 'error'
+  const tag = Object.prototype.toString.call(value)
+  if (tag === '[object Object]') return 'object'
+  return tag.slice(8, -1)
 }
 
 /**
@@ -70,137 +58,130 @@ export function type(value: any): string {
  * @returns `obj.toString()` or `''` if `obj` is `null` or `undefined`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString | Object.toString }
  */
-export function str(obj): string {
-  return obj?.toString() ?? ''
+export function str(obj: unknown): string {
+  if (obj == null) return ''
+  return (obj as { toString(): string }).toString()
 }
 
 /** Check if value is a boolean type. */
-export function isBool(x): x is boolean {
+export function isBool(x: unknown): x is boolean {
   return type(x) === 'boolean'
 }
 
 /** Check if value is an `Error` type. */
-export function isError(x): x is Error {
+export function isError(x: unknown): x is Error {
   return x instanceof Error
 }
 
 /** Check if value is an iterable type. */
-export function isIterable(x): x is IterableIterator<any> {
+export function isIterable(x: unknown): x is Iterable<unknown> {
   if (x == null) return false
-  return typeof x[Symbol.iterator] === 'function'
+  return typeof (x as Iterable<unknown>)[Symbol.iterator] === 'function'
 }
 
 /** Check if value is a native `Date` type. */
-export function isDate(x): x is Date {
+export function isDate(x: unknown): x is Date {
   return x instanceof Date
 }
 
-/** Check if value is an object type. */
-export function isObject(x): x is Object {
+/** Check if value is a plain object type (`type(x) === 'object'`). */
+export function isObject(x: unknown): x is Record<PropertyKey, unknown> {
   return type(x) === 'object'
 }
 
 /** Check if value is a string type. */
-export function isString(x): x is string {
+export function isString(x: unknown): x is string {
   return type(x) === 'string'
 }
 
-/** Check if value is an Array type. */
-export function isArray(x): x is any[] {
-  return Array.isArray(x)
-}
-
 /**
- * Check if value is Array-like type.
- * A value is considered array-like if it's not a function and has a `.length` number property.
+ * Check if value is Array-like.
+ * A value is array-like if it is an array, or a non-null, non-function, non-string
+ * value with a numeric `.length`. Strings return `false`.
  */
-export function isArrayLike(x): boolean {
-  const T = type(x)
-  return T === 'array' || (T === 'object' && isNumber(x.length))
+export function isArrayLike(x: unknown): boolean {
+  if (Array.isArray(x)) return true
+  if (x == null || typeof x === 'function' || typeof x === 'string') return false
+  return typeof (x as { length?: unknown }).length === 'number'
 }
 
-/** Check if value is a number type. */
-export function isNumber(x): x is number {
+/** Check if value is a number type (not NaN). */
+export function isNumber(x: unknown): x is number {
   return type(x) === 'number'
 }
 
-/** Check if value is an integer number type. */
-export function isInteger(x): x is number {
-  return type(x) === 'number' && Math.trunc(x) === x
-}
-
 /** Check if value is a bigint type. */
-export function isBigint(x): x is BigInt {
+export function isBigint(x: unknown): x is bigint {
   return type(x) === 'bigint'
 }
 
 /** Check if value is a Promise type. */
-export function isPromise(x): x is Promise<any> {
+export function isPromise(x: unknown): x is Promise<unknown> {
   return type(x) === 'Promise'
 }
 
 /** Check if value is a function type. */
-export function isFunction(x): x is import('../types.js').AnyFunction {
+export function isFunction(x: unknown): x is AnyFunction {
   return typeof x === 'function'
 }
 
-/** Check if value is an async function type. */
-export function isAsyncFunction(x): boolean {
-  return x?.constructor.name === 'AsyncFunction'
+/** Check if value is an async function. */
+export function isAsyncFunction(x: unknown): x is (...args: never[]) => Promise<unknown> {
+  return typeof x === 'function' && x.constructor?.name === 'AsyncFunction'
 }
 
-/** Check if value is a generator function type. */
-export function isGenerator(x): x is Generator {
-  return x?.constructor.constructor?.name === 'GeneratorFunction'
+/** Check if value is a generator object. */
+export function isGenerator(x: unknown): x is Generator {
+  return Object.prototype.toString.call(x) === '[object Generator]'
 }
 
 /** Check if value is `null` or `undefined`. */
-export function isNull(x): x is null | undefined {
+export function isNull(x: unknown): x is null | undefined {
   return x == null
 }
 
 /** Check if value === `undefined`. */
-export function isUndefined(x): x is undefined {
+export function isUndefined(x: unknown): x is undefined {
   return x === undefined
 }
 
 /** Check if value is not `null` or `undefined`. */
-export function notNull(x): boolean {
+export function notNull(x: unknown): boolean {
   return x != null
 }
 
 /** Returns `true` for objects without length or falsy values. */
-export function isEmpty(x): boolean {
+export function isEmpty(x: unknown): boolean {
   return len(x) === 0 ? true : !x
 }
 
 /** Check if value is a `RegExp` type */
-export function isRegExp(x): x is RegExp {
+export function isRegExp(x: unknown): x is RegExp {
   return x instanceof RegExp
 }
 
 /** Check if value is a `Symbol` type */
-export function isSymbol(x): x is symbol {
+export function isSymbol(x: unknown): x is symbol {
   return type(x) === 'symbol'
 }
 
 /** Check if value is a `Set` type. */
-export function isSet<T>(x): x is Set<T> {
+export function isSet<T>(x: unknown): x is Set<T> {
   return x instanceof Set
 }
 
 /** Check if value is a `Map` type. */
-export function isMap<K, V>(x): x is Map<K, V> {
+export function isMap<K, V>(x: unknown): x is Map<K, V> {
   return x instanceof Map
 }
 
 /** Check if value is a `WeakSet` type. */
-export function isWeakSet<T extends object>(x): x is WeakSet<T> {
+export function isWeakSet<T extends object>(x: unknown): x is WeakSet<T> {
   return x instanceof WeakSet
 }
 
 /** Check if value is a `WeakMap` type. */
-export function isWeakMap<K extends object, V>(x): x is WeakMap<K, V> {
+export function isWeakMap<K extends object, V>(x: unknown): x is WeakMap<K, V> {
   return x instanceof WeakMap
 }
 
@@ -212,43 +193,47 @@ export function isWeakMap<K extends object, V>(x): x is WeakMap<K, V> {
  * @param value
  * @returns The number of elements in the collection or `undefined`.
  */
-export function len(value): number {
-  if (value == null) return
-  if (isNumber(value.length)) {
-    return value.length
+export function len(value: unknown): number | undefined {
+  if (value == null) return undefined
+  const v = value as { length?: unknown; size?: unknown }
+  if (isNumber(v.length)) {
+    return v.length
   }
-  if (isNumber(value.size)) {
-    return value.size
+  if (isNumber(v.size)) {
+    return v.size
   }
-  if (isFunction(value.size)) {
-    return value.size()
+  if (isFunction(v.size)) {
+    return (v.size as () => number)()
   }
   if (isObject(value)) {
     return Object.keys(value).length
   }
+  return undefined
 }
 
+let idCounter = 1
+
 /**
- * Generates a unique ID using random numbers. If a prefix is given, the ID is appended to it and returned as a string.
- * @param {string} [pre=''] The id prefix.
- * @returns {number|string} Returns the numeric or string ID.
+ * Generates a unique ID. If a prefix is given, it is prepended to the counter.
+ * @param {string} [prefix=''] The id prefix.
+ * @returns {string} The unique id string.
  * @example
 ```js
 uniqueId()
-// 3445556877
+// '1'
 
 uniqueId('user_')
-// 'user_1033763188'
+// 'user_2'
 ```
  */
-export function uniqueId(pre: string = ''): string | number {
-  const n = (Math.random() * 1e10) >>> 0
-  return pre ? pre + String(n) : n
+export function uniqueId(prefix = ''): string {
+  return prefix + String(idCounter++)
 }
 
 /**
- * Generates a monotonically increasing, pseudo-random based uuid-v4 string. These are sortable, url-friendly and are 100% unique if the IDs are generated more than 1 millisecond apart. If two IDs are generated at the same millisecond, the chance of collision is still pretty low (1 in 10^15).
- * @returns Returns a GUID formatted string.
+ * Random v4 UUID (RFC 9562). Not sortable.
+ * Uses `crypto.randomUUID` when available, else `crypto.getRandomValues`.
+ * @returns A GUID formatted string.
  * @example
 ```js
 uuid()
@@ -256,21 +241,52 @@ uuid()
 ```
  */
 export function uuid(): string {
-  const u = Date.now().toString(16) + Math.random().toString(16) + '0'.repeat(16)
-  return [u.substr(0, 8), u.substr(8, 4), '4000-8' + u.substr(13, 3), u.substr(16, 12)].join('-')
+  const c = globalThis.crypto
+  if (c && typeof c.randomUUID === 'function') {
+    return c.randomUUID()
+  }
+  if (c && typeof c.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16)
+    c.getRandomValues(bytes)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    let out = ''
+    for (let i = 0; i < bytes.length; i++) {
+      out += bytes[i].toString(16).padStart(2, '0')
+    }
+    return (
+      out.slice(0, 8) +
+      '-' +
+      out.slice(8, 12) +
+      '-' +
+      out.slice(12, 16) +
+      '-' +
+      out.slice(16, 20) +
+      '-' +
+      out.slice(20)
+    )
+  }
+  throw new NotImplementedError('crypto.getRandomValues unavailable')
 }
 
 /**
- * Checks if `obj.key` is a function, and calls it with any given `args`.
- * @param {*} obj
- * @param {PropertyKey} key
- * @param {...any[]} args
- * @return `obj.key(...args)` or `undefined`.
+ * Checks if `obj[key]` is a function, and calls it with any given `args`.
+ * Reads the property once with no path parsing.
+ * @param obj
+ * @param key
+ * @param args
+ * @return The method result or `undefined`.
  */
-export function call<T = any>(obj: any, key: PropertyKey, ...args: any[]): T {
-  if (isFunction(get(key, obj))) {
-    return obj[key](...args)
+export function call<R = unknown>(
+  obj: unknown,
+  key: PropertyKey,
+  ...args: unknown[]
+): R | undefined {
+  const fn = (obj as Record<PropertyKey, unknown> | null | undefined)?.[key]
+  if (typeof fn === 'function') {
+    return (fn as (...a: unknown[]) => R).apply(obj, args)
   }
+  return undefined
 }
 
 /** Convert number to unicode character */
@@ -279,8 +295,8 @@ export function chr(x: number): string {
 }
 
 /** Convert character to Unicode code point */
-export function ord(x: string): number {
-  return x.charCodeAt(0)
+export function ord(s: string): number {
+  return s.codePointAt(0) ?? Number.NaN
 }
 
 /**
@@ -289,18 +305,8 @@ export function ord(x: string): number {
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
  */
-export function keys<T>(object: T): Array<keyof T> {
-  return Object.keys(object) as Array<keyof T>
-}
-
-/**
- * Returns an array of the own enumerable property values of `object`.
- * @param object The given object.
- * @returns The array of object keys.
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values Object.values()}
- */
-export function values<T = any>(object): T[] {
-  return Object.values(object)
+export function keys<T extends object>(object: T): Array<keyof T & string> {
+  return Object.keys(object) as Array<keyof T & string>
 }
 
 /**
@@ -309,35 +315,35 @@ export function values<T = any>(object): T[] {
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
  */
-export function has(obj, attr: PropertyKey): boolean {
-  return obj && attr in obj
+export function has(obj: unknown, attr: PropertyKey): boolean {
+  return obj != null && Reflect.has(Object(obj), attr)
 }
 
 /**
  * Check if the attribute is present in the object or return a default value instead.
- * @param {PropertyKey} key
- * @param {*} obj
- * @param {*} [value=undefined]
+ * @param key
+ * @param obj
+ * @param value
  * @return The property value or default value.
  */
-export function get<T>(key: PropertyKey, obj: T, value?: any): any
-export function get<T>(key: PropertyKey[], obj: T, value?: any): any
-export function get(key: PropertyKey | PropertyKey[], obj, value: any): any {
-  if (obj == null) return value
+export function get<V = unknown>(key: PropertyKey, obj: unknown, value?: V): V
+export function get<V = unknown>(key: PropertyKey[], obj: unknown, value?: V): V
+export function get<V = unknown>(key: PropertyKey | PropertyKey[], obj: unknown, value?: V): V {
+  if (obj == null) return value as V
 
-  let paths = Array.isArray(key) ? key : [key]
+  let paths: PropertyKey[] = Array.isArray(key) ? key : [key]
   if (typeof key === 'string') {
     paths = key.split('.')
   }
 
   try {
-    let result = obj
+    let result: unknown = obj
     for (const k of paths) {
-      result = result[k]
+      result = (result as Record<PropertyKey, unknown>)[k]
     }
-    return result === undefined ? value : result
+    return (result === undefined ? value : result) as V
   } catch {
-    return value
+    return value as V
   }
 }
 
@@ -347,73 +353,35 @@ export function get(key: PropertyKey | PropertyKey[], obj, value: any): any {
  * @param x The given object.
  * @returns The modified object.
  */
-export function del<T>(attr: PropertyKey, x: T): T {
-  if (x != null) delete x[attr]
+export function del<T extends object>(attr: PropertyKey, x: T): T {
+  if (x != null) delete (x as Record<PropertyKey, unknown>)[attr]
   return x
 }
 
 /**
  * Adds a property to an object, or modifies the existing value.
+ * Always sets `configurable: true` so a second call on the same key replaces it.
  * @param attr The name or Symbol of the property to be defined or modified.
  * @param obj The container object.
  * @param value The value associated with the property
  * @param {boolean} [writable=false] If `true` the value may be changed later. Defaults to `false`.
  * @param {boolean} [enumerable=false] If `true` this property shows up during enumeration of the properties in the object. Defaults to `false`.
- * @returns
+ * @returns The object.
  */
-export function set(
+export function set<T extends object>(
   attr: PropertyKey,
-  obj: any,
-  value: any,
+  obj: T,
+  value: unknown,
   writable = false,
   enumerable = false
-): any {
-  return Object.defineProperty(obj, attr, {
+): T {
+  Object.defineProperty(obj, attr, {
     value,
     enumerable,
-    writable
+    writable,
+    configurable: true
   })
-}
-
-export const HASH_KEY = Symbol.for('HASH_KEY')
-
-/**
- * Return a hash value for a given object. The hash will be the same for subsequent invocations.
- * @param obj The given object.
- * @returns The hash value.
- */
-export function hash(obj: string): number
-export function hash<T>(obj: T): T
-export function hash<T>(obj: T): T | number {
-  if (typeof obj === 'string') {
-    return hashCode(obj)
-  }
-
-  if (typeof obj === 'object') {
-    if (get(HASH_KEY, obj) != null) {
-      return obj[HASH_KEY]
-    }
-    obj[HASH_KEY] = uniqueId()
-    return obj[HASH_KEY]
-  }
-
   return obj
-}
-
-/**
- * A hash value generator for strings.
- * @param {string} str The given string.
- * @returns {number} The hash value of the string.
- * @see {@link http://isthe.com/chongo/tech/comp/fnv/ FNV hash}
- */
-export function hashCode(str: string): number {
-  const FNV1_32A_INIT = 0x811c9dc5
-  let hval = FNV1_32A_INIT
-  for (let i = 0; i < str.length; ++i) {
-    hval ^= str.charCodeAt(i)
-    hval += (hval << 1) + (hval << 4) + (hval << 7) + (hval << 8) + (hval << 24)
-  }
-  return hval >>> 0
 }
 
 /**
@@ -456,10 +424,12 @@ export function float(x: string): number {
 /**
  * Returns an integer number constructed from a number or string `x`.
  * @param x The number or string.
+ * @param base Radix for string parsing (default 10).
  * @returns An integer number parsed from the given value or `NaN`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt parseInt}
  */
-export function int(x: string, base = 10): number {
+export function int(x: string | number, base = 10): number {
+  if (typeof x === 'number') return Math.trunc(x)
   return parseInt(x, base)
 }
 
@@ -469,18 +439,20 @@ export function int(x: string, base = 10): number {
  * @returns A new array value.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/from Array.from()}
  */
-export function list<T>(value?: any): T[] {
+export function list<T>(value?: Iterable<T> | ArrayLike<T>): T[] {
   if (value != null) return Array.from(value)
   return []
 }
 
 /**
  * Retrieve the next item from the iterator by calling its `next()` method.
+ * When the iterator is done, returns `dflt` (the iterator return value is ignored).
  * @param iter The iterator.
- * @returns The next value from the iterator.
+ * @param dflt Default when done.
+ * @returns The next value from the iterator, or `dflt`.
  */
-export function next<T>(iter: Iterator<T>): T | undefined
-export function next<T>(iter: Generator<any, T>): T | undefined
-export function next<T>(iter: any): T | undefined {
-  return iter.next().value
+export function next<T, D = undefined>(it: Iterator<T>, dflt?: D): T | D {
+  const r = it.next()
+  if (r.done) return dflt as D
+  return r.value
 }

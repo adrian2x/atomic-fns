@@ -106,7 +106,7 @@ contains('abcd', 'bc')
  */
 export function contains(collection: Iterable<any>, value: any): boolean {
   if (!collection) return false
-  const includes = call(collection, 'includes', value)
+  const includes = call<boolean>(collection, 'includes', value)
   if (includes != null) return includes
   return any(collection, (x) => eq(value, x))
 }
@@ -138,15 +138,6 @@ export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
   for (const [index, value] of enumerate(iterable)) {
     if (fun(value, index, iterable) === false) {
       return
-    }
-  }
-}
-
-export function IterableIterator<T = any>(next: Iterator<T>['next']): Iterable<T> & Iterator<T> {
-  return {
-    next,
-    [Symbol.iterator]() {
-      return this
     }
   }
 }
