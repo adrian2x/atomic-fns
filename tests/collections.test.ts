@@ -12,6 +12,7 @@ import {
   forEach,
   groupBy,
   groupByMap,
+  indexOf,
   intersection,
   lastIndexOf,
   map,
@@ -166,6 +167,13 @@ describe('collections', () => {
     expect(matches({ a: {} })({ a: { b: 1 } })).toBe(true)
     expect(matches({ a: [] })({ a: 'str' })).toBe(false)
     expect(matches({ a: [] })({ a: [1] })).toBe(true)
+  })
+
+  it('indexOf rejects length-driven array-likes before allocating', () => {
+    const evil = JSON.parse('{"length":1e15}') as never
+    const start = performance.now()
+    expect(() => indexOf(evil, 'x')).toThrow(TypeError)
+    expect(performance.now() - start).toBeLessThan(5)
   })
 
   it('defaults never assigns __proto__ as a prototype', () => {

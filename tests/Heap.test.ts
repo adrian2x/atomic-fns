@@ -11,6 +11,13 @@ describe('Heap', () => {
     expect(h.has(1)).toBe(false)
   })
 
+  it('rejects length-driven array-likes before allocating', () => {
+    const evil = JSON.parse('{"length":4294967295}') as never
+    const start = performance.now()
+    expect(() => new Heap(evil)).toThrow(TypeError)
+    expect(performance.now() - start).toBeLessThan(5)
+  })
+
   it('SPEC-R83 heapifies a copied array and pops in order', () => {
     const arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
     const h = new Heap(arr)

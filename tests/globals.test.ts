@@ -402,6 +402,13 @@ describe('globals', () => {
     assert.deepEqual(list(), [])
   })
 
+  it('list rejects length-driven array-likes before allocating', () => {
+    const evil = JSON.parse('{"length":4294967295}') as never
+    const start = performance.now()
+    assert.throws(() => list(evil), TypeError, 'expected an iterable')
+    assert.ok(performance.now() - start < 5)
+  })
+
   it('get', () => {
     const arr = [1, 2, 3]
     assert(get('2', arr) === 3)

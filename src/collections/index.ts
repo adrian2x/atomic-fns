@@ -5,6 +5,7 @@
  */
 
 import { get, isEmpty, isIterable, isObject, keys, ValueError } from '../globals/index.js'
+import { arrayFromIterable } from '../internal/iterable.js'
 import { assertNestingDepth } from '../internal/nesting.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, deepEqual, eq, identity } from '../operators/index.js'
@@ -364,9 +365,7 @@ export function forEachRight<T>(
 ): void {
   if (collection == null) return
   if (Array.isArray(collection) || isIterable(collection)) {
-    const items = Array.isArray(collection)
-      ? (collection as T[])
-      : Array.from(collection as Iterable<T>)
+    const items = Array.isArray(collection) ? (collection as T[]) : arrayFromIterable<T>(collection)
     for (let i = items.length - 1; i >= 0; i--) {
       const res = fn(items[i], i, collection)
       if (res === false) return
@@ -575,19 +574,23 @@ findIndex(users, 'active')
  *
  */
 export function findIndex<T>(
-  obj: T[] | null | undefined,
+  obj: T[] | Iterable<T> | null | undefined,
   fn: Iteratee<T> | object | PropertyKey,
   start = 0
 ): number {
-  if (!obj) return -1
-  const length = obj.length
+  if (obj == null) return -1
+  if (!Array.isArray(obj) && !isIterable(obj)) {
+    throw new TypeError('expected an iterable')
+  }
+  const arr: T[] = Array.isArray(obj) ? obj : arrayFromIterable<T>(obj)
+  const length = arr.length
   if (length && start < 0) {
     start = Math.max(start + length, 0)
   }
   if (!length || start >= length) return -1
   const it = toIteratee<T>(fn)
   for (; start < length; start++) {
-    if (it(obj[start], start, obj)) return start
+    if (it(arr[start], start, arr)) return start
   }
   return -1
 }
@@ -610,7 +613,7 @@ indexOf([1, 2, 1, 2], 2, 2)
  * @see {@link findIndex}
  * @see {@link lastIndexOf}
  */
-export function indexOf<T>(obj: T[] | null | undefined, value: T, start = 0): number {
+export function indexOf<T>(obj: T[] | Iterable<T> | null | undefined, value: T, start = 0): number {
   return findIndex(obj, (x) => eq(value, x), start)
 }
 
@@ -643,18 +646,22 @@ findLastIndex(users, 'active')
  * @see {@link lastIndexOf}
  */
 export function findLastIndex<T>(
-  arr: T[] | null | undefined,
+  arr: T[] | Iterable<T> | null | undefined,
   fn: Iteratee<T> | object | PropertyKey,
   start?: number
 ): number {
   if (arr == null) return -1
-  const length = arr.length
+  if (!Array.isArray(arr) && !isIterable(arr)) {
+    throw new TypeError('expected an iterable')
+  }
+  const list: T[] = Array.isArray(arr) ? arr : arrayFromIterable<T>(arr)
+  const length = list.length
   start ??= length - 1
   if (!length || start < 0) return -1
   if (start >= length) start = length - 1
   const it = toIteratee<T>(fn)
   for (; start >= 0; start--) {
-    if (it(arr[start], start, arr)) return start
+    if (it(list[start], start, list)) return start
   }
   return -1
 }
@@ -677,7 +684,11 @@ lastIndexOf([1, 2, 1, 2], 2, 2)
  * @see {@link findLastIndex}
  * @see {@link indexOf}
  */
-export function lastIndexOf<T>(obj: T[] | null | undefined, value: T, start?: number): number {
+export function lastIndexOf<T>(
+  obj: T[] | Iterable<T> | null | undefined,
+  value: T,
+  start?: number
+): number {
   return findLastIndex(obj, (x) => eq(value, x), start)
 }
 
@@ -890,7 +901,7 @@ export function groupByMap<T, K>(
 function toValues<T>(coll: Iterable<T> | Record<string, T> | null | undefined): T[] {
   if (coll == null) return []
   if (isPlainObject(coll)) return Object.values(coll)
-  if (isIterable(coll)) return Array.from(coll)
+  if (isIterable(coll)) return arrayFromIterable<T>(coll)
   return Object.values(coll)
 }
 

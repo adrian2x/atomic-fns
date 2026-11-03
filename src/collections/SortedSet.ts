@@ -1,3 +1,4 @@
+import { arrayFromIterableMap } from '../internal/iterable.js'
 import type { Comparer } from '../operators/index.js'
 import { protocol } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
@@ -22,7 +23,10 @@ export class SortedSet<T> extends ValueCollection<T> {
     this.#compareFn = compareFn
     // Reverse so bulk-load collapse keeps the earliest equal value (first insert wins).
     this.#tree = values
-      ? new BTree(Array.from(values, (v): [T, true] => [v, true]).reverse(), compareFn)
+      ? new BTree(
+          arrayFromIterableMap(values, (v): [T, true] => [v as T, true]).reverse(),
+          compareFn
+        )
       : new BTree<T, true>(undefined, compareFn)
   }
 

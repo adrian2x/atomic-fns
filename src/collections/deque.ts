@@ -1,3 +1,4 @@
+import { arrayFromIterable } from '../internal/iterable.js'
 import { truncateForError } from '../internal/truncate.js'
 import { sameValueZero } from '../operators/index.js'
 import { SetCollection } from './abc.js'
@@ -36,7 +37,7 @@ export class Deque<T> extends SetCollection<T, number> {
     this.#arrType = options?.arrType
     this.#empty = (this.#arrType ? 0 : undefined) as T
 
-    const list = items == null ? [] : Array.from(items)
+    const list = items == null ? [] : arrayFromIterable<T>(items)
     const bound = maxlen === undefined ? list.length : Math.min(list.length, maxlen)
     this.#cap = Math.max(8, nextPow2(bound))
     this.#buf = this.#alloc(this.#cap)

@@ -58,7 +58,7 @@ export function shuffle<T>(coll: T[] | Record<string, T> | Iterable<T>): T[] {
   const arr = Array.isArray(coll)
     ? coll
     : isIterable(coll)
-      ? Array.from(coll)
+      ? [...coll]
       : isObject(coll)
         ? Object.values(coll)
         : []

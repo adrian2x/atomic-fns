@@ -1,3 +1,4 @@
+import { arrayFromIterable } from '../internal/iterable.js'
 import type { Comparer } from '../operators/index.js'
 import { compare, deepEqual, protocol, sameValueZero } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
@@ -20,7 +21,7 @@ export class Heap<T> extends ValueCollection<T> {
   constructor(items: Iterable<T> = [], compareFn: Comparer<T> = compare) {
     super()
     this.#compare = compareFn
-    this.#heap = Array.from(items)
+    this.#heap = arrayFromIterable<T>(items)
     heapify(this.#heap, this.#compare)
   }
 

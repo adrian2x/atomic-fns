@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { abs, divmod, max, min, round, sum } from '../src/math/index.js'
+import { abs, divmod, max, mean, min, round, sum } from '../src/math/index.js'
 import { decimal } from '../src/decimal/index.js'
 
 describe('math', () => {
@@ -65,5 +65,12 @@ describe('math', () => {
   it('sum', () => {
     expect(sum([])).toBe(0)
     expect(sum([1, 2, 3, 4])).toBe(10)
+  })
+
+  it('mean rejects length-driven array-likes before allocating', () => {
+    const evil = JSON.parse('{"length":4294967295}') as never
+    const start = performance.now()
+    expect(() => mean(evil)).toThrow(TypeError)
+    expect(performance.now() - start).toBeLessThan(5)
   })
 })

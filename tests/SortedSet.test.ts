@@ -11,6 +11,13 @@ describe('SortedSet', () => {
     expect(s.max()).toBeUndefined()
   })
 
+  it('rejects length-driven array-likes before allocating', () => {
+    const evil = JSON.parse('{"length":4294967295}') as never
+    const start = performance.now()
+    expect(() => new SortedSet(evil)).toThrow(TypeError)
+    expect(performance.now() - start).toBeLessThan(5)
+  })
+
   it('SPEC-R78 initialized values stay ordered', () => {
     const s = new SortedSet([5, 4, 3, 1, 2])
     expect(s.size).toBe(5)

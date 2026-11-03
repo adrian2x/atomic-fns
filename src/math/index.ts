@@ -5,6 +5,7 @@
  */
 
 import { decimal } from '../decimal/index.js'
+import { arrayFromIterableMap } from '../internal/iterable.js'
 import { gt, hasMethod, identity, lt, protocol } from '../operators/index.js'
 import type { Predicate } from '../types.js'
 
@@ -119,7 +120,7 @@ mean(objects, o => o.n)
 export function mean(iterable: number[]): number
 export function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): number
 export function mean<T>(iterable: Iterable<T>, key: Predicate<T> = identity): number {
-  const values = Array.from(iterable, (x) => Number(key(x)))
+  const values = arrayFromIterableMap(iterable, (x) => Number(key(x as T)))
   return sum(values) / values.length
 }
 

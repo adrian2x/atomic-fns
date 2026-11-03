@@ -5,6 +5,7 @@
  */
 
 import { call, isEmpty, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
+import { arrayFromIterable } from '../internal/iterable.js'
 import { add, bool, compare, eq, identity, type Comparer } from '../operators/index.js'
 import type { Iteratee, Predicate } from '../types.js'
 
@@ -347,7 +348,7 @@ export function reduce(
  * @returns A new array with the elements reversed.
  */
 export function reversed<T>(iterable: Iterable<T>): T[] {
-  return Array.from(iterable).reverse()
+  return arrayFromIterable<T>(iterable).reverse()
 }
 
 /**
@@ -383,10 +384,10 @@ export function sorted<T, K = T>(
   compareFn?: Comparer<K>
 ): T[] {
   const items: T[] = isIterable(args)
-    ? Array.from(args)
+    ? arrayFromIterable<T>(args)
     : isObject(args)
       ? Object.values(args)
-      : Array.from(args as Iterable<T>)
+      : arrayFromIterable<T>(args)
 
   let keyFn: (x: T) => K = identity as (x: T) => K
   let rev = false

@@ -291,6 +291,13 @@ describe('itertools', () => {
     assert.deepEqual(arr, reverse)
   })
 
+  it('reversed rejects length-driven array-likes before allocating', () => {
+    const evil = JSON.parse('{"length":4294967295}') as never
+    const start = performance.now()
+    assert.throws(() => reversed(evil), TypeError, 'expected an iterable')
+    assert.ok(performance.now() - start < 5)
+  })
+
   it('sort', () => {
     const arr = [3, 2, 1]
     assert.deepEqual(sort(arr), [1, 2, 3])

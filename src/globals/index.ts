@@ -427,14 +427,17 @@ export function int(x: string | number, base = 10): number {
 }
 
 /**
- * Converts the value to an array using `Array.from()`.
- * @param value
+ * Converts an iterable to an array. Non-iterables (including array-likes with only `length`)
+ * throw `TypeError('expected an iterable')` before allocating. Pass `null`/`undefined` for `[]`.
+ * @param value Iterable source.
  * @returns A new array value.
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/from Array.from()}
  */
-export function list<T>(value?: Iterable<T> | ArrayLike<T>): T[] {
-  if (value != null) return Array.from(value)
-  return []
+export function list<T>(value?: Iterable<T> | null): T[] {
+  if (value == null) return []
+  if (!isIterable(value)) throw new TypeError('expected an iterable')
+  const out: T[] = []
+  for (const x of value) out.push(x)
+  return out
 }
 
 /**

@@ -173,6 +173,13 @@ describe('Deque', () => {
     expect(() => new Deque([], { maxlen: NaN })).toThrow(RangeError)
   })
 
+  it('rejects length-driven array-likes before allocating', () => {
+    const evil = JSON.parse('{"length":4294967295}') as never
+    const start = performance.now()
+    expect(() => new Deque(evil)).toThrow(TypeError)
+    expect(performance.now() - start).toBeLessThan(5)
+  })
+
   it('SPEC-R80 after pop vacated Array slot is undefined', () => {
     const deque = new Deque([1, 2, 3])
     expect(deque.pop()).toBe(3)

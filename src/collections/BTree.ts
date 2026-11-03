@@ -1,3 +1,4 @@
+import { arrayFromIterableMap } from '../internal/iterable.js'
 import { compare, protocol, type Comparer } from '../operators/index.js'
 import { MapCollection, sameSequenceItems } from './abc.js'
 import { checkInvariants } from './internal.js'
@@ -1031,7 +1032,10 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   }
 
   #bulkLoad(entries: Iterable<readonly [K, V]>): void {
-    const items = Array.from(entries, (e) => [e[0], e[1]] as [K, V])
+    const items = arrayFromIterableMap(entries, (e): [K, V] => {
+      const pair = e as readonly [K, V]
+      return [pair[0], pair[1]]
+    })
     if (items.length === 0) {
       this.#root = emptyLeaf(this.#token)
       this.#size = 0
