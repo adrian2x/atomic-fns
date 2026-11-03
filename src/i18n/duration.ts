@@ -245,14 +245,11 @@ function roundingFields(largestUnit: DurationUnit, smallestUnit?: DurationUnit):
   if (largest === 'quarters' || smallest === 'quarters') {
     throw new RangeError('quarters cannot be a rounding unit')
   }
-  // Temporal: weeks on the ladder only when largestUnit is 'weeks' (no years/months
-  // above). For largestUnit 'years' the ladder still includes weeks so the result
-  // matches the previous full-ladder redistribution for that largest unit.
+  // Temporal: weeks are on the ladder only when largestUnit is 'weeks'. For every
+  // other largestUnit, weeks are skipped and their time folds into days.
   let ladder: readonly DurationField[]
   if (largest === 'weeks') {
     ladder = ['weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds']
-  } else if (largest === 'years') {
-    ladder = ROUND_LADDER
   } else {
     ladder = ROUND_LADDER.filter((f) => f !== 'weeks')
   }
@@ -558,8 +555,9 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
 
   /**
    * Redistributes the exact total across the unit slice from `largestUnit` down to
-   * `smallestUnit` (default milliseconds). Drops zero fields; keeps a fractional
-   * remainder on the smallest unit.
+   * `smallestUnit` (default milliseconds). Weeks are included only when
+   * `largestUnit` is `'weeks'` (Temporal); otherwise week-sized time folds into days.
+   * Drops zero fields; keeps a fractional remainder on the smallest unit.
    */
   round(options: { largestUnit: DurationUnit; smallestUnit?: DurationUnit }): Duration {
     const fields = roundingFields(options.largestUnit, options.smallestUnit)

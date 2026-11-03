@@ -201,7 +201,7 @@ describe('Duration', () => {
         .subtract(new Duration(7 * 86_400_000).round({ largestUnit: 'years' }))
         .round({ largestUnit: 'years' })
         .toISOString()
-    ).toBe('P1W')
+    ).toBe('P7D')
     const exactYear = new Duration({ years: 100 }, true)
       .subtract(new Duration(7 * 86_400_000).round({ largestUnit: 'years' }))
       .round({ largestUnit: 'years' })
@@ -209,8 +209,7 @@ describe('Duration', () => {
     expect(exactYear).toEqual({
       years: 99,
       months: 11,
-      weeks: 3,
-      days: 2,
+      days: 23,
       hours: 10,
       minutes: 29,
       seconds: 6
@@ -218,6 +217,17 @@ describe('Duration', () => {
     for (const v of Object.values(exactYear)) {
       expect(Number.isInteger(v)).toBe(true)
     }
+    // 400 days -> 1y + 35d remainder; without weeks that remainder is months+days (not 5 weeks).
+    expect(new Duration({ days: 400 }).round({ largestUnit: 'years' }).toObject()).toEqual({
+      years: 1,
+      months: 1,
+      days: 4,
+      hours: 14
+    })
+    expect(new Duration({ days: 10 }).round({ largestUnit: 'weeks' }).toObject()).toEqual({
+      weeks: 1,
+      days: 3
+    })
     expect(new Duration({ hours: 2.3 }).round({ largestUnit: 'years' }).toObject()).toEqual({
       hours: 2,
       minutes: 18
