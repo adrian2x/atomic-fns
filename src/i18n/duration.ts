@@ -197,47 +197,47 @@ export class Duration {
   }
 
   /** Get the years. */
-  get years() {
+  get years(): number {
     return unitValue(this.values.years)
   }
 
   /** Get the quarters. */
-  get quarters() {
+  get quarters(): number {
     return unitValue(this.values.quarters)
   }
 
   /** Get the months. */
-  get months() {
+  get months(): number {
     return unitValue(this.values.months)
   }
 
   /** Get the weeks. */
-  get weeks() {
+  get weeks(): number {
     return unitValue(this.values.weeks)
   }
 
   /** Get the days. */
-  get days() {
+  get days(): number {
     return unitValue(this.values.days)
   }
 
   /** Get the hours. */
-  get hours() {
+  get hours(): number {
     return unitValue(this.values.hours)
   }
 
   /** Get the minutes. */
-  get minutes() {
+  get minutes(): number {
     return unitValue(this.values.minutes)
   }
 
   /** Get the seconds. */
-  get seconds() {
+  get seconds(): number {
     return unitValue(this.values.seconds)
   }
 
   /** Get the milliseconds. */
-  get milliseconds() {
+  get milliseconds(): number {
     return unitValue(this.values.milliseconds)
   }
 
@@ -257,7 +257,7 @@ export class Duration {
    * Add another duration. Returns a new Duration; keeps this instance's exact mode.
    * @param duration The amount to add.
    */
-  add(duration: number | DurationObject | Duration) {
+  add(duration: number | DurationObject | Duration): Duration {
     const dur = new Duration(duration)
     const result: DurationObject = {}
 
@@ -274,7 +274,7 @@ export class Duration {
    * Make this Duration shorter by the specified amount. Return a newly-constructed Duration.
    * @param duration The amount to subtract.
    */
-  subtract(duration: number | DurationObject | Duration) {
+  subtract(duration: number | DurationObject | Duration): Duration {
     const dur = new Duration(duration)
     return this.add(dur.negated())
   }
@@ -287,7 +287,7 @@ new Duration({ hours: 1, seconds: 30 }).negated().toObject()
 // { hours: -1, seconds: -30 }
 ```
    */
-  negated() {
+  negated(): Duration {
     const negated: DurationObject = {}
     for (const k of Object.keys(this.values) as OrderedUnit[]) {
       const v = this.values[k]
@@ -304,7 +304,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
 // { hours: 1, seconds: 30 }
 ```
    */
-  abs() {
+  abs(): Duration {
     const parts: DurationObject = {}
     for (const k of Object.keys(this.values) as OrderedUnit[]) {
       const v = this.values[k]
@@ -382,7 +382,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
    * Convert this duration to a single unit total.
    * @param unit Target unit.
    */
-  total(unit: DurationUnit) {
+  total(unit: DurationUnit): number {
     return this.#shiftTo(unit).get(unit)
   }
 
@@ -400,7 +400,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   }
 
   /** Shallow copy of the unit fields. */
-  toObject() {
+  toObject(): DurationObject {
     return { ...this.values }
   }
 
@@ -408,7 +408,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
    * Normalize overlapping units (e.g. 90 minutes -> 1 hour 30 minutes).
    * Returns a new Duration; the receiver is unchanged.
    */
-  normalize() {
+  normalize(): Duration {
     const vals = { ...this.values }
     normalizeValues(this.#matrix, vals)
     return new Duration(vals, this.#exact)
@@ -417,7 +417,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   /**
    * Normalize, shift to all units, and drop zeroes.
    */
-  rescale() {
+  rescale(): Duration {
     const dur = this.normalize().#shiftToAll()
     const vals = removeZeroes(dur.values)
     return new Duration(vals, this.#exact)
@@ -433,7 +433,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
    * @example new Duration({ minutes: 5 }).toString() // 'PT5M'
    * @example new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
    */
-  toISOString() {
+  toISOString(): string {
     let s = 'P'
     if (this.years !== 0) s += `${String(this.years)}Y`
     const months = this.months + this.quarters * 3
@@ -451,7 +451,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   }
 
   /** Same as {@link toISOString}. */
-  toString() {
+  toString(): string {
     return this.toISOString()
   }
 
@@ -491,7 +491,7 @@ Duration.fromISO('P5Y3M').toObject()
 // { years: 5, months: 3 }
 ```
    */
-  static fromISO(text: string) {
+  static fromISO(text: string): Duration {
     const [parsed] = parseISODuration(text)
     if (!parsed) {
       throw new ValueError(`The input "${text}" can't be parsed as ISO 8601`)

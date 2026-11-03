@@ -1,6 +1,18 @@
 {
   "name": "@atomic-stack/atomic-fns",
-  "version": "0.1.0",
-  "license": "MIT",
-  "exports": "./mod.ts"
+  "version": "2.0.0",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./mod.ts",
+    "./collections": "./collections/index.ts",
+    "./decimal": "./decimal/index.ts",
+    "./functools": "./functools/index.ts",
+    "./globals": "./globals/index.ts",
+    "./i18n": "./i18n/index.ts",
+    "./itertools": "./itertools/index.ts",
+    "./math": "./math/index.ts",
+    "./operators": "./operators/index.ts",
+    "./random": "./random/index.ts",
+    "./string": "./string/index.ts"
+  }
 }

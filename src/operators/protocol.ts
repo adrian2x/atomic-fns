@@ -16,7 +16,20 @@ const abs: unique symbol = Symbol.for('atomic-fns.abs')
 const boolKey: unique symbol = Symbol.for('atomic-fns.bool')
 
 /** Shared protocol symbols for operator dispatch. */
-export const protocol = Object.freeze({
+export const protocol: {
+  readonly compare: typeof compare
+  readonly equals: typeof equals
+  readonly rank: typeof rank
+  readonly clone: typeof clone
+  readonly add: typeof add
+  readonly sub: typeof sub
+  readonly mul: typeof mul
+  readonly div: typeof div
+  readonly mod: typeof mod
+  readonly pow: typeof pow
+  readonly abs: typeof abs
+  readonly bool: typeof boolKey
+} = Object.freeze({
   compare,
   equals,
   rank,

@@ -64,7 +64,7 @@ all([2, 4, 6], n => n > 1)
 ```
 @see {@link any}
  */
-export function all<T>(iterable: Iterable<T>, fn: Predicate<T> = bool) {
+export function all<T>(iterable: Iterable<T>, fn: Predicate<T> = bool): boolean {
   for (const item of iterable) {
     if (!fn(item)) return false
   }
@@ -89,14 +89,14 @@ any([1, 4, 5], n => n % 2 === 0)
 ```
 @see {@link all}
  */
-export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool) {
+export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool): boolean {
   for (const item of iterable) {
     if (fn(item)) return true
   }
   return false
 }
 
-export function chain<T>(...iterables: Iterable<T>[]) {
+export function chain<T>(...iterables: Iterable<T>[]): IteratorObject<T> {
   return iflatten(iterables)
 }
 

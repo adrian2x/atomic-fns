@@ -1,40 +1,87 @@
 {
   "name": "atomic-fns",
   "description": "Like Lodash, but for ESNext and with types. Stop shipping code built for browsers from 2015.",
-  "version": "1.1.7",
-  "files": [
-    "dist/*"
-  ],
+  "version": "2.0.0",
   "type": "module",
-  "module": "dist/index.js",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./collections": {
+      "types": "./dist/collections/index.d.ts",
+      "default": "./dist/collections/index.js"
+    },
+    "./decimal": {
+      "types": "./dist/decimal/index.d.ts",
+      "default": "./dist/decimal/index.js"
+    },
+    "./functools": {
+      "types": "./dist/functools/index.d.ts",
+      "default": "./dist/functools/index.js"
+    },
+    "./globals": {
+      "types": "./dist/globals/index.d.ts",
+      "default": "./dist/globals/index.js"
+    },
+    "./i18n": {
+      "types": "./dist/i18n/index.d.ts",
+      "default": "./dist/i18n/index.js"
+    },
+    "./itertools": {
+      "types": "./dist/itertools/index.d.ts",
+      "default": "./dist/itertools/index.js"
+    },
+    "./math": {
+      "types": "./dist/math/index.d.ts",
+      "default": "./dist/math/index.js"
+    },
+    "./operators": {
+      "types": "./dist/operators/index.d.ts",
+      "default": "./dist/operators/index.js"
+    },
+    "./random": {
+      "types": "./dist/random/index.d.ts",
+      "default": "./dist/random/index.js"
+    },
+    "./string": {
+      "types": "./dist/string/index.d.ts",
+      "default": "./dist/string/index.js"
+    }
+  },
   "scripts": {
-    "preversion": "npm test",
-    "version": "npm run build && npm run docs && git add -A dist",
-    "postversion": "git push && git push --tags",
-    "prepublishOnly": "npm run build",
-    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "tsc": "tsc -p . --declaration",
-    "tsc:w": "tsc -p . --declaration --watch",
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "build": "npm run lint && npm test && npm run tsc && npm run docs",
-    "docs": "typedoc",
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\" \"*.md\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\" \"*.md\"",
-    "test:tz": "for tz in UTC America/Los_Angeles America/New_York Asia/Kolkata Pacific/Kiritimati; do TZ=$tz vitest run tests/date.test.ts tests/format.test.ts tests/duration.test.ts || exit 1; done"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:tz": "for tz in UTC America/Los_Angeles America/New_York Asia/Kolkata Pacific/Kiritimati; do TZ=$tz vitest run tests/date.test.ts tests/format.test.ts tests/duration.test.ts || exit 1; done",
+    "lint:pkg": "publint && attw --pack . --profile esm-only",
+    "jsr:check": "node -e \"const a=require('./package.json').version,b=require('./src/jsr.json').version;if(a!==b){console.error('version mismatch',a,b);process.exit(1)}\" && cd src && jsr publish --dry-run --allow-dirty",
+    "docs": "typedoc",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run test:coverage && npm run build && npm run lint:pkg && npm run jsr:check && npm run test:tz"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.2",
     "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
+    "jsr": "^0.14.3",
     "prettier": "^3.9.10",
-    "typedoc": "^0.23.16",
+    "publint": "^0.3.25",
+    "typedoc": "^0.28.20",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
