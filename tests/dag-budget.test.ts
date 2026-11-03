@@ -14,7 +14,45 @@ function dag(depth: number): object {
   return x
 }
 
+const FLATTEN_REVISIT = 'input repeats shared objects more than 100000 times'
+
 describe('shared-reference DAG budgets', () => {
+  it('flatten depth-20 DAG throws the revisit error in < 50 ms', () => {
+    const src = dag(20)
+    const t0 = performance.now()
+    let err: unknown
+    try {
+      flatten(src)
+    } catch (e) {
+      err = e
+    }
+    expect(performance.now() - t0).toBeLessThan(50)
+    expect(err).toBeInstanceOf(RangeError)
+    expect((err as Error).message).toBe(FLATTEN_REVISIT)
+  })
+
+  it('flatten of a nested-array depth-20 DAG throws the revisit error in < 50 ms', () => {
+    let x: unknown[] = [1]
+    for (let i = 0; i < 20; i++) x = [x, x]
+    const t0 = performance.now()
+    let err: unknown
+    try {
+      flatten(x, true)
+    } catch (e) {
+      err = e
+    }
+    expect(performance.now() - t0).toBeLessThan(50)
+    expect(err).toBeInstanceOf(RangeError)
+    expect((err as Error).message).toBe(FLATTEN_REVISIT)
+  })
+
+  it('flatten of 10001 shared row objects works', () => {
+    const row = { x: 1 }
+    const out = flatten({ rows: new Array(10_001).fill(row) }) as Record<string, unknown>
+    expect(out['rows[0].x']).toBe(1)
+    expect(out['rows[10000].x']).toBe(1)
+  })
+
   it('deepEqual depth-40 DAG pair compares in < 50 ms', () => {
     const a = dag(40)
     const b = dag(40)
@@ -33,40 +71,34 @@ describe('shared-reference DAG budgets', () => {
     expect(canonicalKey(dag(40))).toBe(key)
   })
 
-  const REVISIT_MESSAGE = 'input repeats shared objects more than 10000 times'
-
-  describe.each([23, 40])('depth-%i DAG', (depth) => {
-    it('flatten throws the revisit error in < 20 ms', () => {
+  describe.each([23, 40])('depth-%i DAG merge preserves sharing', (depth) => {
+    it('merge completes in < 20 ms and keeps shared nodes', () => {
       const src = dag(depth)
       const t0 = performance.now()
-      expect(() => flatten(src)).toThrow(RangeError)
-      expect(() => flatten(src)).toThrow(REVISIT_MESSAGE)
-      expect((performance.now() - t0) / 2).toBeLessThan(20)
-    })
-
-    it('merge throws the revisit error in < 20 ms', () => {
-      const src = dag(depth)
-      const t0 = performance.now()
-      expect(() => merge({}, src)).toThrow(RangeError)
-      expect(() => merge({}, src)).toThrow(REVISIT_MESSAGE)
-      expect((performance.now() - t0) / 2).toBeLessThan(20)
-    })
-
-    it('matches throws the revisit error in < 20 ms', () => {
-      const src = dag(depth)
-      const t0 = performance.now()
-      expect(() => matches(src)(src)).toThrow(RangeError)
-      expect(() => matches(src)(src)).toThrow(REVISIT_MESSAGE)
-      expect((performance.now() - t0) / 2).toBeLessThan(20)
-    })
-
-    it('flatten of a nested-array DAG throws the revisit error in < 20 ms', () => {
-      let x: unknown[] = [1]
-      for (let i = 0; i < depth; i++) x = [x, x]
-      const t0 = performance.now()
-      expect(() => flatten(x, true)).toThrow(REVISIT_MESSAGE)
+      const out = merge({}, src) as { l: object; r: object }
       expect(performance.now() - t0).toBeLessThan(20)
+      let node: { l?: object; r?: object; v?: number } = out
+      for (let i = 0; i < depth; i++) {
+        expect(node.l).toBe(node.r)
+        node = node.l as { l?: object; r?: object; v?: number }
+      }
+      expect(node.v).toBe(1)
     })
+  })
+
+  it('matches depth-40 DAG shape and value in < 20 ms', () => {
+    const src = dag(40)
+    const t0 = performance.now()
+    expect(matches(src)(src)).toBe(true)
+    expect(performance.now() - t0).toBeLessThan(20)
+  })
+
+  it('merge of 10001 shared row objects works and preserves sharing', () => {
+    const row = { x: 1 }
+    const out = merge({}, { rows: new Array(10_001).fill(row) }) as { rows: object[] }
+    expect(out.rows).toHaveLength(10_001)
+    expect(out.rows[0]).toEqual({ x: 1 })
+    expect(out.rows[0]).toBe(out.rows[10_000])
   })
 
   it('merge of 1.2M distinct empty objects succeeds (first visits are unbounded)', () => {
@@ -75,10 +107,12 @@ describe('shared-reference DAG budgets', () => {
     expect(out.a).toHaveLength(1_200_000)
   })
 
-  it('a failed call does not leak revisit state into the next call', () => {
-    expect(() => merge({}, dag(23))).toThrow(REVISIT_MESSAGE)
+  it('a failed flatten does not leak revisit state into the next call', () => {
+    expect(() => flatten(dag(20))).toThrow(FLATTEN_REVISIT)
     const shared = {}
     expect(merge({}, { a: shared, b: shared })).toEqual({ a: {}, b: {} })
+    const out = merge({}, { a: shared, b: shared }) as { a: object; b: object }
+    expect(out.a).toBe(out.b)
   })
 
   it('Duration.round error echo for a depth-22 DAG builds in < 5 ms', () => {

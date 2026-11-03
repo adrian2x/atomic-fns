@@ -2,10 +2,16 @@
 export const MAX_NESTING_DEPTH = 1000
 
 /**
- * Max re-expansions of an already-expanded container per top-level merge / matches / flatten call
- * (shared-reference DAG bound). First visits are unbounded, so tree-shaped inputs stay linear.
+ * Max re-expansions of an already-expanded container when merge re-walks a shared source into a
+ * pre-existing target container. Fresh-copy merges memoize and stay linear.
  */
-export const MAX_SHARED_REVISITS = 10_000
+export const MAX_SHARED_REVISITS = 1_000_000
+
+/**
+ * Max re-expansions of an already-expanded container per top-level flatten call
+ * (shared-reference DAG bound). Output size is the number of paths.
+ */
+export const MAX_FLATTEN_SHARED_REVISITS = 100_000
 
 /**
  * Levels charged per nested collection hop (dispatch + hook body together).
@@ -29,13 +35,16 @@ export function setHookNestingCost(cost: number): void {
 }
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
-const REVISIT_ERROR = 'input repeats shared objects more than 10000 times'
+const MERGE_REVISIT_ERROR = 'input repeats shared objects more than 1000000 times'
+const FLATTEN_REVISIT_ERROR = 'input repeats shared objects more than 100000 times'
 
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
 let currentDepth = 0
 
 let revisitCount = 0
 let revisitGuardDepth = 0
+let revisitLimit = 0
+let revisitError = MERGE_REVISIT_ERROR
 let expanded = new WeakSet<object>()
 
 /**
@@ -110,15 +119,12 @@ export function getNestingDepth(): number {
   return currentDepth
 }
 
-/**
- * Run `fn` under a fresh expanded-container set and a revisit budget of {@link MAX_SHARED_REVISITS}.
- * Re-entrant calls share the outer set and budget. Exceeding the budget throws
- * `RangeError('input repeats shared objects more than 10000 times')`.
- */
-export function guardSharedRevisits<T>(fn: () => T): T {
+function withRevisitGuard<T>(fn: () => T, limit: number, error: string): T {
   if (revisitGuardDepth === 0) {
     revisitCount = 0
     expanded = new WeakSet<object>()
+    revisitLimit = limit
+    revisitError = error
   }
   revisitGuardDepth++
   try {
@@ -128,23 +134,45 @@ export function guardSharedRevisits<T>(fn: () => T): T {
     if (revisitGuardDepth === 0) {
       revisitCount = 0
       expanded = new WeakSet<object>()
+      revisitLimit = 0
     }
   }
 }
 
 /**
- * Record that container `obj` is being expanded under the active {@link guardSharedRevisits}
- * (no-op outside a guard). The first expansion is free; each later expansion of the same object
- * counts against {@link MAX_SHARED_REVISITS}.
+ * Run `fn` under a fresh expanded-container set and a revisit budget of {@link MAX_SHARED_REVISITS}
+ * (merge re-walks into pre-existing targets). Re-entrant calls share the outer set and budget.
  */
-export function noteExpanded(obj: object): void {
+export function guardSharedRevisits<T>(fn: () => T): T {
+  return withRevisitGuard(fn, MAX_SHARED_REVISITS, MERGE_REVISIT_ERROR)
+}
+
+/**
+ * Run `fn` under a fresh expanded-container set and a revisit budget of
+ * {@link MAX_FLATTEN_SHARED_REVISITS}.
+ */
+export function guardFlattenSharedRevisits<T>(fn: () => T): T {
+  return withRevisitGuard(fn, MAX_FLATTEN_SHARED_REVISITS, FLATTEN_REVISIT_ERROR)
+}
+
+/**
+ * Record that container `obj` is being expanded under the active revisit guard
+ * (no-op outside a guard). The first expansion is free; each later expansion of the same object
+ * counts `weight` against the active limit (default 1).
+ */
+export function noteExpanded(obj: object, weight = 1): void {
   if (revisitGuardDepth === 0) return
   if (!expanded.has(obj)) {
     expanded.add(obj)
     return
   }
-  revisitCount++
-  if (revisitCount > MAX_SHARED_REVISITS) {
-    throw new RangeError(REVISIT_ERROR)
+  revisitCount += weight
+  if (revisitCount > revisitLimit) {
+    throw new RangeError(revisitError)
   }
+}
+
+/** True when `obj` has already been expanded under the active revisit guard. */
+export function wasExpanded(obj: object): boolean {
+  return revisitGuardDepth !== 0 && expanded.has(obj)
 }

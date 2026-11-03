@@ -11,9 +11,10 @@ import {
   assertNestingDepth,
   enterNesting,
   exitNesting,
+  guardFlattenSharedRevisits,
   guardNesting,
-  guardSharedRevisits,
-  noteExpanded
+  noteExpanded,
+  wasExpanded
 } from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
 import { enumerate } from '../itertools/index.js'
@@ -219,54 +220,113 @@ matches({ a: undefined })({})
  * @param shape Partial shape to match against.
  * @returns Predicate that returns true when its argument matches `shape`.
  */
+/** Pairs `(shape, value)` already proven to match within one matches call. */
+type MatchProven = WeakMap<object, WeakSet<object>>
+
+/** Pairs on the active match path (cycle handling). */
+type MatchPending = WeakMap<object, Set<object>>
+
+function rememberMatch(proven: MatchProven, shape: object, obj: object): void {
+  let set = proven.get(shape)
+  if (set === undefined) {
+    set = new WeakSet()
+    proven.set(shape, set)
+  }
+  set.add(obj)
+}
+
+function isMatchProven(proven: MatchProven, shape: object, obj: object): boolean {
+  return proven.get(shape)?.has(obj) === true
+}
+
 export function matches(shape: unknown): (obj: unknown) => boolean {
   if (shape === null || typeof shape !== 'object') {
     return () => false
   }
   return function (obj) {
-    return guardSharedRevisits(() => guardNesting(() => matchDeep(shape, obj, true, 1)))
+    return guardNesting(() => matchDeep(shape, obj, true, 1, new WeakMap(), new WeakMap()))
   }
 }
 
-function matchDeep(shape: unknown, obj: unknown, top: boolean, depth: number): boolean {
+function matchDeep(
+  shape: unknown,
+  obj: unknown,
+  top: boolean,
+  depth: number,
+  pending: MatchPending,
+  proven: MatchProven
+): boolean {
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
   enterNesting()
+  let partners: Set<object> | undefined
   try {
-    noteExpanded(shape)
     assertNestingDepth(depth)
+    if (obj !== null && typeof obj === 'object') {
+      if (isMatchProven(proven, shape, obj)) return true
+      partners = pending.get(shape)
+      if (partners?.has(obj)) return true
+      if (partners === undefined) {
+        partners = new Set()
+        pending.set(shape, partners)
+      }
+      partners.add(obj)
+    }
+    let ok = false
     if (Array.isArray(shape)) {
-      if (shape.length === 0) return top || Array.isArray(obj)
-      if (!Array.isArray(obj)) return false
-      for (const item of shape) {
-        let found = false
-        for (const candidate of obj) {
-          if (matchDeep(item, candidate, false, depth + 1)) {
-            found = true
+      if (shape.length === 0) {
+        ok = top || Array.isArray(obj)
+      } else if (!Array.isArray(obj)) {
+        ok = false
+      } else {
+        ok = true
+        for (const item of shape) {
+          let found = false
+          for (const candidate of obj) {
+            if (matchDeep(item, candidate, false, depth + 1, pending, proven)) {
+              found = true
+              break
+            }
+          }
+          if (!found) {
+            ok = false
             break
           }
         }
-        if (!found) return false
       }
-      return true
-    }
-    if (isPlainObject(shape)) {
+    } else if (isPlainObject(shape)) {
       const shapeKeys = Object.keys(shape)
       if (shapeKeys.length === 0) {
-        return top || (obj !== null && typeof obj === 'object' && !Array.isArray(obj))
-      }
-      if (obj === null || typeof obj !== 'object') return false
-      const record = obj as Record<string, unknown>
-      for (const key of shapeKeys) {
-        const expected = shape[key]
-        if (expected === undefined) {
-          if (!Object.hasOwn(obj, key)) return false
+        ok = top || (obj !== null && typeof obj === 'object' && !Array.isArray(obj))
+      } else if (obj === null || typeof obj !== 'object') {
+        ok = false
+      } else {
+        const record = obj as Record<string, unknown>
+        ok = true
+        for (const key of shapeKeys) {
+          const expected = shape[key]
+          if (expected === undefined) {
+            if (!Object.hasOwn(obj, key)) {
+              ok = false
+              break
+            }
+          }
+          if (!matchDeep(expected, record[key], false, depth + 1, pending, proven)) {
+            ok = false
+            break
+          }
         }
-        if (!matchDeep(expected, record[key], false, depth + 1)) return false
       }
-      return true
+    } else {
+      ok = deepEqual(shape, obj)
     }
-    return deepEqual(shape, obj)
+    if (ok && obj !== null && typeof obj === 'object') {
+      rememberMatch(proven, shape, obj)
+    }
+    return ok
   } finally {
+    if (partners !== undefined && obj !== null && typeof obj === 'object') {
+      partners.delete(obj)
+    }
     exitNesting()
   }
 }
@@ -411,7 +471,7 @@ flatten({
 export function flatten<T>(arr: T[], depth?: boolean | number): T[]
 export function flatten(arr: object, depth?: boolean | number): object
 export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] | object {
-  return guardSharedRevisits(() =>
+  return guardFlattenSharedRevisits(() =>
     guardNesting(() => {
       if (Array.isArray(arr)) {
         const items = arr as T[]
@@ -470,47 +530,73 @@ function setFlatKey(result: Record<string, unknown>, key: string, value: unknown
   if (Object.hasOwn(result, key)) {
     throw new TypeError(`flatten produced duplicate key ${truncateForError(key)}`)
   }
-  defineData(result, key, value)
+  result[key] = value
 }
 
-function flattenObj(
-  obj: unknown,
-  prefix = '',
-  result: Record<string, unknown> = {},
-  seen = new WeakSet<object>(),
-  nesting = 1
-): Record<string, unknown> {
-  if (typeof obj === 'object' && obj !== null) {
-    enterNesting()
-    try {
-      assertNestingDepth(nesting)
-      if (seen.has(obj)) throw new ValueError('cyclic structure')
-      if (!isPlainObject(obj) && !Array.isArray(obj)) {
-        if (prefix) setFlatKey(result, prefix, obj)
-        return result
-      }
-      noteExpanded(obj)
-      seen.add(obj)
-      for (const i of Object.keys(obj)) {
-        assertFlattenableKey(i)
-        let pref = prefix
-        if (Array.isArray(obj)) {
-          pref = `${pref}[${i}]`
-        } else if (prefix) {
-          pref = `${prefix}.${i}`
-        } else {
-          pref = i
-        }
-        flattenObj((obj as Record<string, unknown>)[i], pref, result, seen, nesting + 1)
-      }
-      seen.delete(obj)
-      return result
-    } finally {
-      exitNesting()
+function flattenObj(root: unknown): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  if (root === null || typeof root !== 'object') return result
+  interface Frame {
+    obj: object
+    prefix: string
+    nesting: number
+    keys: string[]
+    index: number
+  }
+  const path: object[] = []
+  const stack: Frame[] = []
+
+  const pushContainer = (obj: object, prefix: string, nesting: number): void => {
+    assertNestingDepth(nesting)
+    for (const p of path) {
+      if (p === obj) throw new ValueError('cyclic structure')
     }
+    if (!isPlainObject(obj) && !Array.isArray(obj)) {
+      if (prefix) setFlatKey(result, prefix, obj)
+      return
+    }
+    const keys = Object.keys(obj)
+    // DAG fan-in: re-expanding a node whose children were already expanded would walk
+    // exponentially many paths. Charge those edges heavily so the shared-revisit budget
+    // trips before the walk becomes a multi-second DoS; tree-shaped and shallow shared
+    // leaves (e.g. 10001 identical row objects) keep weight 1.
+    let weight = 1
+    if (wasExpanded(obj)) {
+      for (const k of keys) {
+        const child = (obj as Record<string, unknown>)[k]
+        if (child !== null && typeof child === 'object' && wasExpanded(child)) {
+          weight += 256
+        }
+      }
+    }
+    noteExpanded(obj, weight)
+    path.push(obj)
+    stack.push({ obj, prefix, nesting, keys, index: 0 })
   }
 
-  if (prefix) setFlatKey(result, prefix, obj)
+  pushContainer(root, '', 1)
+
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1]
+    if (frame.index >= frame.keys.length) {
+      stack.pop()
+      path.pop()
+      continue
+    }
+    const key = frame.keys[frame.index++]
+    assertFlattenableKey(key)
+    const child = (frame.obj as Record<string, unknown>)[key]
+    const pref = Array.isArray(frame.obj)
+      ? `${frame.prefix}[${key}]`
+      : frame.prefix
+        ? `${frame.prefix}.${key}`
+        : key
+    if (child !== null && typeof child === 'object') {
+      pushContainer(child, pref, frame.nesting + 1)
+    } else if (pref) {
+      setFlatKey(result, pref, child)
+    }
+  }
   return result
 }
 

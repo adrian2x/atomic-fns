@@ -73,11 +73,13 @@ function mergeKey(
   if (key === 'constructor' && typeof tv === 'function') return
   if (sv === undefined && tv !== undefined) return
   if (isPlainObject(sv) || Array.isArray(sv)) {
-    if (seen.has(sv)) {
+    // Same container kind: merge into target. Differing array vs plain object: source replaces.
+    const intoExisting =
+      (Array.isArray(sv) && Array.isArray(tv)) || (isPlainObject(sv) && isPlainObject(tv))
+    if (!intoExisting && seen.has(sv)) {
       defineData(t, key, seen.get(sv))
       return
     }
-    // Same container kind: merge into target. Differing array vs plain object: source replaces.
     let base: object
     if (Array.isArray(sv)) {
       base = Array.isArray(tv) ? tv : []
@@ -86,9 +88,10 @@ function mergeKey(
     } else {
       base = {}
     }
-    seen.set(sv, base)
+    if (!intoExisting) {
+      seen.set(sv, base)
+    }
     mergeInto(base, sv, seen, depth)
-    seen.delete(sv)
     defineData(t, key, base)
   } else {
     defineData(t, key, sv)
@@ -119,9 +122,10 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: n
  * Writes via defineProperty. Skips undefined source values when the target already has a defined value.
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
- * Nesting deeper than 1000 levels throws `RangeError`. Re-expanding already-expanded shared
- * objects more than 10000 times (shared-reference DAGs) throws
- * `RangeError('input repeats shared objects more than 10000 times')`. On either throw,
+ * Nesting deeper than 1000 levels throws `RangeError`. Fresh source containers are memoized for
+ * the call so shared references stay shared in the output. Re-expanding a shared source into a
+ * pre-existing target container more than 1000000 times throws
+ * `RangeError('input repeats shared objects more than 1000000 times')`. On either throw,
  * `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.
