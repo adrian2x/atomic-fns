@@ -163,6 +163,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 - `isEmpty(fn)` ignores arity; a function is empty unless it has own enumerable properties.
 - `uniq` / `without` normalize `-0` to `+0` in results (native Set semantics).
 - `defaults` fills keys missing as own properties (including names like `toString`).
+- `titleCase` only title-cases the first letter of each word (rest unchanged). `capitalize` uses Unicode titlecase for digraphs (`ǆ` -> `ǅ`). `removeAccents` / `slugify` fold Latin ligatures, strip marks only from Latin letters, return NFC; non-Latin text is unchanged.
 
 ### Platform
 

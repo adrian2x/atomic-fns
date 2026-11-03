@@ -50,8 +50,27 @@ export function sentenceCase(s: string): string {
   return `${first.toLocaleUpperCase()}${rest}`
 }
 
+/** Unicode titlecase forms that differ from uppercase (Latin digraphs). */
+const TITLECASE_FIRST: Record<string, string> = {
+  ǆ: 'ǅ',
+  Ǆ: 'ǅ',
+  ǉ: 'ǈ',
+  Ǉ: 'ǈ',
+  ǌ: 'ǋ',
+  Ǌ: 'ǋ'
+}
+
+function titleCaseFirstChar(ch: string): string {
+  if (TITLECASE_FIRST[ch] !== undefined) return TITLECASE_FIRST[ch]
+  const upper = ch.toLocaleUpperCase()
+  // Multi-char uppercase (e.g. ß -> SS): titlecase is first upper + rest lower.
+  if (upper.length > 1) return upper[0] + upper.slice(1).toLocaleLowerCase()
+  return upper
+}
+
 /**
- * Converts the first code point of the given string to upper case and the rest to lower case.
+ * Converts the first code point of the given string to Unicode title case and the rest to lower case.
+ * Digraphs use titlecase mapping (`ǆ` -> `ǅ`, not `Ǆ`).
  * @param s The string to capitalize
  * @returns The capitalized string.
  * @example
@@ -63,7 +82,7 @@ capitalize('TEST')
  */
 export function capitalize(s: string): string {
   const { first, rest } = firstCodePoint(s)
-  return `${first.toLocaleUpperCase()}${rest.toLocaleLowerCase()}`
+  return `${titleCaseFirstChar(first)}${rest.toLocaleLowerCase()}`
 }
 
 /**
@@ -167,10 +186,31 @@ export function asciify(s: string): string {
   return out
 }
 
+/** Non-decomposable Latin letters folded like Lodash `deburr`. */
+const LATIN_FOLDS: Record<string, string> = {
+  Œ: 'OE',
+  œ: 'oe',
+  ß: 'ss',
+  ø: 'o',
+  Ø: 'O',
+  Ł: 'L',
+  ł: 'l',
+  đ: 'd',
+  Đ: 'D',
+  Æ: 'AE',
+  æ: 'ae',
+  þ: 'th',
+  Þ: 'TH'
+}
+
+const IS_MARK = /\p{M}/u
+const IS_LATIN = /\p{Script=Latin}/u
+
 /**
- * Replaces any accent characters in the string with non accents.
+ * Folds Latin accents and ligatures; strips combining marks only from Latin-script letters.
+ * Non-Latin text is unchanged. Result is NFC.
  * @param s The string
- * @returns The new string without accents
+ * @returns The new string without Latin accents
  * @example
 ```js
 removeAccents('Antoine de Saint-Exupéry')
@@ -178,11 +218,28 @@ removeAccents('Antoine de Saint-Exupéry')
 ```
  */
 export function removeAccents(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  let mapped = ''
+  for (const ch of s) {
+    mapped += LATIN_FOLDS[ch] ?? ch
+  }
+  const nfd = mapped.normalize('NFD')
+  let out = ''
+  let lastWasLatin = false
+  for (const ch of nfd) {
+    if (IS_MARK.test(ch)) {
+      if (lastWasLatin) continue
+      out += ch
+      continue
+    }
+    lastWasLatin = IS_LATIN.test(ch)
+    out += ch
+  }
+  return out.normalize('NFC')
 }
 
 /**
- * Capitalizes the first letter of every word in place, keeping punctuation and spacing.
+ * Title-cases the first letter of every word in place, keeping the rest of each word and
+ * punctuation/spacing as-is (`NASA` stays `NASA`).
  * @param s The string to capitalize
  * @returns The title cased string.
  * @example
@@ -194,7 +251,7 @@ titleCase('lord of the rings')
  */
 export function titleCase(s: string): string {
   if (!s) return s
-  return s.replace(WORDS_REGEX, (word) => capitalize(word))
+  return s.replace(WORDS_REGEX, (word) => sentenceCase(word))
 }
 
 /**
@@ -261,8 +318,8 @@ export function kebabCase(s: string): string {
 }
 
 /**
- * Returns a url-safe slug for the given string. Keeps Unicode letters and digits
- * after removing combining marks, joined with `-`.
+ * Returns a url-safe slug for the given string. Applies {@link removeAccents} (Latin-only),
+ * then joins runs of Unicode letters and digits with `-`. Non-Latin letters are preserved.
  * @param s The string
  * @returns A slug version of the string
  * @example

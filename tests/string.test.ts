@@ -6,6 +6,7 @@ describe('string', () => {
     expect(string.capitalize('test')).toBe('Test')
     expect(string.capitalize('𐐨abc').startsWith('𐐀')).toBe(true)
     expect(string.capitalize('')).toBe('')
+    expect(string.capitalize('ǆemal')).toBe('ǅemal')
   })
 
   it('isAlnum', () => {
@@ -38,6 +39,12 @@ describe('string', () => {
 
   it('removeAccents', () => {
     expect(string.removeAccents('Antoine de Saint-Exupéry')).toBe('Antoine de Saint-Exupery')
+    expect(string.removeAccents('Œuvre ß ø Ł đ Æ þ')).toBe('OEuvre ss o L d AE th')
+    expect(string.removeAccents('Crème Brûlée Ångström')).toBe('Creme Brulee Angstrom')
+    expect(string.removeAccents('й')).toBe('й')
+    expect(string.removeAccents('が')).toBe('が')
+    expect([...string.removeAccents('が')].length).toBe(1)
+    expect(string.removeAccents('a⃝ b︠')).toBe('a b')
   })
 
   it('words', () => {
@@ -57,6 +64,7 @@ describe('string', () => {
     expect(string.titleCase('what a sentence')).toBe('What A Sentence')
     expect(string.titleCase('hello, world')).toBe('Hello, World')
     expect(string.titleCase('')).toBe('')
+    expect(string.titleCase('NASA rocket fooBAR')).toBe('NASA Rocket FooBAR')
   })
 
   it('SPEC-R63 sentenceCase first code point', () => {
@@ -90,7 +98,9 @@ describe('string', () => {
     expect(string.slugify('equipment_class_name')).toBe('equipment-class-name')
     expect(string.slugify('equipment class name')).toBe('equipment-class-name')
     expect(string.slugify('Antoine de Saint-Exupéry')).toBe('Antoine-de-Saint-Exupery')
-    expect(string.slugify('Ægir og Ødin')).toBe('Ægir-og-Ødin')
+    expect(string.slugify('Ægir og Ødin')).toBe('AEgir-og-Odin')
+    expect(string.slugify('がぎ')).toBe('がぎ')
+    expect(string.slugify('Йога')).toBe('Йога')
     expect(string.slugify('')).toBe('')
   })
 })
