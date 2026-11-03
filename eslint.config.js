@@ -9,7 +9,12 @@ export default tseslint.config(
   {
     rules: {
       // Conflicts with Global rule forbidding non-null ! assertions.
-      '@typescript-eslint/non-nullable-type-assertion-style': 'off'
+      '@typescript-eslint/non-nullable-type-assertion-style': 'off',
+      // Override params kept for signature match (e.g. FrozenSet.add).
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_', varsIgnorePattern: '^_' }
+      ]
     }
   },
   prettier,

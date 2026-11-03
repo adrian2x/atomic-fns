@@ -20,10 +20,7 @@ export class Heap<T> extends ValueCollection<T> {
     super()
     this.#compare = compareFn
     this.#heap = Array.from(items)
-    const n = this.#heap.length
-    for (let parent = (n - 1) >> 1; parent >= 0; --parent) {
-      siftDown(this.#heap, parent, n, this.#heap[parent], this.#compare)
-    }
+    heapify(this.#heap, this.#compare)
   }
 
   get size(): number {
@@ -45,33 +42,15 @@ export class Heap<T> extends ValueCollection<T> {
    * @returns The new size.
    */
   push(item: T): number {
-    const heap = this.#heap
-    const i = heap.length
-    heap.length = i + 1
-    try {
-      siftUp(heap, i, item, this.#compare)
-    } catch (e) {
-      heap.length = i
-      throw e
-    }
-    return heap.length
+    heappush(this.#heap, item, this.#compare)
+    return this.#heap.length
   }
 
   /**
    * Remove and return the top element, or `undefined` when empty.
    */
   pop(): T | undefined {
-    const heap = this.#heap
-    if (heap.length === 0) return undefined
-    const top = heap[0]
-    if (heap.length === 1) {
-      heap.pop()
-      return top
-    }
-    const last = heap[heap.length - 1]
-    siftDown(heap, 0, heap.length - 1, last, this.#compare)
-    heap.pop()
-    return top
+    return heappop(this.#heap, this.#compare)
   }
 
   /**
@@ -85,7 +64,7 @@ export class Heap<T> extends ValueCollection<T> {
    * `true` when `item` is in the heap (SameValueZero).
    */
   has(item: T): boolean {
-    return indexOfSVZ(this.#heap, item) >= 0
+    return this.#heap.includes(item)
   }
 
   /**
@@ -93,7 +72,7 @@ export class Heap<T> extends ValueCollection<T> {
    */
   delete(item: T): boolean {
     const heap = this.#heap
-    const index = indexOfSVZ(heap, item)
+    const index = heap.findIndex((x) => sameValueZero(x, item))
     if (index < 0) return false
     if (index === 0) {
       this.pop()
@@ -111,15 +90,8 @@ export class Heap<T> extends ValueCollection<T> {
   }
 
   values(): IteratorObject<T> {
-    return Iterator.from(this.#heap)
+    return this.#heap.values()
   }
-}
-
-function indexOfSVZ<T>(arr: readonly T[], item: T): number {
-  for (let i = 0; i < arr.length; i++) {
-    if (sameValueZero(arr[i], item)) return i
-  }
-  return -1
 }
 
 /**

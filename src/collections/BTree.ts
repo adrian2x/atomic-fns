@@ -15,7 +15,6 @@ export interface EditResult<V, R = unknown> {
 
 /**
  * Leaf nodes and base class for internals.
- * Based on the `sorted-btree` implementation by David Piepgrass (MIT License).
  * @private
  */
 class BNode<K, V> {
@@ -26,6 +25,10 @@ class BNode<K, V> {
 
   get isLeaf() {
     return this.children === undefined
+  }
+
+  isInternal(): this is BNodeInternal<K, V> {
+    return this.children !== undefined
   }
 
   constructor(keys: K[] = [], values?: V[]) {
@@ -60,27 +63,23 @@ class BNode<K, V> {
     return this.keys[0]
   }
 
-  minPair(reusedArray: [K, V]): [K, V] | undefined {
+  minPair(): [K, V] | undefined {
     if (this.keys.length === 0) return undefined
-    reusedArray[0] = this.keys[0]
-    reusedArray[1] = this.values[0]
-    return reusedArray
+    return [this.keys[0], this.values[0]]
   }
 
-  maxPair(reusedArray: [K, V]): [K, V] | undefined {
+  maxPair(): [K, V] | undefined {
     if (this.keys.length === 0) return undefined
     const lastIndex = this.keys.length - 1
-    reusedArray[0] = this.keys[lastIndex]
-    reusedArray[1] = this.values[lastIndex]
-    return reusedArray
+    return [this.keys[lastIndex], this.values[lastIndex]]
   }
 
   clone(): BNode<K, V> {
     return new BNode<K, V>(this.keys.slice(0), this.values.slice(0))
   }
 
-  greedyClone(force?: boolean): BNode<K, V> {
-    return this.isShared && !force ? this : this.clone()
+  greedyClone(): BNode<K, V> {
+    return this.isShared ? this : this.clone()
   }
 
   get(key: K, defaultValue: V | undefined, tree: TreeState<K>): V | undefined {
@@ -88,35 +87,21 @@ class BNode<K, V> {
     return i < 0 ? defaultValue : this.values[i]
   }
 
-  getPairOrNextLower(
-    key: K,
-    cmp: (a: K, b: K) => number,
-    inclusive: boolean,
-    reusedArray: [K, V]
-  ): [K, V] | undefined {
+  getPairOrNextLower(key: K, cmp: (a: K, b: K) => number, inclusive: boolean): [K, V] | undefined {
     const i = this.indexOf(key, -1, cmp)
     const indexOrLower = i < 0 ? ~i - 1 : inclusive ? i : i - 1
     if (indexOrLower >= 0) {
-      reusedArray[0] = this.keys[indexOrLower]
-      reusedArray[1] = this.values[indexOrLower]
-      return reusedArray
+      return [this.keys[indexOrLower], this.values[indexOrLower]]
     }
     return undefined
   }
 
-  getPairOrNextHigher(
-    key: K,
-    cmp: (a: K, b: K) => number,
-    inclusive: boolean,
-    reusedArray: [K, V]
-  ): [K, V] | undefined {
+  getPairOrNextHigher(key: K, cmp: (a: K, b: K) => number, inclusive: boolean): [K, V] | undefined {
     const i = this.indexOf(key, -1, cmp)
     const indexOrHigher = i < 0 ? ~i : inclusive ? i : i + 1
     const keys = this.keys
     if (indexOrHigher < keys.length) {
-      reusedArray[0] = keys[indexOrHigher]
-      reusedArray[1] = this.values[indexOrHigher]
-      return reusedArray
+      return [keys[indexOrHigher], this.values[indexOrHigher]]
     }
     return undefined
   }
@@ -445,7 +430,8 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
         if (++nodeindex[level] < nodequeue[level].length) break
       }
       for (; level > 0; level--) {
-        const parent = nodequeue[level][nodeindex[level]] as BNodeInternal<K, V>
+        const parent = nodequeue[level][nodeindex[level]]
+        if (!parent.isInternal()) return
         nodequeue[level - 1] = parent.children
         nodeindex[level - 1] = 0
       }
@@ -475,7 +461,8 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
         if (--nodeindex[level] >= 0) break
       }
       for (; level > 0; level--) {
-        const parent = nodequeue[level][nodeindex[level]] as BNodeInternal<K, V>
+        const parent = nodequeue[level][nodeindex[level]]
+        if (!parent.isInternal()) return
         nodequeue[level - 1] = parent.children
         nodeindex[level - 1] = nodequeue[level - 1].length - 1
       }
@@ -491,14 +478,14 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     let nodequeue: BNode<K, V>[][]
     let nodeindex: number[]
 
-    if (nextnode.isLeaf) {
+    if (!nextnode.isInternal()) {
       nodequeue = EmptyArray
       nodeindex = EmptyArray
     } else {
       nodequeue = []
       nodeindex = []
-      for (let d = 0; !nextnode.isLeaf; d++) {
-        nodequeue[d] = (nextnode as BNodeInternal<K, V>).children
+      for (let d = 0; nextnode.isInternal(); d++) {
+        nodequeue[d] = nextnode.children
         nodeindex[d] =
           from.length === 0 ? 0 : nextnode.indexOf(from[0] as K, 0, this.#state.compare)
         if (nodeindex[d] >= nodequeue[d].length) return undefined
@@ -530,16 +517,15 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return this.#state.maxNodeSize
   }
 
-  clone(force = false): BTree<K, V> {
+  clone(): BTree<K, V> {
     const result = new BTree<K, V>(undefined, this.#state.compare, this.#state.maxNodeSize)
-    result.root = this.root.greedyClone(force)
+    result.root = this.root.greedyClone()
     result.#state.count = this.#state.count
     return result
   }
 
   toArray(): [K, V][] {
-    if (this.#state.count === 0) return []
-    return this.getRange(this.minKey() as K, this.maxKey() as K, true)
+    return [...this.entries()]
   }
 
   toString(): string {
@@ -549,27 +535,23 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   /**
    * Least entry with key strictly greater than `key`, or undefined.
    */
-  higher(key: K, reusedArray?: [K, V]): [K, V] | undefined {
-    const buf: [K, V] = reusedArray ?? ([undefined as K, undefined as V] as [K, V])
-    return this.root.getPairOrNextHigher(key, this.#state.compare, false, buf)
+  higher(key: K): [K, V] | undefined {
+    return this.root.getPairOrNextHigher(key, this.#state.compare, false)
   }
 
   /**
    * Greatest entry with key strictly less than `key`, or undefined.
    */
-  lower(key: K, reusedArray?: [K, V]): [K, V] | undefined {
-    const buf: [K, V] = reusedArray ?? ([undefined as K, undefined as V] as [K, V])
-    return this.root.getPairOrNextLower(key, this.#state.compare, false, buf)
+  lower(key: K): [K, V] | undefined {
+    return this.root.getPairOrNextLower(key, this.#state.compare, false)
   }
 
-  floor(key: K, reusedArray?: [K, V]): [K, V] | undefined {
-    const buf: [K, V] = reusedArray ?? ([undefined as K, undefined as V] as [K, V])
-    return this.root.getPairOrNextLower(key, this.#state.compare, true, buf)
+  floor(key: K): [K, V] | undefined {
+    return this.root.getPairOrNextLower(key, this.#state.compare, true)
   }
 
-  ceiling(key: K, reusedArray?: [K, V]): [K, V] | undefined {
-    const buf: [K, V] = reusedArray ?? ([undefined as K, undefined as V] as [K, V])
-    return this.root.getPairOrNextHigher(key, this.#state.compare, true, buf)
+  ceiling(key: K): [K, V] | undefined {
+    return this.root.getPairOrNextHigher(key, this.#state.compare, true)
   }
 
   /**
@@ -641,10 +623,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
       return typeof r === 'number' ? r : (r.done as R)
     } finally {
       let isShared = false
-      while (root.keys.length <= 1 && !root.isLeaf) {
+      while (root.keys.length <= 1 && root.isInternal()) {
         isShared = isShared || !!root.isShared
-        const internal = root as BNodeInternal<K, V>
-        this.root = root = root.keys.length === 0 ? emptyRoot() : internal.children[0]
+        this.root = root = root.keys.length === 0 ? emptyRoot() : root.children[0]
       }
       if (isShared) root.isShared = true
     }
@@ -665,7 +646,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     let height = -1
     while (node) {
       height++
-      node = node.isLeaf ? undefined : (node as BNodeInternal<K, V>).children[0]
+      node = node.isInternal() ? node.children[0] : undefined
     }
     return height
   }
@@ -714,10 +695,10 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     return new BNodeInternal<K, V>(children, this.keys.slice(0))
   }
 
-  override greedyClone(force?: boolean): BNode<K, V> {
-    if (this.isShared && !force) return this
+  override greedyClone(): BNode<K, V> {
+    if (this.isShared) return this
     const nu = new BNodeInternal<K, V>(this.children.slice(0), this.keys.slice(0))
-    for (let i = 0; i < nu.children.length; i++) nu.children[i] = nu.children[i].greedyClone(force)
+    for (let i = 0; i < nu.children.length; i++) nu.children[i] = nu.children[i].greedyClone()
     return nu
   }
 
@@ -725,12 +706,12 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     return this.children[0].minKey()
   }
 
-  override minPair(reusedArray: [K, V]): [K, V] | undefined {
-    return this.children[0].minPair(reusedArray)
+  override minPair(): [K, V] | undefined {
+    return this.children[0].minPair()
   }
 
-  override maxPair(reusedArray: [K, V]): [K, V] | undefined {
-    return this.children[this.children.length - 1].maxPair(reusedArray)
+  override maxPair(): [K, V] | undefined {
+    return this.children[this.children.length - 1].maxPair()
   }
 
   override get(key: K, defaultValue: V | undefined, tree: TreeState<K>): V | undefined {
@@ -742,29 +723,27 @@ class BNodeInternal<K, V> extends BNode<K, V> {
   override getPairOrNextLower(
     key: K,
     cmp: (a: K, b: K) => number,
-    inclusive: boolean,
-    reusedArray: [K, V]
+    inclusive: boolean
   ): [K, V] | undefined {
     const i = this.indexOf(key, 0, cmp)
     const children = this.children
-    if (i >= children.length) return this.maxPair(reusedArray)
-    const result = children[i].getPairOrNextLower(key, cmp, inclusive, reusedArray)
-    if (result === undefined && i > 0) return children[i - 1].maxPair(reusedArray)
+    if (i >= children.length) return this.maxPair()
+    const result = children[i].getPairOrNextLower(key, cmp, inclusive)
+    if (result === undefined && i > 0) return children[i - 1].maxPair()
     return result
   }
 
   override getPairOrNextHigher(
     key: K,
     cmp: (a: K, b: K) => number,
-    inclusive: boolean,
-    reusedArray: [K, V]
+    inclusive: boolean
   ): [K, V] | undefined {
     const i = this.indexOf(key, 0, cmp)
     const children = this.children
     const length = children.length
     if (i >= length) return undefined
-    const result = children[i].getPairOrNextHigher(key, cmp, inclusive, reusedArray)
-    if (result === undefined && i < length - 1) return children[i + 1].minPair(reusedArray)
+    const result = children[i].getPairOrNextHigher(key, cmp, inclusive)
+    if (result === undefined && i < length - 1) return children[i + 1].minPair()
     return result
   }
 
@@ -903,20 +882,26 @@ class BNodeInternal<K, V> extends BNode<K, V> {
   }
 
   override takeFromRight(rhs: BNode<K, V>) {
-    const r = rhs as BNodeInternal<K, V>
-    this.keys.push(r.keys[0])
-    this.children.push(r.children[0])
-    r.keys.splice(0, 1)
-    r.children.splice(0, 1)
+    if (!rhs.isInternal()) {
+      assert(false, 'sibling type mismatch')
+      return
+    }
+    this.keys.push(rhs.keys[0])
+    this.children.push(rhs.children[0])
+    rhs.keys.splice(0, 1)
+    rhs.children.splice(0, 1)
   }
 
   override takeFromLeft(lhs: BNode<K, V>) {
-    const l = lhs as BNodeInternal<K, V>
-    const ki = l.keys.length - 1
-    this.keys.unshift(l.keys[ki])
-    this.children.unshift(l.children[ki])
-    l.keys.pop()
-    l.children.pop()
+    if (!lhs.isInternal()) {
+      assert(false, 'sibling type mismatch')
+      return
+    }
+    const ki = lhs.keys.length - 1
+    this.keys.unshift(lhs.keys[ki])
+    this.children.unshift(lhs.children[ki])
+    lhs.keys.pop()
+    lhs.children.pop()
   }
 
   override forRange(
@@ -992,9 +977,13 @@ class BNodeInternal<K, V> extends BNode<K, V> {
   }
 
   override mergeSibling(rhs: BNode<K, V>, maxNodeSize: number) {
+    if (!rhs.isInternal()) {
+      assert(false, 'sibling type mismatch')
+      return
+    }
     const oldLength = this.keys.length
     this.keys.push(...rhs.keys)
-    const rhsChildren = (rhs as BNodeInternal<K, V>).children
+    const rhsChildren = rhs.children
     this.children.push(...rhsChildren)
 
     if (rhs.isShared && !this.isShared) {

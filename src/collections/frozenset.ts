@@ -9,14 +9,11 @@ import { protocol } from '../operators/index.js'
  * @template T
  */
 export class FrozenSet<T = unknown> extends Set<T> {
-  #frozen = false
-
   constructor(iterable?: Iterable<T> | null) {
     super()
     for (const x of iterable ?? []) {
       super.add(x)
     }
-    this.#frozen = true
   }
 
   /**
@@ -24,8 +21,7 @@ export class FrozenSet<T = unknown> extends Set<T> {
    * @throws {TypeError}
    */
   override add(_v: T): this {
-    if (this.#frozen) throw new TypeError('FrozenSet is immutable')
-    return super.add(_v)
+    throw new TypeError('FrozenSet is immutable')
   }
 
   /**
@@ -33,8 +29,7 @@ export class FrozenSet<T = unknown> extends Set<T> {
    * @throws {TypeError}
    */
   override delete(_v: T): boolean {
-    if (this.#frozen) throw new TypeError('FrozenSet is immutable')
-    return super.delete(_v)
+    throw new TypeError('FrozenSet is immutable')
   }
 
   /**
@@ -42,8 +37,7 @@ export class FrozenSet<T = unknown> extends Set<T> {
    * @throws {TypeError}
    */
   override clear(): void {
-    if (this.#frozen) throw new TypeError('FrozenSet is immutable')
-    super.clear()
+    throw new TypeError('FrozenSet is immutable')
   }
 
   /** A distinct `FrozenSet` with the same members. */

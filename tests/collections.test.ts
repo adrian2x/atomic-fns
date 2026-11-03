@@ -173,6 +173,15 @@ describe('collections', () => {
     expect(findLast(users, { age: 36 })).toBe(users[2])
   })
 
+  it('findLast property shorthand', () => {
+    const users = [
+      { user: 'barney', active: false },
+      { user: 'fred', active: true },
+      { user: 'pebbles', active: true }
+    ]
+    expect(findLast(users, 'active')).toBe(users[2])
+  })
+
   it('filter property and matches shorthand', () => {
     const users = [
       { user: 'barney', age: 36, active: true },

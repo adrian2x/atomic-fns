@@ -85,28 +85,16 @@ export class Trie extends ValueCollection<string> {
    * Yield words that start with `prefix`, in child insertion order, at most `limit`.
    */
   matches(prefix: string, limit = Infinity): IteratorObject<string> {
-    return Iterator.from(this.#matchGen(prefix, limit))
+    if (typeof prefix !== 'string' || limit <= 0) return Iterator.from([])
+    const start = this.#findNode(prefix)
+    if (!start) return Iterator.from([])
+    return Iterator.from(this.#walk(start, prefix)).take(limit)
   }
 
-  *#matchGen(prefix: string, limit: number): Generator<string> {
-    if (typeof prefix !== 'string' || limit <= 0) return
-    const start = this.#findNode(prefix)
-    if (!start) return
-    let yielded = 0
-    const stack: { node: TrieNode; path: string }[] = [{ node: start, path: prefix }]
-    while (stack.length > 0 && yielded < limit) {
-      const top = stack.pop()
-      if (top === undefined) break
-      const { node, path } = top
-      if (node.isWord) {
-        yield path
-        yielded++
-        if (yielded >= limit) return
-      }
-      const children = [...node.children.entries()].reverse()
-      for (const [c, child] of children) {
-        stack.push({ node: child, path: path + c })
-      }
+  *#walk(node: TrieNode, path: string): Generator<string> {
+    if (node.isWord) yield path
+    for (const [c, child] of node.children) {
+      yield* this.#walk(child, path + c)
     }
   }
 

@@ -128,6 +128,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 | Interfaces `Container`, `Equals`, `Comparable`, `Ordered`, `Reversible`; abstract `Mapping`, `Sequence`                  | `SetCollection`, `MapCollection`                                                |
 | Collection `empty()`, `length`; Mapping `add(key)`; LRUCache `remove`; SplayTree `top`; Heap `at`; Deque `remove`, `add` | JS protocol names below                                                         |
 | String-method protocol dispatch (`obj.eq` / `obj.compare` called automatically)                                          | symbol hooks or `adaptProtocol(Class)`                                          |
+| `cloneArray`, `cloneTypedArray`                                                                                          | `clone` / `.slice()`                                                            |
 
 ### Renamed
 

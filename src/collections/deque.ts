@@ -1,13 +1,6 @@
 import { sameValueZero } from '../operators/index.js'
 import { SetCollection } from './abc.js'
 
-type ArrayLikeConstructor = new (n: number) => { [i: number]: unknown; length: number }
-
-function nextPow2(n: number): number {
-  if (n <= 1) return 1
-  return 1 << (32 - Math.clz32(n - 1))
-}
-
 /**
  * Double-ended queue backed by a power-of-two ring buffer.
  * Grows by doubling when unbounded; with `maxlen`, evicts from the opposite end (Python deque).
@@ -20,7 +13,7 @@ export class Deque<T> extends SetCollection<T, number> {
   #head = 0
   #size = 0
   readonly #maxlen: number | undefined
-  readonly #arrType: ArrayLikeConstructor | undefined
+  readonly #arrType: (new (n: number) => { [i: number]: T; length: number }) | undefined
   readonly #empty: T
 
   /**
@@ -31,7 +24,7 @@ export class Deque<T> extends SetCollection<T, number> {
    */
   constructor(
     items?: Iterable<T> | null,
-    options?: { maxlen?: number; arrType?: ArrayLikeConstructor }
+    options?: { maxlen?: number; arrType?: new (n: number) => { [i: number]: T; length: number } }
   ) {
     super()
     const maxlen = options?.maxlen
@@ -70,9 +63,7 @@ export class Deque<T> extends SetCollection<T, number> {
   readonly [Symbol.toStringTag] = 'Deque'
 
   clear(): void {
-    for (let i = 0; i < this.#size; i++) {
-      this.#buf[this.#phys(i)] = this.#empty
-    }
+    this.#buf = this.#alloc(this.#cap)
     this.#head = 0
     this.#size = 0
   }
@@ -151,21 +142,14 @@ export class Deque<T> extends SetCollection<T, number> {
    * `true` when `x` is present (SameValueZero).
    */
   includes(x: T): boolean {
-    for (let i = 0; i < this.#size; i++) {
-      if (sameValueZero(this.#buf[this.#phys(i)], x)) return true
-    }
-    return false
+    return this.values().some((v) => sameValueZero(v, x))
   }
 
   /**
    * First element for which `fn` is truthy, or `undefined`.
    */
   find(fn: (v: T, i: number) => unknown): T | undefined {
-    for (let i = 0; i < this.#size; i++) {
-      const v = this.#buf[this.#phys(i)]
-      if (fn(v, i)) return v
-    }
-    return undefined
+    return this.values().find((v, i) => fn(v, i))
   }
 
   override forEach(cb: (value: T, key: number, coll: this) => void, thisArg?: unknown): void {
@@ -178,18 +162,14 @@ export class Deque<T> extends SetCollection<T, number> {
    * Copy of the elements in order.
    */
   toArray(): T[] {
-    const out = new Array<T>(this.#size)
-    for (let i = 0; i < this.#size; i++) out[i] = this.#buf[this.#phys(i)]
-    return out
+    return this.values().toArray()
   }
 
   /**
    * Copy of the elements in reverse order.
    */
   toReversed(): T[] {
-    const out = new Array<T>(this.#size)
-    for (let i = 0; i < this.#size; i++) out[i] = this.#buf[this.#phys(this.#size - 1 - i)]
-    return out
+    return this.values().toArray().toReversed()
   }
 
   override keys(): IteratorObject<number> {
@@ -221,7 +201,7 @@ export class Deque<T> extends SetCollection<T, number> {
   }
 
   #alloc(n: number): { [i: number]: T; length: number } {
-    if (this.#arrType) return new this.#arrType(n) as { [i: number]: T; length: number }
+    if (this.#arrType) return new this.#arrType(n)
     return new Array<T>(n)
   }
 
@@ -255,4 +235,9 @@ export class Deque<T> extends SetCollection<T, number> {
     this.#buf[this.#head] = x
     this.#size++
   }
+}
+
+function nextPow2(n: number): number {
+  if (n <= 1) return 1
+  return 1 << (32 - Math.clz32(n - 1))
 }

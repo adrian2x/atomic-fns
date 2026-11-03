@@ -21,10 +21,6 @@ export function isPlainObject(x: unknown): x is Record<string, unknown> {
   return proto === Object.prototype || proto === null
 }
 
-function isNonNullObject(x: unknown): x is object {
-  return x !== null && typeof x === 'object'
-}
-
 function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown } {
   return ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function'
 }
@@ -61,7 +57,8 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>): void {
  * @returns `target`
  */
 export function merge<T extends object>(target: T, ...sources: (object | null | undefined)[]): T {
-  if (!isNonNullObject(target)) {
+  const dest: unknown = target
+  if (dest === null || typeof dest !== 'object') {
     throw new TypeError('merge target must be an object')
   }
   const seen = new WeakMap<object, object>()
@@ -71,15 +68,13 @@ export function merge<T extends object>(target: T, ...sources: (object | null | 
   return target
 }
 
-function pathSegments(path: string): string[] {
-  return path.split('.')
-}
+const MISSING = Symbol('MISSING')
 
 function getAtPath(obj: unknown, parts: string[]): unknown {
   let cur: unknown = obj
   for (const p of parts) {
-    if (cur === null || (typeof cur !== 'object' && typeof cur !== 'function')) return undefined
-    if (!Object.hasOwn(cur, p)) return undefined
+    if (cur === null || (typeof cur !== 'object' && typeof cur !== 'function')) return MISSING
+    if (!Object.hasOwn(cur, p)) return MISSING
     cur = (cur as Record<string, unknown>)[p]
   }
   return cur
@@ -174,21 +169,12 @@ export function pick<T extends object>(
     return result
   }
   for (const path of paths) {
-    const parts = pathSegments(path)
-    if (!hasPath(obj, parts)) continue
-    setPickedPath(result, parts, getAtPath(obj, parts))
+    const parts = path.split('.')
+    const value = getAtPath(obj, parts)
+    if (value === MISSING) continue
+    setPickedPath(result, parts, value)
   }
   return result
-}
-
-function hasPath(obj: unknown, parts: string[]): boolean {
-  let cur: unknown = obj
-  for (const p of parts) {
-    if (cur === null || (typeof cur !== 'object' && typeof cur !== 'function')) return false
-    if (!Object.hasOwn(cur, p)) return false
-    cur = (cur as Record<string, unknown>)[p]
-  }
-  return true
 }
 
 /**
@@ -203,14 +189,9 @@ export function omit<T extends object>(
 ): Partial<T> {
   if (obj == null) return {}
   if (typeof paths === 'function') {
-    const result: object = {}
-    for (const key of Object.keys(obj)) {
-      const v = (obj as Record<string, unknown>)[key]
-      if (!paths(v, key)) defineData(result, key, v)
-    }
-    return result
+    return pick(obj, (v, k) => !paths(v, k))
   }
-  const omitPaths = paths.map(pathSegments)
+  const omitPaths = paths.map((path) => path.split('.'))
   if (isPlainObject(obj) || Array.isArray(obj)) {
     return omitClone(obj, omitPaths) as Partial<T>
   }
@@ -298,14 +279,4 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
   }
 
   return v
-}
-
-/** Clone an array; equivalent to `clone(arr, deep)`. */
-export function cloneArray<T>(arr: T[], deep = false): T[] {
-  return clone(arr, deep)
-}
-
-/** Shallow clone a typed array via `slice()`. */
-export function cloneTypedArray<T extends { slice(): T }>(ta: T): T {
-  return ta.slice()
 }

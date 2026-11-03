@@ -98,11 +98,7 @@ export abstract class ValueCollection<T> extends SetCollection<T, T> {
   }
 
   entries(): IteratorObject<[T, T]> {
-    return Iterator.from(this.#entryPairs())
-  }
-
-  *#entryPairs(): Generator<[T, T]> {
-    for (const v of this.values()) yield [v, v]
+    return this.values().map((v): [T, T] => [v, v])
   }
 }
 

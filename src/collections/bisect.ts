@@ -4,6 +4,25 @@
 
 import { compare, type Comparer } from '../operators/index.js'
 
+function search<T>(
+  arr: readonly T[],
+  x: T,
+  lo: number,
+  hi: number,
+  cmp: Comparer<T>,
+  right: boolean
+): number {
+  if (lo < 0) throw new RangeError('lo must be non-negative')
+  hi = Math.min(hi, arr.length)
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1
+    const goRight = right ? cmp(x, arr[mid]) >= 0 : cmp(arr[mid], x) < 0
+    if (goRight) lo = mid + 1
+    else hi = mid
+  }
+  return lo
+}
+
 /**
  * Return the leftmost insertion index for `x` in a sorted array.
  * @param arr Sorted array.
@@ -19,14 +38,7 @@ export function bisectLeft<T>(
   hi: number = arr.length,
   cmp: Comparer<T> = compare
 ): number {
-  if (lo < 0) throw new RangeError('lo must be non-negative')
-  hi = Math.min(hi, arr.length)
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1
-    if (cmp(arr[mid], x) < 0) lo = mid + 1
-    else hi = mid
-  }
-  return lo
+  return search(arr, x, lo, hi, cmp, false)
 }
 
 /**
@@ -44,14 +56,7 @@ export function bisect<T>(
   hi: number = arr.length,
   cmp: Comparer<T> = compare
 ): number {
-  if (lo < 0) throw new RangeError('lo must be non-negative')
-  hi = Math.min(hi, arr.length)
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1
-    if (cmp(x, arr[mid]) < 0) hi = mid
-    else lo = mid + 1
-  }
-  return lo
+  return search(arr, x, lo, hi, cmp, true)
 }
 
 /**
@@ -108,7 +113,6 @@ export function binarySearch<T>(
   hi: number = arr.length,
   cmp: Comparer<T> = compare
 ): number {
-  if (lo < 0) throw new RangeError('lo must be non-negative')
   hi = Math.min(hi, arr.length)
   const i = bisectLeft(arr, x, lo, hi, cmp)
   return i < hi && cmp(arr[i], x) === 0 ? i : -i - 1

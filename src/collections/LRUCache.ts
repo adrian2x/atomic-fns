@@ -26,11 +26,7 @@ export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
    * capacity evicts the least recently used entry.
    */
   set(key: K, value: V): this {
-    if (this.#items.has(key)) {
-      this.#items.delete(key)
-      this.#items.set(key, value)
-      return this
-    }
+    this.#items.delete(key)
     if (this.#items.size >= this.#capacity) {
       const oldest = this.#items.keys().next()
       if (!oldest.done) this.#items.delete(oldest.value)
@@ -80,14 +76,14 @@ export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
   readonly [Symbol.toStringTag] = 'LRUCache'
 
   keys(): IteratorObject<K> {
-    return Iterator.from(this.#items.keys())
+    return this.#items.keys()
   }
 
   values(): IteratorObject<V> {
-    return Iterator.from(this.#items.values())
+    return this.#items.values()
   }
 
   entries(): IteratorObject<[K, V]> {
-    return Iterator.from(this.#items.entries())
+    return this.#items.entries()
   }
 }
