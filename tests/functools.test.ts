@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, expectTypeOf, vi, beforeEach, afterEach } from 'vitest'
 import assert from 'node:assert/strict'
 import {
   curry,
@@ -38,6 +38,33 @@ describe('functools', () => {
       const mul2 = (x: number) => x * 2
       assert.equal(flow(add1, mul2)(3), 8)
       assert.equal(pipe(mul2, add1)(3), 7)
+    })
+
+    it('flow forwards all arguments to the first function', () => {
+      assert.equal(
+        flow(
+          (a: number, b: number) => a + b,
+          (x: number) => x * 2
+        )(1, 2),
+        6
+      )
+    })
+
+    it('flow forwards this to the first function', () => {
+      const obj = { n: 10 }
+      function add(this: { n: number }, a: number) {
+        return this.n + a
+      }
+      assert.equal(flow(add, (x: number) => x * 2).call(obj, 3), 26)
+    })
+
+    it('flow chains argument and return types', () => {
+      expectTypeOf(
+        flow(
+          (a: number, b: string) => a + b.length,
+          (n: number) => String(n)
+        )
+      ).toEqualTypeOf<(a: number, b: string) => string>()
     })
 
     it('SPEC-R58 compose applies right to left and does not mutate the argument list', () => {

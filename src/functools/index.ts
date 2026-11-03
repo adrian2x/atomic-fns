@@ -20,15 +20,16 @@ export type LooseFunction = (...args: unknown[]) => LooseFunction
 export function curry<A extends unknown[], R>(
   func: (...args: A) => R
 ): LooseFunction & ((...args: A) => R) {
-  const curried: LooseFunction = function (this: unknown, ...args: unknown[]) {
+  const curried = function (this: unknown, ...args: unknown[]): unknown {
     if (args.length >= func.length) {
-      return func.apply(this, args as A) as unknown as LooseFunction
+      return Reflect.apply(func, this, args)
     }
 
     return (...args2: unknown[]) => {
       return curried.apply(this, args.concat(args2))
     }
   }
+  // TypeScript cannot express finite variadic curry arity on a recursive helper
   return curried as LooseFunction & ((...args: A) => R)
 }
 
@@ -46,20 +47,62 @@ export function partial<A extends unknown[], R>(
   return (...rest: unknown[]) => fn(...([...args, ...rest] as A))
 }
 
+function pipeThrough(
+  thisArg: unknown,
+  fns: readonly ((...a: never[]) => unknown)[],
+  args: ArrayLike<unknown>
+): unknown {
+  let result: unknown
+  let first = true
+  for (const fn of fns) {
+    if (first) {
+      result = Reflect.apply(fn, thisArg, args)
+      first = false
+    } else {
+      result = Reflect.apply(fn, undefined, [result])
+    }
+  }
+  return result
+}
+
 /**
  * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from left to right.
- * @param args The set of functions to apply.
+ * The first function receives all call arguments (and `this`); each later function receives the previous result.
+ * @param fns The set of functions to apply.
  * @returns A new function that applies each given function on the result of the previous one.
  */
-export function flow<A extends unknown[]>(
-  ...fns: ((...args: A) => unknown)[]
-): (...args: A) => unknown {
-  return ((x: unknown) => {
-    for (const fn of fns) {
-      x = (fn as unknown as (v: unknown) => unknown)(x)
-    }
-    return x
-  }) as unknown as (...args: A) => unknown
+export function flow<A extends unknown[], R>(fn: (...a: A) => R): (...a: A) => R
+export function flow<A extends unknown[], B, C>(f1: (...a: A) => B, f2: (b: B) => C): (...a: A) => C
+export function flow<A extends unknown[], B, C, D>(
+  f1: (...a: A) => B,
+  f2: (b: B) => C,
+  f3: (c: C) => D
+): (...a: A) => D
+export function flow<A extends unknown[], B, C, D, E>(
+  f1: (...a: A) => B,
+  f2: (b: B) => C,
+  f3: (c: C) => D,
+  f4: (d: D) => E
+): (...a: A) => E
+export function flow<A extends unknown[], B, C, D, E, F>(
+  f1: (...a: A) => B,
+  f2: (b: B) => C,
+  f3: (c: C) => D,
+  f4: (d: D) => E,
+  f5: (e: E) => F
+): (...a: A) => F
+export function flow<A extends unknown[], B, C, D, E, F, G>(
+  f1: (...a: A) => B,
+  f2: (b: B) => C,
+  f3: (c: C) => D,
+  f4: (d: D) => E,
+  f5: (e: E) => F,
+  f6: (f: F) => G
+): (...a: A) => G
+export function flow(...fns: ((...a: never[]) => unknown)[]): (...a: never[]) => unknown {
+  return function (this: unknown, ...args: never[]): unknown {
+    return pipeThrough(this, fns, args)
+  }
 }
 
 /**
@@ -77,7 +120,10 @@ export const pipe = flow
 export function compose<A extends unknown[]>(
   ...args: ((...args: A) => unknown)[]
 ): (...args: A) => unknown {
-  return flow(...args.slice().reverse())
+  const reversed: ((...a: never[]) => unknown)[] = args.slice().reverse()
+  return function (this: unknown, ...callArgs: A): unknown {
+    return pipeThrough(this, reversed, callArgs)
+  }
 }
 
 /**
