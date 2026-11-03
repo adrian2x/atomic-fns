@@ -2,7 +2,7 @@
  * Object utilities: merge, pick, omit, clone.
  */
 
-import { arrayOwnIndices, isHugeSparseArray } from '../internal/arrayKeys.js'
+import { walkArray } from '../internal/arrayKeys.js'
 import {
   assertNestingDepth,
   enterNesting,
@@ -305,11 +305,9 @@ function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unk
           out[i] = omitWithTrie(list[i], child, pathPrefix.concat(String(i)))
         }
       }
-      if (isHugeSparseArray(list)) {
-        for (const key of arrayOwnIndices(list)) visit(Number(key))
-      } else {
-        for (let i = 0; i < list.length; i++) visit(i)
-      }
+      walkArray(list, (ev) => {
+        if (ev.kind === 'value') visit(ev.index)
+      })
       return out
     }
     if (isPlainObject(value) && !hasCallableOrAccessorToJSON(value)) {
@@ -629,13 +627,13 @@ function cloneDeepBody(v: object, map: WeakMap<object, unknown>): unknown {
   if (Array.isArray(v)) {
     const out: unknown[] = new Array(v.length)
     map.set(v, out)
-    if (isHugeSparseArray(v)) {
-      for (const key of arrayOwnIndices(v)) {
-        const i = Number(key)
-        out[i] = cloneInner(v[i], true, map)
-      }
+    const len = v.length
+    if (len > 1024) {
+      walkArray(v, (ev) => {
+        if (ev.kind === 'value') out[ev.index] = cloneInner(ev.value, true, map)
+      })
     } else {
-      for (let i = 0; i < v.length; i++) {
+      for (let i = 0; i < len; i++) {
         if (i in v) out[i] = cloneInner(v[i], true, map)
       }
     }

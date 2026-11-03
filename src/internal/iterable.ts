@@ -1,3 +1,5 @@
+import { assertNotHugeSparse } from './arrayKeys.js'
+
 function isIterable(x: unknown): x is Iterable<unknown> {
   if (x == null) return false
   return typeof (x as Iterable<unknown>)[Symbol.iterator] === 'function'
@@ -12,6 +14,10 @@ export function requireIterable<T>(value: unknown): Iterable<T> {
 /** Copy an iterable into a new array; non-iterables throw `TypeError` before allocating. */
 export function arrayFromIterable<T>(value: unknown): T[] {
   const it = requireIterable<T>(value)
+  if (Array.isArray(it)) {
+    assertNotHugeSparse(it)
+    return (it as T[]).slice()
+  }
   const out: T[] = []
   for (const x of it) out.push(x)
   return out
@@ -23,6 +29,9 @@ export function arrayFromIterableMap<U>(
   mapFn: (item: unknown, index: number) => U
 ): U[] {
   const it = requireIterable(value)
+  if (Array.isArray(it)) {
+    assertNotHugeSparse(it)
+  }
   const out: U[] = []
   let i = 0
   for (const x of it) {

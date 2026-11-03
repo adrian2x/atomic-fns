@@ -5,7 +5,13 @@
  */
 
 import { get, isIterable, isObject, keys, ValueError } from '../globals/index.js'
-import { arrayOwnIndices, isHugeSparseArray } from '../internal/arrayKeys.js'
+import {
+  assertNotHugeSparse,
+  arrayOwnIndices,
+  isHugeSparse,
+  walkArray,
+  type ArrayWalkEvent
+} from '../internal/arrayKeys.js'
 import { isCompactEmpty } from '../internal/compactEmpty.js'
 import { arrayFromIterable } from '../internal/iterable.js'
 import {
@@ -59,15 +65,12 @@ export function compact<T>(arr: T): Partial<T>
 export function compact<T>(arr: T | T[]): T[] | Partial<T> {
   if (!arr) return {}
   if (Array.isArray(arr)) {
-    if (isHugeSparseArray(arr)) {
-      const out: T[] = []
-      for (const key of arrayOwnIndices(arr)) {
-        const x = arr[Number(key)]
-        if (!isCompactEmpty(x)) out.push(x)
-      }
-      return out
-    }
-    return arr.filter((x) => !isCompactEmpty(x))
+    const out: T[] = []
+    walkArray(arr, (ev) => {
+      if (ev.kind === 'holeRun') return
+      if (!isCompactEmpty(ev.value)) out.push(ev.value as T)
+    })
+    return out
   }
   const result: Record<string, unknown> = {}
   for (const key of Object.keys(arr)) {
@@ -134,6 +137,17 @@ export function filter<T>(
   if (!arr) return []
   const predicate = toIteratee<T>(fn)
   const results: T[] = []
+  if (Array.isArray(arr)) {
+    walkArray(arr, (ev) => {
+      if (ev.kind === 'value') {
+        if (predicate(ev.value as T, ev.index, arr)) results.push(ev.value as T)
+        return
+      }
+      // Hole run: one undefined candidate (counts once).
+      if (predicate(undefined as T, ev.start, arr)) results.push(undefined as T)
+    })
+    return results
+  }
   forEach<T>(arr, (value, key) => {
     if (predicate(value, key, arr)) results.push(value)
   })
@@ -167,7 +181,24 @@ find(users, 'active').user
 export function find<T>(arr: T[] | object, fn: Iteratee<T> | object | PropertyKey): T | undefined {
   const it = toIteratee<T>(fn)
   if (Array.isArray(arr)) {
-    return (arr as T[]).find(it)
+    const state: { hit: boolean; result: T | undefined } = { hit: false, result: undefined }
+    walkArray(arr, (ev) => {
+      if (ev.kind === 'value') {
+        if (it(ev.value as T, ev.index, arr)) {
+          state.result = ev.value as T
+          state.hit = true
+          return false
+        }
+        return
+      }
+      if (it(undefined as T, ev.start, arr)) {
+        state.result = undefined
+        state.hit = true
+        return false
+      }
+    })
+    if (state.hit) return state.result
+    return undefined
   }
   if (isIterable(arr)) {
     let i = 0
@@ -291,14 +322,15 @@ function matchDeep(
       } else {
         ok = true
         for (const item of shape) {
-          let found = false
-          for (const candidate of obj) {
+          const state = { found: false }
+          walkArray(obj, (ev) => {
+            const candidate = ev.kind === 'value' ? ev.value : undefined
             if (matchDeep(item, candidate, false, depth + 1, pending, proven)) {
-              found = true
-              break
+              state.found = true
+              return false
             }
-          }
-          if (!found) {
+          })
+          if (!state.found) {
             ok = false
             break
           }
@@ -368,12 +400,12 @@ export function forEach<T>(
   fn: Iteratee<T>
 ): void {
   if (collection == null) return
-  if (Array.isArray(collection) && isHugeSparseArray(collection)) {
-    for (const key of arrayOwnIndices(collection)) {
-      const i = Number(key)
-      const res = fn(collection[i] as T, i, collection)
-      if (res === false) return
-    }
+  // Arrays: own indices only (holes skipped).
+  if (Array.isArray(collection)) {
+    walkArray(collection, (ev) => {
+      if (ev.kind !== 'value') return
+      if (fn(ev.value as T, ev.index, collection) === false) return false
+    })
     return
   }
   if (isIterable(collection)) {
@@ -439,17 +471,20 @@ export function forEachRight<T>(
   fn: Iteratee<T>
 ): void {
   if (collection == null) return
-  if (Array.isArray(collection) && isHugeSparseArray(collection)) {
-    const idxs = arrayOwnIndices(collection)
+  if (Array.isArray(collection)) {
+    const idxs: number[] = []
+    walkArray(collection, (ev) => {
+      if (ev.kind === 'value') idxs.push(ev.index)
+    })
     for (let i = idxs.length - 1; i >= 0; i--) {
-      const idx = Number(idxs[i])
+      const idx = idxs[i]
       const res = fn(collection[idx] as T, idx, collection)
       if (res === false) return
     }
     return
   }
-  if (Array.isArray(collection) || isIterable(collection)) {
-    const items = Array.isArray(collection) ? (collection as T[]) : arrayFromIterable<T>(collection)
+  if (isIterable(collection)) {
+    const items = arrayFromIterable<T>(collection)
     for (let i = items.length - 1; i >= 0; i--) {
       const res = fn(items[i], i, collection)
       if (res === false) return
@@ -529,7 +564,7 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
       depthLeft: depth,
       nesting: 1,
       index: 0,
-      sparseKeys: isHugeSparseArray(arr) ? arrayOwnIndices(arr) : null
+      sparseKeys: isHugeSparse(arr) ? arrayOwnIndices(arr) : null
     }
   ]
   const result: T[] = []
@@ -554,7 +589,7 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
         depthLeft: frame.depthLeft - 1,
         nesting: frame.nesting + 1,
         index: 0,
-        sparseKeys: isHugeSparseArray(value) ? arrayOwnIndices(value) : null
+        sparseKeys: isHugeSparse(value) ? arrayOwnIndices(value) : null
       })
     } else {
       result.push(value)
@@ -677,6 +712,7 @@ export function map<T, TResult>(
 ): TResult[] {
   const it = toIteratee(fn) as Iteratee<T, PropertyKey, TResult>
   if (Array.isArray(arr)) {
+    assertNotHugeSparse(arr)
     return (arr as T[]).map((x, i) => it(x, i, arr))
   }
   if (isIterable(arr)) {
@@ -740,10 +776,24 @@ export function findIndex<T>(
   }
   if (!length || start >= length) return -1
   const it = toIteratee<T>(fn)
-  for (; start < length; start++) {
-    if (it(arr[start], start, arr)) return start
-  }
-  return -1
+  let found = -1
+  walkArray(arr, (ev) => {
+    if (ev.kind === 'value') {
+      if (ev.index < start) return
+      if (it(ev.value as T, ev.index, arr)) {
+        found = ev.index
+        return false
+      }
+      return
+    }
+    if (ev.end <= start) return
+    const idx = Math.max(ev.start, start)
+    if (idx < ev.end && it(undefined as T, idx, arr)) {
+      found = idx
+      return false
+    }
+  })
+  return found
 }
 
 /**
@@ -811,8 +861,20 @@ export function findLastIndex<T>(
   if (!length || start < 0) return -1
   if (start >= length) start = length - 1
   const it = toIteratee<T>(fn)
-  for (; start >= 0; start--) {
-    if (it(list[start], start, list)) return start
+  const events: ArrayWalkEvent[] = []
+  walkArray(list, (ev) => {
+    events.push(ev)
+  })
+  for (let e = events.length - 1; e >= 0; e--) {
+    const ev = events[e]
+    if (ev.kind === 'value') {
+      if (ev.index > start) continue
+      if (it(ev.value as T, ev.index, list)) return ev.index
+    } else {
+      if (ev.start > start) continue
+      const idx = Math.min(ev.end - 1, start)
+      if (idx >= ev.start && it(undefined as T, idx, list)) return idx
+    }
   }
   return -1
 }
@@ -869,12 +931,22 @@ export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | object | PropertyKey
   const seen = new Set<unknown>()
   const result: T[] = []
   const it = toIteratee<T>(fn)
-  for (const x of arr) {
+  const add = (x: T): void => {
     const key = it(x)
-    if (seen.has(key)) continue
+    if (seen.has(key)) return
     seen.add(key)
     result.push(normalizeZero(x))
   }
+  if (Array.isArray(arr)) {
+    const flag = { sawHole: false }
+    walkArray(arr, (ev) => {
+      if (ev.kind === 'value') add(ev.value as T)
+      else flag.sawHole = true
+    })
+    if (flag.sawHole) add(undefined as T)
+    return result
+  }
+  for (const x of arr) add(x)
   return result
 }
 
@@ -1080,12 +1152,20 @@ export function remove<T>(
   if (!Array.isArray(arr)) throw new TypeError('remove expects an array')
   const pred = toIteratee<T>(predicate)
   const drop = new Set<number>()
-  for (let i = 0; i < arr.length; i++) {
-    if (pred(arr[i], i, arr)) drop.add(i)
-  }
+  walkArray(arr, (ev) => {
+    if (ev.kind === 'value') {
+      if (pred(ev.value as T, ev.index, arr)) drop.add(ev.index)
+      return
+    }
+    if (pred(undefined as T, ev.start, arr)) drop.add(ev.start)
+  })
   const removed: T[] = []
   let write = 0
-  for (let read = 0; read < arr.length; read++) {
+  const own: number[] = []
+  walkArray(arr, (ev) => {
+    if (ev.kind === 'value') own.push(ev.index)
+  })
+  for (const read of own) {
     if (drop.has(read)) {
       removed.push(arr[read])
     } else {
@@ -1123,5 +1203,18 @@ export function reject<T>(
  */
 export function without<T>(array: readonly T[], ...values: T[]): T[] {
   const exclude = new Set(values)
-  return array.filter((x) => !exclude.has(x)).map(normalizeZero)
+  if (!Array.isArray(array)) {
+    return [...array].filter((x) => !exclude.has(x)).map(normalizeZero)
+  }
+  const out: T[] = []
+  const flag = { sawHole: false }
+  walkArray(array as unknown[], (ev) => {
+    if (ev.kind === 'value') {
+      if (!exclude.has(ev.value as T)) out.push(normalizeZero(ev.value as T))
+      return
+    }
+    flag.sawHole = true
+  })
+  if (flag.sawHole && !exclude.has(undefined as T)) out.push(normalizeZero(undefined as T))
+  return out
 }

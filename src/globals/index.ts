@@ -16,7 +16,7 @@ export {
 } from './errors.js'
 export { hash, hashCode } from './hash.js'
 
-import { isCanonicalArrayIndex } from '../internal/arrayKeys.js'
+import { assertNotHugeSparse, isCanonicalArrayIndex } from '../internal/arrayKeys.js'
 import type { AnyFunction } from '../types.js'
 import { NotImplementedError } from './errors.js'
 
@@ -683,6 +683,10 @@ export function int(x: string | number, base = 10): number {
 export function list<T>(value?: Iterable<T> | null): T[] {
   if (value == null) return []
   if (!isIterable(value)) throw new TypeError('expected an iterable')
+  if (Array.isArray(value)) {
+    assertNotHugeSparse(value)
+    return (value as T[]).slice()
+  }
   const out: T[] = []
   for (const x of value) out.push(x)
   return out

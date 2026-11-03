@@ -1,4 +1,4 @@
-import { arrayOwnIndices, isHugeSparseArray } from './arrayKeys.js'
+import { walkArray } from './arrayKeys.js'
 
 const MAX_ECHO = 40
 
@@ -75,32 +75,22 @@ function writeEcho(
   if (Array.isArray(value)) {
     if (appendCapped(out, '[', limit)) return true
     stack.push(value)
-    if (isHugeSparseArray(value)) {
-      let first = true
-      for (const key of arrayOwnIndices(value)) {
-        if (!first && appendCapped(out, ',', limit)) {
-          stack.pop()
-          return true
-        }
-        first = false
-        if (writeEcho(value[Number(key)], out, limit, stack)) {
-          stack.pop()
-          return true
-        }
+    let first = true
+    const flag = { stopped: false }
+    walkArray(value, (ev) => {
+      if (ev.kind !== 'value') return
+      if (!first && appendCapped(out, ',', limit)) {
+        flag.stopped = true
+        return false
       }
-    } else {
-      for (let i = 0; i < value.length; i++) {
-        if (i > 0 && appendCapped(out, ',', limit)) {
-          stack.pop()
-          return true
-        }
-        if (writeEcho(value[i], out, limit, stack)) {
-          stack.pop()
-          return true
-        }
+      first = false
+      if (writeEcho(ev.value, out, limit, stack)) {
+        flag.stopped = true
+        return false
       }
-    }
+    })
     stack.pop()
+    if (flag.stopped) return true
     return appendCapped(out, ']', limit)
   }
 

@@ -5,6 +5,7 @@
  */
 
 import { decimal } from '../decimal/index.js'
+import { assertNotHugeSparse } from '../internal/arrayKeys.js'
 import { arrayFromIterableMap } from '../internal/iterable.js'
 import { gt, hasMethod, identity, lt, protocol } from '../operators/index.js'
 import type { Predicate } from '../types.js'
@@ -68,6 +69,7 @@ function extreme<T>(
   key: (x: T) => unknown,
   better: (a: unknown, b: unknown) => boolean
 ): T | undefined {
+  if (Array.isArray(iterable)) assertNotHugeSparse(iterable)
   const it = Iterator.from(iterable)
   const head = it.next()
   if (head.done) return undefined
@@ -120,6 +122,7 @@ mean(objects, o => o.n)
 export function mean(iterable: number[]): number
 export function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): number
 export function mean<T>(iterable: Iterable<T>, key: Predicate<T> = identity): number {
+  if (Array.isArray(iterable)) assertNotHugeSparse(iterable)
   const values = arrayFromIterableMap(iterable, (x) => Number(key(x as T)))
   return sum(values) / values.length
 }

@@ -2,7 +2,18 @@
  * Structural equality helpers.
  */
 
-import { arrayOwnIndices, isHugeSparseArray } from '../internal/arrayKeys.js'
+import { isHugeSparse, walkArray } from '../internal/arrayKeys.js'
+
+/** Sample endpoints and midpoints; only run the full sparse check when a hole is seen. */
+function looksHugeSparse(arr: unknown[]): boolean {
+  const n = arr.length
+  if (n <= 1024) return false
+  for (let s = 0; s < 8; s++) {
+    const i = Math.floor((s * (n - 1)) / 7)
+    if (!(i in arr)) return isHugeSparse(arr)
+  }
+  return false
+}
 import { enterNesting, exitNesting, guardNesting, withHookNesting } from '../internal/nesting.js'
 import { eq, sameValueZero } from './order.js'
 import { hasMethod, protocol } from './protocol.js'
@@ -144,18 +155,24 @@ function deepEqualChildren(a: object, b: object, pending: Pending, proven: Prove
   if (Array.isArray(a)) {
     const bb = b as unknown[]
     if (a.length !== bb.length) return false
-    if (isHugeSparseArray(a) || isHugeSparseArray(bb)) {
-      const keysA = arrayOwnIndices(a)
-      const keysB = arrayOwnIndices(bb)
+    const len = a.length
+    if (len > 1024 && (looksHugeSparse(a) || looksHugeSparse(bb))) {
+      const keysA: number[] = []
+      const keysB: number[] = []
+      walkArray(a, (ev) => {
+        if (ev.kind === 'value') keysA.push(ev.index)
+      })
+      walkArray(bb, (ev) => {
+        if (ev.kind === 'value') keysB.push(ev.index)
+      })
       if (keysA.length !== keysB.length) return false
       for (let i = 0; i < keysA.length; i++) {
         if (keysA[i] !== keysB[i]) return false
-        const idx = Number(keysA[i])
-        if (!deepEqualInner(a[idx], bb[idx], pending, proven)) return false
+        if (!deepEqualInner(a[keysA[i]], bb[keysB[i]], pending, proven)) return false
       }
       return true
     }
-    for (let i = 0; i < a.length; i++) {
+    for (let i = 0; i < len; i++) {
       if (!deepEqualInner(a[i], bb[i], pending, proven)) return false
     }
     return true

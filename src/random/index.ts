@@ -6,6 +6,7 @@
 
 import { ValueError } from '../globals/errors.js'
 import { isIterable, isObject } from '../globals/index.js'
+import { assertNotHugeSparse } from '../internal/arrayKeys.js'
 
 /**
  * Returns a random float in `[min, max)` (max exclusive).
@@ -55,6 +56,7 @@ export function sample<T>(arr: readonly T[], k: number): T[] {
  * @param coll Array or plain object.
  */
 export function shuffle<T>(coll: T[] | Record<string, T> | Iterable<T>): T[] {
+  if (Array.isArray(coll)) assertNotHugeSparse(coll)
   const arr = Array.isArray(coll)
     ? coll
     : isIterable(coll)
