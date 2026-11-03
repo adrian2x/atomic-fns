@@ -251,19 +251,31 @@ describe('functools', () => {
       assert.equal(d.flush(), 8)
     })
 
-    it('SPEC-R56 debounce wait < 0 treated as 0; maxWait < wait raised to wait', () => {
+    it('SPEC-R56 debounce maxWait < wait raised to wait', () => {
       const seen: string[] = []
       const d = debounce(
         (x: string) => {
           seen.push(x)
           return x
         },
-        -10,
-        { maxWait: -5 }
+        50,
+        { maxWait: 10 }
       )
-      d('now')
-      vi.advanceTimersByTime(0)
-      assert.deepEqual(seen, ['now'])
+      d('a')
+      d('b')
+      vi.advanceTimersByTime(50)
+      assert.deepEqual(seen, ['b'])
+    })
+
+    it('R14-D: debounce rejects waits outside setTimeout range', () => {
+      const nop = (): undefined => undefined
+      for (const wait of [2 ** 31, 1e10, Infinity, NaN, -1]) {
+        expect(() => debounce(nop, wait)).toThrow(RangeError)
+        expect(() => debounce(nop, wait)).toThrow('wait must be between 0 and 2147483647 ms')
+      }
+      expect(() => debounce(nop, 0)).not.toThrow()
+      expect(() => debounce(nop, 2147483647)).not.toThrow()
+      expect(() => debounce(nop, 10, { maxWait: Infinity })).toThrow(RangeError)
     })
 
     it('SPEC-R56 debounce returns last result on intermediate calls', () => {
@@ -282,6 +294,16 @@ describe('functools', () => {
     })
     afterEach(() => {
       vi.useRealTimers()
+    })
+
+    it('R14-D: throttle rejects waits outside setTimeout range', () => {
+      const nop = (): undefined => undefined
+      for (const wait of [2 ** 31, 1e10, Infinity, NaN, -1]) {
+        expect(() => throttle(nop, wait)).toThrow(RangeError)
+        expect(() => throttle(nop, wait)).toThrow('wait must be between 0 and 2147483647 ms')
+      }
+      expect(() => throttle(nop, 0)).not.toThrow()
+      expect(() => throttle(nop, 2147483647)).not.toThrow()
     })
 
     it('SPEC-R57 throttle leading and trailing with latest args', () => {
