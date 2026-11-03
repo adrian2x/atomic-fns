@@ -412,6 +412,16 @@ describe('Decimal ValueError truncation and immutable defaultPrecision', () => {
     }
   })
 
+  it('truncateForError cuts a 50 MB string before stringify', async () => {
+    const { truncateForError } = await import('../src/internal/truncate.js')
+    const huge = 'x'.repeat(50 * 1024 * 1024)
+    const start = performance.now()
+    const out = truncateForError(huge)
+    expect(performance.now() - start).toBeLessThan(20)
+    expect(out.endsWith('...')).toBe(true)
+    expect(out.length).toBeLessThan(100)
+  })
+
   it('defaultPrecision is immutable and stays 20', () => {
     expect(Decimal.defaultPrecision).toBe(20)
     expect(() => {

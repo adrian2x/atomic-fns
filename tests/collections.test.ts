@@ -320,6 +320,23 @@ describe('collections', () => {
     expect(out.a).not.toBe(subtree)
   })
 
+  it('pick ancestor check is linear for many object-valued sibling paths', () => {
+    const o: Record<string, object> = {}
+    const paths: string[] = []
+    for (let i = 0; i < 10_000; i++) {
+      o[`k${String(i)}`] = {}
+      paths.push(`k${String(i)}`)
+    }
+    const start = performance.now()
+    const out = pick(o, paths)
+    expect(performance.now() - start).toBeLessThan(50)
+    expect(Object.keys(out)).toHaveLength(10_000)
+  })
+
+  it('pick dedupe key uses JSON parts so NUL keys do not collide with dotted paths', () => {
+    expect(pick({ a: { b: 2 } }, ['a\u0000b', ['a', 'b']])).toEqual({ a: { b: 2 } })
+  })
+
   it('pick/omit: literal segment paths, array containers, no omitted getters', () => {
     expect(pick({ 'a.b': 1 }, [['a.b']])).toEqual({ 'a.b': 1 })
     expect(pick({ 'a.b': 1, a: { b: 2 } }, [['a.b']])).toEqual({ 'a.b': 1 })

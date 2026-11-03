@@ -283,29 +283,28 @@ export function pick<T extends object>(
   }
   const created = new WeakSet<object>([result])
   const seen = new Set<string>()
-  const covered: string[][] = []
+  const pickedObjects = new Set<string>()
   for (const path of paths) {
     const parts = normalizePath(path)
-    const key = parts.join('\0')
+    const key = JSON.stringify(parts)
     if (seen.has(key)) continue
-    if (covered.some((prefix) => isStrictPrefix(prefix, parts))) continue
-    seen.add(key)
+    if (hasPickedAncestor(parts, pickedObjects)) continue
     const value = getAtPath(obj, parts)
     if (value === MISSING) continue
+    seen.add(key)
     setPickedPath(result, parts, value, obj, created)
     if (value !== null && typeof value === 'object') {
-      covered.push(parts)
+      pickedObjects.add(key)
     }
   }
   return result
 }
 
-function isStrictPrefix(prefix: string[], parts: string[]): boolean {
-  if (prefix.length >= parts.length) return false
-  for (let i = 0; i < prefix.length; i++) {
-    if (prefix[i] !== parts[i]) return false
+function hasPickedAncestor(parts: string[], pickedObjects: Set<string>): boolean {
+  for (let i = 1; i < parts.length; i++) {
+    if (pickedObjects.has(JSON.stringify(parts.slice(0, i)))) return true
   }
-  return true
+  return false
 }
 
 /**
