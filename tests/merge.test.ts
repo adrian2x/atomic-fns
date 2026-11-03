@@ -118,4 +118,38 @@ describe('merge', () => {
     )
     expect(merge([], JSON.parse('{"0":1}') as object)).toEqual([1])
   })
+
+  it('POL-26: merge copies holey source arrays without throwing', () => {
+    const holey = [1]
+    holey.length = 3
+    holey[2] = 3
+    const intoEmpty = merge({}, { a: holey }) as { a: unknown[] }
+    expect(intoEmpty.a).toHaveLength(3)
+    expect(0 in intoEmpty.a).toBe(true)
+    expect(1 in intoEmpty.a).toBe(false)
+    expect(2 in intoEmpty.a).toBe(true)
+    expect(intoEmpty.a[0]).toBe(1)
+    expect(intoEmpty.a[2]).toBe(3)
+
+    const holey2 = [1]
+    holey2.length = 3
+    holey2[2] = 3
+    const intoExisting = merge({ a: [9] }, { a: holey2 }) as { a: unknown[] }
+    expect(intoExisting.a).toHaveLength(3)
+    expect(1 in intoExisting.a).toBe(false)
+    expect(intoExisting.a[0]).toBe(1)
+    expect(intoExisting.a[2]).toBe(3)
+
+    const byId: unknown[] = []
+    byId[3] = 'x'
+    const nested = merge({}, { byId }) as { byId: unknown[] }
+    expect(nested.byId).toHaveLength(4)
+    expect(0 in nested.byId).toBe(false)
+    expect(3 in nested.byId).toBe(true)
+    expect(nested.byId[3]).toBe('x')
+
+    expect(() => merge([], JSON.parse('{"4294967294":1}') as object)).toThrow(
+      'array index beyond length'
+    )
+  })
 })

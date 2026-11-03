@@ -184,6 +184,7 @@ describe('collections', () => {
       'array index beyond length'
     )
     expect(defaults([] as unknown[], JSON.parse('{"0":1}') as object)).toEqual([1])
+    expect(() => defaults([] as unknown[], { 0: 1, 2: 3 })).toThrow('array index beyond length')
   })
 
   it('defaults never assigns __proto__ as a prototype', () => {

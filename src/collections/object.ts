@@ -151,8 +151,20 @@ function mergeInto(
     assertNestingDepth(depth)
     if (t === Object.prototype || t === Function.prototype) return
     const rec = s as Record<string, unknown>
-    for (const key of Object.keys(s)) {
-      mergeKey(t, key, rec[key], seen, pairs, depth + 1)
+    if (Array.isArray(s) && Array.isArray(t)) {
+      // Extend first so source indices never trip the beyond-length rule; holes stay holes.
+      if (t.length < s.length) t.length = s.length
+      walkArray(s, (ev) => {
+        if (ev.kind === 'value') mergeKey(t, String(ev.index), ev.value, seen, pairs, depth + 1)
+      })
+      for (const key of Object.keys(s)) {
+        if (isCanonicalArrayIndex(key)) continue
+        mergeKey(t, key, rec[key], seen, pairs, depth + 1)
+      }
+    } else {
+      for (const key of Object.keys(s)) {
+        mergeKey(t, key, rec[key], seen, pairs, depth + 1)
+      }
     }
     const syms = Object.getOwnPropertySymbols(s)
     if (syms.length === 0) return
@@ -171,6 +183,10 @@ function mergeInto(
  * Writes via defineProperty. Skips undefined source values when the target already has a defined value.
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
+ * Array sources extend the target array to at least the source length (holes preserved) before
+ * merging indices, so holey arrays copy cleanly. Non-array sources that write a canonical
+ * array-index key beyond the target array's length throw `RangeError('array index beyond length')`
+ * (same rule as `set` / `defaults`).
  * Nesting deeper than 1000 levels throws `RangeError`. Each key gets its own fresh copy of a
  * shared source (the seen map is path-scoped for cycle protection only). Within one top-level
  * source argument, (source, target) pairs already merged are skipped (merging the same source

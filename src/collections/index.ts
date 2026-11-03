@@ -1000,6 +1000,10 @@ export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = 
  * `__proto__` which is defined as an own data property (reachable only on null-prototype targets).
  * Source objects are applied from left to right. Once a property is set, additional values of
  * the same property are ignored.
+ * When `object` is an array, a canonical array-index key from a non-array source beyond
+ * `object.length` throws `RangeError('array index beyond length')` (e.g.
+ * `defaults([], { 0: 1, 2: 3 })`). Unlike `merge`, `defaults` does not extend array length from
+ * a holey array source.
  * **Note:** This method mutates `object`.
 
  * @param {Object} object The destination object.
