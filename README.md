@@ -160,6 +160,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 - `clone` copies Node `Buffer`s and own enumerable symbol keys; `DataView` keeps offset/length over a full buffer copy; deep `Map` keeps key identity and deep-clones values; RegExp match arrays keep `index`/`input`/`groups`; class instances stay by reference.
 - `merge` copies own enumerable symbol keys. When a path's target and source containers differ in kind (array vs plain object), the source replaces the target.
 - `pick` / `omit` accept array-of-segments paths for literal keys (`[['a.b']]`); string paths still split on `.`. `pick` mirrors array vs object containers from the source. `omit` is O(keys + paths), never invokes getters of omitted keys.
+- `isEmpty(fn)` ignores arity; a function is empty unless it has own enumerable properties.
 
 ### Platform
 

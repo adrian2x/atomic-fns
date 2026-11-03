@@ -158,8 +158,12 @@ export function notNull(x: unknown): boolean {
   return x != null
 }
 
-/** Returns `true` for objects without length or falsy values. */
+/**
+ * Returns `true` for empty collections or falsy values. Functions are empty unless they have
+ * own enumerable properties (arity is irrelevant). Dates and non-zero numbers are not empty.
+ */
 export function isEmpty(x: unknown): boolean {
+  if (typeof x === 'function') return Object.keys(x).length === 0
   return len(x) === 0 ? true : !x
 }
 
