@@ -3,6 +3,8 @@ import { decimal, Decimal } from '../src/decimal/index.js'
 import { isqrt } from '../src/decimal/isqrt.js'
 import type { RoundingMode } from '../src/decimal/index.js'
 import { ValueError, ZeroDivisionError } from '../src/globals/errors.js'
+import { sorted } from '../src/itertools/index.js'
+import { max } from '../src/math/index.js'
 import { add, compare, eq } from '../src/operators/index.js'
 import { protocol } from '../src/operators/protocol.js'
 
@@ -431,5 +433,101 @@ describe('Decimal ValueError truncation and immutable defaultPrecision', () => {
     }).toThrow()
     expect(Decimal.defaultPrecision).toBe(20)
     expect(decimal(1).div(3).toString()).toBe('0.33333333333333333333')
+  })
+})
+
+describe('magnitude-first Decimal comparison', () => {
+  /** Pre-fix scale-by-exponent-gap compare (baseline for agreement). */
+  function oldCompareIE(ai: bigint, ae: number, bi: bigint, be: number): -1 | 0 | 1 {
+    if (ae === be) return ai < bi ? -1 : ai > bi ? 1 : 0
+    if (ae > be) {
+      const scaled = ai * 10n ** BigInt(ae - be)
+      return scaled < bi ? -1 : scaled > bi ? 1 : 0
+    }
+    const scaled = bi * 10n ** BigInt(be - ae)
+    return ai < scaled ? -1 : ai > scaled ? 1 : 0
+  }
+
+  function normalizeIE(i: bigint, e: number): { i: bigint; e: number } {
+    if (i === 0n) return { i: 0n, e: 0 }
+    const s = i.toString()
+    let zeros = 0
+    for (let k = s.length - 1; k >= 0 && s[k] === '0'; k--) zeros++
+    if (zeros === 0) return { i, e }
+    return { i: i / 10n ** BigInt(zeros), e: e + zeros }
+  }
+
+  /** Exact binary value of a finite number as decimal `(i, e)` (mirrors Decimal.toExact). */
+  function toExact(n: number): { i: bigint; e: number } {
+    const dv = new DataView(new ArrayBuffer(8))
+    dv.setFloat64(0, n)
+    const bits = dv.getBigUint64(0)
+    const exp = Number((bits >> 52n) & 0x7ffn)
+    const frac = bits & ((1n << 52n) - 1n)
+    const m = exp === 0 ? frac : frac | (1n << 52n)
+    const k = (exp === 0 ? 1 : exp) - 1075
+    const sign = bits >> 63n ? -1n : 1n
+    if (k >= 0) {
+      return normalizeIE(sign * m * 2n ** BigInt(k), 0)
+    }
+    return normalizeIE(sign * m * 5n ** BigInt(-k), k)
+  }
+
+  function fromIE(i: bigint, e: number): Decimal {
+    const n = normalizeIE(i, e)
+    return decimal(String(n.i) + 'e' + String(n.e))
+  }
+
+  it('1e6 random small-exponent pairs agree with scale-gap compare', { timeout: 60_000 }, () => {
+    let state = 0xdec23c3
+    const rand = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+      return state
+    }
+    const randCoeff = (): bigint => {
+      const bits = rand() % 40
+      let n = BigInt(rand())
+      if (bits > 32) n = (n << 32n) | BigInt(rand())
+      if (n === 0n) return 0n
+      if (rand() & 1) n = -n
+      return n
+    }
+    for (let i = 0; i < 1_000_000; i++) {
+      const ai = randCoeff()
+      const bi = randCoeff()
+      const ae = (rand() % 81) - 40
+      const be = (rand() % 81) - 40
+      const a = normalizeIE(ai, ae)
+      const b = normalizeIE(bi, be)
+      const expected = oldCompareIE(a.i, a.e, b.i, b.e)
+      expect(fromIE(a.i, a.e).compare(fromIE(b.i, b.e))).toBe(expected)
+
+      if ((i & 15) === 0) {
+        // bigint path: #numericCompare uses (bigint, e=0) without re-normalizing
+        expect(fromIE(a.i, a.e).compare(bi)).toBe(oldCompareIE(a.i, a.e, bi, 0))
+      }
+      if ((i & 31) === 0) {
+        // number path: exact-binary via toExact
+        const n = (rand() % 2001) - 1000 + (rand() % 1000) / 1000
+        if (Number.isFinite(n)) {
+          const ex = toExact(n)
+          expect(fromIE(a.i, a.e).compare(n)).toBe(oldCompareIE(a.i, a.e, ex.i, ex.e))
+        }
+      }
+    }
+  })
+
+  it('sorted of 200 extreme-exponent Decimals finishes under 50ms', { timeout: 2000 }, () => {
+    const vals = Array.from({ length: 200 }, (_, i) => decimal(i % 2 ? '1e-999999' : '1e999999'))
+    const start = performance.now()
+    expect(sorted(vals).length).toBe(200)
+    expect(performance.now() - start).toBeLessThan(50)
+  })
+
+  it('math.max over 900 extreme-exponent Decimals finishes under 50ms', { timeout: 2000 }, () => {
+    const vals = Array.from({ length: 900 }, (_, i) => decimal(i % 2 ? '1e-999999' : '1e999999'))
+    const start = performance.now()
+    expect(max(vals)?.eq('1e999999')).toBe(true)
+    expect(performance.now() - start).toBeLessThan(50)
   })
 })

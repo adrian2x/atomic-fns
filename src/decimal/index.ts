@@ -68,14 +68,44 @@ function toExact(n: number): { i: bigint; e: number } {
   return normalizeIE(sign * m * 5n ** BigInt(-k), k)
 }
 
+/** Digit count of a non-zero absolute bigint. */
+function digitLengthAbs(a: bigint): number {
+  return a.toString().length
+}
+
+/**
+ * Compare `ai * 10^ae` vs `bi * 10^be`.
+ * Sign first, then order of magnitude (`e + digits - 1`); scale only when magnitudes match
+ * (exponent gap then equals the digit-count difference).
+ */
 function compareIE(ai: bigint, ae: number, bi: bigint, be: number): -1 | 0 | 1 {
-  if (ae === be) return ai < bi ? -1 : ai > bi ? 1 : 0
-  if (ae > be) {
-    const scaled = ai * pow10(ae - be)
-    return scaled < bi ? -1 : scaled > bi ? 1 : 0
+  if (ai === 0n && bi === 0n) return 0
+  if (ai === 0n) return bi < 0n ? 1 : -1
+  if (bi === 0n) return ai < 0n ? -1 : 1
+  if (ai < 0n !== bi < 0n) return ai < 0n ? -1 : 1
+
+  const sign = ai < 0n ? -1 : 1
+  const aAbs = ai < 0n ? -ai : ai
+  const bAbs = bi < 0n ? -bi : bi
+  const aMag = ae + digitLengthAbs(aAbs) - 1
+  const bMag = be + digitLengthAbs(bAbs) - 1
+  if (aMag !== bMag) {
+    if (aMag < bMag) return sign < 0 ? 1 : -1
+    return sign < 0 ? -1 : 1
   }
-  const scaled = bi * pow10(be - ae)
-  return ai < scaled ? -1 : ai > scaled ? 1 : 0
+
+  let cmp: -1 | 0 | 1
+  if (ae === be) {
+    cmp = aAbs < bAbs ? -1 : aAbs > bAbs ? 1 : 0
+  } else if (ae > be) {
+    const scaled = aAbs * pow10(ae - be)
+    cmp = scaled < bAbs ? -1 : scaled > bAbs ? 1 : 0
+  } else {
+    const scaled = bAbs * pow10(be - ae)
+    cmp = aAbs < scaled ? -1 : aAbs > scaled ? 1 : 0
+  }
+  if (cmp === 0) return 0
+  return sign < 0 ? (cmp < 0 ? 1 : -1) : cmp
 }
 
 function roundQuotient(
@@ -173,7 +203,7 @@ export class Decimal {
   static #digitLength(n: bigint): number {
     const a = n < 0n ? -n : n
     if (a === 0n) return 0
-    return a.toString().length
+    return digitLengthAbs(a)
   }
 
   /**
