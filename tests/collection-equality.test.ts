@@ -67,6 +67,21 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
   it('Heap', () => {
     expect(deepEqual(new Heap([1, 2]), new Heap([1, 3]))).toBe(false)
     expect(deepEqual(new Heap([1, 2]), new Heap([1, 2]))).toBe(true)
+
+    const tieCmp = (a: [number, number], b: [number, number]) => a[0] - b[0]
+    const n = 10_000
+    const items = Array.from({ length: n }, (_, i) => [0, i] as [number, number])
+    const h1 = new Heap(items, tieCmp)
+    const h2 = new Heap(items.slice().reverse(), tieCmp)
+    const t0 = performance.now()
+    expect(deepEqual(h1, h2)).toBe(true)
+    expect(performance.now() - t0).toBeLessThan(200)
+    const h3 = new Heap(items, tieCmp)
+    h3.pop()
+    h3.push([0, -1])
+    const t1 = performance.now()
+    expect(deepEqual(h1, h3)).toBe(false)
+    expect(performance.now() - t1).toBeLessThan(200)
     interface Item {
       p: number
       id: string
