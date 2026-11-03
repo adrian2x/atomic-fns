@@ -384,6 +384,106 @@ describe('isqrt precision-doubling', () => {
   })
 })
 
+describe('R15-D1 exactTerminating linear', () => {
+  /** Pre-fix per-factor loop (baseline for agreement on small inputs). */
+  function oldExactTerminating(
+    i1: bigint,
+    e1: number,
+    i2: bigint,
+    e2: number
+  ): { i: bigint; e: number } | undefined | 'overflow' {
+    const sign = i1 < 0n !== i2 < 0n ? -1n : 1n
+    let n = i1 < 0n ? -i1 : i1
+    let d = i2 < 0n ? -i2 : i2
+    const gcd = (a: bigint, b: bigint): bigint => {
+      let x = a < 0n ? -a : a
+      let y = b < 0n ? -b : b
+      while (y !== 0n) {
+        const t = x % y
+        x = y
+        y = t
+      }
+      return x
+    }
+    const g = gcd(n, d)
+    n /= g
+    d /= g
+    let e = e1 - e2
+    while (d % 2n === 0n) {
+      d /= 2n
+      n *= 5n
+      e -= 1
+      if (n.toString().length > Decimal.MAX_DIGITS) return 'overflow'
+    }
+    while (d % 5n === 0n) {
+      d /= 5n
+      n *= 2n
+      e -= 1
+      if (n.toString().length > Decimal.MAX_DIGITS) return 'overflow'
+    }
+    if (d !== 1n) return undefined
+    return { i: sign * n, e }
+  }
+
+  it('dos-34: div by large 2/5 powers finishes within budget', { timeout: 2000 }, () => {
+    const s2 = (2n ** 16000n).toString()
+    expectFast(() => {
+      expect(() => decimal('1').div(s2)).toThrow(RangeError)
+    }, 50)
+    const s2big = (2n ** 33000n).toString()
+    expectFast(() => {
+      expect(() => decimal('1').div(s2big)).toThrow(RangeError)
+    }, 50)
+    const s5 = (5n ** 14000n).toString()
+    expectFast(() => {
+      // Exact path fits; default precision 20 rounds the tiny value to 0.
+      expect(decimal('1').div(s5).toString()).toBe('0')
+    }, 50)
+    const s3 = (3n * 2n ** 16000n).toString()
+    expectFast(() => {
+      expect(decimal('1').div(s3, { precision: 20 }).toString().length).toBeGreaterThan(0)
+    }, 50)
+  })
+
+  it('dos-34: exact results match old exactTerminating on 5000 small cases', () => {
+    let state = 0xdec15d1
+    const rand = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+      return state
+    }
+    for (let i = 0; i < 5000; i++) {
+      const a = BigInt((rand() % 10_000) + 1) * (rand() & 1 ? -1n : 1n)
+      const twos = rand() % 20
+      const fives = rand() % 12
+      const other = rand() % 5 === 0 ? 3n : 1n
+      const b = 2n ** BigInt(twos) * 5n ** BigInt(fives) * other * BigInt((rand() % 50) + 1)
+      const ae = (rand() % 21) - 10
+      const be = (rand() % 21) - 10
+      const old = oldExactTerminating(a, ae, b, be)
+      let got: string | undefined
+      let threw = false
+      try {
+        got = decimal(String(a) + 'e' + String(ae))
+          .div(String(b) + 'e' + String(be), { precision: 20 })
+          .toString()
+      } catch {
+        threw = true
+      }
+      if (old === 'overflow') {
+        expect(threw).toBe(true)
+      } else if (old === undefined) {
+        // Non-terminating: rounded path; just ensure it returns a finite string.
+        expect(threw).toBe(false)
+        expect(got).toBeDefined()
+      } else {
+        expect(threw).toBe(false)
+        const exact = decimal(String(old.i) + 'e' + String(old.e))
+        expect(decimal(got as string).eq(exact.round(20))).toBe(true)
+      }
+    }
+  })
+})
+
 describe('Decimal.MAX_DIGITS', () => {
   it('R13-F2: probe wide ops throw before bigint work', () => {
     expectFast(() => {

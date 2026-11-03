@@ -428,10 +428,63 @@ export class Decimal {
     return Decimal.#fromIE(q, -precision)
   }
 
+  /** Count trailing zero bits of a positive bigint (factors of 2) without digit strings. */
+  static #trailingZeros2(d: bigint): number {
+    if ((d & 1n) !== 0n) return 0
+    let x = d
+    let tz = 0
+    while ((x & 0xffffn) === 0n) {
+      x >>= 16n
+      tz += 16
+    }
+    if ((x & 0xffn) === 0n) {
+      x >>= 8n
+      tz += 8
+    }
+    if ((x & 0xfn) === 0n) {
+      x >>= 4n
+      tz += 4
+    }
+    if ((x & 0x3n) === 0n) {
+      x >>= 2n
+      tz += 2
+    }
+    if ((x & 1n) === 0n) tz += 1
+    return tz
+  }
+
+  /**
+   * Divide out all factors of 5 from a positive bigint via large powers (repeated squaring).
+   * Returns the cofactor and the factor count.
+   */
+  static #stripFactors5(d: bigint): { rest: bigint; count: number } {
+    if (d % 5n !== 0n) return { rest: d, count: 0 }
+    const powers: bigint[] = [5n]
+    for (;;) {
+      const last = powers[powers.length - 1]
+      const next = last * last
+      if (next > d) break
+      powers.push(next)
+      if (powers.length > 20) break
+    }
+    let rest = d
+    let count = 0
+    for (let k = powers.length - 1; k >= 0; k--) {
+      const pk = powers[k]
+      const step = 1 << k
+      while (rest % pk === 0n) {
+        rest /= pk
+        count += step
+      }
+    }
+    return { rest, count }
+  }
+
   /**
    * Exact terminating quotient of coefficients, or `undefined` when the denominator has a
    * prime factor other than 2 or 5 (after cancelling gcd). Exponent is adjusted; coefficient
-   * growth is capped at {@link Decimal.MAX_DIGITS}.
+   * growth is capped at {@link Decimal.MAX_DIGITS}. Factors of 2/5 are stripped in bulk and
+   * the result digit count is estimated before a single multiply (no digit counts in a loop).
    */
   static #exactTerminating(
     i1: bigint,
@@ -445,24 +498,27 @@ export class Decimal {
     const g = gcdBig(n, d)
     n /= g
     d /= g
-    let e = e1 - e2
-    while (d % 2n === 0n) {
-      d /= 2n
-      n *= 5n
-      e -= 1
-      if (Decimal.#digitLength(n) > Decimal.MAX_DIGITS) {
-        throw new RangeError('result exceeds 10000 digits')
-      }
-    }
-    while (d % 5n === 0n) {
-      d /= 5n
-      n *= 2n
-      e -= 1
-      if (Decimal.#digitLength(n) > Decimal.MAX_DIGITS) {
-        throw new RangeError('result exceeds 10000 digits')
-      }
-    }
+    const twos = Decimal.#trailingZeros2(d)
+    if (twos > 0) d >>= BigInt(twos)
+    const fives = Decimal.#stripFactors5(d)
+    d = fives.rest
     if (d !== 1n) return undefined
+    const a = twos
+    const b = fives.count
+    const e = e1 - e2 - a - b
+    if (a > 0 || b > 0) {
+      // digits(n * 5^a * 2^b) <= digits(n) + floor(a*log10(5) + b*log10(2)) + 1
+      const nDigits = Decimal.#digitLength(n)
+      const growth = Math.floor(a * Math.log10(5) + b * Math.log10(2)) + 1
+      if (nDigits + growth - 1 > Decimal.MAX_DIGITS) {
+        throw new RangeError('result exceeds 10000 digits')
+      }
+      if (a > 0) n *= 5n ** BigInt(a)
+      if (b > 0) n *= 2n ** BigInt(b)
+      if (Decimal.#digitLength(n) > Decimal.MAX_DIGITS) {
+        throw new RangeError('result exceeds 10000 digits')
+      }
+    }
     return { i: sign * n, e }
   }
 
