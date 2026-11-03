@@ -4,20 +4,20 @@ import { SortedTree } from '../src/collections/SortedTree.js'
 
 describe('SortedTree', () => {
   it('empty', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     assert(tree.empty())
     assert(tree.size === 0)
   })
 
   it('initialized', () => {
-    let entries: Array<[number, number]> = [
+    const entries: Array<[number, number]> = [
       [5, 5],
       [4, 4],
       [3, 3],
       [1, 1],
       [2, 2]
     ]
-    let tree = new SortedTree(entries)
+    const tree = new SortedTree(entries)
     assert(!tree.empty())
     assert(tree.size === 5)
     entries.sort((x, y) => x[0] - y[0])
@@ -28,7 +28,7 @@ describe('SortedTree', () => {
   })
 
   it('add', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
       assert(tree.get(i) === null)
@@ -38,7 +38,7 @@ describe('SortedTree', () => {
   })
 
   it('get', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
       assert(tree.get(i) === i)
@@ -48,7 +48,7 @@ describe('SortedTree', () => {
   })
 
   it('set', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
       assert(tree.get(i) === i)
@@ -63,7 +63,7 @@ describe('SortedTree', () => {
   })
 
   it('has', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 100; i > 0; i--) {
       tree.add(i)
       assert(tree.has(i))
@@ -72,7 +72,7 @@ describe('SortedTree', () => {
   })
 
   it('min', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
     }
@@ -80,7 +80,7 @@ describe('SortedTree', () => {
   })
 
   it('max', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
     }
@@ -88,7 +88,7 @@ describe('SortedTree', () => {
   })
 
   it('delete', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     tree.add(42)
     assert(tree.contains(42))
     assert(tree.delete(42) === true)
@@ -97,7 +97,7 @@ describe('SortedTree', () => {
   })
 
   it('clear', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 1; i <= 5; i++) {
       tree.add(i)
       assert(tree.contains(i))
@@ -111,7 +111,7 @@ describe('SortedTree', () => {
   })
 
   it('freeze', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
     }
@@ -121,8 +121,8 @@ describe('SortedTree', () => {
   })
 
   it('reversed', () => {
-    let tree = new SortedTree()
-    let entries: any[] = []
+    const tree = new SortedTree()
+    const entries: any[] = []
     for (let i = 100; i > 0; i--) {
       tree.set(i, i)
       entries.push([i, i])
@@ -131,7 +131,7 @@ describe('SortedTree', () => {
   })
 
   it('keys', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i * 2)
     }
@@ -139,7 +139,7 @@ describe('SortedTree', () => {
   })
 
   it('values', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i * 2)
     }
@@ -147,7 +147,7 @@ describe('SortedTree', () => {
   })
 
   it('entries', () => {
-    let tree = new SortedTree()
+    const tree = new SortedTree()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i * 2)
     }

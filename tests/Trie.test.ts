@@ -4,14 +4,14 @@ import { Trie } from '../src/collections/Trie.js'
 
 describe('Trie', () => {
   it('empty', () => {
-    let tree = new Trie()
+    const tree = new Trie()
     assert(tree.empty())
     assert(tree.size === 0)
   })
 
   it('add', () => {
-    let tree = new Trie()
-    let words = ['cat', 'can', 'dog', 'dark', 'an']
+    const tree = new Trie()
+    const words = ['cat', 'can', 'dog', 'dark', 'an']
     for (const w of words) {
       tree.add(w)
       assert(tree.contains(w))
@@ -19,30 +19,30 @@ describe('Trie', () => {
   })
 
   it('size', () => {
-    let words = ['cat', 'can', 'dog', 'dark', 'an']
-    let tree = new Trie(words)
+    const words = ['cat', 'can', 'dog', 'dark', 'an']
+    const tree = new Trie(words)
     assert(tree.size === words.length)
   })
 
   it('contains', () => {
-    let words = ['cat', 'can', 'dog', 'dark', 'an']
-    let tree = new Trie(words)
+    const words = ['cat', 'can', 'dog', 'dark', 'an']
+    const tree = new Trie(words)
     for (const w of words) {
       assert(tree.contains(w))
     }
   })
 
   it('matches', () => {
-    let words = ['cat', 'can', 'dog', 'dark', 'dam', 'an']
-    let tree = new Trie(words)
+    const words = ['cat', 'can', 'dog', 'dark', 'dam', 'an']
+    const tree = new Trie(words)
     assert.deepEqual([...tree.matches('ca')], ['cat', 'can'])
     assert.deepEqual([...tree.matches('da')], ['dark', 'dam'])
     assert.deepEqual([...tree.matches('d')], ['dog', 'dark', 'dam'])
   })
 
   it('remove', () => {
-    let words = ['cat', 'can', 'dog', 'dark', 'an']
-    let tree = new Trie(words)
+    const words = ['cat', 'can', 'dog', 'dark', 'an']
+    const tree = new Trie(words)
     for (const w of words) {
       if (w.startsWith('c')) {
         assert(tree.remove(w))
@@ -54,8 +54,8 @@ describe('Trie', () => {
   })
 
   it('clear', () => {
-    let words = ['cat', 'can', 'dog', 'dark', 'an']
-    let tree = new Trie(words)
+    const words = ['cat', 'can', 'dog', 'dark', 'an']
+    const tree = new Trie(words)
     assert(tree.size === words.length)
     tree.clear()
     assert(tree.size === 0)

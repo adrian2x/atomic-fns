@@ -7,8 +7,8 @@ const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
 
 describe('IntlDate', () => {
   it('now', () => {
-    let date = new Date()
-    let testDate = mockDate()
+    const date = new Date()
+    const testDate = mockDate()
     assert(testDate.year === date.getFullYear())
     assert(testDate.month === date.getMonth() + 1)
     assert(testDate.day === date.getDate())
@@ -18,8 +18,8 @@ describe('IntlDate', () => {
   })
 
   it('UTC', () => {
-    let date = new Date()
-    let testDate = IntlDate.UTC(undefined)
+    const date = new Date()
+    const testDate = IntlDate.UTC(undefined)
     assert(testDate.year === date.getUTCFullYear())
     assert(testDate.month === date.getUTCMonth() + 1)
     assert(testDate.day === date.getUTCDate())
@@ -29,8 +29,8 @@ describe('IntlDate', () => {
   })
 
   it('clone', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate(date)
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate(date)
     assert(testDate.isSame(testDate.clone()))
     assert(testDate.clone().isSame(date))
   })
@@ -43,7 +43,7 @@ describe('IntlDate', () => {
   })
 
   it('seconds', () => {
-    let date = IntlDate.unix(946702800)
+    const date = IntlDate.unix(946702800)
     assert(date.year === 2000)
     assert(date.month === 1)
     assert(date.day === 1)
@@ -52,72 +52,72 @@ describe('IntlDate', () => {
   })
 
   it('create from Object', () => {
-    let date = mockDate({ year: 1964, month: 7, day: 2 })
+    const date = mockDate({ year: 1964, month: 7, day: 2 })
     assert(date.year === 1964)
     assert(date.month === 7)
     assert(date.day === 2)
   })
 
   it('create from string', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate(date.toISOString())
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate(date.toISOString())
     assert(testDate.year === 1964)
     assert(testDate.month === 7)
     assert(testDate.day === 2)
   })
 
   it('toDate', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate(date.toISOString())
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate(date.toISOString())
     assert(testDate.toDate() instanceof Date)
     assert(testDate.toDate().getTime() === date.getTime())
   })
 
   it('timestamp', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate(date.toISOString())
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate(date.toISOString())
     assert(testDate.timestamp() === testDate.toSeconds())
     assert(testDate.timestamp() === testDate.unix())
   })
 
   it('toSeconds', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate(date.toISOString())
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate(date.toISOString())
     assert(testDate.toSeconds() === Math.floor(date.getTime() / 1000))
   })
 
   it('toISOString', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate(date.toISOString())
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate(date.toISOString())
     assert(testDate.toISOString() === date.toISOString())
   })
 
   it('toISODate', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate(date.toISOString())
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate(date.toISOString())
     assert(testDate.toISODate() === date.toISOString().slice(0, 10))
   })
 
   it('toISOTime', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate(date.toISOString())
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate(date.toISOString())
     assert(testDate.toISOTime() === date.toISOString().slice(11))
   })
 
   it('toString', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate('1964-07-02')
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate('1964-07-02')
     assert(testDate.toString() === date.toLocaleString())
   })
 
   it('inspect', () => {
-    let date = IntlDate.unix(946702800)
+    const date = IntlDate.unix(946702800)
     assert(date.inspect() === 'new IntlDate("2000-01-01T05:00:00.000Z")')
   })
 
   it('toObject', () => {
-    let date = new Date()
-    let obj = mockDate().toObject()
+    const date = new Date()
+    const obj = mockDate().toObject()
     assert(obj.year === date.getFullYear())
     assert(obj.month === date.getMonth() + 1)
     assert(obj.day === date.getDate())
@@ -139,20 +139,20 @@ describe('IntlDate', () => {
   })
 
   it('daysInMonth', () => {
-    let date = new Date(2020, 1, 1, 16, 1, 1, 1)
-    let d = mockDate(date, { utc: true })
+    const date = new Date(2020, 1, 1, 16, 1, 1, 1)
+    const d = mockDate(date, { utc: true })
     assert(d.daysInMonth() === 29)
   })
 
   it('daysInYear', () => {
-    let date = new Date(2020, 1, 1, 16, 1, 1, 1)
-    let d = mockDate(date, { utc: true })
+    const date = new Date(2020, 1, 1, 16, 1, 1, 1)
+    const d = mockDate(date, { utc: true })
     assert(d.daysInYear() === 366)
   })
 
   it('weeksInYear', () => {
-    let date = new Date(2020, 1, 1, 16, 1, 1, 1)
-    let d = mockDate(date, { utc: true })
+    const date = new Date(2020, 1, 1, 16, 1, 1, 1)
+    const d = mockDate(date, { utc: true })
     assert(d.week() === 4)
     assert(d.isoWeek() === d.week() + 1)
     assert(d.weeksInYear() === 52)
@@ -160,29 +160,29 @@ describe('IntlDate', () => {
   })
 
   it('isBefore', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate('1964-07-02')
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate('1964-07-02')
     assert(!testDate.isBefore(date))
     assert(testDate.isBefore(new Date()))
   })
 
   it('isAfter', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate()
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate()
     assert(testDate.isAfter(date))
     assert(!testDate.isAfter(new Date()))
   })
 
   it('isSame', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate('1964-07-02')
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate('1964-07-02')
     assert(testDate.isSame(testDate))
     assert(testDate.isSame(date))
   })
 
   it('compare', () => {
-    let date = new Date(1964, 6, 2)
-    let testDate = mockDate('1964-07-02')
+    const date = new Date(1964, 6, 2)
+    const testDate = mockDate('1964-07-02')
     assert(testDate.compare(testDate) === 0)
     assert(testDate.compare(date) === 0)
     assert(testDate.compare(new Date()) < 0)
@@ -190,21 +190,21 @@ describe('IntlDate', () => {
   })
 
   it('min', () => {
-    let start = new Date(1964, 6, 2)
-    let end = mockDate()
+    const start = new Date(1964, 6, 2)
+    const end = mockDate()
     assert(IntlDate.min(start, end) === start)
     assert(IntlDate.min([start, end]) === start)
   })
 
   it('max', () => {
-    let start = new Date(1964, 6, 2)
-    let end = mockDate()
+    const start = new Date(1964, 6, 2)
+    const end = mockDate()
     assert(IntlDate.max(start, end) === end)
     assert(IntlDate.max([start, end]) === end)
   })
 
   it('startOf', () => {
-    let date = mockDate('1964-07-02')
+    const date = mockDate('1964-07-02')
     assert(date.startOf('year').year === 1964)
     assert(date.startOf('year').month === 1)
     assert(date.startOf('year').day === 1)
@@ -222,7 +222,7 @@ describe('IntlDate', () => {
   })
 
   it('endOf', () => {
-    let date = mockDate('2020-02-29')
+    const date = mockDate('2020-02-29')
     assert(date.endOf('year').year === 2020)
     assert(date.endOf('year').month === 12)
     assert(date.endOf('year').day === 31)
@@ -240,8 +240,8 @@ describe('IntlDate', () => {
   })
 
   it('diff', () => {
-    let start = mockDate('2020-02-29')
-    let end = start.add({ years: 1 })
+    const start = mockDate('2020-02-29')
+    const end = start.add({ years: 1 })
     assert(end.isAfter(start))
     assert(start.isBefore(end))
     assert(end.diff(start, 'years') === 1)
@@ -252,37 +252,37 @@ describe('IntlDate', () => {
   })
 
   it('to', () => {
-    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
-    let start = mockDate(date)
-    let end = mockDate('2020-02-29')
+    const date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    const start = mockDate(date)
+    const end = mockDate('2020-02-29')
     assert(start.to(end, 'years') === 'in 55 years')
     assert(end.to(start, 'years') === '55 years ago')
   })
 
   it('from', () => {
-    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
-    let start = mockDate(date)
-    let end = mockDate('2020-02-29')
+    const date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    const start = mockDate(date)
+    const end = mockDate('2020-02-29')
     assert(start.from(end, 'years') === '55 years ago')
     assert(end.from(start, 'years') === 'in 55 years')
   })
 
   it('toNow', () => {
-    let now = mockDate()
-    let start = now.subtract({ years: 33 })
+    const now = mockDate()
+    const start = now.subtract({ years: 33 })
     assert(start.toNow('years') === `in 33 years`)
   })
 
   it('fromNow', () => {
-    let now = mockDate()
-    let start = now.subtract({ years: 33 })
+    const now = mockDate()
+    const start = now.subtract({ years: 33 })
     assert(start.fromNow('years') === `33 years ago`)
   })
 
   it('add', () => {
-    let date = new Date(1964, 6, 2, 2, 30, 0, 0)
-    let start = mockDate(date)
-    let end = start.add({ years: 5, months: 5, days: 30 })
+    const date = new Date(1964, 6, 2, 2, 30, 0, 0)
+    const start = mockDate(date)
+    const end = start.add({ years: 5, months: 5, days: 30 })
     assert(end.isAfter(start))
     assert(start.isBefore(end))
     assert(end.year === 1970)
@@ -291,9 +291,9 @@ describe('IntlDate', () => {
   })
 
   it('subtract', () => {
-    let date = new Date(1970, 0, 2, 1, 30, 0, 0)
-    let start = mockDate(date)
-    let end = start.subtract({ years: 5, months: 5, days: 30 })
+    const date = new Date(1970, 0, 2, 1, 30, 0, 0)
+    const start = mockDate(date)
+    const end = start.subtract({ years: 5, months: 5, days: 30 })
     assert(end.isBefore(start))
     assert(start.isAfter(end))
     assert(end.year === 1964)
@@ -302,8 +302,8 @@ describe('IntlDate', () => {
   })
 
   it('format', () => {
-    let date = new Date(2020, 1, 1, 11, 1, 1, 1)
-    let d = mockDate(date, { utc: true })
+    const date = new Date(2020, 1, 1, 11, 1, 1, 1)
+    const d = mockDate(date, { utc: true })
     assert(d.format('YYYY MMMM DD') === '2020 February 01')
     assert(d.format('YYYY MMMM DD dddd') === '2020 February 01 Saturday')
     assert(d.format('ddd, MMM DD, YYYY') === 'Sat, Feb 01, 2020')
@@ -315,30 +315,30 @@ describe('IntlDate', () => {
     assert(d.format('HH:mm:ss').match(/\d{2}:\d{2}:\d{2}$/), d.format('HH:mm:ss'))
     assert(d.format('hh:mm:ss A').match(/\sPM|AM/), d.format('hh:mm:ss A'))
     assert(d.format('h:m:s a').match(/\spm|am/), d.format('h:m:s a'))
-    assert(d.format('h:m:s').match(/\d+\:\d+\:\d+$/), d.format('h:m:s'))
+    assert(d.format('h:m:s').match(/\d+:\d+:\d+$/), d.format('h:m:s'))
 
     // Localized formats
     // Note: There are some weird space characters inconsistent between node versions
     // which is why the test just checks if the correct parts are included
-    assert(d.format('LT').match(/\d+\:\d+\sPM|AM/), d.format('LT'))
-    assert(d.format('LTS').match(/\d+\:\d+\:\d+\sPM|AM/), d.format('LTS'))
+    assert(d.format('LT').match(/\d+:\d+\sPM|AM/), d.format('LT'))
+    assert(d.format('LTS').match(/\d+:\d+:\d+\sPM|AM/), d.format('LTS'))
     assert(d.format('L') === '02/01/2020', d.format('L'))
     assert(d.format('LL') === 'February 1, 2020', d.format('LL'))
     assert(d.format('LLL').includes('February 1, 2020'), d.format('LLL'))
-    assert(d.format('LLL').match(/\d+\:\d+\sPM|AM/), d.format('LLL'))
+    assert(d.format('LLL').match(/\d+:\d+\sPM|AM/), d.format('LLL'))
     assert(d.format('LLLL').includes('Saturday, February 1, 2020'), d.format('LLLL'))
-    assert(d.format('LLLL').match(/\d+\:\d+\sPM|AM/), d.format('LLLL'))
+    assert(d.format('LLLL').match(/\d+:\d+\sPM|AM/), d.format('LLLL'))
     assert(d.format('l') === '2/1/2020', d.format('l'))
     assert(d.format('ll') === 'Feb 1, 2020', d.format('ll'))
     assert(d.format('lll').includes('Feb 1, 2020'), d.format('lll'))
-    assert(d.format('lll').match(/\d+\:\d+\sPM|AM/), d.format('lll'))
+    assert(d.format('lll').match(/\d+:\d+\sPM|AM/), d.format('lll'))
     assert(d.format('llll').includes('Sat, Feb 1, 2020'), d.format('llll'))
-    assert(d.format('llll').match(/\d+\:\d+\sPM|AM/), d.format('llll'))
+    assert(d.format('llll').match(/\d+:\d+\sPM|AM/), d.format('llll'))
   })
 
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
-    let d = mockDate(date, { utc: true })
+    const d = mockDate(date, { utc: true })
     date = d.toDate()
 
     assert(strftime('%A', date) === 'Saturday')

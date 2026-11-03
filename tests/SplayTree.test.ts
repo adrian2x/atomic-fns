@@ -4,7 +4,7 @@ import { SplayTree } from '../src/collections/SplayTree.js'
 
 describe('SplayTree', () => {
   it('empty', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     assert(tree.empty())
     assert(tree.size === 0)
     for (const value of tree.values()) {
@@ -13,7 +13,7 @@ describe('SplayTree', () => {
   })
 
   it('set', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
       assert(tree.contains(i))
@@ -22,7 +22,7 @@ describe('SplayTree', () => {
   })
 
   it('get', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 100; i > 0; i--) {
       tree.set(i, i)
       assert(tree.get(i) === i)
@@ -31,7 +31,7 @@ describe('SplayTree', () => {
   })
 
   it('splay', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 100; i > 0; i--) {
       tree.add(i)
       assert(tree.contains(i))
@@ -41,7 +41,7 @@ describe('SplayTree', () => {
   })
 
   it('lowerBound', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 20; i > 0; i -= 2) {
       tree.set(i, i)
     }
@@ -49,7 +49,7 @@ describe('SplayTree', () => {
   })
 
   it('min', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
     }
@@ -57,7 +57,7 @@ describe('SplayTree', () => {
   })
 
   it('max', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
     }
@@ -65,7 +65,7 @@ describe('SplayTree', () => {
   })
 
   it('remove', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     tree.set(42, 42)
     assert(tree.contains(42))
     assert(tree.remove(42) === 42)
@@ -74,7 +74,7 @@ describe('SplayTree', () => {
   })
 
   it('clear', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 1; i <= 5; i++) {
       tree.add(i)
       assert(tree.contains(i))
@@ -88,7 +88,7 @@ describe('SplayTree', () => {
   })
 
   it('keys', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i)
     }
@@ -96,7 +96,7 @@ describe('SplayTree', () => {
   })
 
   it('values', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i * 2)
     }
@@ -104,7 +104,7 @@ describe('SplayTree', () => {
   })
 
   it('entries', () => {
-    let tree = new SplayTree()
+    const tree = new SplayTree()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i * 2)
     }

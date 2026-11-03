@@ -40,7 +40,7 @@ import { enumerate } from '../src/itertools/index.js'
 
 describe('globals', () => {
   it('CustomError', () => {
-    let err = new CustomError('custom')
+    const err = new CustomError('custom')
     assert.equal(err.message, 'custom')
   })
 
@@ -169,9 +169,8 @@ describe('globals', () => {
   it('uniqueId', () => {
     const uid = uniqueId()
     assert(isNumber(uid))
-    let prefix = 'user_'
     const userId = uniqueId('user_')
-    assert(userId.startsWith('user_'))
+    assert(typeof userId === 'string' && userId.startsWith('user_'))
   })
 
   it('call', () => {
@@ -194,12 +193,12 @@ describe('globals', () => {
   })
 
   it('keys', () => {
-    let obj = { a: 1, b: 2 }
+    const obj = { a: 1, b: 2 }
     assert.deepEqual(keys(obj), Object.keys(obj))
   })
 
   it('values', () => {
-    let obj = { a: 1, b: 2 }
+    const obj = { a: 1, b: 2 }
     assert.deepEqual(values(obj), Object.values(obj))
   })
 
@@ -211,15 +210,15 @@ describe('globals', () => {
   })
 
   it('hash', () => {
-    let obj = { a: 1, b: 2 }
-    let h = hash(obj)
+    const obj = { a: 1, b: 2 }
+    const h = hash(obj)
     assert(h != undefined, String(h))
     assert(h === hash(obj), String(hash(obj)))
     assert(obj[HASH_KEY] === h, String(obj[HASH_KEY]))
   })
 
   it('hashCode', () => {
-    let obj = '{ a: 1, b: 2 }'
+    const obj = '{ a: 1, b: 2 }'
     assert(hash(obj) === hashCode(obj))
   })
 
@@ -246,8 +245,8 @@ describe('globals', () => {
     assert(get('2', arr) === 3)
     assert(get('3', arr, false) === false)
     assert(get('3', arr, false) === false)
-    let obj = { foo: { bar: true } }
-    let h = hash(obj)
+    const obj = { foo: { bar: true } }
+    const h = hash(obj)
     assert(get('foo.bar', obj))
     assert(get(['foo', 'bar'], obj))
     assert(get(HASH_KEY, obj) === h)

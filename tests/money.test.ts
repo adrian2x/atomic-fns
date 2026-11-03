@@ -31,8 +31,8 @@ describe('Money', () => {
   })
 
   it('add', () => {
-    let a = Money('50000000000')
-    let b = Money('0.000000005')
+    const a = Money('50000000000')
+    const b = Money('0.000000005')
     assert(a.add(b).toDecimal().toString() === '50000000000.000000005')
     // note rounding when format
     assert(a.add(b).toNumber() === 50000000000)
@@ -40,31 +40,31 @@ describe('Money', () => {
   })
 
   it('sub', () => {
-    let a = Money('1')
-    let b = Money('0.0000000001')
+    const a = Money('1')
+    const b = Money('0.0000000001')
     assert(a.sub(b).toString() === '$0.9999999999')
   })
 
   it('mul', () => {
-    let a = Money('0.0000000000000000000025')
-    let b = Money('400000000000000000000')
+    const a = Money('0.0000000000000000000025')
+    const b = Money('400000000000000000000')
     assert(a.mul(b).toString() === '$1.00')
   })
 
   it('div', () => {
-    let a = Money('1')
-    let b = Money('3')
+    const a = Money('1')
+    const b = Money('3')
     assert(a.div(b).toString() === '$0.3333333333333333')
   })
 
   it('precision', () => {
-    let a = Money('1')
-    let b = Money('3')
+    const a = Money('1')
+    const b = Money('3')
     assert(a.div(b).precision(4) === '$0.3333')
   })
 
   it('displayName', () => {
-    let a = Money('1')
+    const a = Money('1')
     assert(a.displayName() === '1.00 US dollars')
   })
 

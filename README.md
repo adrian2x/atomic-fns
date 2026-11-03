@@ -8,12 +8,12 @@ Stop shipping code built for browsers from 2015.
 
 You may prefer this library because:
 
-* **TypeScript & docs**: Includes type declaration files and js with JSDocs for best in class experience.
-* **Zero deps**: Built from scratch with no runtime dependencies or polyfills.
-* **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
-* **Modular**: Pick what you need. Supports tree-shaking, no side effects, and works with all bundlers.
-* **Lazy**: Leverage generators, iterators, and functional composition.
-* **Tests**: All modules have comprehensive test suites and 100% test coverage.
+- **TypeScript & docs**: Includes type declaration files and js with JSDocs for best in class experience.
+- **Zero deps**: Built from scratch with no runtime dependencies or polyfills.
+- **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
+- **Modular**: Pick what you need. Supports tree-shaking, no side effects, and works with all bundlers.
+- **Lazy**: Leverage generators, iterators, and functional composition.
+- **Tests**: All modules have comprehensive test suites and 100% test coverage.
 
 ## Docs
 
@@ -50,18 +50,21 @@ uniqueId('user_')
 See the full list of [modules](https://atomic-stack.github.io/atomic-fns/modules.html).
 
 ## Data model
+
 This library features a data model similar to [Python](https://docs.python.org/3/reference/datamodel.html#special-method-names) but not always. Only the missing parts have been implemented, while respecting the JS standards.
 
 For example, in Python collections, `size()` is a method, while in JS it's just a property. So this library uses `size` property instead of method. Similarly, the `len` function implementation checks for both `length` and `size` since many JS objects have a `length` property.
 
 ## Special method names
+
 This library adds support for operators using object methods such as:
-  - `obj.eq(other)`  adds custom `obj == other`.
-  - `obj.lt(other)`  adds custom `obj < other`.
-  - `obj.lte(other)`  adds custom `obj <= other`.
-  - `obj.gt(other)`  adds custom `obj > other`.
-  - `obj.gte(other)`  adds custom `obj >= other`.
-  - `obj.compare(other)`  overloads sorting operations.
+
+- `obj.eq(other)` adds custom `obj == other`.
+- `obj.lt(other)` adds custom `obj < other`.
+- `obj.lte(other)` adds custom `obj <= other`.
+- `obj.gt(other)` adds custom `obj > other`.
+- `obj.gte(other)` adds custom `obj >= other`.
+- `obj.compare(other)` overloads sorting operations.
 
 When working with objects, functions in this library use these custom operators for equality and sorting. You can also apply operators to values like `eq(x, y)`, `lte(x, y)`, `compare(x, y)`, etc.
 
@@ -70,6 +73,7 @@ When working with objects, functions in this library use these custom operators 
 [`Decimal`](https://atomic-stack.github.io/atomic-fns/classes/decimal.Decimal.html) provides support for correct rounded floating point arithmetic, with arbitrary precision.
 
 This fixes precision issues with float arithmetic, for example:
+
 ```
 0.1 + 0.1 + 0.1
 // 0.30000000000000004
@@ -81,19 +85,20 @@ decimal('0.1').add('0.1').add('0.1').toNumber()
 Some common base interfaces and typing patterns you may have seen like `Optional`, `Result`, `Comparable`, `Iterator`, and others.
 
 ### Sorted Containers
-  - [SortedSet](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedSet.html)
-  - [SortedMap](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedMap.html)
-  - [SortedTree](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedTree.html)
+
+- [SortedSet](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedSet.html)
+- [SortedMap](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedMap.html)
+- [SortedTree](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedTree.html)
 
 ### Other Containers
-  - [Deque](https://atomic-stack.github.io/atomic-fns/classes/collections.Deque.html)
-  - [FrozenSet](https://atomic-stack.github.io/atomic-fns/classes/collections.FrozenSet.html)
-  - [LRUCache](https://atomic-stack.github.io/atomic-fns/classes/collections.LRUCache.html)
 
+- [Deque](https://atomic-stack.github.io/atomic-fns/classes/collections.Deque.html)
+- [FrozenSet](https://atomic-stack.github.io/atomic-fns/classes/collections.FrozenSet.html)
+- [LRUCache](https://atomic-stack.github.io/atomic-fns/classes/collections.LRUCache.html)
 
 ## Contributing
-If you want to contribute to the project and make it better, your help is very welcome. Contributing is also a great way to learn more about social coding on Github, new technologies and and their ecosystems and how to make constructive, helpful bug reports, feature requests and the noblest of all contributions: a good, clean pull request. You will be listed as a **Champion** on the official site as well.
 
+If you want to contribute to the project and make it better, your help is very welcome. Contributing is also a great way to learn more about social coding on Github, new technologies and and their ecosystems and how to make constructive, helpful bug reports, feature requests and the noblest of all contributions: a good, clean pull request. You will be listed as a **Champion** on the official site as well.
 
 ## License
 

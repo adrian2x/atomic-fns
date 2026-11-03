@@ -4,20 +4,20 @@ import { SortedMap } from '../src/collections/SortedMap.js'
 
 describe('SortedMap', () => {
   it('empty', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     assert(tree.empty())
     assert(tree.size === 0)
   })
 
   it('initialized', () => {
-    let entries: Array<[number, number]> = [
+    const entries: Array<[number, number]> = [
       [5, 5],
       [4, 4],
       [3, 3],
       [1, 1],
       [2, 2]
     ]
-    let tree = new SortedMap(entries)
+    const tree = new SortedMap(entries)
     assert(!tree.empty())
     assert(tree.size === 5)
     entries.sort((x, y) => x[0] - y[0])
@@ -28,7 +28,7 @@ describe('SortedMap', () => {
   })
 
   it('add', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
       assert(tree.get(i) === null)
@@ -38,7 +38,7 @@ describe('SortedMap', () => {
   })
 
   it('set', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
       assert(tree.get(i) === i)
@@ -53,7 +53,7 @@ describe('SortedMap', () => {
   })
 
   it('get', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
       assert(tree.get(i) === i)
@@ -63,7 +63,7 @@ describe('SortedMap', () => {
   })
 
   it('has', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 100; i > 0; i--) {
       tree.add(i)
       assert(tree.has(i))
@@ -72,7 +72,7 @@ describe('SortedMap', () => {
   })
 
   it('min', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
     }
@@ -80,7 +80,7 @@ describe('SortedMap', () => {
   })
 
   it('max', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
     }
@@ -88,7 +88,7 @@ describe('SortedMap', () => {
   })
 
   it('delete', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     tree.add(42)
     assert(tree.contains(42))
     assert(tree.delete(42) === true)
@@ -97,7 +97,7 @@ describe('SortedMap', () => {
   })
 
   it('clear', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 1; i <= 5; i++) {
       tree.add(i)
       assert(tree.contains(i))
@@ -111,7 +111,7 @@ describe('SortedMap', () => {
   })
 
   it('keys', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i * 2)
     }
@@ -119,7 +119,7 @@ describe('SortedMap', () => {
   })
 
   it('values', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i * 2)
     }
@@ -127,7 +127,7 @@ describe('SortedMap', () => {
   })
 
   it('entries', () => {
-    let tree = new SortedMap()
+    const tree = new SortedMap()
     for (let i = 1; i <= 5; i++) {
       tree.set(i, i * 2)
     }

@@ -304,8 +304,8 @@ range(-3)
  */
 export function* range(...args: number[]) {
   let start = 0
-  let stop = 0
   let step = 1
+  let stop: number
   if (args.length === 1) {
     stop = args[0]
     if (stop < 0) step = -1

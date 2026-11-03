@@ -294,9 +294,9 @@ uniqueId('user_')
 // 'user_1033763188'
 ```
  */
-export function uniqueId(pre: string = ''): string {
-  // @ts-expect-error
-  return (pre || 0) + ((Math.random() * 1e10) >>> 0)
+export function uniqueId(pre: string = ''): string | number {
+  const n = (Math.random() * 1e10) >>> 0
+  return pre ? pre + String(n) : n
 }
 
 /**
@@ -389,7 +389,7 @@ export function get(key: PropertyKey | PropertyKey[], obj, value: any): any {
       result = result[k]
     }
     return result === undefined ? value : result
-  } catch (error) {
+  } catch {
     return value
   }
 }

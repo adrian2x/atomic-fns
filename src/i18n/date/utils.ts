@@ -19,21 +19,6 @@ function floorMod(x: number, n: number) {
   return x - n * Math.floor(x / n)
 }
 
-function padStart(input: number, n = 2) {
-  const isNeg = input < 0
-  let padded
-  if (isNeg) {
-    padded = '-' + ('' + -input).padStart(n, '0')
-  } else {
-    padded = ('' + input).padStart(n, '0')
-  }
-  return padded
-}
-
-function parseInteger(str: string) {
-  if (str != null && str !== '') return parseInt(str, 10)
-}
-
 function parseFloating(str: string) {
   if (str != null && str !== '') return parseFloat(str)
 }
@@ -125,66 +110,6 @@ export function daysInMonth(date: string | number | Date): number {
   }
 }
 
-// covert a calendar object to a local timestamp (epoch, but with the offset baked in)
-function objToLocalTS(obj: DateObject): number {
-  let d = Date.UTC(
-    obj.year,
-    obj.month - 1,
-    obj.day,
-    obj.hour,
-    obj.minute,
-    obj.second,
-    obj.millisecond
-  )
-  // for legacy reasons, years between 0 and 99 are interpreted as 19XX; revert that
-  if (obj.year < 100 && obj.year >= 0) {
-    let dt = new Date(d)
-    dt.setUTCFullYear(dt.getUTCFullYear() - 1900)
-    d = dt.getTime()
-  }
-  return +d
-}
-
-function untruncateYear(year: number): number {
-  if (year > 99) {
-    return year
-  } else return year > 60 ? 1900 + year : 2000 + year
-}
-
-// PARSING
-
-function parseZoneInfo(ts: number | Date, offsetFormat, locale, timeZone?) {
-  const date = new Date(ts),
-    intlOpts: Intl.DateTimeFormatOptions = {
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone,
-      timeZoneName: offsetFormat
-    }
-  const parsed = new Intl.DateTimeFormat(locale, intlOpts)
-    .formatToParts(date)
-    .find((m) => m.type === 'timeZoneName')
-  return parsed?.value
-}
-
-// signedOffset('-5', '30') -> -330
-function signedOffset(offHourStr: string, offMinuteStr: string) {
-  let offHour = parseInt(offHourStr, 10)
-
-  // don't || this because we want to preserve -0
-  if (Number.isNaN(offHour)) {
-    offHour = 0
-  }
-
-  const offMin = parseInt(offMinuteStr, 10) || 0,
-    offMinSigned = offHour < 0 || Object.is(offHour, -0) ? -offMin : offMin
-  return offHour * 60 + offMinSigned
-}
-
 // COERCION
 
 export function asNumber(value) {
@@ -193,30 +118,6 @@ export function asNumber(value) {
     throw new Error(`Invalid unit value ${value}`)
   return numericValue
 }
-
-function formatOffset(offset: number, format: 'short' | 'narrow' | 'techie') {
-  const hours = Math.trunc(Math.abs(offset / 60)),
-    minutes = Math.trunc(Math.abs(offset % 60)),
-    sign = offset >= 0 ? '+' : '-'
-
-  switch (format) {
-    case 'short':
-      return `${sign}${padStart(hours, 2)}:${padStart(minutes, 2)}`
-    case 'narrow':
-      return `${sign}${hours}${minutes > 0 ? `:${minutes}` : ''}`
-    case 'techie':
-      return `${sign}${padStart(hours, 2)}${padStart(minutes, 2)}`
-    default:
-      throw new RangeError(`Value format ${format} is out of range for property format`)
-  }
-}
-
-function timeObject(obj: DateObject) {
-  const { hour, minute, second, millisecond } = obj
-  return { hour, minute, second, millisecond }
-}
-
-const ianaRegex = /[A-Za-z_+-]{1,256}(?::?\/[A-Za-z0-9_+-]{1,256}(?:\/[A-Za-z0-9_+-]{1,256})?)?/
 
 const isoDuration =
   /^-?P(?:(?:(-?\d{1,20}(?:\.\d{1,20})?)Y)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20}(?:\.\d{1,20})?)W)?(?:(-?\d{1,20}(?:\.\d{1,20})?)D)?(?:T(?:(-?\d{1,20}(?:\.\d{1,20})?)H)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20})(?:[.,](-?\d{1,20}))?S)?)?)$/
@@ -263,57 +164,29 @@ export function parseISODuration(s) {
   return parse(s, [isoDuration, extractISODuration])
 }
 
-function createUTCDate(...args) {
-  let date,
-    y = args[0]
+function createUTCDate(y: number, m = 0, d = 1, h = 0, min = 0, s = 0, ms = 0) {
+  let date: Date
   // the Date.UTC function remaps years 0-99 to 1900-1999
   if (y < 100 && y >= 0) {
-    args = Array.from(arguments)
     // preserve leap years using a full 400 year cycle, then reset
-    args[0] = y + 400
-    date = new Date(Date.UTC.apply(null, args))
+    date = new Date(Date.UTC(y + 400, m, d, h, min, s, ms))
     if (isFinite(date.getUTCFullYear())) {
       date.setUTCFullYear(y)
     }
   } else {
-    date = new Date(Date.UTC.apply(null, arguments))
+    date = new Date(Date.UTC(y, m, d, h, min, s, ms))
   }
 
   return date
 }
 
 function firstWeekOffset(year, dow, doy) {
-  var // first-week day -- which january is always in the first week (4 for iso, 1 for other)
+  const // first-week day -- which january is always in the first week (4 for iso, 1 for other)
     fwd = 7 + dow - doy,
     // first-week day local weekday -- which local weekday is fwd
     fwdlw = (7 + createUTCDate(year, 0, fwd).getUTCDay() - dow) % 7
 
   return -fwdlw + fwd - 1
-}
-
-// https://en.wikipedia.org/wiki/ISO_week_date#Calculating_a_date_given_the_year.2C_week_number_and_weekday
-function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
-  var localWeekday = (7 + weekday - dow) % 7,
-    weekOffset = firstWeekOffset(year, dow, doy),
-    dayOfYear = 1 + 7 * (week - 1) + localWeekday + weekOffset,
-    resYear,
-    resDayOfYear
-
-  if (dayOfYear <= 0) {
-    resYear = year - 1
-    resDayOfYear = daysInYear(resYear) + dayOfYear
-  } else if (dayOfYear > daysInYear(year)) {
-    resYear = year + 1
-    resDayOfYear = dayOfYear - daysInYear(year)
-  } else {
-    resYear = year
-    resDayOfYear = dayOfYear
-  }
-
-  return {
-    year: resYear,
-    dayOfYear: resDayOfYear
-  }
 }
 
 /**
@@ -323,7 +196,7 @@ function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
  * @param firstDayOfYear
  */
 export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1): number {
-  var weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
+  const weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
     weekOffsetNext = firstWeekOffset(year + 1, firstDayOfWeek, firstDayOfYear)
   return (daysInYear(year) - weekOffset + weekOffsetNext) / 7
 }
@@ -339,10 +212,9 @@ export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1
 export function weekOfYear(date: string | number | Date, firstDayOfWeek = 1, firstDayOfYear = 1) {
   const year = new Date(date).getFullYear()
   const doy = dayOfYear(date)
-  let weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
-    week = Math.floor((doy - weekOffset - 1) / 7) + 1,
-    resWeek,
-    resYear
+  const weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear)
+  const week = Math.floor((doy - weekOffset - 1) / 7) + 1
+  let resWeek, resYear
 
   if (week < 1) {
     resYear = year - 1
@@ -371,6 +243,6 @@ export function dayOfYear(input: string | number | Date): number {
   input.setMinutes(0)
   input.setSeconds(0)
   input.setMilliseconds(0)
-  let start = new Date(input.getFullYear(), 0, 1, 0, 0, 0, 0)
+  const start = new Date(input.getFullYear(), 0, 1, 0, 0, 0, 0)
   return Math.round((+input - start.getTime()) / 864e5) + 1
 }

@@ -29,7 +29,7 @@ export interface Comparable {
  * @interface Ordered
  */
 export interface Ordered<T> {
-  lt: (other) => boolean
+  lt: (other: T) => boolean
 }
 
 /**

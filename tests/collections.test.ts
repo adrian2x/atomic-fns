@@ -29,13 +29,13 @@ import {
 
 describe('collections', () => {
   it('compact', () => {
-    let filtered = compact([0, 1, false, 2, '', 3])
+    const filtered = compact([0, 1, false, 2, '', 3])
     assert.deepEqual(filtered, [1, 2, 3])
     assert.deepEqual(compact({ a: 1, b: undefined, c: false, d: [] }), { a: 1 })
   })
 
   it('count', () => {
-    let counters = count([0, 1, false, 2, '', 3], (x) => !!x)
+    const counters = count([0, 1, false, 2, '', 3], (x) => !!x)
     assert(counters['true'] === 3)
     assert(counters['false'] === 3)
     assert.deepEqual(
@@ -45,37 +45,37 @@ describe('collections', () => {
   })
 
   it('clone array', () => {
-    let arr = [4, 7, 1, 9]
+    const arr = [4, 7, 1, 9]
     assert.deepEqual(clone(arr), arr)
-    let target = { user: 'fred', age: 40, active: false }
+    const target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(clone(target), target)
   })
 
   it('clone object', () => {
-    let target = { user: 'fred', age: 40, active: false }
+    const target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(clone(target), target)
   })
 
   it('difference', () => {
-    let a = [1, 2, 5]
-    let b = [3, 4, 5]
+    const a = [1, 2, 5]
+    const b = [3, 4, 5]
     assert.deepEqual(sortedUniq(difference(a, b)), [1, 2, 3, 4])
   })
 
   it('intersection', () => {
-    let a = [1, 2, 5]
-    let b = [3, 4, 5]
+    const a = [1, 2, 5]
+    const b = [3, 4, 5]
     assert.deepEqual([...intersection(a, b)], [5])
   })
 
   it('union', () => {
-    let a = [1, 2, 5]
-    let b = [3, 4, 5]
+    const a = [1, 2, 5]
+    const b = [3, 4, 5]
     assert.deepEqual(sortedUniq(union(a, b)), [1, 2, 3, 4, 5])
   })
 
   it('filter', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
@@ -86,7 +86,7 @@ describe('collections', () => {
   })
 
   it('filter matches', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
@@ -94,7 +94,7 @@ describe('collections', () => {
   })
 
   it('filter property', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
@@ -102,7 +102,7 @@ describe('collections', () => {
   })
 
   it('find', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
@@ -110,7 +110,7 @@ describe('collections', () => {
   })
 
   it('find matches', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
@@ -118,7 +118,7 @@ describe('collections', () => {
   })
 
   it('find Object', () => {
-    let users = {
+    const users = {
       '0': { user: 'barney', age: 36, active: true },
       '1': { user: 'fred', age: 40, active: false }
     }
@@ -126,7 +126,7 @@ describe('collections', () => {
   })
 
   it('findLast', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false },
       { user: 'barney', age: 36, active: true }
@@ -135,7 +135,7 @@ describe('collections', () => {
   })
 
   it('findLast matches', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false },
       { user: 'barney', age: 36, active: true }
@@ -144,11 +144,11 @@ describe('collections', () => {
   })
 
   it('forEach', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
-    let result = [] as any
+    const result = [] as any
     forEach(users, (value, key) => result.push([key, value]))
     assert.deepEqual(
       result,
@@ -157,19 +157,19 @@ describe('collections', () => {
   })
 
   it('forEach object key', () => {
-    let target = { user: 'fred', age: 40, active: false }
-    let objs = [] as any[]
+    const target = { user: 'fred', age: 40, active: false }
+    const objs = [] as any[]
     forEach(target, (value, key) => objs.push([key, value]))
     assert.deepEqual(objs, Object.entries(target))
   })
 
   it('flatten Array', () => {
-    let data = flatten([1, 2, [3, 4], 5])
+    const data = flatten([1, 2, [3, 4], 5])
     assert.deepEqual(data, [1, 2, 3, 4, 5])
   })
 
   it('flatten Array deep', () => {
-    let data = flatten([1, 2, [3, [4]], [5]], true)
+    const data = flatten([1, 2, [3, [4]], [5]], true)
     assert.deepEqual(data, [1, 2, 3, 4, 5])
   })
 
@@ -205,7 +205,7 @@ describe('collections', () => {
   })
 
   it('map', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
@@ -216,10 +216,10 @@ describe('collections', () => {
   })
 
   it('merge', () => {
-    let object = {
+    const object = {
       a: [{ b: 2 }, { d: 4 }]
     }
-    let other = {
+    const other = {
       a: [{ c: 3 }, { e: 5 }],
       foo: null,
       bar: true,
@@ -236,7 +236,7 @@ describe('collections', () => {
   })
 
   it('pick', () => {
-    let target = { user: 'fred', age: 40, active: false }
+    const target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })
     assert.deepEqual(
       pick(target, (x) => x >= 40),
@@ -245,7 +245,7 @@ describe('collections', () => {
   })
 
   it('pickBy', () => {
-    let target = { user: 'fred', age: 40, active: false }
+    const target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(
       pick(target, (x) => x >= 40),
       { age: 40 }
@@ -253,12 +253,12 @@ describe('collections', () => {
   })
 
   it('omit', () => {
-    let target = { user: 'fred', age: 40, active: false }
+    const target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(omit(target, ['age', 'active']), { user: 'fred' })
   })
 
   it('omitBy', () => {
-    let target = { user: 'fred', age: 40, active: false }
+    const target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(
       omit(target, (x) => !x),
       { user: 'fred', age: 40 }
@@ -278,25 +278,25 @@ describe('collections', () => {
   })
 
   it('sortedUniq', () => {
-    let arr = [4, 7, 1, 9, 1, 7, 4]
-    let sort = sortedUniq(arr)
+    const arr = [4, 7, 1, 9, 1, 7, 4]
+    const sort = sortedUniq(arr)
     assert.deepEqual(sort, [1, 4, 7, 9])
   })
 
   it('uniq', () => {
-    let arr = [4, 7, 1, 1, 9, 4, 7]
-    let distinct = uniq(arr)
+    const arr = [4, 7, 1, 1, 9, 4, 7]
+    const distinct = uniq(arr)
     assert.deepEqual(distinct, [4, 7, 1, 9])
   })
 
   it('uniqBy', () => {
-    let arr = [4, 7, 1, 1, 9, 4, 7]
-    let distinct = uniq(arr, (x) => x * 2)
+    const arr = [4, 7, 1, 1, 9, 4, 7]
+    const distinct = uniq(arr, (x) => x * 2)
     assert.deepEqual(distinct, [8, 14, 2, 18])
   })
 
   it('binarySearch', () => {
-    let arr = [1, 1, 4, 4, 7, 7, 9]
+    const arr = [1, 1, 4, 4, 7, 7, 9]
     assert(binarySearch(arr, 1) === 1)
     assert(binarySearch(arr, 4) === 3)
     assert(binarySearch(arr, 7) === 5)
@@ -305,7 +305,7 @@ describe('collections', () => {
 
   it('bisect', () => {
     assert(bisect([1], 2) === 1)
-    let arr = [1, 1, 4, 4, 7, 7, 9]
+    const arr = [1, 1, 4, 4, 7, 7, 9]
     assert(bisect(arr, 1) === 2)
     assert(bisect(arr, 4) === 4)
     assert(bisect(arr, 7) === 6)
@@ -320,7 +320,7 @@ describe('collections', () => {
 
   it('bisectLeft', () => {
     assert(bisectLeft([1], 2) === 1)
-    let arr = [1, 1, 4, 4, 7, 7, 9]
+    const arr = [1, 1, 4, 4, 7, 7, 9]
     assert(bisectLeft(arr, 1) === 0)
     assert(bisectLeft(arr, 4) === 2)
     assert(bisectLeft(arr, 7) === 4)

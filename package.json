@@ -19,22 +19,24 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "tsc": "tsc -p . --declaration",
     "tsc:w": "tsc -p . --declaration --watch",
-    "lint": "eslint src/**/*.ts --fix",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
     "build": "npm run lint && npm test && npm run tsc && npm run docs",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\" \"*.md\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\" \"*.md\""
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.2",
-    "@typescript-eslint/eslint-plugin": "^5.39.0",
     "@vitest/coverage-v8": "^5.0.5",
-    "eslint": "^8.25.0",
-    "eslint-config-prettier": "^8.5.0",
-    "eslint-config-standard-with-typescript": "^23.0.0",
-    "eslint-plugin-n": "^15.3.0",
-    "eslint-plugin-prettier": "^4.2.1",
-    "prettier": "^2.7.1",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.10",
     "typedoc": "^0.23.16",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.5",
     "vitest": "^5.0.5"
   },
   "repository": {

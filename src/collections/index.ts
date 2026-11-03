@@ -17,8 +17,7 @@ import {
   isNumber,
   isObject,
   isString,
-  keys,
-  set
+  keys
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, eq, id } from '../operators/index.js'
@@ -359,7 +358,7 @@ flatten({
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flat Array.flat()}
  */
 export function flatten<T>(arr: T[], depth?: boolean | number): T[]
-export function flatten<T>(arr: Object, depth?: boolean | number): Object
+export function flatten(arr: Object, depth?: boolean | number): Object
 export function flatten<T>(arr: T[] | Object, depth = 1): T[] | Object {
   if (!depth) return arr
   if (Array.isArray(arr)) return flattenArray(arr, depth, []) as T[]
@@ -435,7 +434,7 @@ map(users, 'user')
 export function map<T, TResult>(arr: T[], fn: Iteratee<T, PropertyKey, TResult>): TResult[]
 export function map<T, TResult>(arr: T[], fn: PropertyKey): TResult[]
 export function map<T, TResult>(arr: Object, fn: Iteratee<T, PropertyKey, TResult>): TResult[]
-export function map<T, TResult>(arr: Object, fn: PropertyKey): TResult[]
+export function map<TResult>(arr: Object, fn: PropertyKey): TResult[]
 export function map<T, TResult>(
   arr: T[] | Object,
   fn: Iteratee<T, PropertyKey, TResult> | PropertyKey

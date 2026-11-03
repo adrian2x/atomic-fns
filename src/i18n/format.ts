@@ -1,7 +1,5 @@
 const NATIVE_DATE =
   /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
-const REGEX_PARSE =
-  /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
 const REGEX_FORMAT =
   /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
 
@@ -248,6 +246,76 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
   return str.replace(REGEX_FORMAT, (match, $1) => $1 || matches[match] || zoneStr.replace(':', '')) // 'ZZ'
 }
 
+/** L: 09/04/1983 */
+const DATE_SHORT_DD = {
+  year: n,
+  month: dd,
+  day: dd
+}
+
+/** l: 9/4/1983 */
+const DATE_SHORT = {
+  year: n,
+  month: n,
+  day: n
+}
+
+/** ll: Oct 14, 1983 */
+const DATE_MED = {
+  year: n,
+  month: s,
+  day: n
+}
+
+/** LL: October 14, 1983 */
+const DATE_FULL = {
+  year: n,
+  month: l,
+  day: n
+}
+
+/** lll: Oct 14, 1983 8:30 PM */
+const DATE_MED_TIME = {
+  year: n,
+  month: s,
+  day: n,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** LLL: October 14, 1983 8:30 PM */
+const DATE_LONG_TIME = {
+  year: n,
+  month: l,
+  day: n,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** llll: Fri, Oct 14, 1983, 8:30 PM */
+const DATE_MED_WITH_WEEKDAY = {
+  year: n,
+  month: s,
+  day: n,
+  weekday: s,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
+/** LLLL: Tuesday, October 14, 1983, 8:30 PM */
+const DATE_HUGE = {
+  year: n,
+  month: l,
+  day: n,
+  weekday: l,
+  hour: n,
+  minute: n,
+  hourCycle: 'h12'
+}
+
 /**
  * Formats a date using a formatting string in the {@link https://strftime.org/ strftime} format, in any given locale.
  * @param {string} fmt The format string to apply
@@ -322,243 +390,4 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
   if (dayPeriodIndex >= 0) results[dayPeriodIndex] = dayPeriod || ''
 
   return results.join('').trim()
-}
-
-const DATETIME_DEFAULT = {}
-
-/** L: 09/04/1983 */
-const DATE_SHORT_DD = {
-  year: n,
-  month: dd,
-  day: dd
-}
-
-/** l: 9/4/1983 */
-const DATE_SHORT = {
-  year: n,
-  month: n,
-  day: n
-}
-
-/** ll: Oct 14, 1983 */
-const DATE_MED = {
-  year: n,
-  month: s,
-  day: n
-}
-
-/** LL: October 14, 1983 */
-const DATE_FULL = {
-  year: n,
-  month: l,
-  day: n
-}
-
-/** lll: Oct 14, 1983 8:30 PM */
-const DATE_MED_TIME = {
-  year: n,
-  month: s,
-  day: n,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** LLL: October 14, 1983 8:30 PM */
-const DATE_LONG_TIME = {
-  year: n,
-  month: l,
-  day: n,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** llll: Fri, Oct 14, 1983, 8:30 PM */
-const DATE_MED_WITH_WEEKDAY = {
-  year: n,
-  month: s,
-  day: n,
-  weekday: s,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** LLLL: Tuesday, October 14, 1983, 8:30 PM */
-const DATE_HUGE = {
-  year: n,
-  month: l,
-  day: n,
-  weekday: l,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** LT: 09:30 AM */
-const TIME_SIMPLE = {
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** LTS: 09:30:23 AM */
-const TIME_WITH_SECONDS = {
-  hour: n,
-  minute: n,
-  second: n,
-  hourCycle: 'h12'
-}
-
-/** 09:30:23 AM EDT */
-const TIME_WITH_SHORT_OFFSET = {
-  hour: n,
-  minute: n,
-  second: n,
-  timeZoneName: s,
-  hourCycle: 'h12'
-}
-
-/** 09:30:23 AM Eastern Daylight Time */
-const TIME_WITH_LONG_OFFSET = {
-  hour: n,
-  minute: n,
-  second: n,
-  timeZoneName: l,
-  hourCycle: 'h12'
-}
-
-/** 09:30 */
-const TIME_24_SIMPLE = {
-  hour: n,
-  minute: n,
-  hourCycle: 'h23'
-}
-
-/** 09:30:23 */
-const TIME_24_WITH_SECONDS = {
-  hour: n,
-  minute: n,
-  second: n,
-  hourCycle: 'h23'
-}
-
-/** 09:30:23 EDT */
-const TIME_24_WITH_SHORT_OFFSET = {
-  hour: n,
-  minute: n,
-  second: n,
-  hourCycle: 'h23',
-  timeZoneName: s
-}
-
-/** 09:30:23 Eastern Daylight Time */
-const TIME_24_WITH_LONG_OFFSET = {
-  hour: n,
-  minute: n,
-  second: n,
-  hourCycle: 'h23',
-  timeZoneName: l
-}
-
-/** 10/14/1983, 9:30 AM */
-const DATETIME_SHORT = {
-  year: n,
-  month: n,
-  day: n,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** 10/14/1983, 9:30:33 AM */
-const DATETIME_SHORT_WITH_SECONDS = {
-  year: n,
-  month: n,
-  day: n,
-  hour: n,
-  minute: n,
-  second: n,
-  hourCycle: 'h12'
-}
-
-/** Oct 14, 1983, 9:30 AM */
-const DATETIME_MED = {
-  year: n,
-  month: s,
-  day: n,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** Oct 14, 1983, 9:30:33 AM */
-const DATETIME_MED_WITH_SECONDS = {
-  year: n,
-  month: s,
-  day: n,
-  hour: n,
-  minute: n,
-  second: n,
-  hourCycle: 'h12'
-}
-
-/** Fri, 14 Oct 1983, 9:30 AM */
-const DATETIME_MED_WITH_WEEKDAY = {
-  year: n,
-  month: s,
-  day: n,
-  weekday: s,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** October 14, 1983, 9:30 AM EDT */
-const DATETIME_FULL = {
-  year: n,
-  month: l,
-  day: n,
-  hour: n,
-  minute: n,
-  timeZoneName: s,
-  hourCycle: 'h12'
-}
-
-/** October 14, 1983, 9:30:33 AM EDT */
-const DATETIME_FULL_WITH_SECONDS = {
-  year: n,
-  month: l,
-  day: n,
-  hour: n,
-  minute: n,
-  second: n,
-  timeZoneName: s,
-  hourCycle: 'h12'
-}
-
-/** Friday, October 14, 1983, 9:30 AM Eastern Daylight Time */
-const DATETIME_HUGE = {
-  year: n,
-  month: l,
-  day: n,
-  weekday: l,
-  hour: n,
-  minute: n,
-  timeZoneName: l,
-  hourCycle: 'h12'
-}
-
-/** Friday, October 14, 1983, 9:30:33 AM Eastern Daylight Time */
-const DATETIME_HUGE_WITH_SECONDS = {
-  year: n,
-  month: l,
-  day: n,
-  weekday: l,
-  hour: n,
-  minute: n,
-  second: n,
-  timeZoneName: l,
-  hourCycle: 'h12'
 }

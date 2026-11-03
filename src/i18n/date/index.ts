@@ -75,7 +75,8 @@ export class IntlDate {
     if (typeof obj === 'string' || typeof obj === 'number' || obj instanceof Date) {
       this._date = asDate(obj, utc)
     } else if (isObject(obj)) {
-      let { year, month, day, hour, minute, second, millisecond } = obj
+      const { year, day, hour, minute, second, millisecond } = obj
+      let { month } = obj
 
       // NOTE month is from 1-12, not from 0-11
       if (typeof month === 'number') {
@@ -513,12 +514,14 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     return new IntlDate(date ?? this, { locale: this.locale })
   }
 
-  static max(...args) {
-    return maxDate.apply(undefined, args)
+  static max(first: any, ...rest: any[]) {
+    if (rest.length === 0) return maxDate(first)
+    return maxDate([first, ...rest])
   }
 
-  static min(...args) {
-    return minDate.apply(undefined, args)
+  static min(first: any, ...rest: any[]) {
+    if (rest.length === 0) return minDate(first)
+    return minDate([first, ...rest])
   }
 
   inspect() {

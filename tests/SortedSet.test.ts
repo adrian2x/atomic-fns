@@ -4,14 +4,14 @@ import { SortedSet } from '../src/collections/SortedSet.js'
 
 describe('SortedSet', () => {
   it('empty', () => {
-    let tree = new SortedSet()
+    const tree = new SortedSet()
     assert(tree.empty())
     assert(tree.size === 0)
   })
 
   it('initialized', () => {
-    let entries: number[] = [5, 4, 3, 1, 2]
-    let tree = new SortedSet(entries)
+    const entries: number[] = [5, 4, 3, 1, 2]
+    const tree = new SortedSet(entries)
     assert(!tree.empty())
     assert(tree.size === 5)
     entries.sort()
@@ -19,7 +19,7 @@ describe('SortedSet', () => {
   })
 
   it('add', () => {
-    let tree = new SortedSet()
+    const tree = new SortedSet()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
       assert(tree.contains(i))
@@ -28,7 +28,7 @@ describe('SortedSet', () => {
   })
 
   it('has', () => {
-    let tree = new SortedSet()
+    const tree = new SortedSet()
     for (let i = 100; i > 0; i--) {
       tree.add(i)
       assert(tree.has(i))
@@ -37,7 +37,7 @@ describe('SortedSet', () => {
   })
 
   it('min', () => {
-    let tree = new SortedSet()
+    const tree = new SortedSet()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
     }
@@ -45,7 +45,7 @@ describe('SortedSet', () => {
   })
 
   it('max', () => {
-    let tree = new SortedSet()
+    const tree = new SortedSet()
     for (let i = 10; i > 0; i--) {
       tree.add(i)
     }
@@ -53,7 +53,7 @@ describe('SortedSet', () => {
   })
 
   it('delete', () => {
-    let tree = new SortedSet()
+    const tree = new SortedSet()
     tree.add(42)
     assert(tree.contains(42))
     assert(tree.delete(42) === true)
@@ -62,7 +62,7 @@ describe('SortedSet', () => {
   })
 
   it('clear', () => {
-    let tree = new SortedSet()
+    const tree = new SortedSet()
     for (let i = 1; i <= 5; i++) {
       tree.add(i)
       assert(tree.contains(i))
@@ -76,7 +76,7 @@ describe('SortedSet', () => {
   })
 
   it('values', () => {
-    let tree = new SortedSet()
+    const tree = new SortedSet()
     for (let i = 1; i <= 5; i++) {
       tree.add(i * 2)
     }

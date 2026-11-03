@@ -5,13 +5,13 @@ import { sorted } from '../src/itertools/index.js'
 
 describe('Heap', () => {
   it('empty', () => {
-    let h = new Heap()
+    const h = new Heap()
     assert(h.empty())
   })
 
   it('heapifies array', () => {
-    let arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
-    let h = new Heap(arr)
+    const arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
+    const h = new Heap(arr)
     assert.deepEqual([...h.values()], arr)
     for (const x of sorted(arr)) {
       assert(h.contains(x))
@@ -20,8 +20,8 @@ describe('Heap', () => {
   })
 
   it('max heapifies', () => {
-    let arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
-    let h = new Heap(arr, (x, y) => {
+    const arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
+    const h = new Heap(arr, (x, y) => {
       if (x > y) return -1
       if (x < y) return 1
       return 0
@@ -34,8 +34,8 @@ describe('Heap', () => {
   })
 
   it('add', () => {
-    let h = new Heap()
-    let arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
+    const h = new Heap()
+    const arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
     for (const value of arr) {
       h.add(value)
       assert(h.contains(value))
@@ -44,8 +44,8 @@ describe('Heap', () => {
   })
 
   it('pop', () => {
-    let h = new Heap()
-    let arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
+    const h = new Heap()
+    const arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
     for (const value of arr) {
       h.add(value)
     }
@@ -55,8 +55,8 @@ describe('Heap', () => {
   })
 
   it('remove', () => {
-    let h = new Heap()
-    let arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
+    const h = new Heap()
+    const arr = [7, 9, 3, 5, 8, 1, 2, 6, 4]
     for (const value of arr) {
       h.add(value)
     }

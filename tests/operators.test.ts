@@ -27,7 +27,7 @@ describe('operators', () => {
 
   it('isinstance', () => {
     assert(isinstance([], Array))
-    assert(isinstance(Array(), Array))
+    assert(isinstance([], Array))
     assert(isinstance(Object(), Object))
     assert(isinstance(new Set(), Set))
     assert(isinstance(new Map(), Map))

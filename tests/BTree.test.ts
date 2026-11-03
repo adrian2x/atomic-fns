@@ -5,7 +5,7 @@ import { times } from '../src/itertools/index.js'
 
 describe('BTree', () => {
   it('get', () => {
-    let tree = new BTree()
+    const tree = new BTree()
 
     for (let i = 100; i > 0; i--) {
       tree.set(i, i * 2)
@@ -14,7 +14,7 @@ describe('BTree', () => {
   })
 
   it('add', () => {
-    let tree = new BTree()
+    const tree = new BTree()
 
     for (let i = 100; i > 0; i--) {
       tree.add(i)
@@ -24,7 +24,7 @@ describe('BTree', () => {
   })
 
   it('set', () => {
-    let tree = new BTree()
+    const tree = new BTree()
 
     for (let i = 100; i > 0; i--) {
       tree.set(i, i)
@@ -35,7 +35,7 @@ describe('BTree', () => {
   })
 
   it('remove', () => {
-    let tree = new BTree()
+    const tree = new BTree()
     for (let i = 100; i > 0; i--) {
       tree.set(i, i)
     }
@@ -45,7 +45,7 @@ describe('BTree', () => {
   })
 
   it('clear', () => {
-    let tree = new BTree()
+    const tree = new BTree()
     for (let i = 100; i > 0; i--) {
       tree.set(i, i)
     }
@@ -55,8 +55,8 @@ describe('BTree', () => {
   })
 
   it('iterates in order', () => {
-    let tree = new BTree()
-    let entries: any[] = []
+    const tree = new BTree()
+    const entries: any[] = []
     for (let i = 9; i >= 0; i--) {
       tree.set(i, i * 2)
       entries.push([i, i * 2])
@@ -66,8 +66,8 @@ describe('BTree', () => {
   })
 
   it('minKey', () => {
-    let tree = new BTree()
-    let keys: number[] = []
+    const tree = new BTree()
+    const keys: number[] = []
     for (let i = 10; i >= 0; i--) {
       keys.push(i)
       tree.set(i, i * 2)
@@ -77,8 +77,8 @@ describe('BTree', () => {
   })
 
   it('maxKey', () => {
-    let tree = new BTree()
-    let keys: number[] = []
+    const tree = new BTree()
+    const keys: number[] = []
     for (let i = 10; i >= 0; i--) {
       keys.push(i)
       tree.set(i, i * 2)
@@ -88,18 +88,18 @@ describe('BTree', () => {
   })
 
   it('clone', () => {
-    let tree = new BTree()
-    let entries: any[] = []
+    const tree = new BTree()
+    const entries: any[] = []
     for (let i = 100; i > 0; i--) {
       tree.set(i, i)
       entries.push([i, i])
     }
-    let t2 = tree.clone()
+    const t2 = tree.clone()
     assert.deepEqual([...t2.reversed()], entries)
   })
 
   it('freeze', () => {
-    let tree = new BTree()
+    const tree = new BTree()
     for (let i = 10; i > 0; i--) {
       tree.set(i, i)
     }
@@ -109,8 +109,8 @@ describe('BTree', () => {
   })
 
   it('reversed', () => {
-    let tree = new BTree()
-    let entries: any[] = []
+    const tree = new BTree()
+    const entries: any[] = []
     for (let i = 100; i > 0; i--) {
       tree.set(i, i)
       entries.push([i, i])
@@ -119,7 +119,7 @@ describe('BTree', () => {
   })
 
   it('keys', () => {
-    let tree = new BTree()
+    const tree = new BTree()
     for (let i = 9; i >= 0; i--) {
       tree.set(i, i)
     }
@@ -127,7 +127,7 @@ describe('BTree', () => {
   })
 
   it('values', () => {
-    let tree = new BTree()
+    const tree = new BTree()
     for (let i = 9; i >= 0; i--) {
       tree.set(i, i * 2)
     }
@@ -135,7 +135,7 @@ describe('BTree', () => {
   })
 
   it('entries', () => {
-    let tree = new BTree()
+    const tree = new BTree()
     for (let i = 9; i >= 0; i--) {
       tree.set(i, i * 2)
     }

@@ -53,7 +53,7 @@ describe('itertools', () => {
   })
 
   it('chain', () => {
-    let it = chain([1, 3, 5], [2, 4, 6])
+    const it = chain([1, 3, 5], [2, 4, 6])
     assert.deepEqual([...it], [1, 3, 5, 2, 4, 6])
   })
 
@@ -63,13 +63,13 @@ describe('itertools', () => {
   })
 
   it('dropWhile', () => {
-    let it = dropWhile([false, 0, '', true, '', []], Falsy)
+    const it = dropWhile([false, 0, '', true, '', []], Falsy)
     assert.deepEqual([...it], [true, '', []])
   })
 
   it('enumerate', () => {
-    let iter = enumerate(['foo', 'bar', 'baz'])
-    let values = [...iter]
+    const iter = enumerate(['foo', 'bar', 'baz'])
+    const values = [...iter]
     assert.deepEqual(values, [
       [0, 'foo'],
       [1, 'bar'],
@@ -108,21 +108,21 @@ describe('itertools', () => {
   })
 
   it('icompact', () => {
-    let it = icompact([false, 0, '', true, '', []])
+    const it = icompact([false, 0, '', true, '', []])
     assert.deepEqual([...it], [true])
   })
 
   it('ifilter', () => {
-    let users = [
+    const users = [
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
-    let it = ifilter(users, (x) => !x.active)
+    const it = ifilter(users, (x) => !x.active)
     assert.deepEqual([...it], [users[1]])
   })
 
   it('iflatten', () => {
-    let it = iflatten([
+    const it = iflatten([
       [0, 1],
       [2, 3]
     ])
@@ -130,7 +130,7 @@ describe('itertools', () => {
   })
 
   it('imap', () => {
-    let it = imap([0, 1, 2, 3], (x) => 2 ** x)
+    const it = imap([0, 1, 2, 3], (x) => 2 ** x)
     assert.deepEqual([...it], [1, 2, 4, 8])
   })
 
@@ -143,17 +143,17 @@ describe('itertools', () => {
   })
 
   it('itake', () => {
-    let it = itake(3, [false, 0, '', true, '', []])
+    const it = itake(3, [false, 0, '', true, '', []])
     assert.deepEqual([...it], [false, 0, ''])
   })
 
   it('take', () => {
-    let it = take(3, [false, 0, '', true, '', []])
+    const it = take(3, [false, 0, '', true, '', []])
     assert.deepEqual(it, [false, 0, ''])
   })
 
   it('partition', () => {
-    let [A, B] = partition([false, 0, '', true, '', []], Falsy)
+    const [A, B] = partition([false, 0, '', true, '', []], Falsy)
     assert.deepEqual(A, [false, 0, '', ''])
     assert.deepEqual(B, [true, []])
   })
@@ -172,31 +172,31 @@ describe('itertools', () => {
   })
 
   it('reversed', () => {
-    let arr = [3, 2, 1]
-    let reverse = reversed(arr)
+    const arr = [3, 2, 1]
+    const reverse = reversed(arr)
     arr.reverse()
     assert.deepEqual(arr, reverse)
   })
 
   it('sort', () => {
-    let arr = [3, 2, 1]
+    const arr = [3, 2, 1]
     assert.deepEqual(sort(arr), [1, 2, 3])
   })
 
   it('sort reversed', () => {
-    let arr = [3, 1, 2]
+    const arr = [3, 1, 2]
     assert.deepEqual(sort(arr, true), [3, 2, 1])
   })
 
   it('sorted', () => {
-    let arr = [3, 2, 1]
+    const arr = [3, 2, 1]
     assert.deepEqual(sorted(arr), arr.sort())
     // sorted in reverse
     assert.deepEqual(sorted([3, 1, 2], true), [3, 2, 1])
   })
 
   it('sorted by key', () => {
-    let users = [
+    const users = [
       { user: 'fred', age: 40 },
       { user: 'barney', age: 36 }
     ]
@@ -219,7 +219,7 @@ describe('itertools', () => {
   })
 
   it('sorted with custom compare', () => {
-    let users = [
+    const users = [
       { user: 'fred', age: 40 },
       { user: 'barney', age: 36 }
     ]
@@ -233,7 +233,7 @@ describe('itertools', () => {
   })
 
   it('times', () => {
-    let arr = [...times(5, (x) => x)]
+    const arr = [...times(5, (x) => x)]
     assert.deepEqual(arr, [0, 1, 2, 3, 4])
   })
 
@@ -245,22 +245,22 @@ describe('itertools', () => {
   })
 
   it('zip', () => {
-    let users1 = [
+    const users1 = [
       { user: 'barney', age: 36 },
       { user: 'fred', age: 40 }
     ]
-    let users2 = [
+    const users2 = [
       { user: 'fred', age: 40 },
       { user: 'barney', age: 36 }
     ]
 
-    let results = [...zip(users1, users2)]
+    const results = [...zip(users1, users2)]
 
-    let [first1, first2] = results[0]
+    const [first1, first2] = results[0]
     assert(first1 === users1[0])
     assert(first2 === users2[0])
 
-    let [second1, second2] = results[1]
+    const [second1, second2] = results[1]
     assert(second1 === users1[1])
     assert(second2 === users2[1])
   })

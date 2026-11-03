@@ -4,12 +4,12 @@ import { LRUCache } from '../src/collections/LRUCache.js'
 
 describe('LRUCache', () => {
   it('empty', () => {
-    let cache = new LRUCache()
+    const cache = new LRUCache()
     assert(cache.size === 0)
   })
 
   it('contains', () => {
-    let cache = new LRUCache(2)
+    const cache = new LRUCache(2)
     assert(cache.capacity === 2)
     assert(!cache.contains(1))
     cache.set(1, 'foo')
@@ -19,7 +19,7 @@ describe('LRUCache', () => {
   })
 
   it('evicts LRU keys', () => {
-    let cache = new LRUCache(2)
+    const cache = new LRUCache(2)
     assert(cache.capacity === 2)
     cache.set(1, 'foo')
     cache.set(2, 'bar')
@@ -30,7 +30,7 @@ describe('LRUCache', () => {
   })
 
   it('keys', () => {
-    let cache = new LRUCache(5)
+    const cache = new LRUCache(5)
     for (const value of [1, 2, 3, 4, 5]) {
       cache.set(value, value)
     }
@@ -38,7 +38,7 @@ describe('LRUCache', () => {
   })
 
   it('values', () => {
-    let cache = new LRUCache(5)
+    const cache = new LRUCache(5)
     for (const value of [1, 2, 3, 4, 5]) {
       cache.set(value, value)
     }
@@ -46,7 +46,7 @@ describe('LRUCache', () => {
   })
 
   it('entries', () => {
-    let cache = new LRUCache(3)
+    const cache = new LRUCache(3)
     for (const value of [1, 2, 3]) {
       cache.set(value, 0)
     }
@@ -61,16 +61,16 @@ describe('LRUCache', () => {
   })
 
   it('iterator', () => {
-    let cache = new LRUCache(3)
+    const cache = new LRUCache(3)
     for (const value of [1, 2, 3]) {
       cache.set(value, 0)
     }
-    let values = [...cache]
+    const values = [...cache]
     assert.deepEqual(values, [...cache.entries()])
   })
 
   it('delete', () => {
-    let cache = new LRUCache()
+    const cache = new LRUCache()
     for (const value of [1, 2, 3]) {
       cache.set(value, 0)
     }
@@ -82,7 +82,7 @@ describe('LRUCache', () => {
   })
 
   it('remove', () => {
-    let cache = new LRUCache()
+    const cache = new LRUCache()
     for (const value of [1, 2, 3]) {
       cache.set(value, 0)
     }

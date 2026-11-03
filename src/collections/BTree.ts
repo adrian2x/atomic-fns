@@ -63,15 +63,15 @@ class BNode<K, V = any> {
     while (lo < hi) {
       const c = cmp(keys[mid], key)
       if (c < 0) lo = mid + 1
-      else if (c > 0) hi = mid // key < keys[mid]
+      else if (c > 0)
+        hi = mid // key < keys[mid]
       else if (c === 0) return mid
       else {
         // c is NaN or otherwise invalid
-        // eslint-disable-next-line
+
         if (key === key)
           // at least the search key is not NaN
           return keys.length
-        // eslint-disable-next-line
         else throw new KeyError(`Btree found an invalid key: ${key}`)
       }
       mid = (lo + hi) >> 1
@@ -235,10 +235,10 @@ class BNode<K, V = any> {
       if (v !== undefVals) v.push(undefined as any)
     } else {
       v = this.reifyValues()
-      // eslint-disable-next-line
+
       v.push(rhs.values.shift()!)
     }
-    // eslint-disable-next-line
+
     this.keys.push(rhs.keys.shift()!)
   }
 
@@ -251,10 +251,10 @@ class BNode<K, V = any> {
       if (v !== undefVals) v.unshift()
     } else {
       v = this.reifyValues()
-      // eslint-disable-next-line
+
       v.unshift(lhs.values.pop()!)
     }
-    // eslint-disable-next-line
+
     this.keys.unshift(lhs.keys.pop()!)
   }
 
@@ -269,7 +269,7 @@ class BNode<K, V = any> {
   /// //////////////////////////////////////////////////////////////////////////
   // Leaf Node: scanning & deletions //////////////////////////////////////////
 
-  forRange<R>(
+  forRange(
     low: K,
     high: K,
     includeHigh: boolean | undefined,
@@ -318,13 +318,14 @@ class BNode<K, V = any> {
   }
 
   /** Adds entire contents of right-hand sibling (rhs is left unchanged) */
-  mergeSibling(rhs: BNode<K, V>, _: number) {
-    this.keys.push.apply(this.keys, rhs.keys)
+  mergeSibling(rhs: BNode<K, V>, maxNodeSize: number) {
+    void maxNodeSize
+    this.keys.push(...rhs.keys)
     if (this.values === undefVals) {
       if (rhs.values === undefVals) return
       this.values = this.values.slice(0, this.keys.length)
     }
-    this.values.push.apply(this.values, rhs.reifyValues())
+    this.values.push(...rhs.reifyValues())
   }
 }
 
@@ -471,12 +472,12 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   entries(lowestKey?: K, reusedArray?: Array<K | V>): IterableIterator<[K, V]> {
     const info = this.findPath(lowestKey)
     if (info === undefined) return iterator<[K, V]>()
-    let { nodequeue, nodeindex, leaf } = info
+    const { nodequeue, nodeindex } = info
+    let { leaf } = info
     let state = reusedArray !== undefined ? 1 : 0
     let i = lowestKey === undefined ? -1 : leaf.indexOf(lowestKey, 0, this._compare) - 1
 
     return iterator<[K, V]>(() => {
-      // eslint-disable-next-line
       jump: while (true) {
         switch (state) {
           case 0:
@@ -486,9 +487,8 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
             continue
           case 1:
             if (++i < leaf.keys.length) {
-              // eslint-disable-next-line
               reusedArray![0] = leaf.keys[i]!
-              // eslint-disable-next-line
+
               reusedArray![1] = leaf.values[i]!
               return { done: false, value: reusedArray as [K, V] }
             }
@@ -501,7 +501,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
             while (true) {
               if (++level >= nodequeue.length) {
                 state = 3
-                // eslint-disable-next-line
+
                 continue jump
               }
               if (++nodeindex[level] < nodequeue[level].length) break
@@ -550,7 +550,6 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     let state = reusedArray !== undefined ? 1 : 0
 
     return iterator<[K, V]>(() => {
-      // eslint-disable-next-line
       jump: while (true) {
         switch (state) {
           case 0:
@@ -559,9 +558,8 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
             continue
           case 1:
             if (--i >= 0) {
-              // eslint-disable-next-line
               reusedArray![0] = leaf.keys[i]!
-              // eslint-disable-next-line
+
               reusedArray![1] = leaf.values[i]!
               return { done: false, value: reusedArray as [K, V] }
             }
@@ -574,7 +572,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
             while (true) {
               if (++level >= nodequeue.length) {
                 state = 3
-                // eslint-disable-next-line
+
                 continue jump
               }
               if (--nodeindex[level] >= 0) break
@@ -1213,9 +1211,9 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     // Reminder: parent node must update its copy of key for this node
     // assert: neither node is shared
     // assert rhs.keys.length > (maxNodeSize/2 && this.keys.length<maxNodeSize)
-    // eslint-disable-next-line
+
     this.keys.push(rhs.keys.shift()!)
-    // eslint-disable-next-line
+
     this.children.push((rhs as BNodeInternal<K, V>).children.shift()!)
   }
 
@@ -1223,9 +1221,9 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     // Reminder: parent node must update its copy of key for this node
     // assert: neither node is shared
     // assert rhs.keys.length > (maxNodeSize/2 && this.keys.length<maxNodeSize)
-    // eslint-disable-next-line
+
     this.keys.unshift(lhs.keys.pop()!)
-    // eslint-disable-next-line
+
     this.children.unshift((lhs as BNodeInternal<K, V>).children.pop()!)
   }
 
@@ -1235,7 +1233,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
   // Note: `count` is the next value of the third argument to `onFound`.
   //       A leaf node's `forRange` function returns a new value for this counter,
   //       unless the operation is to stop early.
-  forRange<R>(
+  forRange(
     low: K,
     high: K,
     includeHigh: boolean | undefined,
@@ -1323,9 +1321,9 @@ class BNodeInternal<K, V> extends BNode<K, V> {
   mergeSibling(rhs: BNode<K, V>, maxNodeSize: number) {
     // assert !this.isShared;
     const oldLength = this.keys.length
-    this.keys.push.apply(this.keys, rhs.keys)
+    this.keys.push(...rhs.keys)
     const rhsChildren = (rhs as any as BNodeInternal<K, V>).children
-    this.children.push.apply(this.children, rhsChildren)
+    this.children.push(...rhsChildren)
 
     if (rhs.isShared && !this.isShared) {
       // All children of a shared node are implicitly shared, and since their new
