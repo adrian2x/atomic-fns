@@ -340,10 +340,15 @@ export function keys<T extends object>(object: T): (keyof T & string)[] {
 
 const DANGEROUS_SEGMENTS = new Set<PropertyKey>(['__proto__', 'constructor', 'prototype'])
 
+/**
+ * Normalize a path once at parse time: string paths split on `.`; array / single segments
+ * stringify numbers (so index and dangerous-name checks apply identically) and keep symbols.
+ */
 function pathSegments(key: PropertyKey | PropertyKey[]): PropertyKey[] {
+  const normalize = (seg: PropertyKey): PropertyKey => (typeof seg === 'number' ? String(seg) : seg)
   if (typeof key === 'string') return key.split('.')
-  if (Array.isArray(key)) return key
-  return [key]
+  if (Array.isArray(key)) return key.map(normalize)
+  return [normalize(key)]
 }
 
 function isPlainObjectOrArray(base: object): boolean {

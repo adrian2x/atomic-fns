@@ -453,6 +453,45 @@ describe('globals', () => {
     assert.equal(d.tags[1], 'b')
   })
 
+  it('R12-D: path segment checks apply to every path form', () => {
+    const d = { tags: ['a'] as unknown[] }
+    assert.throws(
+      () => set(['tags', 4294967294], d, 'x', true, true),
+      RangeError,
+      'array index beyond length'
+    )
+    assert.throws(
+      () => set(['tags', 1e9], d, 'x', true, true),
+      RangeError,
+      'array index beyond length'
+    )
+    assert.equal(d.tags.length, 1)
+    set(['tags', 0], d, 'z', true, true)
+    assert.equal(d.tags[0], 'z')
+    set(['tags', 1], d, 'b', true, true)
+    assert.equal(d.tags.length, 2)
+    set(['tags', 2], d, 'c', true, true)
+    assert.equal(d.tags.length, 3)
+    assert.equal(d.tags[2], 'c')
+
+    assert.throws(
+      () => set(['__proto__', 'x'], {}, 1, true, true),
+      TypeError,
+      'refusing to write through "__proto__"'
+    )
+    assert.equal(get(['__proto__', 'x'], {}, 'D'), 'D')
+    assert.equal(get(['a', 'constructor'], { a: {} }, 'D'), 'D')
+    assert.equal(get('a.constructor', { a: {} }, 'D'), 'D')
+
+    const obj: Record<string, unknown> = {}
+    set([1.5], obj, 'dot', true, true)
+    assert.equal(obj['1.5'], 'dot')
+    const arr: unknown[] = []
+    set([-1], arr, 'neg', true, true)
+    assert.equal(Reflect.get(arr, '-1'), 'neg')
+    assert.equal(arr.length, 0)
+  })
+
   it('POL-20 residual: inherited natives are missing; set refuses inherited walks', () => {
     const doc = {
       ta: new Uint8Array(4),
