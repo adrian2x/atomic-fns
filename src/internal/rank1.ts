@@ -24,7 +24,7 @@ export function isRank1(v: unknown): boolean {
   if (t === 'bigint') return true
   if (t === 'number') return !Number.isNaN(v)
   if ((t !== 'object' && t !== 'function') || v === null) return false
-  if ((v as Record<symbol, unknown>)[DECIMAL_BRAND] === true) return true
+  if (typeof (v as Record<symbol, unknown>)[DECIMAL_BRAND] === 'function') return true
   if (unitOf(v) !== '') return true
   return (v as { [protocol.rank]?: unknown })[protocol.rank] === 1
 }

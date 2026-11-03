@@ -318,17 +318,33 @@ describe('R12-A rank-1 relational checks are numeric', () => {
     expect(lte(decimal(0), 0) && lte(new Currency(0, 'USD', 'en-US'), 0)).toBe(true)
   })
 
-  it('R7-2: foreign Decimal brand converts via string form', () => {
+  it('R7-2: foreign Decimal brand converts via brand method', () => {
     const foreign = {
-      [DECIMAL_BRAND]: true as const,
-      toString() {
+      [DECIMAL_BRAND]() {
         return '3.25'
+      },
+      toString() {
+        return '$3.25'
       }
     }
     expect(eq(decimal(3.25), foreign)).toBe(true)
     expect(lte(foreign, decimal(3.25))).toBe(true)
     expect(decimal(3.25).eq(foreign as never)).toBe(true)
     expect(decimal(foreign as never).toString()).toBe('3.25')
+  })
+
+  it('R13-F3: brand method preferred over formatted toString', () => {
+    const fake = {
+      [DECIMAL_BRAND]() {
+        return '1.5'
+      },
+      toString() {
+        return '$1.50'
+      }
+    }
+    expect(decimal(fake as never).toString()).toBe('1.5')
+    expect(eq(decimal('1.5'), fake)).toBe(true)
+    expect(() => decimal({ toString: () => '$1.00', [DECIMAL_BRAND]: true } as never)).toThrow()
   })
 
   it('R7-3: adaptProtocol falls back to own instance unit property', () => {

@@ -14,13 +14,25 @@ import { isqrtRoot } from './isqrt.js'
 /** Cross-realm Decimal brand (`Symbol.for` so every copy of the library shares it). */
 export const DECIMAL_BRAND: unique symbol = Symbol.for('atomic-fns.decimal')
 
-/** True when `v` is a Decimal from this or another copy of the library. */
+/** True when `v` carries the Decimal brand method from this or another copy of the library. */
 export function isDecimalBrand(v: unknown): boolean {
   return (
     (typeof v === 'object' || typeof v === 'function') &&
     v !== null &&
-    (v as Record<symbol, unknown>)[DECIMAL_BRAND] === true
+    typeof (v as Record<symbol, unknown>)[DECIMAL_BRAND] === 'function'
   )
+}
+
+/** Canonical plain decimal string from a branded foreign Decimal (not `toString()`). */
+function decimalBrandString(v: unknown): string {
+  if ((typeof v !== 'object' && typeof v !== 'function') || v === null) {
+    throw new TypeError('Decimal brand method missing')
+  }
+  const fn = (v as Record<symbol, unknown>)[DECIMAL_BRAND]
+  if (typeof fn !== 'function') {
+    throw new TypeError('Decimal brand method missing')
+  }
+  return String((fn as (this: object) => unknown).call(v))
 }
 
 /**
@@ -54,6 +66,7 @@ export function compareRank1Numeric(x: unknown, y: unknown): -1 | 0 | 1 | undefi
 
 function coerceDecimal(v: unknown): Decimal {
   if (v instanceof Decimal) return v
+  if (isDecimalBrand(v)) return new Decimal(decimalBrandString(v))
   return new Decimal(String(v))
 }
 
@@ -75,12 +88,12 @@ const PARSE_LEADING_DOT = /^\s*([+-]?)\.(\d+)(?:e([+-]?\d+))?\s*$/i
 
 /**
  * Casts the given value as a {@link Decimal}.
- * Foreign Decimals (other library copies) convert exactly via their string form.
+ * Foreign Decimals (other library copies) convert via their brand method's canonical string.
  * @param x Value to convert.
  */
 export function decimal(x: DecimalInput): Decimal {
   if (x instanceof Decimal) return x
-  if (isDecimalBrand(x)) return new Decimal(String(x))
+  if (isDecimalBrand(x)) return new Decimal(decimalBrandString(x))
   return new Decimal(x)
 }
 
@@ -212,7 +225,9 @@ function toDecimalInput(o: unknown): DecimalInput {
     typeof o === 'bigint' ||
     typeof o === 'string'
   ) {
-    return isDecimalBrand(o) && !(o instanceof Decimal) ? String(o) : (o as DecimalInput)
+    return isDecimalBrand(o) && !(o instanceof Decimal)
+      ? decimalBrandString(o)
+      : (o as DecimalInput)
   }
   throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
 }
@@ -694,7 +709,7 @@ export class Decimal {
 
   /**
    * Numeric-only compare (no unit or kind tie-break): Decimal/bigint exact; finite number
-   * exact-binary. Foreign branded Decimals convert via their string form.
+   * exact-binary. Foreign branded Decimals convert via their brand method.
    */
   numericCompare(o: unknown): number | undefined {
     if (o instanceof Decimal) {
@@ -775,7 +790,10 @@ export class Decimal {
 }
 
 Object.defineProperty(Decimal.prototype, DECIMAL_BRAND, {
-  value: true,
+  value: function decimalBrand(this: Decimal): string {
+    // Currency overrides toString for display; brand always returns the plain canonical form.
+    return Decimal.prototype.toString.call(this)
+  },
   enumerable: false,
   configurable: false,
   writable: false
