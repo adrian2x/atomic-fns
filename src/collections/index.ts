@@ -138,13 +138,10 @@ export function filter<T>(
   const predicate = toIteratee<T>(fn)
   const results: T[] = []
   if (Array.isArray(arr)) {
+    // Native filter skips holes; only own elements are candidates.
     walkArray(arr, (ev) => {
-      if (ev.kind === 'value') {
-        if (predicate(ev.value as T, ev.index, arr)) results.push(ev.value as T)
-        return
-      }
-      // Hole run: one undefined candidate (counts once).
-      if (predicate(undefined as T, ev.start, arr)) results.push(undefined as T)
+      if (ev.kind !== 'value') return
+      if (predicate(ev.value as T, ev.index, arr)) results.push(ev.value as T)
     })
     return results
   }
@@ -805,7 +802,25 @@ indexOf([1, 2, 1, 2], 2, 2)
  * @see {@link lastIndexOf}
  */
 export function indexOf<T>(obj: T[] | Iterable<T> | null | undefined, value: T, start = 0): number {
-  return findIndex(obj, (x) => eq(value, x), start)
+  // Native indexOf skips holes (unlike findIndex, which sees them as undefined).
+  if (obj == null) return -1
+  if (!Array.isArray(obj) && !isIterable(obj)) {
+    throw new TypeError('expected an iterable')
+  }
+  const arr: T[] = Array.isArray(obj) ? obj : arrayFromIterable<T>(obj)
+  const length = arr.length
+  if (length && start < 0) start = Math.max(start + length, 0)
+  if (!length || start >= length) return -1
+  let found = -1
+  walkArray(arr, (ev) => {
+    if (ev.kind !== 'value') return
+    if (ev.index < start) return
+    if (eq(value, ev.value)) {
+      found = ev.index
+      return false
+    }
+  })
+  return found
 }
 
 /**
@@ -892,7 +907,26 @@ export function lastIndexOf<T>(
   value: T,
   start?: number
 ): number {
-  return findLastIndex(obj, (x) => eq(value, x), start)
+  // Native lastIndexOf skips holes (unlike findLastIndex, which sees them as undefined).
+  if (obj == null) return -1
+  if (!Array.isArray(obj) && !isIterable(obj)) {
+    throw new TypeError('expected an iterable')
+  }
+  const list: T[] = Array.isArray(obj) ? obj : arrayFromIterable<T>(obj)
+  const length = list.length
+  let from = start ?? length - 1
+  if (!length || from < 0) return -1
+  if (from >= length) from = length - 1
+  const events: ArrayWalkEvent[] = []
+  walkArray(list, (ev) => {
+    if (ev.kind === 'value') events.push(ev)
+  })
+  for (let e = events.length - 1; e >= 0; e--) {
+    const ev = events[e]
+    if (ev.kind !== 'value' || ev.index > from) continue
+    if (eq(value, ev.value)) return ev.index
+  }
+  return -1
 }
 
 /** Normalize `-0` to `+0` (native Set / Lodash semantics). */
@@ -928,12 +962,10 @@ export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | object | PropertyKey
     result.push(normalizeZero(x))
   }
   if (Array.isArray(arr)) {
-    const flag = { sawHole: false }
+    // Own elements only (holes skipped), matching filter/map native hole rules.
     walkArray(arr, (ev) => {
       if (ev.kind === 'value') add(ev.value as T)
-      else flag.sawHole = true
     })
-    if (flag.sawHole) add(undefined as T)
     return result
   }
   for (const x of arr) add(x)
@@ -1202,14 +1234,9 @@ export function without<T>(array: readonly T[], ...values: T[]): T[] {
     return [...array].filter((x) => !exclude.has(x)).map(normalizeZero)
   }
   const out: T[] = []
-  const flag = { sawHole: false }
   walkArray(array as unknown[], (ev) => {
-    if (ev.kind === 'value') {
-      if (!exclude.has(ev.value as T)) out.push(normalizeZero(ev.value as T))
-      return
-    }
-    flag.sawHole = true
+    if (ev.kind !== 'value') return
+    if (!exclude.has(ev.value as T)) out.push(normalizeZero(ev.value as T))
   })
-  if (flag.sawHole && !exclude.has(undefined as T)) out.push(normalizeZero(undefined as T))
   return out
 }

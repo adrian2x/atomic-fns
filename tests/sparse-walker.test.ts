@@ -80,8 +80,8 @@ describe('R12-E sparse-safe array walker', () => {
       expect(lastIndexOf(a, 'nope')).toBe(-1)
       expect(findIndex(a, (x) => x === 'nope')).toBe(-1)
       expect(find(a, (x) => x === 'admin')).toBe('admin')
-      expect(uniq(a as string[])).toEqual(['x', 'y', 'admin', undefined])
-      expect(without(a as string[], 'x')).toEqual(['y', 'admin', undefined])
+      expect(uniq(a as string[])).toEqual(['x', 'y', 'admin'])
+      expect(without(a as string[], 'x')).toEqual(['y', 'admin'])
       const rem = hugeSparse()
       expect(remove(rem, (x) => x === 'x')).toEqual(['x'])
       expect(compact(a).length).toBe(3)
@@ -208,15 +208,40 @@ describe('R12-E sparse-safe array walker', () => {
     }
   })
 
-  it('small sparse preserves hole vs undefined for indexOf/filter/uniq', () => {
+  it('R13-E3: sparse semantics match native Array methods', () => {
     const holes: unknown[] = [1]
     holes.length = 3
     holes[2] = 3
     const filled = [1, undefined, 3]
-    expect(indexOf(holes, undefined)).toBe(1)
+    expect(indexOf(holes, undefined)).toBe(-1)
     expect(indexOf(filled, undefined)).toBe(1)
-    expect(filter(holes, (x) => x === undefined)).toEqual([undefined])
-    expect(uniq(holes).length).toBe(3)
+    expect(filter(holes, () => true)).toEqual([1, 3])
+    expect(filter(filled, (x) => x === undefined)).toEqual([undefined])
+    expect(findIndex(holes, (x) => x === undefined)).toBe(1)
+    expect(uniq(holes)).toEqual([1, 3])
+
+    for (let n = 0; n < 1000; n++) {
+      const len = 1 + (n % 64)
+      const a: unknown[] = []
+      a.length = len
+      for (let i = 0; i < len; i++) {
+        if ((n * 17 + i * 13) % 3 !== 0) a[i] = (n + i) % 7
+      }
+      const keep = (_x: unknown) => true
+      expect(filter(a, keep)).toEqual(a.filter(keep))
+      expect(map(a, (x) => x)).toEqual(a.map((x) => x))
+      expect(indexOf(a, undefined)).toBe(a.indexOf(undefined))
+      expect(lastIndexOf(a, undefined)).toBe(a.lastIndexOf(undefined))
+      expect(findIndex(a, (x) => x === undefined)).toBe(a.findIndex((x) => x === undefined))
+      expect(find(a, (x) => x === 3)).toBe(a.find((x) => x === 3))
+    }
+
+    const huge = hugeSparse()
+    expectFast(() => {
+      expect(filter(huge, () => true)).toEqual(['x', 'y', 'admin'])
+      expect(indexOf(huge, undefined)).toBe(-1)
+      expect(findIndex(huge, (x) => x === undefined)).toBe(1)
+    }, BUDGET)
   })
 
   it('dense deepEqual of 1e6 arrays stays within budget', () => {
