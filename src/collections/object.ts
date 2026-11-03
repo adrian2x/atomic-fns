@@ -185,17 +185,20 @@ function omitWithTrie(value: unknown, trie: OmitTrie): unknown {
   if (value === null || typeof value !== 'object') return value
   if (Array.isArray(value)) {
     const list = value as unknown[]
-    const out: unknown[] = []
+    const out: unknown[] = new Array(list.length)
     for (let i = 0; i < list.length; i++) {
       const child = trie.kids?.get(String(i))
-      if (!child || child.drop || !child.kids) {
-        out.push(list[i])
+      if (child?.drop) continue
+      if (!child?.kids) {
+        out[i] = list[i]
       } else {
-        out.push(omitWithTrie(list[i], child))
+        out[i] = omitWithTrie(list[i], child)
       }
     }
     return out
   }
+  // Paths stop at non-plain objects (Date, Map, class instances, typed arrays): keep by reference.
+  if (!isPlainObject(value)) return value
   return omitFromObject(value, trie)
 }
 
@@ -247,7 +250,9 @@ export function pick<T extends object>(
  * Create a deep copy of `obj` with the given paths omitted, or keep values where the predicate is falsy.
  * Never mutates `obj`. Builds a path trie once so cost is O(keys + total path length). Never
  * invokes getters of omitted keys (copies kept keys via property descriptors). String paths
- * split on `.`; an array of segments addresses literal keys.
+ * split on `.`; an array of segments addresses literal keys. An omit path that ends at an array
+ * index leaves a hole (`delete` semantics) on the copy. Descent only continues through plain
+ * objects and arrays; any other value is kept by reference.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */

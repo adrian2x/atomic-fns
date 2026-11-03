@@ -160,6 +160,42 @@ describe('collections', () => {
     expect(Array.isArray(pickedArr.a)).toBe(true)
     expect((pickedArr.a as unknown[])[1]).toBe(2)
 
+    const nestedSrc = { a: [1, 2, 3] }
+    const nestedOmit = omit(nestedSrc, ['a.1']) as { a: unknown[] }
+    expect(nestedSrc.a).toEqual([1, 2, 3])
+    expect(nestedOmit.a).toHaveLength(3)
+    expect(1 in nestedOmit.a).toBe(false)
+    expect(nestedOmit.a[0]).toBe(1)
+    expect(nestedOmit.a[2]).toBe(3)
+
+    const rootArr = [1, 2, 3]
+    const rootOmit = omit(rootArr, ['0']) as unknown as unknown[]
+    expect(rootArr).toEqual([1, 2, 3])
+    expect(rootOmit).toHaveLength(3)
+    expect(0 in rootOmit).toBe(false)
+    expect(rootOmit[1]).toBe(2)
+    expect(rootOmit[2]).toBe(3)
+
+    const d = new Date(0)
+    const withDate = omit({ d }, ['d.x']) as { d: Date }
+    expect(withDate.d).toBe(d)
+
+    const m = new Map([['k', 1]])
+    expect((omit({ m }, ['m.k']) as { m: Map<string, number> }).m).toBe(m)
+
+    class Box {
+      x = 1
+      y = 2
+    }
+    const box = new Box()
+    const throughBox = omit({ box, z: 3 }, ['box.x']) as { box: Box; z: number }
+    expect(throughBox.box).toBe(box)
+    expect(box.x).toBe(1)
+    expect(throughBox.z).toBe(3)
+
+    const ta = new Uint8Array([1, 2, 3])
+    expect((omit({ ta }, ['ta.0']) as { ta: Uint8Array }).ta).toBe(ta)
+
     expect(
       omit(
         {
@@ -345,10 +381,10 @@ describe('collections', () => {
     expect(Object.getPrototypeOf(out)).toBe(Object.prototype)
 
     const nested = { x: new P() }
-    const out2 = omit(nested, ['x.a'])
+    const out2 = omit(nested, ['x.a']) as { x: P }
     expect(nested.x.a).toBe(1)
-    expect(out2).toEqual({ x: { b: 2 } })
-    expect(out2.x).not.toBe(nested.x)
+    expect(out2.x).toBe(nested.x)
+    expect(out2.x.a).toBe(1)
   })
 
   it('pick never defines on objects reachable from a frozen source', () => {
