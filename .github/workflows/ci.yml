@@ -28,4 +28,4 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci --ignore-scripts && npm run build && npm pack && cd consumer && npm i --ignore-scripts --no-save ../atomic-fns-2.0.0.tgz typescript@~6.0.3 @types/node@^24 && npx tsc -p tsconfig.json
+      - run: npm ci --ignore-scripts && npm run build && npm pack && cd consumer && npm i --ignore-scripts --no-save ../atomic-fns-2.0.0.tgz typescript@6.0.3 @types/node@24.19.2 && npx tsc -p tsconfig.json
