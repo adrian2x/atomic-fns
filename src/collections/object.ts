@@ -25,33 +25,55 @@ function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown 
   return ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function'
 }
 
+function mergeKey(
+  t: object,
+  key: PropertyKey,
+  sv: unknown,
+  seen: WeakMap<object, object>
+): void {
+  const tv = Object.hasOwn(t, key) ? (t as Record<PropertyKey, unknown>)[key] : undefined
+  if (key === 'constructor' && typeof tv === 'function') return
+  if (sv === undefined && tv !== undefined) return
+  if (isPlainObject(sv) || Array.isArray(sv)) {
+    if (seen.has(sv)) {
+      defineData(t, key, seen.get(sv))
+      return
+    }
+    // Same container kind: merge into target. Differing array vs plain object: source replaces.
+    let base: object
+    if (Array.isArray(sv)) {
+      base = Array.isArray(tv) ? (tv as unknown[]) : []
+    } else if (isPlainObject(tv)) {
+      base = tv as object
+    } else {
+      base = {}
+    }
+    seen.set(sv, base)
+    mergeInto(base, sv, seen)
+    seen.delete(sv)
+    defineData(t, key, base)
+  } else {
+    defineData(t, key, sv)
+  }
+}
+
 function mergeInto(t: object, s: object, seen: WeakMap<object, object>): void {
   if (t === Object.prototype || t === Function.prototype) return
   for (const key of Object.keys(s)) {
-    const sv = (s as Record<string, unknown>)[key]
-    const tv = Object.hasOwn(t, key) ? (t as Record<string, unknown>)[key] : undefined
-    if (key === 'constructor' && typeof tv === 'function') continue
-    if (sv === undefined && tv !== undefined) continue
-    if (isPlainObject(sv) || Array.isArray(sv)) {
-      if (seen.has(sv)) {
-        defineData(t, key, seen.get(sv))
-        continue
-      }
-      const base = Array.isArray(sv) ? (Array.isArray(tv) ? tv : []) : isPlainObject(tv) ? tv : {}
-      seen.set(sv, base)
-      mergeInto(base, sv, seen)
-      seen.delete(sv)
-      defineData(t, key, base)
-    } else {
-      defineData(t, key, sv)
-    }
+    mergeKey(t, key, (s as Record<string, unknown>)[key], seen)
+  }
+  for (const sym of Object.getOwnPropertySymbols(s)) {
+    const desc = Object.getOwnPropertyDescriptor(s, sym)
+    if (!desc?.enumerable) continue
+    mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen)
   }
 }
 
 /**
- * Recursively merge own enumerable string keys of `sources` into `target`.
+ * Recursively merge own enumerable string and symbol keys of `sources` into `target`.
  * Writes via defineProperty. Skips undefined source values when the target already has a defined value.
- * Recurses for plain objects and arrays; other values are assigned by reference.
+ * Recurses when both sides are plain objects or both are arrays; when array and plain object
+ * kinds differ, the source value replaces the target. Other values are assigned by reference.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.
  * @returns `target`

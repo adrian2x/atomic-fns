@@ -88,4 +88,15 @@ describe('merge', () => {
     const cyc = merge({}, cyclic) as { self: { self: object }; n: number }
     expect(cyc.self.self).toBe(cyc.self)
   })
+
+  it('merge copies enumerable symbols; array vs plain object replaces', () => {
+    const s = Symbol('s')
+    const withSym = merge({}, { [s]: 1, a: 1 }) as { a: number; [k: symbol]: number }
+    expect(withSym[s]).toBe(1)
+    expect(withSym.a).toBe(1)
+
+    expect(merge({ a: [1, 2] }, { a: { 0: 'x' } })).toEqual({ a: { 0: 'x' } })
+    expect(merge({ a: { 0: 'x', b: 1 } }, { a: [1] })).toEqual({ a: [1] })
+    expect(merge({ a: [1, 2] }, { a: [null] })).toEqual({ a: [null, 2] })
+  })
 })
