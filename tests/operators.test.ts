@@ -155,6 +155,120 @@ describe('SPEC-R17 deepEqual', () => {
     expect(deepEqual(a, b)).toBe(true)
   })
 
+  it('SPEC-R17 shared sub-object pairs with different partners in both orders', () => {
+    const s = { a: 1 }
+    const t1 = { a: 1 }
+    const t2 = { a: 1 }
+    expect(deepEqual({ x: s, y: s }, { x: t1, y: t2 })).toBe(true)
+    expect(deepEqual({ x: t1, y: t2 }, { x: s, y: s })).toBe(true)
+  })
+
+  it('SPEC-R17 shared sub-object against unequal partners is false in both orders', () => {
+    const s = { a: 1 }
+    const t1 = { a: 1 }
+    const t2 = { a: 2 }
+    expect(deepEqual({ x: s, y: s }, { x: t1, y: t2 })).toBe(false)
+    expect(deepEqual({ x: t1, y: t2 }, { x: s, y: s })).toBe(false)
+  })
+
+  it('SPEC-R17 shared arrays and Maps pair with different partners', () => {
+    const s = [1, [2]]
+    expect(
+      deepEqual(
+        [s, s],
+        [
+          [1, [2]],
+          [1, [2]]
+        ]
+      )
+    ).toBe(true)
+    expect(
+      deepEqual(
+        [
+          [1, [2]],
+          [1, [2]]
+        ],
+        [s, s]
+      )
+    ).toBe(true)
+    const m = new Map([['k', { a: 1 }]])
+    expect(deepEqual({ p: m, q: m }, { p: new Map(m), q: new Map([['k', { a: 1 }]]) })).toBe(true)
+  })
+
+  it('SPEC-R17 cycles still terminate, including mutual and unequal ones', () => {
+    const a1: Record<string, unknown> = {}
+    const a2: Record<string, unknown> = { prev: a1 }
+    a1.next = a2
+    const b1: Record<string, unknown> = {}
+    const b2: Record<string, unknown> = { prev: b1 }
+    b1.next = b2
+    expect(deepEqual(a1, b1)).toBe(true)
+    expect(deepEqual(b1, a1)).toBe(true)
+
+    const c: Record<string, unknown> = { v: 1 }
+    c.self = c
+    const d: Record<string, unknown> = { v: 2 }
+    d.self = d
+    expect(deepEqual(c, d)).toBe(false)
+    expect(deepEqual(d, c)).toBe(false)
+  })
+
+  it('SPEC-R17 dispatches to protocol.equals when either side has it', () => {
+    expect(deepEqual(decimal(1), decimal(2))).toBe(false)
+    expect(deepEqual(decimal(1), decimal('1.0'))).toBe(true)
+    expect(deepEqual(decimal(1), 1)).toBe(true)
+    expect(deepEqual(1, decimal(1))).toBe(true)
+    expect(deepEqual(decimal(1), 2)).toBe(false)
+    expect(deepEqual([decimal(1)], [decimal(2)])).toBe(false)
+    expect(deepEqual({ d: decimal(3) }, { d: decimal('3.0') })).toBe(true)
+  })
+
+  it('SPEC-R17 protocol.equals decides even when structure would match', () => {
+    class AlwaysDifferent {
+      [protocol.equals](): boolean {
+        return false
+      }
+    }
+    class AlwaysSame {
+      [protocol.equals](): boolean {
+        return true
+      }
+      readonly tag: string
+      constructor(tag: string) {
+        this.tag = tag
+      }
+    }
+    expect(deepEqual(new AlwaysDifferent(), new AlwaysDifferent())).toBe(false)
+    expect(deepEqual(new AlwaysSame('a'), new AlwaysSame('b'))).toBe(true)
+  })
+
+  it('SPEC-R17 boxed primitives compare by value', () => {
+    expect(deepEqual(new Number(1), new Number(2))).toBe(false)
+    expect(deepEqual(new Number(1), new Number(1))).toBe(true)
+    expect(deepEqual(new Number(NaN), new Number(NaN))).toBe(true)
+    expect(deepEqual(new Number(0), new Number(-0))).toBe(false)
+    expect(deepEqual(new String('a'), new String('b'))).toBe(false)
+    expect(deepEqual(new String('a'), new String('a'))).toBe(true)
+    expect(deepEqual(new Boolean(true), new Boolean(false))).toBe(false)
+    expect(deepEqual(new Boolean(false), new Boolean(false))).toBe(true)
+    expect(deepEqual(Object(1n), Object(2n))).toBe(false)
+    expect(deepEqual(Object(1n), Object(1n))).toBe(true)
+    const sym = Symbol('s')
+    expect(deepEqual(Object(sym), Object(Symbol('s')))).toBe(false)
+    expect(deepEqual(Object(sym), Object(sym))).toBe(true)
+  })
+
+  it('SPEC-R17 boxed primitive differs from other kinds', () => {
+    expect(deepEqual(new Number(1), new String('1'))).toBe(false)
+    expect(deepEqual(new Number(1), 1)).toBe(false)
+    expect(deepEqual(new Number(1), {})).toBe(false)
+  })
+
+  it('SPEC-R17 impostor tagged object is not unboxed', () => {
+    const fake = Object.create(Number.prototype) as object
+    expect(deepEqual(fake, Object.create(Number.prototype) as object)).toBe(true)
+  })
+
   it('SPEC-R17 NaN and signed zero', () => {
     expect(deepEqual(NaN, NaN)).toBe(true)
     expect(deepEqual(0, -0)).toBe(true)

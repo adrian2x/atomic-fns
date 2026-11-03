@@ -52,6 +52,12 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     return this.#size
   }
 
+  protected override cloneFrom(entries: Iterable<[K, V]>): this {
+    const copy = new SplayTree<K, V>(this.#cmp, this.#p)
+    for (const [k, v] of entries) copy.set(k, v)
+    return copy as this
+  }
+
   readonly [Symbol.toStringTag] = 'SplayTree'
 
   /**

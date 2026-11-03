@@ -81,6 +81,35 @@ describe('SPEC-R13 compare dispatch', () => {
     expect(() => compare(bad, other)).toThrow(/finite number or undefined/)
   })
 
+  it.each([null, true, '1', NaN, Infinity, {}])(
+    'SPEC-R13 invalid protocol result %j throws in both argument orders',
+    (value) => {
+      const other = { [protocol.rank]: 6 as const }
+      const bad = {
+        [protocol.rank]: 6 as const,
+        [protocol.compare]() {
+          return value
+        }
+      }
+      // forward: bad is x; reflected: bad is y and the result is validated before negation
+      expect(() => compare(bad, other)).toThrow(TypeError)
+      expect(() => compare(other, bad)).toThrow(TypeError)
+      expect(() => compare(other, bad)).toThrow(/finite number or undefined/)
+    }
+  )
+
+  it('SPEC-R13 reflected finite result is negated', () => {
+    const other = { [protocol.rank]: 6 as const }
+    const pos = {
+      [protocol.rank]: 6 as const,
+      [protocol.compare]() {
+        return 5
+      }
+    }
+    expect(compare(pos, other)).toBe(1)
+    expect(compare(other, pos)).toBe(-1)
+  })
+
   it('SPEC-R13 declining protocol uses kind tie-break', () => {
     class Decliner {
       [protocol.compare]() {

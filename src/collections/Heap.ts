@@ -30,6 +30,10 @@ export class Heap<T> extends ValueCollection<T> {
     return this.#heap.length
   }
 
+  protected override cloneFrom(values: Iterable<T>): this {
+    return new Heap(values, this.#compare) as this
+  }
+
   readonly [Symbol.toStringTag] = 'Heap'
 
   clear(): void {

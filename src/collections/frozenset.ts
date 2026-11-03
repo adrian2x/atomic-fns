@@ -1,3 +1,5 @@
+import { protocol } from '../operators/index.js'
+
 /**
  * An immutable Set. Contents cannot change after construction.
  * `Set.prototype.add.call(fs, x)` still mutates (inherent Set subclass limit).
@@ -42,6 +44,11 @@ export class FrozenSet<T = unknown> extends Set<T> {
   override clear(): void {
     if (this.#frozen) throw new TypeError('FrozenSet is immutable')
     super.clear()
+  }
+
+  /** A distinct `FrozenSet` with the same members. */
+  [protocol.clone](): this {
+    return new FrozenSet(this) as this
   }
 
   readonly [Symbol.toStringTag] = 'FrozenSet'

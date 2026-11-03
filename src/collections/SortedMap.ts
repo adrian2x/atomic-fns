@@ -10,6 +10,7 @@ import { BTree } from './BTree.js'
  */
 export class SortedMap<K, V> extends MapCollection<K, V> {
   readonly #tree: BTree<K, V>
+  readonly #compareFn: Comparer<K> | undefined
 
   /**
    * @param entries Initial key-value pairs.
@@ -17,11 +18,16 @@ export class SortedMap<K, V> extends MapCollection<K, V> {
    */
   constructor(entries?: Iterable<[K, V]>, compareFn?: Comparer<K>) {
     super()
+    this.#compareFn = compareFn
     this.#tree = new BTree(entries, compareFn)
   }
 
   get size(): number {
     return this.#tree.size
+  }
+
+  protected override cloneFrom(entries: Iterable<[K, V]>): this {
+    return new SortedMap(entries, this.#compareFn) as this
   }
 
   readonly [Symbol.toStringTag] = 'SortedMap'

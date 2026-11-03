@@ -66,6 +66,12 @@ export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
     return this.#items.size
   }
 
+  protected override cloneFrom(entries: Iterable<[K, V]>): this {
+    const copy = new LRUCache<K, V>(this.#capacity)
+    for (const [k, v] of entries) copy.set(k, v)
+    return copy as this
+  }
+
   /** Maximum number of entries. */
   get capacity(): number {
     return this.#capacity

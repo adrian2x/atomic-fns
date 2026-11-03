@@ -56,6 +56,10 @@ export class Deque<T> extends SetCollection<T, number> {
     return this.#size
   }
 
+  protected override cloneFrom(values: Iterable<T>): this {
+    return new Deque(values, { maxlen: this.#maxlen, arrType: this.#arrType }) as this
+  }
+
   /**
    * Maximum size when constructed with `maxlen`, otherwise `undefined`.
    */

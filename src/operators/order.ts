@@ -139,6 +139,12 @@ function nativeCompare(x: unknown, y: unknown, rank: number): -1 | 0 | 1 {
   }
 }
 
+function assertCompareResult(r: unknown): asserts r is number | undefined {
+  if (r !== undefined && (typeof r !== 'number' || !Number.isFinite(r))) {
+    throw new TypeError('compare protocol must return a finite number or undefined')
+  }
+}
+
 /**
  * Total order over all values: `-1`, `0`, or `1`.
  * Antisymmetric and transitive; never applies `<`/`>` to objects.
@@ -153,14 +159,13 @@ export function compare(x: unknown, y: unknown): -1 | 0 | 1 {
     r = x[protocol.compare](y)
   } else if (hasMethod(y, protocol.compare)) {
     const r0 = y[protocol.compare](x)
-    r = r0 === undefined ? undefined : -Number(r0)
+    assertCompareResult(r0)
+    r = r0 === undefined ? undefined : -r0
   } else {
     return nativeCompare(x, y, rx)
   }
 
-  if (r !== undefined && (typeof r !== 'number' || !Number.isFinite(r))) {
-    throw new TypeError('compare protocol must return a finite number or undefined')
-  }
+  assertCompareResult(r)
   if (typeof r === 'number' && r < 0) return -1
   if (typeof r === 'number' && r > 0) return 1
   if (r === 0 && sameKind(x, y)) return 0
