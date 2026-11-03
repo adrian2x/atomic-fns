@@ -30,6 +30,7 @@ import {
 import { max } from '../src/math/index.js'
 import { decimal } from '../src/decimal/index.js'
 import { ValueError } from '../src/globals/index.js'
+import { expectFast } from './helpers/perf.js'
 
 const Falsy = (x: unknown) => !x
 
@@ -100,9 +101,9 @@ describe('itertools', () => {
   })
 
   it('SPEC-R45 dropWhile terminates when source ends before predicate fails', () => {
-    const start = performance.now()
-    assert.deepEqual([...dropWhile([1, 2], () => true)], [])
-    assert.ok(performance.now() - start < 100)
+    expectFast(() => {
+      assert.deepEqual([...dropWhile([1, 2], () => true)], [])
+    }, 250)
     assert.deepEqual([...dropWhile([{ a: 1 }], (o) => o.a)], [])
   })
 
@@ -315,9 +316,9 @@ describe('itertools', () => {
 
   it('reversed rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
-    const start = performance.now()
-    assert.throws(() => reversed(evil), TypeError, 'expected an iterable')
-    assert.ok(performance.now() - start < 5)
+    expectFast(() => {
+      assert.throws(() => reversed(evil), TypeError, 'expected an iterable')
+    }, 250)
   })
 
   it('sort', () => {

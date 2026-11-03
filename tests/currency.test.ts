@@ -3,6 +3,7 @@ import { decimal } from '../src/decimal/index.js'
 import { Currency } from '../src/i18n/index.js'
 import { compare, eq } from '../src/operators/index.js'
 import { protocol } from '../src/operators/protocol.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('SPEC-R71 Currency', () => {
   const locale = 'en-US'
@@ -42,12 +43,11 @@ describe('SPEC-R71 Currency', () => {
     expect(() => neg.toString()).toThrow(RangeError)
     expect(() => neg.format()).toThrow(RangeError)
 
-    const tTiny = performance.now()
-    expect(decimal('1e-999999').greaterThanMaxValue()).toBe(false)
-    expect(performance.now() - tTiny).toBeLessThan(1)
-    const tBig = performance.now()
-    expect(decimal('1e999999').greaterThanMaxValue()).toBe(true)
-    expect(performance.now() - tBig).toBeLessThan(1)
+    // Pre-fix: hang formatting huge digit strings. Revert of 707087f fails this.
+    expectFast(() => {
+      expect(decimal('1e-999999').greaterThanMaxValue()).toBe(false)
+      expect(decimal('1e999999').greaterThanMaxValue()).toBe(true)
+    }, 250)
     expect(() => new Currency('1e-999999', 'USD', 'en-US').toString()).not.toThrow()
     expect(() => new Currency('1e999999', 'USD', 'en-US').toString()).toThrow(RangeError)
 

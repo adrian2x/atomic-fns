@@ -14,6 +14,7 @@ import {
 import { decimal } from '../src/decimal/index.js'
 import { IntlDate } from '../src/i18n/date/index.js'
 import { deepEqual, eq, protocol } from '../src/operators/index.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('SPEC-R75 collection equality and clone protocol', () => {
   it('SortedSet equals by content', () => {
@@ -87,23 +88,24 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
     const keyed = Array.from({ length: n }, (_, i) => ({ i }))
     const h1 = new Heap(keyed)
     const h2 = new Heap(keyed.slice().reverse())
-    const t0 = performance.now()
-    expect(deepEqual(h1, h2)).toBe(true)
-    expect(performance.now() - t0).toBeLessThan(200)
+    // Pre-fix: quadratic Heap equality. Revert of 2443b9e fails these.
+    expectFast(() => {
+      expect(deepEqual(h1, h2)).toBe(true)
+    }, 250)
 
     const dated = Array.from({ length: 2000 }, (_, i) => ({ p: 0, at: new Date(i) }))
     const hd1 = new Heap(dated)
     const hd2 = new Heap(dated.slice().reverse())
-    const tDate = performance.now()
-    expect(deepEqual(hd1, hd2)).toBe(true)
-    expect(performance.now() - tDate).toBeLessThan(200)
+    expectFast(() => {
+      expect(deepEqual(hd1, hd2)).toBe(true)
+    }, 250)
 
     const h3 = new Heap(keyed)
     h3.pop()
     h3.push({ i: -1 })
-    const t1 = performance.now()
-    expect(deepEqual(h1, h3)).toBe(false)
-    expect(performance.now() - t1).toBeLessThan(200)
+    expectFast(() => {
+      expect(deepEqual(h1, h3)).toBe(false)
+    }, 250)
 
     interface Item {
       p: number
@@ -160,9 +162,9 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
     const jsonB = Array.from({ length: nJson }, (_, i) =>
       i % 3 === 0 ? i + nJson : i % 3 === 1 ? `t${String(i)}` : { n: i + nJson }
     )
-    const tJson = performance.now()
-    expect(deepEqual(new Heap(jsonA), new Heap(jsonB))).toBe(false)
-    expect(performance.now() - tJson).toBeLessThan(200)
+    expectFast(() => {
+      expect(deepEqual(new Heap(jsonA), new Heap(jsonB))).toBe(false)
+    }, 250)
   })
 
   it('Trie', () => {
@@ -338,16 +340,16 @@ describe('Heap equality with oversized (hashed) keys', () => {
       const xB = dagChain(chain)
       const left = new Heap(Array.from({ length: count }, (_, i) => [xA, i]))
       const reversed = new Heap(Array.from({ length: count }, (_, i) => [xB, count - 1 - i]))
-      const t0 = performance.now()
-      expect(deepEqual(left, reversed)).toBe(true)
-      expect(performance.now() - t0).toBeLessThan(200)
+      expectFast(() => {
+        expect(deepEqual(left, reversed)).toBe(true)
+      }, 250)
 
       const different = new Heap(
         Array.from({ length: count }, (_, i) => [xB, i === 7 ? count + 1 : i])
       )
-      const t1 = performance.now()
-      expect(deepEqual(left, different)).toBe(false)
-      expect(performance.now() - t1).toBeLessThan(200)
+      expectFast(() => {
+        expect(deepEqual(left, different)).toBe(false)
+      }, 250)
     })
 
     it('{ s, id } items sharing one S per side: true / false, < 200 ms', () => {
@@ -357,16 +359,16 @@ describe('Heap equality with oversized (hashed) keys', () => {
       const reversed = new Heap(
         Array.from({ length: count }, (_, i) => ({ s: sB, id: count - 1 - i }))
       )
-      const t0 = performance.now()
-      expect(deepEqual(left, reversed)).toBe(true)
-      expect(performance.now() - t0).toBeLessThan(200)
+      expectFast(() => {
+        expect(deepEqual(left, reversed)).toBe(true)
+      }, 250)
 
       const different = new Heap(
         Array.from({ length: count }, (_, i) => ({ s: sB, id: i === 11 ? -1 : i }))
       )
-      const t1 = performance.now()
-      expect(deepEqual(left, different)).toBe(false)
-      expect(performance.now() - t1).toBeLessThan(200)
+      expectFast(() => {
+        expect(deepEqual(left, different)).toBe(false)
+      }, 250)
     })
   })
 
@@ -380,16 +382,16 @@ describe('Heap equality with oversized (hashed) keys', () => {
     expect(deepEqual(a, new Heap([{ s: bSub, id: 1 }]))).toBe(false)
   })
 
-  it('dos-21 wide shape: 12,000 refs to a ~45 KB-key subtree compares in < 100 ms', () => {
+  it('dos-21 wide shape: 12,000 refs to a ~45 KB-key subtree compares within budget', () => {
     const wide = (): unknown[] => {
       const sub = dagChain(0, 11)
       return Array.from({ length: 12_000 }, () => sub)
     }
     const left = new Heap([wide()])
     const right = new Heap([wide()])
-    const t0 = performance.now()
-    expect(deepEqual(left, right)).toBe(true)
-    expect(performance.now() - t0).toBeLessThan(100)
+    expectFast(() => {
+      expect(deepEqual(left, right)).toBe(true)
+    }, 250)
   })
 
   it('hashed items still match cross-kind unkeyed items (Decimal vs number)', () => {

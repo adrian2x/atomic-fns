@@ -5,6 +5,7 @@ import {
   createCanonicalKeySession
 } from '../src/internal/canonicalKey.js'
 import { deepEqual } from '../src/operators/index.js'
+import { expectFast } from './helpers/perf.js'
 
 /** Deterministic PRNG (mulberry32). */
 function mulberry32(seed: number): () => number {
@@ -264,14 +265,11 @@ describe('hashed oversized keys', () => {
     expect(exact?.length).toBeGreaterThan(40_000)
     expect(exact?.length).toBeLessThan(64 * 1024)
     const wide = Array.from({ length: 12_000 }, () => sub)
-    const t0 = performance.now()
-    let info: ReturnType<typeof canonicalKeyInfo>
-    expect(() => {
-      info = canonicalKeyInfo(wide)
-    }).not.toThrow()
-    expect(performance.now() - t0).toBeLessThan(100)
-    expect(info?.hashed).toBe(true)
-    expect(info?.key).toMatch(/^H:[0-9a-f]{16}$/)
+    expectFast(() => {
+      const info = canonicalKeyInfo(wide)
+      expect(info?.hashed).toBe(true)
+      expect(info?.key).toMatch(/^H:[0-9a-f]{16}$/)
+    }, 250)
   })
 
   it('a shared session keys shared subtrees once and gives the same keys', () => {

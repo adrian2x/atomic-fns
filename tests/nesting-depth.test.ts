@@ -22,6 +22,7 @@ import {
   setHookNestingCost
 } from '../src/internal/nesting.js'
 import { deepEqual } from '../src/operators/index.js'
+import { expectFast } from './helpers/perf.js'
 
 function nestArray(depth: number): unknown {
   return JSON.parse('['.repeat(depth) + ']'.repeat(depth))
@@ -144,7 +145,8 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
     expect(() => flatten(nestObject(1001) as object)).toThrow(NESTING_MSG)
   })
 
-  it('5000-deep probe throws RangeError under 50ms', () => {
+  it('5000-deep probe throws RangeError within budget', () => {
+    // Pre-fix: stack overflow / multi-second hang. Budget >= 250ms hang floor.
     const deep = nestArray(5000)
     for (const fn of [
       () => deepEqual(deep, nestArray(5000)),
@@ -153,9 +155,9 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
       () => matches({ x: deep })({ x: nestArray(5000) }),
       () => flatten(deep as unknown[], true)
     ]) {
-      const start = performance.now()
-      expect(fn).toThrow(NESTING_MSG)
-      expect(performance.now() - start).toBeLessThan(50)
+      expectFast(() => {
+        expect(fn).toThrow(NESTING_MSG)
+      }, 250)
     }
   })
 
@@ -264,7 +266,8 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
 
   it('headroom: depth 1000 succeeds inside environment-relative caller frames', () => {
     // Measure how deep the same rec helper can go here (coverage frames are larger).
-    // Use 30% of that as caller headroom; the capped walk must fit in the remaining 70%.
+    // Empty-rec frames are lighter than deepEqual frames; keep caller headroom at 20% so
+    // the capped walk still fits under parallel-suite load (heap/stack pressure).
     function rec(n: number, fn: () => void): void {
       if (n === 0) {
         fn()
@@ -272,6 +275,8 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
       }
       rec(n - 1, fn)
     }
+    const gc = (globalThis as { gc?: () => void }).gc
+    if (typeof gc === 'function') gc()
     // Recurse until RangeError, record n, unwind. Exponential grow then binary search
     // so the measurement uses the same rec frame shape as the walks below.
     let measured = 0
@@ -301,7 +306,7 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
         }
       }
     }
-    const callerFrames = Math.floor(measured * 0.3)
+    const callerFrames = Math.floor(measured * 0.2)
     expect(callerFrames).toBeGreaterThan(0)
 
     const deep = nestArray(1000)

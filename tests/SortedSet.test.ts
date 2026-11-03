@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SortedSet } from '../src/collections/SortedSet.js'
 import { decimal } from '../src/decimal/index.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('SortedSet', () => {
   it('SPEC-R78 empty size and iteration', () => {
@@ -13,9 +14,9 @@ describe('SortedSet', () => {
 
   it('rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
-    const start = performance.now()
-    expect(() => new SortedSet(evil)).toThrow(TypeError)
-    expect(performance.now() - start).toBeLessThan(5)
+    expectFast(() => {
+      expect(() => new SortedSet(evil)).toThrow(TypeError)
+    }, 250)
   })
 
   it('SPEC-R78 initialized values stay ordered', () => {

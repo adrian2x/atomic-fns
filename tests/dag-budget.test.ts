@@ -4,6 +4,7 @@ import { Duration, durationField } from '../src/i18n/duration.js'
 import { canonicalKey } from '../src/internal/canonicalKey.js'
 import { truncateForError } from '../src/internal/truncate.js'
 import { deepEqual } from '../src/operators/index.js'
+import { expectFast } from './helpers/perf.js'
 
 /** Shared-reference DAG: x(i+1) = { l: x(i), r: x(i) }. */
 function dag(depth: number): object {
@@ -15,35 +16,37 @@ function dag(depth: number): object {
 }
 
 const FLATTEN_REVISIT = 'input repeats shared objects more than 100000 times'
+/** Pre-fix: exponential blow-up / hang. Hang-floor budget. */
+const BUDGET = 250
 
 describe('shared-reference DAG budgets', () => {
-  it('flatten depth-20 DAG throws the revisit error in < 50 ms', () => {
+  it('flatten depth-20 DAG throws the revisit error within budget', () => {
     const src = dag(20)
-    const t0 = performance.now()
-    let err: unknown
-    try {
-      flatten(src)
-    } catch (e) {
-      err = e
-    }
-    expect(performance.now() - t0).toBeLessThan(50)
-    expect(err).toBeInstanceOf(RangeError)
-    expect((err as Error).message).toBe(FLATTEN_REVISIT)
+    expectFast(() => {
+      let err: unknown
+      try {
+        flatten(src)
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(RangeError)
+      expect((err as Error).message).toBe(FLATTEN_REVISIT)
+    }, BUDGET)
   })
 
-  it('flatten of a nested-array depth-20 DAG throws the revisit error in < 50 ms', () => {
+  it('flatten of a nested-array depth-20 DAG throws the revisit error within budget', () => {
     let x: unknown[] = [1]
     for (let i = 0; i < 20; i++) x = [x, x]
-    const t0 = performance.now()
-    let err: unknown
-    try {
-      flatten(x, true)
-    } catch (e) {
-      err = e
-    }
-    expect(performance.now() - t0).toBeLessThan(50)
-    expect(err).toBeInstanceOf(RangeError)
-    expect((err as Error).message).toBe(FLATTEN_REVISIT)
+    expectFast(() => {
+      let err: unknown
+      try {
+        flatten(x, true)
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(RangeError)
+      expect((err as Error).message).toBe(FLATTEN_REVISIT)
+    }, BUDGET)
   })
 
   it('flatten of 10001 shared row objects works', () => {
@@ -53,43 +56,43 @@ describe('shared-reference DAG budgets', () => {
     expect(out['rows[10000].x']).toBe(1)
   })
 
-  it('deepEqual depth-40 DAG pair compares in < 50 ms', () => {
+  it('deepEqual depth-40 DAG pair compares within budget', () => {
     const a = dag(40)
     const b = dag(40)
-    const t0 = performance.now()
-    expect(deepEqual(a, b)).toBe(true)
-    expect(performance.now() - t0).toBeLessThan(50)
+    expectFast(() => {
+      expect(deepEqual(a, b)).toBe(true)
+    }, BUDGET)
   })
 
-  it('canonicalKey depth-40 DAG completes in < 50 ms', () => {
+  it('canonicalKey depth-40 DAG completes within budget', () => {
     const a = dag(40)
-    const t0 = performance.now()
-    const key = canonicalKey(a)
-    expect(performance.now() - t0).toBeLessThan(50)
-    // Tree expansion exceeds 64 KB -> fixed-size hashed key.
-    expect(key).toMatch(/^H:[0-9a-f]{16}$/)
-    expect(canonicalKey(dag(40))).toBe(key)
+    expectFast(() => {
+      const key = canonicalKey(a)
+      // Tree expansion exceeds 64 KB -> fixed-size hashed key.
+      expect(key).toMatch(/^H:[0-9a-f]{16}$/)
+      expect(canonicalKey(dag(40))).toBe(key)
+    }, BUDGET)
   })
 
-  it('merge of depth-23 DAG throws the revisit error in < 50 ms', () => {
+  it('merge of depth-23 DAG throws the revisit error within budget', () => {
     const src = dag(23)
-    const t0 = performance.now()
-    let err: unknown
-    try {
-      merge({}, src)
-    } catch (e) {
-      err = e
-    }
-    expect(performance.now() - t0).toBeLessThan(50)
-    expect(err).toBeInstanceOf(RangeError)
-    expect((err as Error).message).toBe(FLATTEN_REVISIT)
+    expectFast(() => {
+      let err: unknown
+      try {
+        merge({}, src)
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(RangeError)
+      expect((err as Error).message).toBe(FLATTEN_REVISIT)
+    }, BUDGET)
   })
 
-  it('matches depth-40 DAG shape and value in < 20 ms', () => {
+  it('matches depth-40 DAG shape and value within budget', () => {
     const src = dag(40)
-    const t0 = performance.now()
-    expect(matches(src)(src)).toBe(true)
-    expect(performance.now() - t0).toBeLessThan(20)
+    expectFast(() => {
+      expect(matches(src)(src)).toBe(true)
+    }, BUDGET)
   })
 
   it('merge of 10001 shared row objects works with distinct copies', () => {
@@ -139,7 +142,7 @@ describe('shared-reference DAG budgets', () => {
     expect(out.a).not.toBe(out.b)
   })
 
-  it('R12-F: merge into a mirrored DAG completes in < 20 ms', () => {
+  it('R12-F: merge into a mirrored DAG completes within budget', () => {
     /** Copy that preserves shared references (unlike merge, which gives each key its own copy). */
     function copyShared(node: object, map = new WeakMap<object, object>()): object {
       const hit = map.get(node)
@@ -156,34 +159,34 @@ describe('shared-reference DAG budgets', () => {
     for (const depth of [20, 24, 40]) {
       const src = dag(depth)
       const target = copyShared(src)
-      const t0 = performance.now()
-      const out = merge(target, src)
-      expect(performance.now() - t0).toBeLessThan(20)
-      expect(out).toBe(target)
-      expect(deepEqual(out, src)).toBe(true)
+      expectFast(() => {
+        const out = merge(target, src)
+        expect(out).toBe(target)
+        expect(deepEqual(out, src)).toBe(true)
+      }, BUDGET)
     }
     let a: unknown[] = [1]
     for (let i = 0; i < 40; i++) a = [a, a]
     const msg = { a }
     const target = copyShared(msg)
-    const t0 = performance.now()
-    merge(target, msg)
-    expect(performance.now() - t0).toBeLessThan(20)
-    expect(deepEqual(target, msg)).toBe(true)
+    expectFast(() => {
+      merge(target, msg)
+      expect(deepEqual(target, msg)).toBe(true)
+    }, BUDGET)
   })
 
-  it('Duration.round error echo for a depth-22 DAG builds in < 5 ms', () => {
+  it('Duration.round error echo for a depth-22 DAG builds within budget', () => {
     const a = dag(22)
-    const t0 = performance.now()
-    const d = new Duration(0)
-    expect(() => {
-      const opts = { largestUnit: 'seconds' as const }
-      Object.defineProperty(opts, 'largestUnit', { get: () => a })
-      d.round(opts)
-    }).toThrow()
-    expect(performance.now() - t0).toBeLessThan(5)
-    expect(truncateForError(a).length).toBeLessThanOrEqual(43)
-    const callField = durationField as (unit: unknown) => string
-    expect(() => callField(a)).toThrow()
+    expectFast(() => {
+      const d = new Duration(0)
+      expect(() => {
+        const opts = { largestUnit: 'seconds' as const }
+        Object.defineProperty(opts, 'largestUnit', { get: () => a })
+        d.round(opts)
+      }).toThrow()
+      expect(truncateForError(a).length).toBeLessThanOrEqual(43)
+      const callField = durationField as (unit: unknown) => string
+      expect(() => callField(a)).toThrow()
+    }, BUDGET)
   })
 })

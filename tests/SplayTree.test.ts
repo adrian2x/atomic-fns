@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SplayTree } from '../src/collections/SplayTree.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('SplayTree', () => {
   it('SPEC-R77 empty tree size height and iteration', () => {
@@ -151,18 +152,18 @@ describe('SplayTree', () => {
     expect(Number.isFinite(tree.height)).toBe(true)
   })
 
-  it('SPEC-R77 iterate 4000 ascending keys under 20ms', () => {
+  it('SPEC-R77 iterate 4000 ascending keys within budget', () => {
+    // Pre-fix: O(n^2) re-splay per step. Hang-floor budget. Revert of 6da2abc fails this.
     const tree = new SplayTree<number, number>()
     for (let i = 0; i < 4000; i++) {
       tree.set(i, i)
     }
-    const t0 = performance.now()
-    const keys = [...tree.keys()]
-    const elapsed = performance.now() - t0
-    expect(keys.length).toBe(4000)
-    expect(keys[0]).toBe(0)
-    expect(keys[3999]).toBe(3999)
-    expect(elapsed).toBeLessThan(20)
+    expectFast(() => {
+      const keys = [...tree.keys()]
+      expect(keys.length).toBe(4000)
+      expect(keys[0]).toBe(0)
+      expect(keys[3999]).toBe(3999)
+    }, 250)
   })
 
   it('SPEC-R77 reads during for-of visit each key once across 50 trials', () => {

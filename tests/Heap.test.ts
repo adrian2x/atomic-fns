@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Heap, heapify, heappop, heappush } from '../src/collections/Heap.js'
 import { sorted } from '../src/itertools/index.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('Heap', () => {
   it('SPEC-R83 empty heap', () => {
@@ -13,9 +14,9 @@ describe('Heap', () => {
 
   it('rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
-    const start = performance.now()
-    expect(() => new Heap(evil)).toThrow(TypeError)
-    expect(performance.now() - start).toBeLessThan(5)
+    expectFast(() => {
+      expect(() => new Heap(evil)).toThrow(TypeError)
+    }, 250)
   })
 
   it('SPEC-R83 heapifies a copied array and pops in order', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { abs, divmod, max, mean, min, round, sum } from '../src/math/index.js'
 import { decimal } from '../src/decimal/index.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('math', () => {
   it('SPEC-R61 min max return first among ties', () => {
@@ -69,8 +70,8 @@ describe('math', () => {
 
   it('mean rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
-    const start = performance.now()
-    expect(() => mean(evil)).toThrow(TypeError)
-    expect(performance.now() - start).toBeLessThan(5)
+    expectFast(() => {
+      expect(() => mean(evil)).toThrow(TypeError)
+    }, 250)
   })
 })

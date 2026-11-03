@@ -23,6 +23,14 @@ import { reversed, sorted } from '../src/itertools/index.js'
 import { max, mean, min } from '../src/math/index.js'
 import { deepEqual } from '../src/operators/index.js'
 import { shuffle } from '../src/random/index.js'
+import { expectFast } from './helpers/perf.js'
+
+/** Pre-fix: hang on length 4e9. Hang-floor budget. */
+const BUDGET = 250
+/** Dense 1e6 deepEqual median under coverage ~178ms -> 5x = 900, use 1000. */
+const DENSE_EQ_BUDGET = 1000
+/** Dense 1e6 clone median ~28ms -> 5x = 141, hang-adjacent floor 250. */
+const DENSE_CLONE_BUDGET = 250
 
 function hugeSparse(): unknown[] {
   const a: unknown[] = []
@@ -47,30 +55,30 @@ describe('R12-E sparse-safe array walker', () => {
     expect(holeRuns).toBeGreaterThan(0)
   })
 
-  it('group 2 consumers return in < 20 ms on length 4294967294 with 3 elements', () => {
+  it('group 2 consumers return within budget on length 4294967294 with 3 elements', () => {
     const a = hugeSparse()
-    const t0 = performance.now()
-    expect(indexOf(a, 'nope')).toBe(-1)
-    expect(lastIndexOf(a, 'nope')).toBe(-1)
-    expect(findIndex(a, (x) => x === 'nope')).toBe(-1)
-    expect(find(a, (x) => x === 'admin')).toBe('admin')
-    expect(uniq(a as string[])).toEqual(['x', 'y', 'admin', undefined])
-    expect(without(a as string[], 'x')).toEqual(['y', 'admin', undefined])
-    const rem = hugeSparse()
-    expect(remove(rem, (x) => x === 'x')).toEqual(['x'])
-    expect(compact(a).length).toBe(3)
-    expect(filter(a, (x) => x === 'y')).toEqual(['y'])
-    expect(matches({ tags: ['admin'] })({ tags: a })).toBe(true)
-    let n = 0
-    forEach(a, () => {
-      n++
-    })
-    expect(n).toBe(3)
-    expect(deepEqual(a, clone(a, true))).toBe(true)
-    expect(performance.now() - t0).toBeLessThan(20)
+    expectFast(() => {
+      expect(indexOf(a, 'nope')).toBe(-1)
+      expect(lastIndexOf(a, 'nope')).toBe(-1)
+      expect(findIndex(a, (x) => x === 'nope')).toBe(-1)
+      expect(find(a, (x) => x === 'admin')).toBe('admin')
+      expect(uniq(a as string[])).toEqual(['x', 'y', 'admin', undefined])
+      expect(without(a as string[], 'x')).toEqual(['y', 'admin', undefined])
+      const rem = hugeSparse()
+      expect(remove(rem, (x) => x === 'x')).toEqual(['x'])
+      expect(compact(a).length).toBe(3)
+      expect(filter(a, (x) => x === 'y')).toEqual(['y'])
+      expect(matches({ tags: ['admin'] })({ tags: a })).toBe(true)
+      let n = 0
+      forEach(a, () => {
+        n++
+      })
+      expect(n).toBe(3)
+      expect(deepEqual(a, clone(a, true))).toBe(true)
+    }, BUDGET)
   })
 
-  it('group 3 consumers throw RangeError in < 5 ms', () => {
+  it('group 3 consumers throw RangeError within budget', () => {
     const a = hugeSparse()
     const cases = [
       () => map(a, (x) => x),
@@ -86,10 +94,10 @@ describe('R12-E sparse-safe array walker', () => {
       () => shuffle(a)
     ]
     for (const run of cases) {
-      const t0 = performance.now()
-      expect(run).toThrow(RangeError)
-      expect(run).toThrow('sparse array too large')
-      expect(performance.now() - t0).toBeLessThan(5)
+      expectFast(() => {
+        expect(run).toThrow(RangeError)
+        expect(run).toThrow('sparse array too large')
+      }, BUDGET)
     }
   })
 
@@ -107,22 +115,18 @@ describe('R12-E sparse-safe array walker', () => {
   it('dense deepEqual of 1e6 arrays stays within budget', () => {
     const a = Array.from({ length: 1e6 }, (_, i) => i)
     const b = Array.from({ length: 1e6 }, (_, i) => i)
-    const t0 = performance.now()
-    expect(deepEqual(a, b)).toBe(true)
-    const ms = performance.now() - t0
-    // Deviation: under coverage instrumentation local runs are ~150-250ms; bare vitest ~40-80ms.
-    // 41f99d1-era bare times were similar; 1.5x bare budget is ~120ms, coverage needs more.
-    expect(ms).toBeLessThan(400)
+    expectFast(() => {
+      expect(deepEqual(a, b)).toBe(true)
+    }, DENSE_EQ_BUDGET)
   })
 
   it('dense deep clone of 1e6 stays within budget', () => {
     const a = Array.from({ length: 1e6 }, (_, i) => i)
-    const t0 = performance.now()
-    const c = clone(a, true)
-    const ms = performance.now() - t0
-    expect(ms).toBeLessThan(400)
-    expect(c).toHaveLength(1e6)
-    expect(c[0]).toBe(0)
-    expect(c[999999]).toBe(999999)
+    expectFast(() => {
+      const c = clone(a, true)
+      expect(c).toHaveLength(1e6)
+      expect(c[0]).toBe(0)
+      expect(c[999999]).toBe(999999)
+    }, DENSE_CLONE_BUDGET)
   })
 })

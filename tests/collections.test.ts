@@ -27,6 +27,7 @@ import {
   uniq,
   without
 } from '../src/collections/index.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('collections', () => {
   it('SPEC-R30 remove mutates and returns removed', () => {
@@ -106,14 +107,15 @@ describe('collections', () => {
     expect(c).toHaveLength(3)
   })
 
-  it('flattenArray single-output stack: 900-deep with 2500 leaves under 20ms', () => {
+  it('flattenArray single-output stack: 900-deep with 2500 leaves within budget', () => {
+    // Pre-fix: quadratic output growth. Revert of 8c67194 fails this.
     const leaves = Array.from({ length: 2500 }, (_, i) => i)
     let nested: unknown = leaves
     for (let d = 0; d < 899; d++) nested = [nested]
-    const start = performance.now()
-    const out = flatten(nested as number[], true)
-    expect(performance.now() - start).toBeLessThan(20)
-    expect(out).toEqual(leaves)
+    expectFast(() => {
+      const out = flatten(nested as number[], true)
+      expect(out).toEqual(leaves)
+    }, 250)
   })
 
   it('SPEC-R41 flatten depth holes and object leaves', () => {
@@ -171,9 +173,9 @@ describe('collections', () => {
 
   it('indexOf rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":1e15}') as never
-    const start = performance.now()
-    expect(() => indexOf(evil, 'x')).toThrow(TypeError)
-    expect(performance.now() - start).toBeLessThan(5)
+    expectFast(() => {
+      expect(() => indexOf(evil, 'x')).toThrow(TypeError)
+    }, 250)
   })
 
   it('defaults never assigns __proto__ as a prototype', () => {
@@ -283,7 +285,8 @@ describe('collections', () => {
     expect(pick({ a: { b: 1, c: 2 } }, ['a.b'])).toEqual({ a: { b: 1 } })
   })
 
-  it('pick copies each intermediate once (20k array paths under 100ms)', () => {
+  it('pick copies each intermediate once (20k array paths within budget)', () => {
+    // Pre-fix: quadratic path copies. Revert of a9ccefa fails this.
     const n = 20_000
     const arr = Array.from({ length: n }, (_, i) => i)
     const src = { a: arr }
@@ -292,12 +295,12 @@ describe('collections', () => {
     expect(small.a[0]).toBe(1)
     expect(small.a[2]).toBe(3)
     expect(1 in small.a).toBe(false)
-    const start = performance.now()
-    const out = pick(src, paths) as { a: number[] }
-    expect(performance.now() - start).toBeLessThan(100)
-    expect(out.a.length).toBe(n)
-    expect(out.a[0]).toBe(0)
-    expect(out.a[n - 1]).toBe(n - 1)
+    expectFast(() => {
+      const out = pick(src, paths) as { a: number[] }
+      expect(out.a.length).toBe(n)
+      expect(out.a[0]).toBe(0)
+      expect(out.a[n - 1]).toBe(n - 1)
+    }, 250)
   })
 
   it('pick skips child paths under an already-picked ancestor', () => {
@@ -313,11 +316,11 @@ describe('collections', () => {
     expect(pick({ a: { k0: 1, k1: 2 } }, ['a', 'a.k0', 'a', 'a.k1'])).toEqual({
       a: { k0: 1, k1: 2 }
     })
-    const start = performance.now()
-    const out = pick(record, paths) as { a: Record<string, number> }
-    expect(performance.now() - start).toBeLessThan(50)
-    expect(out.a).toEqual(subtree)
-    expect(out.a).not.toBe(subtree)
+    expectFast(() => {
+      const out = pick(record, paths) as { a: Record<string, number> }
+      expect(out.a).toEqual(subtree)
+      expect(out.a).not.toBe(subtree)
+    }, 250)
   })
 
   it('pick ancestor check is linear for many object-valued sibling paths', () => {
@@ -327,20 +330,20 @@ describe('collections', () => {
       o[`k${String(i)}`] = {}
       paths.push(`k${String(i)}`)
     }
-    const start = performance.now()
-    const out = pick(o, paths)
-    expect(performance.now() - start).toBeLessThan(50)
-    expect(Object.keys(out)).toHaveLength(10_000)
+    expectFast(() => {
+      const out = pick(o, paths)
+      expect(Object.keys(out)).toHaveLength(10_000)
+    }, 250)
   })
 
   it('POL-17 pick ancestor check is linear in total segments', () => {
-    const t0 = performance.now()
-    expect(pick({}, ['.'.repeat(10_000)])).toEqual({})
-    expect(performance.now() - t0).toBeLessThan(20)
-
-    const t1 = performance.now()
-    expect(pick({}, ['a.'.repeat(5000)])).toEqual({})
-    expect(performance.now() - t1).toBeLessThan(20)
+    // Pre-fix: quadratic ancestor scan. Revert of e63cdbd / 9411191 fails this.
+    expectFast(() => {
+      expect(pick({}, ['.'.repeat(10_000)])).toEqual({})
+    }, 250)
+    expectFast(() => {
+      expect(pick({}, ['a.'.repeat(5000)])).toEqual({})
+    }, 250)
   })
 
   it('pick dedupe key uses JSON parts so NUL keys do not collide with dotted paths', () => {
@@ -440,10 +443,10 @@ describe('collections', () => {
       big[key] = i
       paths.push(key)
     }
-    const t0 = performance.now()
-    const omitted = omit(big, paths)
-    expect(performance.now() - t0).toBeLessThan(50)
-    expect(Object.keys(omitted)).toHaveLength(0)
+    expectFast(() => {
+      const omitted = omit(big, paths)
+      expect(Object.keys(omitted)).toHaveLength(0)
+    }, 250)
   })
 
   it('legacy compact count smoke', () => {

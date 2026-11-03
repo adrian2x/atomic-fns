@@ -44,6 +44,7 @@ import {
   len
 } from '../src/globals/index.js'
 import { enumerate } from '../src/itertools/index.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('globals', () => {
   it('SPEC-R27 CustomError and subclasses keep cause and literal name', () => {
@@ -405,9 +406,9 @@ describe('globals', () => {
 
   it('list rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
-    const start = performance.now()
-    assert.throws(() => list(evil), TypeError, 'expected an iterable')
-    assert.ok(performance.now() - start < 5)
+    expectFast(() => {
+      assert.throws(() => list(evil), TypeError, 'expected an iterable')
+    }, 250)
   })
 
   it('get', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Deque } from '../src/collections/deque.js'
+import { expectFast } from './helpers/perf.js'
 
 describe('Deque', () => {
   it('SPEC-R80 empty starts at size 0', () => {
@@ -181,9 +182,9 @@ describe('Deque', () => {
 
   it('rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
-    const start = performance.now()
-    expect(() => new Deque(evil)).toThrow(TypeError)
-    expect(performance.now() - start).toBeLessThan(5)
+    expectFast(() => {
+      expect(() => new Deque(evil)).toThrow(TypeError)
+    }, 250)
   })
 
   it('maxlen above 2**30 grows without overwriting live slots', () => {

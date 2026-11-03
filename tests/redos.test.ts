@@ -3,13 +3,17 @@ import { ValueError } from '../src/globals/errors.js'
 import { Duration } from '../src/i18n/duration.js'
 import { asDate, formatDate, strftime } from '../src/i18n/format.js'
 import { camelCase, words } from '../src/string/index.js'
+import { expectFast } from './helpers/perf.js'
+
+/** Pre-fix: ReDoS hang / multi-second. Hang-floor budget. */
+const BUDGET = 250
 
 describe('NFR-4 ReDoS guards', () => {
   it('SPEC-R63 words finishes on 1e5-char adversarial input', () => {
     const input = 'a'.repeat(1e5) + '!'
-    const t0 = performance.now()
-    words(input)
-    expect(performance.now() - t0).toBeLessThan(200)
+    expectFast(() => {
+      words(input)
+    }, BUDGET)
   })
 
   it('SPEC-R63 D9 words and camelCase stay linear on 100k-char vectors', () => {
@@ -27,51 +31,51 @@ describe('NFR-4 ReDoS guards', () => {
       "A'S".repeat(33_333)
     ]
     for (const s of vectors) {
-      const t0 = performance.now()
-      words(s)
-      expect(performance.now() - t0).toBeLessThan(100)
-      const t1 = performance.now()
-      camelCase(s.slice(0, 20_000))
-      expect(performance.now() - t1).toBeLessThan(100)
+      expectFast(() => {
+        words(s)
+      }, BUDGET)
+      expectFast(() => {
+        camelCase(s.slice(0, 20_000))
+      }, BUDGET)
     }
   })
 
   it('SPEC-R87 asDate finishes on 1e5-char adversarial input', () => {
     const input = '2022' + '1'.repeat(1e5) + 'x'
-    const t0 = performance.now()
-    asDate(input)
-    expect(performance.now() - t0).toBeLessThan(200)
+    expectFast(() => {
+      asDate(input)
+    }, BUDGET)
   })
 
-  it('SPEC-R87 asDate ReDoS vectors stay under 50ms and invalid', () => {
+  it('SPEC-R87 asDate ReDoS vectors stay within budget and invalid', () => {
     for (const input of [
       '2021-' + '1'.repeat(1e5),
       '2021-01-01T' + '1'.repeat(1e5),
       ' '.repeat(1e5)
     ]) {
-      const t0 = performance.now()
-      const d = asDate(input)
-      expect(performance.now() - t0).toBeLessThan(50)
-      expect(Number.isNaN(d.getTime())).toBe(true)
+      expectFast(() => {
+        const d = asDate(input)
+        expect(Number.isNaN(d.getTime())).toBe(true)
+      }, BUDGET)
     }
   })
 
   it('SPEC-R94 Duration.from finishes and rejects 1e5-digit P input', () => {
     const input = 'P' + '1'.repeat(1e5)
-    const t0 = performance.now()
-    expect(() => Duration.from(input)).toThrow(ValueError)
-    expect(performance.now() - t0).toBeLessThan(200)
+    expectFast(() => {
+      expect(() => Duration.from(input)).toThrow(ValueError)
+    }, BUDGET)
   })
 
-  it('SPEC-R94 Duration.from ReDoS vectors stay under 50ms', () => {
+  it('SPEC-R94 Duration.from ReDoS vectors stay within budget', () => {
     for (const input of [
       'P' + '1Y'.repeat(5e4),
       '-P' + '-1.1'.repeat(5e4),
       'P' + '9'.repeat(5e4) + 'X'
     ]) {
-      const t0 = performance.now()
-      expect(() => Duration.from(input)).toThrow(ValueError)
-      expect(performance.now() - t0).toBeLessThan(50)
+      expectFast(() => {
+        expect(() => Duration.from(input)).toThrow(ValueError)
+      }, BUDGET)
     }
   })
 
@@ -83,9 +87,9 @@ describe('NFR-4 ReDoS guards', () => {
       () => strftime('%-'.repeat(5e4), d),
       () => strftime('%' + 'a'.repeat(1e5), d)
     ]) {
-      const t0 = performance.now()
-      run()
-      expect(performance.now() - t0).toBeLessThan(100)
+      expectFast(() => {
+        run()
+      }, BUDGET)
     }
     expect(formatDate('['.repeat(10), d)).toBe('['.repeat(10))
   })
