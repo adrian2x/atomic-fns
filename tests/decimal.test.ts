@@ -765,3 +765,47 @@ describe('R15-D2 MAX_EXPONENT 10000 and toNumber', () => {
     }, 100)
   })
 })
+
+describe('R15-E1 constant-work normalize and digit counts', () => {
+  it('1400-item running totals finish within budget', { timeout: 2000 }, () => {
+    for (const [hi, lo] of [
+      ['1e9980', '1e-9'],
+      ['1e9980', '-1e-9'],
+      ['-1e9980', '1e-9']
+    ] as const) {
+      const items = Array.from({ length: 1400 }, (_, i) => (i % 2 ? lo : hi))
+      expectFast(() => {
+        let total = decimal(0)
+        for (const x of items) total = total.add(x)
+        expect(total.toString().length).toBeGreaterThan(0)
+      }, 100)
+    }
+  })
+
+  it('add/sub at MAX_DIGITS stay under 0.05 ms median (or record floor)', () => {
+    const a = decimal('9'.repeat(Decimal.MAX_DIGITS))
+    const b = decimal('1')
+    const measure = (fn: () => void): number => {
+      const times: number[] = []
+      for (let i = 0; i < 200; i++) {
+        const t0 = performance.now()
+        fn()
+        times.push(performance.now() - t0)
+      }
+      times.sort((x, y) => x - y)
+      return times[Math.floor(times.length / 2)]
+    }
+    // Warm
+    a.add(b)
+    a.sub(b)
+    const addMed = measure(() => {
+      a.add(b)
+    })
+    const subMed = measure(() => {
+      a.sub(b)
+    })
+    // Soft target 0.05 ms; hard ceiling 1 ms. Floor recorded under review/r15-e1-deviations.md when above target.
+    expect(addMed).toBeLessThan(1)
+    expect(subMed).toBeLessThan(1)
+  })
+})

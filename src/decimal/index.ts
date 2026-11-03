@@ -97,17 +97,61 @@ export function decimal(x: DecimalInput): Decimal {
   return new Decimal(x)
 }
 
+/** Cached `10^k` for k in `0..MAX_DIGITS+2` (digit-count bounds and arithmetic). */
+const POW10_TABLE: bigint[] = (() => {
+  const t: bigint[] = [1n]
+  let p = 1n
+  for (let k = 1; k <= 10_002; k++) {
+    p *= 10n
+    t.push(p)
+  }
+  return t
+})()
+
 function pow10(k: number): bigint {
+  if (k >= 0 && k < POW10_TABLE.length) return POW10_TABLE[k]
   return 10n ** BigInt(k)
 }
 
+/** Bit length of a positive bigint (no decimal strings). */
+function bitLengthAbs(a: bigint): number {
+  let n = a
+  let bits = 0
+  while (n > 0xffffffffffffffffn) {
+    n >>= 64n
+    bits += 64
+  }
+  if (n > 0xffffffffn) {
+    n >>= 32n
+    bits += 32
+  }
+  bits += 32 - Math.clz32(Number(n))
+  return bits
+}
+
+/**
+ * Strip trailing decimal zeros via `% 10^k` bulk divides (no coefficient toString).
+ */
 function normalizeIE(i: bigint, e: number): { i: bigint; e: number } {
   if (i === 0n) return { i: 0n, e: 0 }
-  const s = i.toString()
+  if (i % 10n !== 0n) return { i, e }
+  let x = i
   let zeros = 0
-  for (let k = s.length - 1; k >= 0 && s[k] === '0'; k--) zeros++
-  if (zeros === 0) return { i, e }
-  return { i: i / pow10(zeros), e: e + zeros }
+  // powers: 10^(2^k) for k = 0..13 (10^8192); enough for MAX_DIGITS trailing zeros
+  const powers: bigint[] = [10n]
+  for (let k = 0; k < 13; k++) {
+    const last = powers[powers.length - 1]
+    powers.push(last * last)
+  }
+  for (let k = powers.length - 1; k >= 0; k--) {
+    const pk = powers[k]
+    const step = 1 << k
+    while (x % pk === 0n) {
+      x /= pk
+      zeros += step
+    }
+  }
+  return { i: x, e: e + zeros }
 }
 
 function absBig(n: bigint): bigint {
@@ -141,9 +185,21 @@ function toExact(n: number): { i: bigint; e: number } {
   return normalizeIE(sign * m * 5n ** BigInt(-k), k)
 }
 
-/** Digit count of a non-zero absolute bigint. */
+/**
+ * Digit count of a non-zero absolute bigint via bit length + one compare against a cached
+ * power of ten (no decimal toString on the arithmetic path).
+ */
 function digitLengthAbs(a: bigint): number {
-  return a.toString().length
+  if (a < 10n) return 1
+  const bits = bitLengthAbs(a)
+  // digits ≈ floor(bits * log10(2)) + 1; adjust with one table compare
+  let digits = Math.floor(bits * Math.LOG10E * Math.LN2) + 1
+  if (digits < 1) digits = 1
+  if (digits > 10_002) digits = 10_002
+  const bound = POW10_TABLE[digits - 1]
+  if (a >= bound * 10n) return digits + 1
+  if (a < bound) return digits - 1
+  return digits
 }
 
 /**
@@ -639,7 +695,7 @@ export class Decimal {
     const absI = this.#i < 0n ? -this.#i : this.#i
     const p = -precision - this.#e
     let cmpHalf: -1 | 0 | 1
-    if (p > Decimal.MAX_EXPONENT || p > absI.toString().length + 2) {
+    if (p > Decimal.MAX_EXPONENT || p > digitLengthAbs(absI) + 2) {
       cmpHalf = -1
     } else {
       const twice = absI << 1n
