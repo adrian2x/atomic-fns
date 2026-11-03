@@ -126,8 +126,16 @@ function digitLengthAbs(a: bigint): number {
  * Compare `ai * 10^ae` vs `bi * 10^be`.
  * Sign first, then order of magnitude (`e + digits - 1`); scale only when magnitudes match
  * (exponent gap then equals the digit-count difference).
+ * Optional `aDigits` / `bDigits` skip bigint toString when the caller already knows them.
  */
-function compareIE(ai: bigint, ae: number, bi: bigint, be: number): -1 | 0 | 1 {
+function compareIE(
+  ai: bigint,
+  ae: number,
+  bi: bigint,
+  be: number,
+  aDigits?: number,
+  bDigits?: number
+): -1 | 0 | 1 {
   if (ai === 0n && bi === 0n) return 0
   if (ai === 0n) return bi < 0n ? 1 : -1
   if (bi === 0n) return ai < 0n ? -1 : 1
@@ -136,8 +144,8 @@ function compareIE(ai: bigint, ae: number, bi: bigint, be: number): -1 | 0 | 1 {
   const sign = ai < 0n ? -1 : 1
   const aAbs = ai < 0n ? -ai : ai
   const bAbs = bi < 0n ? -bi : bi
-  const aMag = ae + digitLengthAbs(aAbs) - 1
-  const bMag = be + digitLengthAbs(bAbs) - 1
+  const aMag = ae + (aDigits ?? digitLengthAbs(aAbs)) - 1
+  const bMag = be + (bDigits ?? digitLengthAbs(bAbs)) - 1
   if (aMag !== bMag) {
     if (aMag < bMag) return sign < 0 ? 1 : -1
     return sign < 0 ? -1 : 1
@@ -230,6 +238,8 @@ export class Decimal {
 
   #i = 0n
   #e = 0
+  /** Lazy cache of absolute coefficient decimal digit count (Decimals are immutable). */
+  #digits: number | undefined
 
   static #assertDivPrecision(precision: number): void {
     if (!Number.isInteger(precision) || precision < 0 || precision > Decimal.MAX_PRECISION) {
@@ -254,6 +264,14 @@ export class Decimal {
     const a = n < 0n ? -n : n
     if (a === 0n) return 0
     return digitLengthAbs(a)
+  }
+
+  /** Cached absolute coefficient digit count (0 for zero). */
+  #digitCount(): number {
+    if (this.#digits === undefined) {
+      this.#digits = Decimal.#digitLength(this.#i)
+    }
+    return this.#digits
   }
 
   /**
@@ -570,7 +588,7 @@ export class Decimal {
     const r = this.numericCompare(x)
     if (r === undefined) {
       const o = decimal(x)
-      return compareIE(this.#i, this.#e, o.#i, o.#e)
+      return compareIE(this.#i, this.#e, o.#i, o.#e, this.#digitCount(), o.#digitCount())
     }
     return r < 0 ? -1 : r > 0 ? 1 : 0
   }
@@ -622,9 +640,8 @@ export class Decimal {
    * exponents stay cheap; only the `[1e308, 1e309)` band does an exact compare.
    */
   greaterThanMaxValue(): boolean {
-    const absI = this.#i < 0n ? -this.#i : this.#i
-    if (absI === 0n) return false
-    const digs = Decimal.#digitLength(absI)
+    if (this.#i === 0n) return false
+    const digs = this.#digitCount()
     const order = this.#e + digs - 1
     if (order < 308) return false
     if (order >= 309) return true
@@ -644,19 +661,23 @@ export class Decimal {
    * exact-binary. Foreign branded Decimals convert via their string form.
    */
   numericCompare(o: unknown): number | undefined {
-    if (o instanceof Decimal) return compareIE(this.#i, this.#e, o.#i, o.#e)
+    if (o instanceof Decimal) {
+      return compareIE(this.#i, this.#e, o.#i, o.#e, this.#digitCount(), o.#digitCount())
+    }
     if (isDecimalBrand(o)) {
       const d = coerceDecimal(o)
-      return compareIE(this.#i, this.#e, d.#i, d.#e)
+      return compareIE(this.#i, this.#e, d.#i, d.#e, this.#digitCount(), d.#digitCount())
     }
-    if (typeof o === 'bigint') return compareIE(this.#i, this.#e, o, 0)
+    if (typeof o === 'bigint') {
+      return compareIE(this.#i, this.#e, o, 0, this.#digitCount())
+    }
     if (typeof o === 'number') {
       if (Number.isNaN(o)) return undefined
       if (o === Infinity) return -1
       if (o === -Infinity) return 1
       if (!Number.isFinite(o)) return undefined
       const exact = toExact(o)
-      return compareIE(this.#i, this.#e, exact.i, exact.e)
+      return compareIE(this.#i, this.#e, exact.i, exact.e, this.#digitCount())
     }
     return undefined
   }

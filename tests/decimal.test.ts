@@ -523,6 +523,27 @@ describe('magnitude-first Decimal comparison', () => {
     }, 250)
   })
 
+  it('R13-F1: cached digit counts keep wide compares fast', { timeout: 30_000 }, () => {
+    // Probe form: 12 values with ~2e6-digit coeffs from 1eN + 1e-N (F2 bounds this construction).
+    const mk = (k: number) => new Decimal(`${String(k)}e999999`).add(`${String(k)}e-999999`)
+    const vals = Array.from({ length: 12 }, (_, k) => mk(k + 1))
+    expectFast(() => {
+      expect(sorted(vals.slice().reverse()).length).toBe(12)
+    }, 250)
+
+    const a = vals[0]
+    const b = vals[1]
+    a.compare(b) // warm digit caches
+    const spy = vi.spyOn(BigInt.prototype, 'toString')
+    try {
+      spy.mockClear()
+      a.compare(b)
+      expect(spy).toHaveBeenCalledTimes(0)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it(
     'math.max over 900 extreme-exponent Decimals finishes within budget',
     { timeout: 2000 },
