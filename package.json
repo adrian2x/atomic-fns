@@ -67,8 +67,9 @@
     "test:coverage": "vitest run --coverage",
     "test:tz": "for tz in UTC America/Los_Angeles America/New_York Asia/Kolkata Pacific/Kiritimati; do TZ=$tz vitest run tests/date.test.ts tests/format.test.ts tests/duration.test.ts || exit 1; done",
     "lint:pkg": "publint && attw --pack . --profile esm-only",
-    "jsr:check": "node -e \"const a=require('./package.json').version,b=require('./src/jsr.json').version;if(a!==b){console.error('version mismatch',a,b);process.exit(1)}\" && cd src && jsr publish --dry-run --allow-dirty",
+    "jsr:check": "node -e \"const a=require('./package.json'),b=require('./src/jsr.json');for(const k of ['version','license'])if(a[k]!==b[k]){console.error(k+' mismatch',a[k],b[k]);process.exit(1)}\" && cd src && jsr publish --dry-run --allow-dirty",
     "docs": "typedoc",
+    "prepublishOnly": "npm run check",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm run test:coverage && npm run build && npm run lint:pkg && npm run jsr:check && npm run test:tz"
   },
   "devDependencies": {

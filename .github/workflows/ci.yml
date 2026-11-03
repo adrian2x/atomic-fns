@@ -1,5 +1,7 @@
 name: CI
 on: [pull_request, push]
+permissions:
+  contents: read
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -7,19 +9,23 @@ jobs:
       matrix:
         node: [24, latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run check
   consumer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
-      - run: npm ci && npm run build && npm pack && cd consumer && npm i --no-save ../atomic-fns-2.0.0.tgz typescript@~6.0.3 @types/node@^24 && npx tsc -p tsconfig.json
+      - run: npm ci --ignore-scripts && npm run build && npm pack && cd consumer && npm i --ignore-scripts --no-save ../atomic-fns-2.0.0.tgz typescript@~6.0.3 @types/node@^24 && npx tsc -p tsconfig.json
