@@ -1,0 +1,317 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import assert from 'node:assert/strict'
+import {
+  curry,
+  partial,
+  flow,
+  pipe,
+  compose,
+  memoize,
+  cache,
+  debounce,
+  throttle,
+  once,
+  result,
+  resultAsync,
+  promisify
+} from '../src/functools/index.js'
+
+describe('functools', () => {
+  describe('curry / partial / flow / pipe / compose', () => {
+    it('curry accumulates until arity then applies', () => {
+      const add = (a: number, b: number, c: number) => a + b + c
+      const curried = curry(add)
+      assert.equal(curried(1)(2)(3), 6)
+      assert.equal(curried(1, 2)(3), 6)
+      assert.equal(curried(1)(2, 3), 6)
+      assert.equal(curried(1, 2, 3), 6)
+    })
+
+    it('partial prepends arguments', () => {
+      const add = (a: number, b: number) => a + b
+      assert.equal(partial(add, 2)(3), 5)
+      assert.equal(partial(add, 2, 3)(), 5)
+    })
+
+    it('flow and pipe apply left to right', () => {
+      const add1 = (x: number) => x + 1
+      const mul2 = (x: number) => x * 2
+      assert.equal(flow(add1, mul2)(3), 8)
+      assert.equal(pipe(mul2, add1)(3), 7)
+    })
+
+    it('SPEC-R58 compose applies right to left and does not mutate the argument list', () => {
+      const add1 = (x: number) => x + 1
+      const mul2 = (x: number) => x * 2
+      const fns = [add1, mul2]
+      assert.equal(compose(...fns)(3), 7)
+      assert.equal(fns[0], add1)
+      assert.equal(fns[1], mul2)
+      assert.equal(compose(add1, mul2)(3), 7)
+    })
+  })
+
+  describe('memoize / cache', () => {
+    it('SPEC-R55 memoize caches undefined results via Map.has', () => {
+      let calls = 0
+      const fn = memoize((x: number) => {
+        calls++
+        void x
+        return undefined
+      })
+      assert.equal(fn(1), undefined)
+      assert.equal(fn(1), undefined)
+      assert.equal(fn(1), undefined)
+      assert.equal(calls, 1)
+      assert.equal(fn(2), undefined)
+      assert.equal(calls, 2)
+    })
+
+    it('SPEC-R55 memoize uses resolver and caller this', () => {
+      const obj = {
+        n: 10,
+        add(a: number, b: number) {
+          return this.n + a + b
+        }
+      }
+      let calls = 0
+      const mem = memoize(
+        function (this: typeof obj, a: number, b: number) {
+          calls++
+          return this.add(a, b)
+        },
+        (a, b) => `${a}:${b}`
+      )
+      assert.equal(mem.call(obj, 1, 2), 13)
+      assert.equal(mem.call(obj, 1, 2), 13)
+      assert.equal(calls, 1)
+    })
+
+    it('SPEC-R55 memoize resolver throwing propagates and caches nothing', () => {
+      let calls = 0
+      const fn = memoize(
+        (x: number) => {
+          calls++
+          return x * 2
+        },
+        () => {
+          throw new Error('bad key')
+        }
+      )
+      assert.throws(() => fn(1), /bad key/)
+      assert.equal(calls, 0)
+      assert.throws(() => fn(1), /bad key/)
+      assert.equal(calls, 0)
+    })
+
+    it('SPEC-R55 cache decorator memoizes per instance with this', () => {
+      class Counter {
+        base: number
+        constructor(base: number) {
+          this.base = base
+        }
+        add(x: number) {
+          return this.base + x
+        }
+      }
+      const ctx = {
+        kind: 'method',
+        name: 'add',
+        static: false,
+        private: false,
+        addInitializer() {}
+      } as unknown as ClassMethodDecoratorContext<Counter, (this: Counter, x: number) => number>
+      Counter.prototype.add = cache(Counter.prototype.add, ctx)
+      const a = new Counter(10)
+      const b = new Counter(100)
+      assert.equal(a.add(1), 11)
+      assert.equal(a.add(1), 11)
+      a.base = 999
+      assert.equal(a.add(1), 11)
+      assert.equal(b.add(1), 101)
+      assert.equal(b.add(1), 101)
+      b.base = 0
+      assert.equal(b.add(1), 101)
+      assert.equal(a.add(2), 1001)
+    })
+  })
+
+  describe('debounce', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('SPEC-R56 debounce trailing uses latest args', () => {
+      const seen: string[] = []
+      const d = debounce((x: string) => {
+        seen.push(x)
+        return x
+      }, 50)
+      d('a')
+      vi.advanceTimersByTime(10)
+      d('b')
+      vi.advanceTimersByTime(50)
+      assert.deepEqual(seen, ['b'])
+    })
+
+    it('SPEC-R56 debounce maxWait fires once with latest args and clears trailing', () => {
+      const seen: string[] = []
+      const d = debounce(
+        (x: string) => {
+          seen.push(x)
+          return x
+        },
+        50,
+        { maxWait: 60 }
+      )
+      d('a')
+      vi.advanceTimersByTime(40)
+      d('b')
+      vi.advanceTimersByTime(20)
+      assert.deepEqual(seen, ['b'])
+      vi.advanceTimersByTime(100)
+      assert.deepEqual(seen, ['b'])
+    })
+
+    it('SPEC-R56 debounce cancel prevents the pending call', () => {
+      const seen: number[] = []
+      const d = debounce((x: number) => {
+        seen.push(x)
+      }, 50)
+      d(1)
+      d.cancel()
+      vi.advanceTimersByTime(100)
+      assert.deepEqual(seen, [])
+    })
+
+    it('SPEC-R56 debounce flush invokes pending now', () => {
+      const seen: number[] = []
+      const d = debounce((x: number) => {
+        seen.push(x)
+        return x * 2
+      }, 50)
+      d(3)
+      assert.equal(d.flush(), 6)
+      assert.deepEqual(seen, [3])
+      vi.advanceTimersByTime(100)
+      assert.deepEqual(seen, [3])
+    })
+
+    it('SPEC-R56 debounce flush with nothing pending returns last result', () => {
+      const d = debounce((x: number) => x * 2, 50)
+      d(4)
+      vi.advanceTimersByTime(50)
+      assert.equal(d.flush(), 8)
+      assert.equal(d.flush(), 8)
+    })
+
+    it('SPEC-R56 debounce wait < 0 treated as 0; maxWait < wait raised to wait', () => {
+      const seen: string[] = []
+      const d = debounce(
+        (x: string) => {
+          seen.push(x)
+          return x
+        },
+        -10,
+        { maxWait: -5 }
+      )
+      d('now')
+      vi.advanceTimersByTime(0)
+      assert.deepEqual(seen, ['now'])
+    })
+
+    it('SPEC-R56 debounce returns last result on intermediate calls', () => {
+      const d = debounce((x: number) => x + 1, 50)
+      assert.equal(d(1), undefined)
+      vi.advanceTimersByTime(50)
+      assert.equal(d(2), 2)
+      vi.advanceTimersByTime(50)
+      assert.equal(d(3), 3)
+    })
+  })
+
+  describe('throttle', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('SPEC-R57 throttle invokes on leading edge and returns last result', () => {
+      let calls = 0
+      const t = throttle((x: number) => {
+        calls++
+        return x * 10
+      }, 100)
+      assert.equal(t(1), 10)
+      assert.equal(calls, 1)
+      assert.equal(t(2), 10)
+      assert.equal(calls, 1)
+      vi.advanceTimersByTime(100)
+      assert.equal(t(3), 30)
+      assert.equal(calls, 2)
+    })
+  })
+
+  describe('once / result / resultAsync / promisify', () => {
+    it('once invokes only on the first call', () => {
+      let calls = 0
+      const f = once((x: number) => {
+        calls++
+        return x
+      })
+      assert.equal(f(1), 1)
+      assert.equal(f(2), 1)
+      assert.equal(f(3), 1)
+      assert.equal(calls, 1)
+    })
+
+    it('result returns [value, undefined] or [undefined, error]', () => {
+      const ok = result((x: number) => x + 1)
+      assert.deepEqual(ok(2), [3, undefined])
+      const bad = result(() => {
+        throw new Error('nope')
+      })
+      const [value, err] = bad()
+      assert.equal(value, undefined)
+      assert.ok(err instanceof Error)
+      assert.equal((err as Error).message, 'nope')
+    })
+
+    it('resultAsync awaits and catches', async () => {
+      const ok = resultAsync(async (x: number) => x + 1)
+      assert.deepEqual(await ok(2), [3, undefined])
+      const bad = resultAsync(async () => {
+        throw new Error('async nope')
+      })
+      const [value, err] = await bad()
+      assert.equal(value, undefined)
+      assert.equal((err as Error).message, 'async nope')
+    })
+
+    it('promisify wraps node-style callbacks', async () => {
+      const read = (path: string, cb: (err: Error | null, data?: string) => void) => {
+        if (path === 'bad') cb(new Error('fail'))
+        else cb(null, `data:${path}`)
+      }
+      const readP = promisify<string>(read)
+      assert.equal(await readP('ok'), 'data:ok')
+      await expect(readP('bad')).rejects.toThrow('fail')
+    })
+
+    it('promisify binds thisArg', async () => {
+      const obj = {
+        prefix: 'p',
+        go(cb: (err: null, v: string) => void) {
+          cb(null, this.prefix)
+        }
+      }
+      const goP = promisify<string>(obj.go, obj)
+      assert.equal(await goP(), 'p')
+    })
+  })
+})
