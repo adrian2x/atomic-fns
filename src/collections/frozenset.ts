@@ -1,4 +1,6 @@
 import { protocol } from '../operators/index.js'
+import { sameSetMembers } from './abc.js'
+import { clone } from './object.js'
 
 /**
  * An immutable Set. Contents cannot change after construction.
@@ -40,9 +42,15 @@ export class FrozenSet<T = unknown> extends Set<T> {
     throw new TypeError('FrozenSet is immutable')
   }
 
-  /** A distinct `FrozenSet` with the same members. */
-  [protocol.clone](): this {
-    return new FrozenSet(this) as this
+  /** Set membership: same members regardless of insertion order. */
+  [protocol.equals](other: unknown): boolean {
+    return sameSetMembers(this, other, (c) => c.values())
+  }
+
+  /** A distinct `FrozenSet` with the same members (deep-clones values when `deep`). */
+  [protocol.clone](deep = false): this {
+    if (!deep) return new FrozenSet(this) as this
+    return new FrozenSet([...this].map((v) => clone(v, true))) as this
   }
 
   readonly [Symbol.toStringTag] = 'FrozenSet'

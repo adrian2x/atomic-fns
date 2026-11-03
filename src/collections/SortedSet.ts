@@ -1,4 +1,5 @@
 import type { Comparer } from '../operators/index.js'
+import { protocol } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
 import { BTree } from './BTree.js'
 
@@ -31,6 +32,14 @@ export class SortedSet<T> extends ValueCollection<T> {
 
   protected override cloneFrom(values: Iterable<T>): this {
     return new SortedSet(values, this.#compareFn) as this
+  }
+
+  /**
+   * Deep clone keeps values by reference (they are the comparator keys).
+   * Shallow and deep are therefore the same for element identity.
+   */
+  override [protocol.clone](_deep = false): this {
+    return this.cloneFrom(this.values())
   }
 
   readonly [Symbol.toStringTag] = 'SortedSet'

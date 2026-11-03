@@ -1,6 +1,7 @@
 import type { Comparer } from '../operators/index.js'
-import { compare, sameValueZero } from '../operators/index.js'
+import { compare, deepEqual, protocol, sameValueZero } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
+import { clone } from './object.js'
 
 /**
  * Binary min-heap (or max-heap with a custom comparator).
@@ -29,6 +30,28 @@ export class Heap<T> extends ValueCollection<T> {
 
   protected override cloneFrom(values: Iterable<T>): this {
     return new Heap(values, this.#compare) as this
+  }
+
+  /**
+   * Multiset equality: same size and equal contents after sorting both with this heap's
+   * comparator (iteration / heap order is not part of equality).
+   */
+  override [protocol.equals](other: unknown): boolean {
+    if (this === other) return true
+    if (typeof other !== 'object' || other?.constructor !== this.constructor) return false
+    const o = other as Heap<T>
+    if (this.size !== o.size) return false
+    const a = [...this.values()].sort(this.#compare)
+    const b = [...o.values()].sort(o.#compare)
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false
+    }
+    return true
+  }
+
+  override [protocol.clone](deep = false): this {
+    if (!deep) return this.cloneFrom(this.values())
+    return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
   }
 
   readonly [Symbol.toStringTag] = 'Heap'

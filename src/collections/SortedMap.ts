@@ -1,6 +1,8 @@
 import type { Comparer } from '../operators/index.js'
-import { MapCollection } from './abc.js'
+import { protocol } from '../operators/index.js'
+import { MapCollection, sameSequenceItems } from './abc.js'
 import { BTree } from './BTree.js'
+import { clone } from './object.js'
 
 /**
  * Map whose keys stay ordered by {@link compare} (or a supplied comparator).
@@ -28,6 +30,17 @@ export class SortedMap<K, V> extends MapCollection<K, V> {
 
   protected override cloneFrom(entries: Iterable<[K, V]>): this {
     return new SortedMap(entries, this.#compareFn) as this
+  }
+
+  /** Sequence equality: key order is part of meaning. */
+  override [protocol.equals](other: unknown): boolean {
+    return sameSequenceItems(this, other, (c) => c.entries())
+  }
+
+  /** Deep clone keeps keys by reference (comparator owns key identity) and deep-clones values. */
+  override [protocol.clone](deep = false): this {
+    if (!deep) return this.cloneFrom(this.entries())
+    return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
   }
 
   readonly [Symbol.toStringTag] = 'SortedMap'

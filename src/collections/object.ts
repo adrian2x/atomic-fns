@@ -284,8 +284,9 @@ const BOXED_TAGS = new Set([
  * Own enumerable symbol keys are copied. Node `Buffer` is copied (not a shared view). `DataView`
  * keeps `byteOffset` / `byteLength` over a copy of the whole backing buffer. Deep `Map` clone
  * keeps key identity and deep-clones values. RegExp match arrays keep `index` / `input` /
- * `groups`. Class instances stay by reference. Symbol `protocol.clone` is honored; a
- * string-named `clone` method is ignored.
+ * `groups`. Class instances stay by reference. Symbol `protocol.clone` is honored and
+ * receives the `deep` flag; a string-named `clone` method is ignored. Collection classes
+ * deep-clone their values when `deep` is true (comparator-ordered keys stay by reference).
  * @param value Value to clone.
  * @param deep Deep clone when true.
  */
@@ -323,7 +324,7 @@ function isNodeBuffer(v: unknown): v is Uint8Array {
 function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): unknown {
   if (v === null || typeof v !== 'object') return v
   if (map.has(v)) return map.get(v)
-  if (hasMethod(v, protocol.clone)) return v[protocol.clone]()
+  if (hasMethod(v, protocol.clone)) return v[protocol.clone](deep)
 
   const tag = Object.prototype.toString.call(v)
   let r: unknown

@@ -1,4 +1,5 @@
-import { ValueCollection } from './abc.js'
+import { protocol } from '../operators/index.js'
+import { sameSetMembers, ValueCollection } from './abc.js'
 
 interface TrieNode {
   children: Map<string, TrieNode>
@@ -116,7 +117,12 @@ export class Trie extends ValueCollection<string> {
     return this.#count
   }
 
-  readonly [Symbol.toStringTag] = 'Trie'
+  readonly [Symbol.toStringTag] = 'Trie';
+
+  /** Set membership: same words regardless of insertion order. */
+  override [protocol.equals](other: unknown): boolean {
+    return sameSetMembers(this, other, (c) => c.values())
+  }
 
   values(): IteratorObject<string> {
     return this.matches('', Infinity)

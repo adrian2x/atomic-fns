@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { clone } from '../src/collections/index.js'
-import { protocol } from '../src/operators/index.js'
+import { clone, Deque, Heap, LRUCache, SortedMap, Trie } from '../src/collections/index.js'
+import { deepEqual, protocol } from '../src/operators/index.js'
 
 describe('clone', () => {
   it('SPEC-R37 shallow typed array isolation ArrayBuffer Date Map', () => {
@@ -118,6 +118,35 @@ describe('clone', () => {
     expect(clone(Symbol.iterator)).toBe(Symbol.iterator)
     const fn = () => 1
     expect(clone(fn)).toBe(fn)
+  })
+
+  it('SPEC-R37 collection equality is order-independent where required', () => {
+    expect(deepEqual(new Trie(['ab', 'ac']), new Trie(['ac', 'ab']))).toBe(true)
+    expect(deepEqual(new Heap([1, 3, 2]), new Heap([1, 2, 3]))).toBe(true)
+    expect(deepEqual(new Heap([1, 1, 2]), new Heap([1, 2, 2]))).toBe(false)
+    expect(deepEqual(new Deque([1, 2]), new Deque([2, 1]))).toBe(false)
+
+    const a = new LRUCache<string, number>(4)
+    a.set('x', 1)
+    a.set('y', 2)
+    const b = new LRUCache<string, number>(4)
+    b.set('y', 2)
+    b.set('x', 1)
+    // Touch x on a so recency differs from b.
+    expect(a.get('x')).toBe(1)
+    expect(deepEqual(a, b)).toBe(true)
+  })
+
+  it('SPEC-R37 deep clone of SortedMap deep-clones values; shallow shares them', () => {
+    const v = { n: 1 }
+    const m = new SortedMap([['k', v]])
+    const shallow = clone(m)
+    expect(shallow).not.toBe(m)
+    expect(shallow.get('k')).toBe(v)
+
+    const deep = clone(m, true)
+    expect(deep.get('k')).toEqual({ n: 1 })
+    expect(deep.get('k')).not.toBe(v)
   })
 
   it('clone Buffer copies memory; DataView keeps offset; symbols; match arrays', () => {
