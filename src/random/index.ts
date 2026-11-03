@@ -5,7 +5,7 @@
  */
 
 import { ValueError } from '../globals/errors.js'
-import { isObject } from '../globals/index.js'
+import { isIterable, isObject } from '../globals/index.js'
 
 /**
  * Returns a random float in `[min, max)` (max exclusive).
@@ -55,8 +55,14 @@ export function sample<T>(arr: readonly T[], k: number): T[] {
  * new shuffled array of their values.
  * @param coll Array or plain object.
  */
-export function shuffle<T>(coll: T[] | Record<string, T>): T[] {
-  const arr = isObject(coll) ? Object.values(coll) : coll
+export function shuffle<T>(coll: T[] | Record<string, T> | Iterable<T>): T[] {
+  const arr = Array.isArray(coll)
+    ? coll
+    : isIterable(coll)
+      ? Array.from(coll)
+      : isObject(coll)
+        ? Object.values(coll)
+        : []
   if (!arr.length) return arr
   const n = arr.length
   for (let i = 0; i < n - 1; i++) {

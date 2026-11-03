@@ -261,8 +261,11 @@ describe('collections edge coverage', () => {
     expect(groupBy({ x: 1, y: 2 }, (v) => v)).toEqual({ 1: [1], 2: [2] })
     expect(groupByMap({ x: '10' }, 'length').get(2)).toEqual(['10'])
     expect(map(new Date(), () => 1)).toEqual([])
-    remove([1, 2, 3], 'length')
-    remove([{ a: 1 }, { a: 2 }], { a: 1 })
+    const lenRemoved = remove([1, 2, 3], 'length')
+    expect(lenRemoved).toEqual([])
+    const shapeArr = [{ a: 1 }, { a: 2 }]
+    expect(remove(shapeArr, { a: 1 })).toEqual([{ a: 1 }])
+    expect(shapeArr).toEqual([{ a: 2 }])
   })
 })
 

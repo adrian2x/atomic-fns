@@ -82,6 +82,18 @@ describe('itertools', () => {
     assert.equal(contains(null, 1), false)
   })
 
+  it('contains and sorted iterate user iterable classes before plain-object fallback', () => {
+    class Box {
+      constructor(private readonly items: number[]) {}
+      [Symbol.iterator]() {
+        return this.items[Symbol.iterator]()
+      }
+    }
+    const box = new Box([3, 1, 2])
+    assert.equal(contains(box, 1), true)
+    assert.deepEqual(sorted(box), [1, 2, 3])
+  })
+
   it('dropWhile', () => {
     const it = dropWhile([false, 0, '', true, '', []], Falsy)
     assert.deepEqual([...it], [true, '', []])

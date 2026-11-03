@@ -86,7 +86,10 @@ export function isDate(x: unknown): x is Date {
   return x instanceof Date
 }
 
-/** Check if value is a plain object type (`type(x) === 'object'`). */
+/**
+ * True for any non-null, non-array object (`type(x) === 'object'`), including class instances
+ * and null-prototype objects. Arrays, Dates, Maps, and other tagged builtins are false.
+ */
 export function isObject(x: unknown): x is Record<PropertyKey, unknown> {
   return type(x) === 'object'
 }

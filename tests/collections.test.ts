@@ -253,4 +253,100 @@ describe('collections', () => {
     expect(counters.false).toBe(3)
     expect(count(['one', 'two', 'three'], (x) => x.length)).toEqual({ '3': 2, '5': 1 })
   })
+
+  it('omit never walks inherited proto paths', () => {
+    omit({}, ['__proto__.toString'])
+    expect(typeof {}.toString).toBe('function')
+    omit({ tags: [1] }, ['tags.__proto__.includes'])
+    expect(typeof [].includes).toBe('function')
+  })
+
+  it('omit does not mutate class instances or nested non-plain values', () => {
+    class P {
+      a = 1
+      b = 2
+    }
+    const p = new P()
+    const out = omit(p, ['a'])
+    expect(p.a).toBe(1)
+    expect(out).toEqual({ b: 2 })
+    expect(out).not.toBe(p)
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype)
+
+    const nested = { x: new P() }
+    const out2 = omit(nested, ['x.a'])
+    expect(nested.x.a).toBe(1)
+    expect(out2).toEqual({ x: { b: 2 } })
+    expect(out2.x).not.toBe(nested.x)
+  })
+
+  it('pick never defines on objects reachable from a frozen source', () => {
+    const deep = Object.freeze({
+      a: Object.freeze({
+        b: 1,
+        get c() {
+          return 2
+        }
+      })
+    })
+    expect(() => pick(deep, ['a', 'a.b'])).not.toThrow()
+    const picked = pick(deep, ['a', 'a.b'])
+    expect(picked).not.toBe(deep)
+    expect(picked.a).not.toBe(deep.a)
+    expect(picked.a?.b).toBe(1)
+    expect(deep.a.b).toBe(1)
+  })
+
+  it('F-030 compact keeps class instances and non-plain objects', () => {
+    class K {
+      x = 1
+    }
+    expect(compact([new K()])).toHaveLength(1)
+    expect(compact([Object.create({ p: 1 })])).toHaveLength(1)
+    expect(compact([{}, []])).toEqual([])
+  })
+
+  it('compact and flattenObj resist __proto__ assignment', () => {
+    const c = compact(JSON.parse('{"name":"u","__proto__":{"isAdmin":true}}') as object) as Record<
+      string,
+      unknown
+    >
+    expect(c.isAdmin).toBeUndefined()
+    expect(Object.getPrototypeOf(c)).toBe(Object.prototype)
+    expect(Object.hasOwn(c, 'name')).toBe(true)
+
+    const f = flatten(JSON.parse('{"name":"u","__proto__":{"isAdmin":true}}') as object) as Record<
+      string,
+      unknown
+    >
+    expect(f.isAdmin).toBeUndefined()
+    expect(Object.getPrototypeOf(f)).toBe(Object.prototype)
+  })
+
+  it('remove predicate sees the original array', () => {
+    const arr = [1, 2, 3, 4]
+    const removed = remove(arr, (_v, i, a) => i > 0 && (a as number[])[i - 1] === 1)
+    expect(removed).toEqual([2])
+    expect(arr).toEqual([1, 3, 4])
+  })
+
+  it('flatten preserves holes as undefined', () => {
+    // eslint-disable-next-line no-sparse-arrays
+    expect(flatten([1, , [2]])).toEqual([1, undefined, 2])
+  })
+
+  it('intersection keeps the first argument iteration order', () => {
+    expect([...intersection([1, 2, 3, 4], [4, 3])]).toEqual([3, 4])
+  })
+
+  it('map and find iterate Map and Set', () => {
+    expect(map(new Set([1, 2]), (x) => Number(x) * 2)).toEqual([2, 4])
+    expect(
+      map(new Map([['a', 1]]), (entry) => {
+        const [k, v] = entry as [string, number]
+        return `${k}:${String(v)}`
+      })
+    ).toEqual(['a:1'])
+    expect(find(new Set([1, 2, 3]), (x) => Number(x) > 1)).toBe(2)
+  })
 })

@@ -19,7 +19,7 @@ import {
 import { enumerate } from '../itertools/index.js'
 import { compare, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
-import { isPlainObject } from './object.js'
+import { defineData, isPlainObject } from './object.js'
 
 export { SetCollection, ValueCollection, MapCollection } from './abc.js'
 export * from './BTree.js'
@@ -63,6 +63,26 @@ function toIteratee<T>(fn: Iteratee<T> | object | PropertyKey): Iteratee<T> {
 }
 
 /**
+ * True when `compact` should drop `x` (SPEC-R40).
+ * Plain objects / arrays / strings / Maps / Sets use emptiness; other objects are kept
+ * unless they expose `size` or `length` equal to 0. `isEmpty` itself keeps Lodash meaning.
+ */
+function isCompactEmpty(x: unknown): boolean {
+  if (x == null || x === false || x === '' || Number.isNaN(x)) return true
+  if (x === 0 || Object.is(x, -0) || x === 0n) return true
+  if (typeof x === 'string' || Array.isArray(x)) return x.length === 0
+  if (x instanceof Map || x instanceof Set) return x.size === 0
+  if (isPlainObject(x)) return Object.keys(x).length === 0
+  if (typeof x === 'object') {
+    const v = x as { length?: unknown; size?: unknown }
+    if (typeof v.length === 'number') return v.length === 0
+    if (typeof v.size === 'number') return v.size === 0
+    return false
+  }
+  return isEmpty(x)
+}
+
+/**
  * Creates a new array with all falsy and empty values removed.
  * @param arr The array to compact
  * @example
@@ -76,11 +96,12 @@ export function compact<T>(arr: T[]): T[]
 export function compact<T>(arr: T): Partial<T>
 export function compact<T>(arr: T | T[]): T[] | Partial<T> {
   if (!arr) return Array.isArray(arr) ? [] : {}
-  if (Array.isArray(arr)) return arr.filter((x) => !isEmpty(x))
+  if (Array.isArray(arr)) return arr.filter((x) => !isCompactEmpty(x))
   const result: Record<string, unknown> = {}
   for (const key of Object.keys(arr)) {
-    if (!isEmpty((arr as Record<string, unknown>)[key])) {
-      result[key] = (arr as Record<string, unknown>)[key]
+    const v = (arr as Record<string, unknown>)[key]
+    if (!isCompactEmpty(v)) {
+      defineData(result, key, v)
     }
   }
   return result as Partial<T>
@@ -175,7 +196,16 @@ export function find<T>(arr: T[] | object, fn: Iteratee<T> | object | PropertyKe
   const it = toIteratee<T>(fn)
   if (Array.isArray(arr)) {
     return (arr as T[]).find(it)
-  } else if (isObject(arr)) {
+  }
+  if (isIterable(arr)) {
+    let i = 0
+    for (const value of arr as Iterable<T>) {
+      if (it(value, i, arr)) return value
+      i++
+    }
+    return undefined
+  }
+  if (isObject(arr)) {
     const record = arr as Record<string, T>
     for (const key of Object.keys(record)) {
       if (it(record[key], key, arr)) {
@@ -406,7 +436,7 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
   const result: T[] = []
   for (let i = 0; i < arr.length; i++) {
     if (!(i in arr)) {
-      result.length++
+      result.push(undefined as T)
       continue
     }
     const value = arr[i]
@@ -414,7 +444,7 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
       const nested = flattenArray(value as T[], depth - 1)
       for (let j = 0; j < nested.length; j++) {
         if (j in nested) result.push(nested[j])
-        else result.length++
+        else result.push(undefined as T)
       }
     } else {
       result.push(value)
@@ -430,14 +460,14 @@ function flattenObj(
   seen = new WeakSet<object>()
 ): Record<string, unknown> {
   if (isString(obj) || isNumber(obj) || isBool(obj) || isNull(obj)) {
-    if (prefix) result[prefix] = obj
+    if (prefix) defineData(result, prefix, obj)
     return result
   }
 
   if (typeof obj === 'object') {
     if (seen.has(obj)) throw new ValueError('cyclic structure')
     if (!isPlainObject(obj) && !Array.isArray(obj)) {
-      if (prefix) result[prefix] = obj
+      if (prefix) defineData(result, prefix, obj)
       return result
     }
     seen.add(obj)
@@ -456,7 +486,7 @@ function flattenObj(
     return result
   }
 
-  if (prefix) result[prefix] = obj
+  if (prefix) defineData(result, prefix, obj)
   return result
 }
 
@@ -496,6 +526,15 @@ export function map<T, TResult>(
     typeof fn === 'function' ? fn : (obj) => get<TResult>(fn, obj)
   if (Array.isArray(arr)) {
     return (arr as T[]).map((x, i) => it(x, i, arr))
+  }
+  if (isIterable(arr)) {
+    const out: TResult[] = []
+    let i = 0
+    for (const x of arr as Iterable<T>) {
+      out.push(it(x, i, arr))
+      i++
+    }
+    return out
   }
   if (isObject(arr)) {
     const obj = arr as Record<PropertyKey, T>
@@ -760,11 +799,17 @@ export function symmetricDifference<T>(a: Iterable<T>, b: Iterable<T>): Iterator
  */
 export function intersection<T>(...its: Iterable<T>[]): IteratorObject<T> {
   if (its.length === 0) return new Set<T>().values()
-  let result = new Set(its[0])
-  for (let i = 1; i < its.length; i++) {
-    result = result.intersection(new Set(its[i]))
-  }
-  return result.values()
+  const rest = its.slice(1).map((it) => new Set(it))
+  return (function* () {
+    const seen = new Set<T>()
+    for (const value of its[0]) {
+      if (seen.has(value)) continue
+      if (rest.every((s) => s.has(value))) {
+        seen.add(value)
+        yield value
+      }
+    }
+  })()
 }
 
 /**
@@ -785,7 +830,7 @@ export function union<T>(...its: Iterable<T>[]): IteratorObject<T> {
  * Creates an object composed of keys generated from the results of running each element of `arr` thru `func`. The order of grouped values is determined by the order they occur in `arr`. The corresponding value of each key is an array of elements responsible for generating the key.
  *
  * @param arr The collection to iterate over.
- * @param [func=identity] The iteratee to transform keys.
+ * @param fn The iteratee to transform keys (required).
  * @returns Returns the aggregated object.
  *
  * @example
@@ -811,7 +856,7 @@ export function groupBy<T, K extends PropertyKey>(
  * Similar to {@link groupBy} but it returns a {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map Map} object with the results.
  *
  * @param arr The collection to iterate over.
- * @param {Function | PropertyKey} [func=identity] The iteratee to transform keys.
+ * @param fn The iteratee to transform keys (required).
  * @returns {Map} Returns the aggregated map object.
  * @template K, V
  *
@@ -848,10 +893,14 @@ function toValues<T>(coll: Iterable<T> | Record<string, T> | null | undefined): 
 export function remove<T>(arr: T[], predicate: Predicate<T>): T[] {
   if (!Array.isArray(arr)) throw new TypeError('remove expects an array')
   const pred = resolvePredicate(predicate)
+  const drop = new Set<number>()
+  for (let i = 0; i < arr.length; i++) {
+    if (pred(arr[i], i, arr)) drop.add(i)
+  }
   const removed: T[] = []
   let write = 0
   for (let read = 0; read < arr.length; read++) {
-    if (pred(arr[read], read, arr)) {
+    if (drop.has(read)) {
       removed.push(arr[read])
     } else {
       arr[write++] = arr[read]

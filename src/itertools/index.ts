@@ -4,14 +4,14 @@
  * @module itertools
  */
 
-import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js'
+import { call, isEmpty, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
 import { add, bool, compare, eq, identity, type Comparer } from '../operators/index.js'
 import type { Iteratee, Predicate } from '../types.js'
 
-export interface SortOptions<T = unknown> {
-  key?: (x: T) => unknown
+export interface SortOptions<T = unknown, K = unknown> {
+  key?: (x: T) => K
   reverse?: boolean
-  compare?: Comparer<T>
+  compare?: Comparer<K>
 }
 
 /**
@@ -122,8 +122,9 @@ contains('abcd', 'bc')
 export function contains(collection: unknown, value: unknown): boolean {
   if (collection == null) return false
   if (typeof collection === 'string') return collection.includes(value as string)
+  if (isIterable(collection)) return any(collection, (x) => eq(x, value))
   if (isObject(collection)) return any(Object.values(collection), (x) => eq(x, value))
-  return any(collection as Iterable<unknown>, (x) => eq(x, value))
+  return false
 }
 
 /**
@@ -395,52 +396,57 @@ export function reversed<T>(iterable: Iterable<T>): T[] {
  *
  * If `args` is a plain Object, returns the sorted values.
  */
-export function sorted<T>(
+export function sorted<T, K = T>(
   args: Iterable<T> | Record<string, T>,
-  key?: boolean | Predicate<T> | SortOptions<T>
+  key?: boolean | Predicate<T> | SortOptions<T, K>
 ): T[]
-export function sorted<T>(
+export function sorted<T, K = T>(
   args: Iterable<T> | Record<string, T>,
   reverse: boolean,
-  comp: Comparer<T>
+  comp: Comparer<K>
 ): T[]
-export function sorted<T>(
+export function sorted<T, K = T>(
   args: Iterable<T> | Record<string, T>,
   key: Predicate<T>,
-  reverse: boolean
+  reverse: boolean,
+  compareFn?: Comparer<K>
 ): T[]
-export function sorted<T>(
+export function sorted<T, K = T>(
   args: Iterable<T> | Record<string, T>,
-  key?: boolean | Predicate<T> | SortOptions<T>,
-  reverse?: boolean | Comparer<T>,
-  compareFn?: Comparer<T>
+  key?: boolean | Predicate<T> | SortOptions<T, K>,
+  reverse?: boolean | Comparer<K>,
+  compareFn?: Comparer<K>
 ): T[] {
-  const items: T[] = isObject(args) ? Object.values(args) : Array.from(args)
+  const items: T[] = isIterable(args)
+    ? Array.from(args)
+    : isObject(args)
+      ? Object.values(args)
+      : Array.from(args as Iterable<T>)
 
-  let keyFn: (x: T) => unknown = identity
+  let keyFn: (x: T) => K = identity as (x: T) => K
   let rev = false
-  let itemCmp: Comparer<T> | undefined
+  let keyCmp: Comparer<K> | undefined
 
   if (key != null && typeof key === 'object') {
     const opts = key
-    keyFn = opts.key ?? identity
+    keyFn = (opts.key ?? identity) as (x: T) => K
     rev = opts.reverse ?? false
-    itemCmp = opts.compare
+    keyCmp = opts.compare
   } else if (typeof key === 'boolean') {
     rev = key
     if (typeof reverse === 'function') {
-      itemCmp = reverse
+      keyCmp = reverse
     }
   } else if (typeof key === 'function') {
-    keyFn = key
+    keyFn = key as (x: T) => K
     if (typeof reverse === 'boolean') rev = reverse
-    if (typeof reverse === 'function') itemCmp = reverse
-    if (typeof compareFn === 'function') itemCmp = compareFn
+    if (typeof reverse === 'function') keyCmp = reverse
+    if (typeof compareFn === 'function') keyCmp = compareFn
   }
 
   const decorated = items.map((item) => ({ item, k: keyFn(item) }))
   decorated.sort((a, b) => {
-    const c = itemCmp ? itemCmp(a.item, b.item) : compare(a.k, b.k)
+    const c = keyCmp ? keyCmp(a.k, b.k) : compare(a.k, b.k)
     return rev ? -c : c
   })
   return decorated.map((d) => d.item)

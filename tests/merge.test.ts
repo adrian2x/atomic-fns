@@ -72,4 +72,20 @@ describe('merge', () => {
     const frozen = Object.freeze({ a: 1 }) as { a: number; b?: number }
     expect(() => merge(frozen, { b: 2 })).toThrow(TypeError)
   })
+
+  it('shared source object is not aliased across distinct keys', () => {
+    const s = { y: 2 }
+    const result = merge({ a: { x: 1 } }, { a: s, b: s }) as {
+      a: { x: number; y: number }
+      b: { y: number }
+    }
+    expect(result.b).toEqual({ y: 2 })
+    expect(result.a).toEqual({ x: 1, y: 2 })
+    expect(result.a).not.toBe(result.b)
+
+    const cyclic: { self?: object; n: number } = { n: 1 }
+    cyclic.self = cyclic
+    const cyc = merge({}, cyclic) as { self: { self: object }; n: number }
+    expect(cyc.self.self).toBe(cyc.self)
+  })
 })

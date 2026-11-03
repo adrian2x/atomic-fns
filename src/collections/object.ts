@@ -44,6 +44,7 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>): void {
       const base = Array.isArray(sv) ? (Array.isArray(tv) ? tv : []) : isPlainObject(tv) ? tv : {}
       seen.set(sv, base)
       mergeInto(base, sv, seen)
+      seen.delete(sv)
       defineData(t, key, base)
     } else {
       defineData(t, key, sv)
@@ -84,41 +85,78 @@ function getAtPath(obj: unknown, parts: string[]): unknown {
   return cur
 }
 
-function setAtPath(root: object, parts: string[], value: unknown): void {
+/** Own enumerable string keys copied into a fresh plain object. */
+function copyOwnEnumerable(src: object): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of Object.keys(src)) {
+    defineData(out, key, (src as Record<string, unknown>)[key])
+  }
+  return out
+}
+
+/** Assign a picked leaf onto `root`, copying every intermediate container. */
+function setPickedPath(root: object, parts: string[], value: unknown): void {
   let cur: object = root
   for (let i = 0; i < parts.length - 1; i++) {
     const p = parts[i]
     let next = Object.hasOwn(cur, p) ? (cur as Record<string, unknown>)[p] : undefined
-    if (!isPlainObject(next) && !Array.isArray(next)) {
+    if (Array.isArray(next)) {
+      next = next.slice()
+    } else if (isPlainObject(next)) {
+      next = copyOwnEnumerable(next)
+    } else {
       next = {}
-      defineData(cur, p, next)
     }
+    defineData(cur, p, next)
     cur = next as object
   }
   defineData(cur, parts[parts.length - 1], value)
 }
 
-function deleteAtPath(root: object, parts: string[]): void {
-  let cur: unknown = root
-  for (let i = 0; i < parts.length - 1; i++) {
-    if (cur === null || typeof cur !== 'object') return
-    cur = (cur as Record<string, unknown>)[parts[i]]
-  }
-  if (cur !== null && typeof cur === 'object') {
-    const key = parts[parts.length - 1]
-    if (!Reflect.deleteProperty(cur, key)) {
-      throw new TypeError(`Cannot delete property '${key}'`)
+function omitClone(value: unknown, omitPaths: string[][]): unknown {
+  if (value === null || typeof value !== 'object') return value
+  if (Array.isArray(value)) {
+    const list = value as unknown[]
+    const out: unknown[] = []
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i]
+      const nested = omitPaths.filter((p) => p[0] === String(i)).map((p) => p.slice(1))
+      if (nested.some((p) => p.length === 0) || nested.length === 0) {
+        out.push(item)
+      } else {
+        out.push(omitClone(item, nested))
+      }
     }
+    return out
   }
+  if (!isPlainObject(value)) {
+    return omitFromPlain(copyOwnEnumerable(value), omitPaths)
+  }
+  return omitFromPlain(value, omitPaths)
 }
 
-function deepClonePlain(value: unknown): unknown {
-  return clone(value, true)
+function omitFromPlain(
+  src: Record<string, unknown>,
+  omitPaths: string[][]
+): Record<string, unknown> {
+  const dropTop = new Set(omitPaths.filter((p) => p.length === 1).map((p) => p[0]))
+  const result: Record<string, unknown> = {}
+  for (const key of Object.keys(src)) {
+    if (dropTop.has(key)) continue
+    const nested = omitPaths.filter((p) => p[0] === key && p.length > 1).map((p) => p.slice(1))
+    if (nested.length === 0) {
+      defineData(result, key, src[key])
+    } else {
+      defineData(result, key, omitClone(src[key], nested))
+    }
+  }
+  return result
 }
 
 /**
  * Create an object with only the selected paths or predicate matches from `obj`.
  * Dotted paths produce nested output. Keys are written with defineProperty.
+ * Never mutates `obj` or any object reachable from it.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
@@ -138,7 +176,7 @@ export function pick<T extends object>(
   for (const path of paths) {
     const parts = pathSegments(path)
     if (!hasPath(obj, parts)) continue
-    setAtPath(result, parts, getAtPath(obj, parts))
+    setPickedPath(result, parts, getAtPath(obj, parts))
   }
   return result
 }
@@ -155,6 +193,7 @@ function hasPath(obj: unknown, parts: string[]): boolean {
 
 /**
  * Create a deep copy of `obj` with the given paths omitted, or keep values where the predicate is falsy.
+ * Never mutates `obj`. Non-plain inputs become fresh plain objects along modified paths.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
@@ -171,11 +210,11 @@ export function omit<T extends object>(
     }
     return result
   }
-  const result = deepClonePlain(obj) as object
-  for (const path of paths) {
-    deleteAtPath(result, pathSegments(path))
+  const omitPaths = paths.map(pathSegments)
+  if (isPlainObject(obj) || Array.isArray(obj)) {
+    return omitClone(obj, omitPaths) as Partial<T>
   }
-  return result
+  return omitFromPlain(copyOwnEnumerable(obj), omitPaths) as Partial<T>
 }
 
 const BOXED_TAGS = new Set([
