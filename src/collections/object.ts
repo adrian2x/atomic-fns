@@ -10,6 +10,7 @@ import {
   guardNesting,
   guardSharedRevisits,
   noteExpanded,
+  wasExpanded,
   withHookNesting
 } from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
@@ -77,6 +78,7 @@ function mergeKey(
     // Same container kind: merge into target. Differing array vs plain object: source replaces.
     const intoExisting =
       (Array.isArray(sv) && Array.isArray(tv)) || (isPlainObject(sv) && isPlainObject(tv))
+    // Path-scoped cycle protection only: a hit means this source is already on the active path.
     if (!intoExisting && seen.has(sv)) {
       defineData(t, key, seen.get(sv))
       return
@@ -92,7 +94,14 @@ function mergeKey(
     if (!intoExisting) {
       seen.set(sv, base)
     }
-    mergeInto(base, sv, seen, depth)
+    try {
+      mergeInto(base, sv, seen, depth)
+    } finally {
+      // Drop after this key so a sibling key with the same shared source gets its own copy.
+      if (!intoExisting) {
+        seen.delete(sv)
+      }
+    }
     defineData(t, key, base)
   } else {
     defineData(t, key, sv)
@@ -102,7 +111,20 @@ function mergeKey(
 function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: number): void {
   enterNesting()
   try {
-    noteExpanded(s)
+    // DAG fan-in: re-expanding a node whose children were already expanded would walk
+    // exponentially many paths. Charge those edges heavily so the shared-revisit budget
+    // trips before the walk becomes a multi-second DoS; tree-shaped and shallow shared
+    // leaves (e.g. 10001 identical row objects) keep weight 1.
+    let weight = 1
+    if (wasExpanded(s)) {
+      for (const k of Object.keys(s)) {
+        const child = (s as Record<string, unknown>)[k]
+        if (child !== null && typeof child === 'object' && wasExpanded(child)) {
+          weight += 256
+        }
+      }
+    }
+    noteExpanded(s, weight)
     assertNestingDepth(depth)
     if (t === Object.prototype || t === Function.prototype) return
     for (const key of Object.keys(s)) {
@@ -123,10 +145,10 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: n
  * Writes via defineProperty. Skips undefined source values when the target already has a defined value.
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
- * Nesting deeper than 1000 levels throws `RangeError`. Fresh source containers are memoized for
- * the call so shared references stay shared in the output. Re-expanding a shared source into a
- * pre-existing target container more than 1000000 times throws
- * `RangeError('input repeats shared objects more than 1000000 times')`. On either throw,
+ * Nesting deeper than 1000 levels throws `RangeError`. Each key gets its own fresh copy of a
+ * shared source (the seen map is path-scoped for cycle protection only). Re-expanding a shared
+ * source more than 100000 times throws
+ * `RangeError('input repeats shared objects more than 100000 times')`. On either throw,
  * `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.

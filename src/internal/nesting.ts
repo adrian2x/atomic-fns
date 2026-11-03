@@ -2,10 +2,10 @@
 export const MAX_NESTING_DEPTH = 1000
 
 /**
- * Max re-expansions of an already-expanded container when merge re-walks a shared source into a
- * pre-existing target container. Fresh-copy merges memoize and stay linear.
+ * Max re-expansions of an already-expanded container per top-level merge call
+ * (shared-reference DAG bound, and re-walks into pre-existing targets).
  */
-export const MAX_SHARED_REVISITS = 1_000_000
+export const MAX_MERGE_SHARED_REVISITS = 100_000
 
 /**
  * Max re-expansions of an already-expanded container per top-level flatten call
@@ -35,7 +35,7 @@ export function setHookNestingCost(cost: number): void {
 }
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
-const MERGE_REVISIT_ERROR = 'input repeats shared objects more than 1000000 times'
+const MERGE_REVISIT_ERROR = 'input repeats shared objects more than 100000 times'
 const FLATTEN_REVISIT_ERROR = 'input repeats shared objects more than 100000 times'
 
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
@@ -140,11 +140,11 @@ function withRevisitGuard<T>(fn: () => T, limit: number, error: string): T {
 }
 
 /**
- * Run `fn` under a fresh expanded-container set and a revisit budget of {@link MAX_SHARED_REVISITS}
- * (merge re-walks into pre-existing targets). Re-entrant calls share the outer set and budget.
+ * Run `fn` under a fresh expanded-container set and a revisit budget of
+ * {@link MAX_MERGE_SHARED_REVISITS}. Re-entrant calls share the outer set and budget.
  */
 export function guardSharedRevisits<T>(fn: () => T): T {
-  return withRevisitGuard(fn, MAX_SHARED_REVISITS, MERGE_REVISIT_ERROR)
+  return withRevisitGuard(fn, MAX_MERGE_SHARED_REVISITS, MERGE_REVISIT_ERROR)
 }
 
 /**

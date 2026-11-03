@@ -71,19 +71,18 @@ describe('shared-reference DAG budgets', () => {
     expect(canonicalKey(dag(40))).toBe(key)
   })
 
-  describe.each([23, 40])('depth-%i DAG merge preserves sharing', (depth) => {
-    it('merge completes in < 20 ms and keeps shared nodes', () => {
-      const src = dag(depth)
-      const t0 = performance.now()
-      const out = merge({}, src) as { l: object; r: object }
-      expect(performance.now() - t0).toBeLessThan(20)
-      let node: { l?: object; r?: object; v?: number } = out
-      for (let i = 0; i < depth; i++) {
-        expect(node.l).toBe(node.r)
-        node = node.l as { l?: object; r?: object; v?: number }
-      }
-      expect(node.v).toBe(1)
-    })
+  it('merge of depth-23 DAG throws the revisit error in < 50 ms', () => {
+    const src = dag(23)
+    const t0 = performance.now()
+    let err: unknown
+    try {
+      merge({}, src)
+    } catch (e) {
+      err = e
+    }
+    expect(performance.now() - t0).toBeLessThan(50)
+    expect(err).toBeInstanceOf(RangeError)
+    expect((err as Error).message).toBe(FLATTEN_REVISIT)
   })
 
   it('matches depth-40 DAG shape and value in < 20 ms', () => {
@@ -93,12 +92,14 @@ describe('shared-reference DAG budgets', () => {
     expect(performance.now() - t0).toBeLessThan(20)
   })
 
-  it('merge of 10001 shared row objects works and preserves sharing', () => {
+  it('merge of 10001 shared row objects works with distinct copies', () => {
     const row = { x: 1 }
     const out = merge({}, { rows: new Array(10_001).fill(row) }) as { rows: object[] }
     expect(out.rows).toHaveLength(10_001)
     expect(out.rows[0]).toEqual({ x: 1 })
-    expect(out.rows[0]).toBe(out.rows[10_000])
+    expect(out.rows[0]).not.toBe(out.rows[10_000])
+    ;(out.rows[0] as { x: number }).x = 99
+    expect((out.rows[10_000] as { x: number }).x).toBe(1)
   })
 
   it('merge of 1.2M distinct empty objects succeeds (first visits are unbounded)', () => {
@@ -112,7 +113,30 @@ describe('shared-reference DAG budgets', () => {
     const shared = {}
     expect(merge({}, { a: shared, b: shared })).toEqual({ a: {}, b: {} })
     const out = merge({}, { a: shared, b: shared }) as { a: object; b: object }
-    expect(out.a).toBe(out.b)
+    expect(out.a).not.toBe(out.b)
+  })
+
+  it('R12-B: merge never shares copies across keys (user/admin leak)', () => {
+    const e = { name: 'admin' }
+    const state = merge({}, { user: e, admin: e }) as {
+      user: { name: string }
+      admin: { name: string }
+    }
+    expect(state.user).not.toBe(state.admin)
+    merge(state, { user: { name: 'x' } })
+    expect(state.user.name).toBe('x')
+    expect(state.admin.name).toBe('admin')
+  })
+
+  it('R12-B: sibling key stays independent when another key is updated', () => {
+    const s = { z: 0 }
+    const out = merge({}, { a: s, b: s }, { a: { z: 1 } }) as {
+      a: { z: number }
+      b: { z: number }
+    }
+    expect(out.a.z).toBe(1)
+    expect(out.b.z).toBe(0)
+    expect(out.a).not.toBe(out.b)
   })
 
   it('Duration.round error echo for a depth-22 DAG builds in < 5 ms', () => {
