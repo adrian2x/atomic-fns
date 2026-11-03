@@ -121,8 +121,10 @@ function defineCompareFromOrdering(proto: object): void {
 
 /**
  * Wires 1.x string-named protocol methods on `Class.prototype` to symbol keys.
- * Also wires a string-named `unit` getter/value to `protocol.unit` when present.
- * Returns `Class`. Does not overwrite an existing symbol method or unit hook.
+ * Also wires a string-named `unit` on the prototype (getter or data) to `protocol.unit`.
+ * When the prototype has no `unit`, falls back to reading an own instance `unit` property
+ * (string), so `constructor(public amount, public unit)` classes adapt without a prototype
+ * accessor. Returns `Class`. Does not overwrite an existing symbol method or unit hook.
  */
 export function adaptProtocol<C extends abstract new (...args: never[]) => object>(Class: C): C {
   const proto = Class.prototype as object & Record<string | symbol, unknown>
@@ -145,6 +147,16 @@ export function adaptProtocol<C extends abstract new (...args: never[]) => objec
       Object.defineProperty(proto, protocol.unit, {
         get: function (this: { unit: unknown }) {
           return this.unit
+        },
+        enumerable: false,
+        configurable: true
+      })
+    } else {
+      Object.defineProperty(proto, protocol.unit, {
+        get: function (this: object) {
+          if (!Object.hasOwn(this, 'unit')) return undefined
+          const u = (this as { unit: unknown }).unit
+          return typeof u === 'string' ? u : undefined
         },
         enumerable: false,
         configurable: true

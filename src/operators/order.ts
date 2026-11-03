@@ -2,8 +2,20 @@
  * Total-order compare and derived relations.
  */
 
-import { assertSameCurrency } from '../internal/rank1.js'
+import { assertSameCurrency, isRank1 } from '../internal/rank1.js'
 import { hasMethod, protocol } from './protocol.js'
+
+type Rank1NumericCompare = (x: unknown, y: unknown) => -1 | 0 | 1 | undefined
+
+let rank1NumericCompare: Rank1NumericCompare | undefined
+
+/**
+ * Wired by the Decimal module so rank-1 relational ops stay numeric without `order` importing
+ * `decimal` (that import cycle costs nesting headroom in deepEqual).
+ */
+export function registerRank1NumericCompare(fn: Rank1NumericCompare): void {
+  rank1NumericCompare = fn
+}
 
 /** User comparator; `compare` itself always returns `-1 | 0 | 1`. */
 export type Comparer<T = unknown> = (x: T, y: T) => number
@@ -199,37 +211,52 @@ export function eq(x: unknown, y: unknown): boolean {
 }
 
 /**
- * `compare(x, y) < 0`.
- * @throws {ValueError} when both are Currencies with different codes.
+ * Relational compare: numeric-only for rank-1 values; otherwise the total-order `compare`.
+ * @throws {ValueError} when both operands carry different unit codes.
+ */
+function relationalCompare(x: unknown, y: unknown): -1 | 0 | 1 {
+  assertSameCurrency(x, y)
+  if (isRank1(x) && isRank1(y)) {
+    const n = rank1NumericCompare?.(x, y)
+    if (n !== undefined) return n
+    if (
+      (typeof x === 'number' || typeof x === 'bigint') &&
+      (typeof y === 'number' || typeof y === 'bigint')
+    ) {
+      return x < y ? -1 : x > y ? 1 : 0
+    }
+  }
+  return compare(x, y)
+}
+
+/**
+ * Strict less-than. Rank-1 values compare numerically only (equal kinds/units are equal).
+ * @throws {ValueError} when both operands carry different unit codes.
  */
 export function lt(x: unknown, y: unknown): boolean {
-  assertSameCurrency(x, y)
-  return compare(x, y) < 0
+  return relationalCompare(x, y) < 0
 }
 
 /**
- * `compare(x, y) <= 0`.
- * @throws {ValueError} when both are Currencies with different codes.
+ * Less-than or equal. Rank-1 values compare numerically only.
+ * @throws {ValueError} when both operands carry different unit codes.
  */
 export function lte(x: unknown, y: unknown): boolean {
-  assertSameCurrency(x, y)
-  return compare(x, y) <= 0
+  return relationalCompare(x, y) <= 0
 }
 
 /**
- * `compare(x, y) > 0`.
- * @throws {ValueError} when both are Currencies with different codes.
+ * Strict greater-than. Rank-1 values compare numerically only.
+ * @throws {ValueError} when both operands carry different unit codes.
  */
 export function gt(x: unknown, y: unknown): boolean {
-  assertSameCurrency(x, y)
-  return compare(x, y) > 0
+  return relationalCompare(x, y) > 0
 }
 
 /**
- * `compare(x, y) >= 0`.
- * @throws {ValueError} when both are Currencies with different codes.
+ * Greater-than or equal. Rank-1 values compare numerically only.
+ * @throws {ValueError} when both operands carry different unit codes.
  */
 export function gte(x: unknown, y: unknown): boolean {
-  assertSameCurrency(x, y)
-  return compare(x, y) >= 0
+  return relationalCompare(x, y) >= 0
 }

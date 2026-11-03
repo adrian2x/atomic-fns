@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { BTree } from '../src/collections/BTree.js'
 import { Heap } from '../src/collections/Heap.js'
 import { SortedMap } from '../src/collections/SortedMap.js'
-import { decimal, Decimal } from '../src/decimal/index.js'
+import { DECIMAL_BRAND, decimal, Decimal } from '../src/decimal/index.js'
 import { ValueError } from '../src/globals/errors.js'
 import { Currency } from '../src/i18n/index.js'
 import { contains, sorted } from '../src/itertools/index.js'
 import { max, min } from '../src/math/index.js'
-import { compare, eq, gt, gte, lt, lte } from '../src/operators/index.js'
+import { adaptProtocol, compare, eq, gt, gte, lt, lte, unitOf } from '../src/operators/index.js'
 
 /** Deterministic PRNG so failures reproduce. */
 function mulberry32(seed: number): () => number {
@@ -255,17 +255,25 @@ describe('methods agree with operators on a random matrix', () => {
         (typeof b === 'number' || typeof b === 'bigint' || b instanceof Decimal)
       ) {
         expect(a.eq(b as never)).toBe(eq(a, b))
-        expect(a.compare(b as never)).toBe(compare(a, b))
         for (const [, op, method] of rel) {
           expect(method(a, b as never)).toBe(op(a, b))
         }
+        const nc = a.compare(b)
+        expect(lt(a, b)).toBe(nc < 0)
+        expect(lte(a, b)).toBe(nc <= 0)
+        expect(gt(a, b)).toBe(nc > 0)
+        expect(gte(a, b)).toBe(nc >= 0)
       }
       if (b instanceof Decimal && (typeof a === 'number' || typeof a === 'bigint')) {
         expect(b.eq(a as never)).toBe(eq(b, a))
-        expect(b.compare(a as never)).toBe(compare(b, a))
         for (const [, op, method] of rel) {
           expect(method(b, a as never)).toBe(op(b, a))
         }
+        const nc = b.compare(a)
+        expect(lt(b, a)).toBe(nc < 0)
+        expect(lte(b, a)).toBe(nc <= 0)
+        expect(gt(b, a)).toBe(nc > 0)
+        expect(gte(b, a)).toBe(nc >= 0)
       }
     }
   })
@@ -285,5 +293,109 @@ describe('Currency.format keeps the instance currency', () => {
     expect(usd.accounting()).toBe('$1,234.50')
     expect(usd.precision(0)).toBe('$1,235')
     expect(usd.format({ minimumFractionDigits: 3, currency: 'JPY' }, 'en-US')).toBe('$1,234.500')
+  })
+})
+
+describe('R12-A rank-1 relational checks are numeric', () => {
+  it('N1: Decimal/Currency methods treat equal amounts as equal across kinds', () => {
+    expect(decimal(1).lte(1)).toBe(true)
+    expect(decimal(1).gt(1)).toBe(false)
+    expect(decimal(5).lte(5n)).toBe(true)
+    expect(new Currency(5, 'USD', 'en-US').lte(5)).toBe(true)
+    expect(new Currency(5, 'USD', 'en-US').eq(5)).toBe(true)
+    expect(decimal(1).compare(1)).toBe(0)
+    expect(compare(decimal(1), 1)).toBe(1)
+  })
+
+  it('R7-1: operators and min/max use numeric equality for rank-1', () => {
+    expect(lte(decimal(0), 0)).toBe(true)
+    expect(lte(new Currency(0, 'USD', 'en-US'), 0)).toBe(true)
+    expect(gte(0, decimal(0))).toBe(true)
+    expect(new Currency(5, 'USD', 'en-US').gt(5)).toBe(false)
+    const usd5 = new Currency(5, 'USD', 'en-US')
+    expect(max([usd5, 5])).toBe(usd5)
+    expect(max([5, usd5])).toBe(5)
+    expect(lte(decimal(0), 0) && lte(new Currency(0, 'USD', 'en-US'), 0)).toBe(true)
+  })
+
+  it('R7-2: foreign Decimal brand converts via string form', () => {
+    const foreign = {
+      [DECIMAL_BRAND]: true as const,
+      toString() {
+        return '3.25'
+      }
+    }
+    expect(eq(decimal(3.25), foreign)).toBe(true)
+    expect(lte(foreign, decimal(3.25))).toBe(true)
+    expect(decimal(3.25).eq(foreign as never)).toBe(true)
+    expect(decimal(foreign as never).toString()).toBe('3.25')
+  })
+
+  it('R7-3: adaptProtocol falls back to own instance unit property', () => {
+    class Money {
+      constructor(
+        public amount: number,
+        public unit: string
+      ) {}
+      eq(o: unknown) {
+        return o instanceof Money && this.amount === o.amount && this.unit === o.unit
+      }
+      lt(o: Money) {
+        return this.amount < o.amount
+      }
+    }
+    adaptProtocol(Money)
+    const usd = new Money(5, 'USD')
+    const jpy = new Money(5, 'JPY')
+    expect(unitOf(usd)).toBe('USD')
+    expect(unitOf(jpy)).toBe('JPY')
+    expect(() => lte(usd, jpy)).toThrow(ValueError)
+    expect(lte(usd, new Money(6, 'USD'))).toBe(true)
+  })
+
+  it('R12-A: 3000 random rank-1 pairs - eq implies lte/gte; methods match operators', () => {
+    const rand = mulberry32(0xa12)
+    const codes = ['EUR', 'JPY', 'USD'] as const
+    function sample(): unknown {
+      const roll = Math.floor(rand() * 8)
+      if (roll === 0) return Object.is(rand(), 0.5) ? -0 : 0
+      if (roll === 1) return Number.NaN
+      const value = Math.floor(rand() * 9) - 4
+      if (roll === 2) return value
+      if (roll === 3) return BigInt(value)
+      if (roll === 4) return decimal(value)
+      return new Currency(value, codes[Math.floor(rand() * 3)] ?? 'USD', 'en-US')
+    }
+    for (let i = 0; i < 3000; i++) {
+      const a = sample()
+      const b = sample()
+      const aUnit = a instanceof Currency ? a.currency : ''
+      const bUnit = b instanceof Currency ? b.currency : ''
+      const mismatch = aUnit !== '' && bUnit !== '' && aUnit !== bUnit
+      if (mismatch) {
+        expect(() => lte(a, b)).toThrow(ValueError)
+        expect(() => gte(a, b)).toThrow(ValueError)
+        if (a instanceof Currency) {
+          expect(() => a.lte(b as never)).toThrow(ValueError)
+          expect(() => a.compare(b as never)).toThrow(ValueError)
+        }
+        continue
+      }
+      if (typeof a === 'number' && Number.isNaN(a)) continue
+      if (typeof b === 'number' && Number.isNaN(b)) continue
+      if (eq(a, b)) {
+        expect(lte(a, b)).toBe(true)
+        expect(gte(a, b)).toBe(true)
+      }
+      if (
+        a instanceof Decimal &&
+        (typeof b === 'number' || typeof b === 'bigint' || b instanceof Decimal)
+      ) {
+        expect(a.lt(b as never)).toBe(lt(a, b))
+        expect(a.lte(b as never)).toBe(lte(a, b))
+        expect(a.gt(b as never)).toBe(gt(a, b))
+        expect(a.gte(b as never)).toBe(gte(a, b))
+      }
+    }
   })
 })

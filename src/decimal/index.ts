@@ -7,9 +7,55 @@
 import { ValueError, ZeroDivisionError } from '../globals/errors.js'
 import { compareValueThenUnit } from '../internal/rank1.js'
 import { truncateForError } from '../internal/truncate.js'
-import { compare as totalCompare, eq as totalEq } from '../operators/order.js'
+import { registerRank1NumericCompare } from '../operators/order.js'
 import { protocol, unitOf } from '../operators/protocol.js'
 import { isqrtRoot } from './isqrt.js'
+
+/** Cross-realm Decimal brand (`Symbol.for` so every copy of the library shares it). */
+export const DECIMAL_BRAND: unique symbol = Symbol.for('atomic-fns.decimal')
+
+/** True when `v` is a Decimal from this or another copy of the library. */
+export function isDecimalBrand(v: unknown): boolean {
+  return (
+    (typeof v === 'object' || typeof v === 'function') &&
+    v !== null &&
+    (v as Record<symbol, unknown>)[DECIMAL_BRAND] === true
+  )
+}
+
+/**
+ * Numeric-only rank-1 compare (no unit or kind tie-break).
+ * Returns `undefined` when either side is not a comparable rank-1 numeric.
+ */
+function asCmp3(n: number): -1 | 0 | 1 {
+  return n < 0 ? -1 : n > 0 ? 1 : 0
+}
+
+export function compareRank1Numeric(x: unknown, y: unknown): -1 | 0 | 1 | undefined {
+  if (isDecimalBrand(x) || x instanceof Decimal) {
+    const r = coerceDecimal(x).numericCompare(y)
+    return r === undefined ? undefined : asCmp3(r)
+  }
+  if (isDecimalBrand(y) || y instanceof Decimal) {
+    const r = coerceDecimal(y).numericCompare(x)
+    if (r === undefined) return undefined
+    return asCmp3(-r)
+  }
+  if (
+    (typeof x === 'number' || typeof x === 'bigint') &&
+    (typeof y === 'number' || typeof y === 'bigint')
+  ) {
+    if (typeof x === 'number' && Number.isNaN(x)) return undefined
+    if (typeof y === 'number' && Number.isNaN(y)) return undefined
+    return x < y ? -1 : x > y ? 1 : 0
+  }
+  return undefined
+}
+
+function coerceDecimal(v: unknown): Decimal {
+  if (v instanceof Decimal) return v
+  return new Decimal(String(v))
+}
 
 /** Rounding mode for {@link Decimal.div}, {@link Decimal.round} and {@link Decimal.sqrt}. */
 export type RoundingMode = 'halfEven' | 'halfUp' | 'halfDown' | 'down' | 'up' | 'floor' | 'ceil'
@@ -29,10 +75,13 @@ const PARSE_LEADING_DOT = /^\s*([+-]?)\.(\d+)(?:e([+-]?\d+))?\s*$/i
 
 /**
  * Casts the given value as a {@link Decimal}.
+ * Foreign Decimals (other library copies) convert exactly via their string form.
  * @param x Value to convert.
  */
 export function decimal(x: DecimalInput): Decimal {
-  return x instanceof Decimal ? x : new Decimal(x)
+  if (x instanceof Decimal) return x
+  if (isDecimalBrand(x)) return new Decimal(String(x))
+  return new Decimal(x)
 }
 
 function pow10(k: number): bigint {
@@ -150,11 +199,12 @@ function roundQuotient(
 function toDecimalInput(o: unknown): DecimalInput {
   if (
     o instanceof Decimal ||
+    isDecimalBrand(o) ||
     typeof o === 'number' ||
     typeof o === 'bigint' ||
     typeof o === 'string'
   ) {
-    return o
+    return isDecimalBrand(o) && !(o instanceof Decimal) ? String(o) : (o as DecimalInput)
   }
   throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
 }
@@ -508,30 +558,36 @@ export class Decimal {
   }
 
   /**
-   * Rank-1 total order with a Decimal, bigint, or number (exact binary for numbers).
-   * Matches the `compare` operator for those inputs; string inputs stay numeric-only.
+   * Numeric compare with a Decimal, bigint, or number (exact binary for numbers).
+   * Equal values of any rank-1 kind return `0` (no unit/kind tie-break). The `compare`
+   * operator keeps those tie-breaks for sorted containers.
    * @param x Other value.
    */
   compare(x: DecimalInput): -1 | 0 | 1 {
     if (typeof x === 'number') {
       if (Number.isNaN(x)) throw new TypeError('cannot compare Decimal with NaN')
-      return totalCompare(this, x)
     }
-    if (typeof x === 'bigint' || x instanceof Decimal) {
-      return totalCompare(this, x)
+    const r = this.numericCompare(x)
+    if (r === undefined) {
+      const o = decimal(x)
+      return compareIE(this.#i, this.#e, o.#i, o.#e)
     }
-    const o = decimal(x)
-    return compareIE(this.#i, this.#e, o.#i, o.#e)
+    return r < 0 ? -1 : r > 0 ? 1 : 0
   }
 
   /**
-   * Semantic equality (exact binary when `x` is a number). Matches the `eq` operator for
-   * Decimal, number, and bigint; string inputs stay numeric-only.
+   * Semantic equality. Identical to {@link Decimal.protocolEquals} for Decimal, number,
+   * bigint, and branded foreign Decimals; string inputs stay numeric-only.
    * @param x Other value.
    */
   eq(x: DecimalInput): boolean {
-    if (typeof x === 'number' || typeof x === 'bigint' || x instanceof Decimal) {
-      return totalEq(this, x)
+    if (
+      typeof x === 'number' ||
+      typeof x === 'bigint' ||
+      x instanceof Decimal ||
+      isDecimalBrand(x)
+    ) {
+      return this.protocolEquals(x)
     }
     const o = decimal(x)
     return this.#i === o.#i && this.#e === o.#e
@@ -583,9 +639,16 @@ export class Decimal {
     return this.compare(x) >= 0
   }
 
-  /** Numeric-only compare (no currency code): Decimal/bigint exact; finite number exact-binary. */
-  #numericCompare(o: unknown): number | undefined {
+  /**
+   * Numeric-only compare (no unit or kind tie-break): Decimal/bigint exact; finite number
+   * exact-binary. Foreign branded Decimals convert via their string form.
+   */
+  numericCompare(o: unknown): number | undefined {
     if (o instanceof Decimal) return compareIE(this.#i, this.#e, o.#i, o.#e)
+    if (isDecimalBrand(o)) {
+      const d = coerceDecimal(o)
+      return compareIE(this.#i, this.#e, d.#i, d.#e)
+    }
     if (typeof o === 'bigint') return compareIE(this.#i, this.#e, o, 0)
     if (typeof o === 'number') {
       if (Number.isNaN(o)) return undefined
@@ -603,7 +666,7 @@ export class Decimal {
    * Rank-1 order is lexicographic: numeric value, then unit code (`''` when unit-less).
    */
   protocolCompare(o: unknown): number | undefined {
-    const numeric = this.#numericCompare(o)
+    const numeric = this.numericCompare(o)
     if (numeric === undefined) return undefined
     return compareValueThenUnit(numeric, unitOf(this), unitOf(o))
   }
@@ -613,7 +676,7 @@ export class Decimal {
    * Never derived from compare (eq is not transitive across units).
    */
   protocolEquals(o: unknown): boolean {
-    const numeric = this.#numericCompare(o)
+    const numeric = this.numericCompare(o)
     if (numeric === undefined || numeric !== 0) return false
     const ux = unitOf(this)
     const uy = unitOf(o)
@@ -653,3 +716,12 @@ export class Decimal {
     return this.abs()
   }
 }
+
+Object.defineProperty(Decimal.prototype, DECIMAL_BRAND, {
+  value: true,
+  enumerable: false,
+  configurable: false,
+  writable: false
+})
+
+registerRank1NumericCompare(compareRank1Numeric)

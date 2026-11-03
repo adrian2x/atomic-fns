@@ -262,7 +262,7 @@ describe('SPEC-R66 decimal edge coverage', () => {
     expect(decimal(1).lt(2)).toBe(true)
     expect(decimal(1).lte(decimal(1))).toBe(true)
     expect(decimal(1).eq(1)).toBe(true)
-    expect(decimal(1).lte(1)).toBe(false)
+    expect(decimal(1).lte(1)).toBe(true)
     expect(decimal(2).gt(1)).toBe(true)
     expect(decimal(1).gte(decimal(1))).toBe(true)
     expect(decimal(1).gte(1)).toBe(true)

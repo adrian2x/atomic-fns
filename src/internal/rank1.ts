@@ -5,10 +5,29 @@
  * values), then the generic kind tie-break in `compare`. Numeric order wins first, so
  * Currencies and plain numbers with different amounts sort by amount; equal amounts keep
  * distinct units apart. Units come from `protocol.unit` (see {@link unitOf}).
+ *
+ * Relational checks (`lt`/`lte`/`gt`/`gte`, math `min`/`max`, Decimal/Currency methods) use
+ * numeric order only; the `compare` operator is the only place unit/kind tie-breaks live.
  */
 
 import { ValueError } from '../globals/errors.js'
-import { unitOf } from '../operators/protocol.js'
+import { protocol, unitOf } from '../operators/protocol.js'
+
+const DECIMAL_BRAND = Symbol.for('atomic-fns.decimal')
+
+/**
+ * True for number (non-NaN), bigint, Decimal/Currency (rank 1, brand, or unit hook), and any
+ * value that carries a string `protocol.unit`.
+ */
+export function isRank1(v: unknown): boolean {
+  const t = typeof v
+  if (t === 'bigint') return true
+  if (t === 'number') return !Number.isNaN(v)
+  if ((t !== 'object' && t !== 'function') || v === null) return false
+  if ((v as Record<symbol, unknown>)[DECIMAL_BRAND] === true) return true
+  if (unitOf(v) !== '') return true
+  return (v as { [protocol.rank]?: unknown })[protocol.rank] === 1
+}
 
 /**
  * Rank-1 order after a numeric compare: when values differ return that result; when equal,
