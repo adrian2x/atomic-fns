@@ -1,5 +1,4 @@
-const NATIVE_DATE =
-  /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
+import { daysInMonthOf, localWallToTime, utcWallToTime, type WallFields } from './date/calendar.js'
 
 const TOKEN_RE =
   /\[([^\]]*)]|YYYY|YY|Q|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|d|E|HH|H|hh|h|kk|k|mm|m|ss|s|SSS|A|a|ZZ|Z|zzz|z|NNNN|NNN|NN|N|X|x|LTS|LT|LLLL|LLL|LL|L|llll|lll|ll|l/g
@@ -142,39 +141,200 @@ function ordinalDay(day: number, locale: string | undefined): string {
   return `${String(day)}${suffixes[category] ?? 'th'}`
 }
 
+function isAsciiDigit(c: string): boolean {
+  return c >= '0' && c <= '9'
+}
+
 /**
- * Returns a new Date from the given arguments.
+ * Parse an ISO-8601 / ECMA-262 Date Time String subset.
+ * Returns a Date, or the sentinel `'fallback'` when the scan fails before committing
+ * to a year-month form (caller may try engine parsing).
+ */
+function parseDateString(text: string, utc: boolean): Date | 'fallback' {
+  let i = 0
+  let committed = false
+
+  const peek = (): string | undefined => (i < text.length ? text.charAt(i) : undefined)
+
+  const readDigits = (min: number, max: number): number | undefined => {
+    let n = 0
+    let count = 0
+    while (count < max && i < text.length) {
+      const c = text.charAt(i)
+      if (!isAsciiDigit(c)) break
+      n = n * 10 + (c.charCodeAt(0) - 48)
+      i += 1
+      count += 1
+    }
+    if (count < min) return undefined
+    return n
+  }
+
+  const fail = (): Date | 'fallback' => (committed ? new Date(Number.NaN) : 'fallback')
+
+  let year: number
+  const first = peek()
+  if (first === '+' || first === '-') {
+    const sign = first === '-' ? -1 : 1
+    i += 1
+    const y = readDigits(6, 6)
+    if (y === undefined) return fail()
+    // ECMA-262 Date Time String Format rejects "-000000"
+    if (sign === -1 && y === 0) return new Date(Number.NaN)
+    year = sign * y
+  } else {
+    const y = readDigits(4, 4)
+    if (y === undefined) return fail()
+    year = y
+  }
+
+  let month = 1
+  let day = 1
+
+  if (i === text.length) {
+    // year only
+  } else if (peek() === '-') {
+    i += 1
+    committed = true
+    const m = readDigits(1, 2)
+    if (m === undefined) return fail()
+    month = m
+    if (peek() === '-') {
+      i += 1
+      const d = readDigits(1, 2)
+      if (d === undefined) return fail()
+      day = d
+    }
+  } else {
+    return fail()
+  }
+
+  let hour = 0
+  let minute = 0
+  let second = 0
+  let millisecond = 0
+  let hasZone = false
+  let zoneSign = 1
+  let zoneHour = 0
+  let zoneMinute = 0
+
+  if (i < text.length) {
+    const sep = peek()
+    if (sep !== 'T' && sep !== 't' && sep !== ' ') return fail()
+    i += 1
+
+    const hh = readDigits(2, 2)
+    if (hh === undefined) return fail()
+    hour = hh
+    if (peek() !== ':') return fail()
+    i += 1
+    const mm = readDigits(2, 2)
+    if (mm === undefined) return fail()
+    minute = mm
+
+    if (peek() === ':') {
+      i += 1
+      const ss = readDigits(2, 2)
+      if (ss === undefined) return fail()
+      second = ss
+      const fracSep = peek()
+      if (fracSep === '.' || fracSep === ',') {
+        i += 1
+        const fracStart = i
+        const frac = readDigits(1, 9)
+        if (frac === undefined) return fail()
+        if (i < text.length && isAsciiDigit(text.charAt(i))) return fail()
+        const digits = text.slice(fracStart, i)
+        millisecond = Number(digits.padEnd(3, '0').slice(0, 3))
+      }
+    }
+
+    const z = peek()
+    if (z === 'Z' || z === 'z') {
+      hasZone = true
+      i += 1
+    } else if (z === '+' || z === '-') {
+      hasZone = true
+      zoneSign = z === '-' ? -1 : 1
+      i += 1
+      const oh = readDigits(2, 2)
+      if (oh === undefined) return fail()
+      zoneHour = oh
+      if (peek() === ':') {
+        i += 1
+        const om = readDigits(2, 2)
+        if (om === undefined) return fail()
+        zoneMinute = om
+      } else if (i < text.length && isAsciiDigit(text.charAt(i))) {
+        const om = readDigits(2, 2)
+        if (om === undefined) return fail()
+        zoneMinute = om
+      }
+    }
+
+    if (i !== text.length) return fail()
+  }
+
+  if (month < 1 || month > 12) return new Date(Number.NaN)
+  const dim = daysInMonthOf(year, month)
+  if (day < 1 || day > dim) return new Date(Number.NaN)
+
+  if (hour === 24) {
+    if (minute !== 0 || second !== 0 || millisecond !== 0) return new Date(Number.NaN)
+  } else if (hour < 0 || hour > 23) {
+    return new Date(Number.NaN)
+  }
+  if (minute < 0 || minute > 59) return new Date(Number.NaN)
+  if (second < 0 || second > 59) return new Date(Number.NaN)
+  if (hasZone) {
+    if (zoneHour < 0 || zoneHour > 23) return new Date(Number.NaN)
+    if (zoneMinute < 0 || zoneMinute > 59) return new Date(Number.NaN)
+  }
+
+  const fields: WallFields = {
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    millisecond
+  }
+
+  let t: number
+  if (hasZone) {
+    t = utcWallToTime(fields) - zoneSign * (zoneHour * 60 + zoneMinute) * 60_000
+  } else if (utc) {
+    t = utcWallToTime(fields)
+  } else {
+    t = localWallToTime(fields)
+  }
+
+  if (!(Math.abs(t) <= 8.64e15)) return new Date(Number.NaN)
+  return new Date(t)
+}
+
+/**
+ * Coerce a value to a `Date`.
+ * Strings are parsed with a strict ISO-8601 / ECMA-262 Date Time String subset:
+ * out-of-range fields yield an invalid Date; years 0-99 are literal; date-only and
+ * zone-less strings use local wall time unless `utc` is true. Non-ISO strings of
+ * length 1..128 fall back to engine parsing (`utc` does not apply). Longer non-ISO
+ * input is invalid.
  * @param date The date value
- * @param utc Interprets the given value as a UTC date
+ * @param utc When true, zone-less ISO strings are read as UTC
  * @returns The new date object
  */
 export function asDate(date: string | number | Date | null | undefined, utc = false): Date {
-  if (date === null) {
-    return new Date(NaN)
-  }
+  if (date === undefined) return new Date()
+  if (date === null) return new Date(Number.NaN)
+  if (date instanceof Date) return new Date(date.getTime())
+  if (typeof date === 'number') return new Date(date)
+  if (typeof date !== 'string') return new Date(Number.NaN)
 
-  date ??= Date.now()
-
-  if (typeof date === 'string' && !/Z$/i.test(date)) {
-    const d: (string | undefined)[] | null = NATIVE_DATE.exec(date)
-
-    if (d) {
-      const year = Number(d[1])
-      const month = d[2] !== undefined && d[2] !== '' ? Number(d[2]) - 1 : 0
-      const day = d[3] !== undefined && d[3] !== '' ? Number(d[3]) : 1
-      const hour = d[4] !== undefined ? Number(d[4]) : 0
-      const minute = d[5] !== undefined ? Number(d[5]) : 0
-      const second = d[6] !== undefined ? Number(d[6]) : 0
-      const ms = Number((d[7] ?? '0').padEnd(3, '0').slice(0, 3))
-
-      if (utc) {
-        return new Date(Date.UTC(year, month, day, hour, minute, second, ms))
-      }
-
-      return new Date(year, month, day, hour, minute, second, ms)
-    }
-  }
-
+  const parsed = parseDateString(date, utc)
+  if (parsed !== 'fallback') return parsed
+  if (date.length === 0 || date.length > 128) return new Date(Number.NaN)
   return new Date(date)
 }
 

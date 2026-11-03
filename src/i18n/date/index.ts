@@ -4,6 +4,18 @@ import { Duration, UNITS_PLURAL, type DurationObject, type DurationUnit } from '
 import { asDate, formatDate, strftime } from '../format.js'
 import { addDuration, lastDayOfMonth, subDuration } from './arith.js'
 import {
+  civilFromDayNumber,
+  dayNumber,
+  ISO_WEEK_RULE,
+  localeWeekRule,
+  localWallToTime,
+  readWall,
+  utcWallToTime,
+  weekdayOf,
+  weekDateOf,
+  weeksInWeekYear
+} from './calendar.js'
+import {
   asNumber,
   dayOfYear,
   daysInMonth,
@@ -212,24 +224,44 @@ export class IntlDate implements Comparable, Equatable {
     return isLeapYear(this.year)
   }
 
-  /** Weeks in the current year (Monday / Jan-1 rule). */
+  /** Locale week-numbering year for this date. */
+  weekYear(): number {
+    if (!this.isValid()) return Number.NaN
+    const w = readWall(this.#date.getTime(), this.utc)
+    return weekDateOf(dayNumber(w.year, w.month, w.day), localeWeekRule(this.locale)).year
+  }
+
+  /** Weeks in this date's locale week-numbering year. */
   weeksInYear(): number {
-    return weeksInYear(this.year)
+    if (!this.isValid()) return Number.NaN
+    return weeksInWeekYear(this.weekYear(), localeWeekRule(this.locale))
   }
 
-  /** ISO weeks in the current year. */
+  /** ISO week-numbering year for this date. */
+  isoWeekYear(): number {
+    if (!this.isValid()) return Number.NaN
+    const w = readWall(this.#date.getTime(), this.utc)
+    return weekDateOf(dayNumber(w.year, w.month, w.day), ISO_WEEK_RULE).year
+  }
+
+  /** Weeks in this date's ISO week-numbering year. */
   isoWeeksInYear(): number {
-    return weeksInYear(this.year, 1, 4)
+    if (!this.isValid()) return Number.NaN
+    return weeksInWeekYear(this.isoWeekYear(), ISO_WEEK_RULE)
   }
 
-  /** Week of the year. */
+  /** Locale week of the year (rule from this instance's locale). */
   week(): number {
-    return weekOfYear(this.#date, 1, 1, this.utc).week
+    if (!this.isValid()) return Number.NaN
+    const w = readWall(this.#date.getTime(), this.utc)
+    return weekDateOf(dayNumber(w.year, w.month, w.day), localeWeekRule(this.locale)).week
   }
 
-  /** ISO week of the year. */
+  /** ISO 8601 week of the year. */
   isoWeek(): number {
-    return weekOfYear(this.#date, 1, 4, this.utc).week
+    if (!this.isValid()) return Number.NaN
+    const w = readWall(this.#date.getTime(), this.utc)
+    return weekDateOf(dayNumber(w.year, w.month, w.day), ISO_WEEK_RULE).week
   }
 
   /**
@@ -548,13 +580,34 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
   }
 
   /**
-   * Start of the given unit. `week` is Monday 00:00 of the ISO week.
-   * @param unit Duration unit
+   * Start of the given unit. `week` uses the locale first day of week; `isoWeek` is Monday 00:00.
+   * @param unit Duration unit, or `isoWeek` / `isoWeeks`
    */
-  startOf(unit: DurationUnit): IntlDate {
+  startOf(unit: DurationUnit | 'isoWeek' | 'isoWeeks'): IntlDate {
     if (!this.isValid()) return this
-    const normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
+    const key = unit.toLowerCase()
+    const isIsoWeek = key === 'isoweek' || key === 'isoweeks'
+    const normalizedUnit = isIsoWeek ? 'weeks' : UNITS_PLURAL[key]
     if (!normalizedUnit) throw new ValueError(`Invalid unit ${unit}`)
+
+    if (normalizedUnit === 'weeks') {
+      const w = readWall(this.#date.getTime(), this.utc)
+      const dn = dayNumber(w.year, w.month, w.day)
+      const firstDay = isIsoWeek ? 1 : localeWeekRule(this.locale).firstDay
+      const startDn = dn - ((weekdayOf(dn) - firstDay + 7) % 7)
+      const civil = civilFromDayNumber(startDn)
+      const fields = {
+        year: civil.year,
+        month: civil.month,
+        day: civil.day,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        millisecond: 0
+      }
+      const t = this.utc ? utcWallToTime(fields) : localWallToTime(fields)
+      return this.clone(new Date(t))
+    }
 
     const obj: DateObject = {}
     switch (normalizedUnit) {
@@ -565,7 +618,6 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
       case 'months':
         obj.day = 1
       // falls through
-      case 'weeks':
       case 'days':
         obj.hour = 0
       // falls through
@@ -587,21 +639,18 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
       obj.month = (q - 1) * 3 + 1
     }
 
-    if (normalizedUnit === 'weeks') {
-      const dow = this.dayOfWeek
-      return this.subtract({ days: dow - 1 }).set(obj)
-    }
-
     return this.set(obj)
   }
 
   /**
    * End of the given unit: `startOf(unit)` + 1 unit - 1 ms.
-   * @param unit Duration unit
+   * @param unit Duration unit, or `isoWeek` / `isoWeeks`
    */
-  endOf(unit: DurationUnit): IntlDate {
+  endOf(unit: DurationUnit | 'isoWeek' | 'isoWeeks'): IntlDate {
     if (!this.isValid()) return this
-    const normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
+    const key = unit.toLowerCase()
+    const isIsoWeek = key === 'isoweek' || key === 'isoweeks'
+    const normalizedUnit = isIsoWeek ? 'weeks' : UNITS_PLURAL[key]
     if (!normalizedUnit) throw new ValueError(`Invalid unit ${unit}`)
     return this.startOf(unit)
       .add({ [normalizedUnit]: 1 })

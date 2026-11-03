@@ -179,12 +179,14 @@ describe('IntlDate', () => {
   })
 
   it('weeksInYear', () => {
-    const date = new Date(2020, 1, 1, 16, 1, 1, 1)
-    const d = mockDate(date, { utc: true })
-    expect(d.week()).toBe(4)
-    expect(d.isoWeek()).toBe(d.week() + 1)
+    // Absolute instant so the UTC wall date is 2020-02-01 in every host TZ
+    const d = mockDate(new Date(Date.UTC(2020, 1, 1, 16, 1, 1, 1)), { utc: true })
+    expect(d.week()).toBe(5)
+    expect(d.isoWeek()).toBe(5)
     expect(d.weeksInYear()).toBe(52)
-    expect(d.isoWeeksInYear()).toBe(d.weeksInYear() + 1)
+    expect(d.isoWeeksInYear()).toBe(53)
+    expect(d.weekYear()).toBe(2020)
+    expect(d.isoWeekYear()).toBe(2020)
   })
 
   it('isBefore', () => {
@@ -321,17 +323,23 @@ describe('IntlDate', () => {
     expect(date.startOf('second').millisecond).toBe(0)
   })
 
-  it('SPEC-R88 startOf week is Monday of the ISO week', () => {
+  it('SPEC-R88 startOf week uses locale first day; isoWeek is Monday', () => {
     const wed = mockDate(new Date(2024, 0, 10, 15, 30, 0))
     const start = wed.startOf('week')
     expect(start.year).toBe(2024)
     expect(start.month).toBe(1)
-    expect(start.day).toBe(8)
-    expect(start.dayOfWeek).toBe(1)
+    expect(start.day).toBe(7)
+    expect(start.dayOfWeek).toBe(7)
     expect(start.hour).toBe(0)
     expect(start.minute).toBe(0)
     expect(start.second).toBe(0)
     expect(start.millisecond).toBe(0)
+
+    const iso = wed.startOf('isoWeek')
+    expect(iso.year).toBe(2024)
+    expect(iso.month).toBe(1)
+    expect(iso.day).toBe(8)
+    expect(iso.dayOfWeek).toBe(1)
   })
 
   it('SPEC-R88 startOf unknown unit throws ValueError', () => {
@@ -372,11 +380,20 @@ describe('IntlDate', () => {
     const endWeek = wed.endOf('week')
     expect(endWeek.year).toBe(2024)
     expect(endWeek.month).toBe(1)
-    expect(endWeek.day).toBe(14)
+    expect(endWeek.day).toBe(13)
     expect(endWeek.hour).toBe(23)
     expect(endWeek.minute).toBe(59)
     expect(endWeek.second).toBe(59)
     expect(endWeek.millisecond).toBe(999)
+
+    const endIso = wed.endOf('isoWeek')
+    expect(endIso.year).toBe(2024)
+    expect(endIso.month).toBe(1)
+    expect(endIso.day).toBe(14)
+    expect(endIso.hour).toBe(23)
+    expect(endIso.minute).toBe(59)
+    expect(endIso.second).toBe(59)
+    expect(endIso.millisecond).toBe(999)
 
     const jan31 = mockDate(new Date(2022, 0, 31, 12, 0, 0))
     const endMonth = jan31.endOf('month')
@@ -605,10 +622,11 @@ describe('SPEC-R85 IntlDate UTC view America/New_York', () => {
     expect(d.zone()).toBe('+0000')
     expect(d.zoneName()).toBe('Coordinated Universal Time')
     // 2022-01-01T02:00Z is still Dec 31 locally in New York
-    const newYear = IntlDate.UTC('2022-01-01T02:00:00Z')
-    expect(newYear.dayOfYear()).toBe(1)
-    expect(newYear.week()).toBe(weekOfYear('2022-01-01').week)
-    expect(newYear.isoWeek()).toBe(52)
+    const newYearUS = IntlDate.UTC('2022-01-01T02:00:00Z', 'en-US')
+    expect(newYearUS.dayOfYear()).toBe(1)
+    expect(newYearUS.week()).toBe(1)
+    expect(IntlDate.UTC('2022-01-01T02:00:00Z', 'de').week()).toBe(52)
+    expect(newYearUS.isoWeek()).toBe(52)
     const local = new IntlDate('2022-01-01T02:00:00Z')
     expect(local.dayOfYear()).toBe(365)
   })

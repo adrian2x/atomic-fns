@@ -1,5 +1,6 @@
-import { lastDayOfMonth } from './arith.js'
 import { asDate } from '../format.js'
+import { lastDayOfMonth } from './arith.js'
+import { dayNumber, readWall, toWeekRule, weekDateOf, weeksInWeekYear } from './calendar.js'
 
 /** Calendar fields for IntlDate object construction and `set`. */
 export interface DateObject {
@@ -167,89 +168,55 @@ export function parseISODuration(s: string | null | undefined): ISODurationField
   return null
 }
 
-function createUTCDate(y: number, m = 0, d = 1, h = 0, min = 0, s = 0, ms = 0) {
-  let date: Date
-  if (y < 100 && y >= 0) {
-    date = new Date(Date.UTC(y + 400, m, d, h, min, s, ms))
-    if (Number.isFinite(date.getUTCFullYear())) {
-      date.setUTCFullYear(y)
-    }
-  } else {
-    date = new Date(Date.UTC(y, m, d, h, min, s, ms))
-  }
-  return date
-}
-
-function firstWeekOffset(year: number, dow: number, doy: number) {
-  const fwd = 7 + dow - doy
-  const fwdlw = (7 + createUTCDate(year, 0, fwd).getUTCDay() - dow) % 7
-  return -fwdlw + fwd - 1
+function toDate(input: string | number | Date, utc = false): Date {
+  if (typeof input === 'string') return asDate(input, utc)
+  return new Date(input)
 }
 
 /**
- * Returns the number of weeks in the specified year.
- * @param year Calendar year.
- * @param firstDayOfWeek First day of week (0=Sun..6=Sat, default Mon=1).
- * @param firstDayOfYear Day-of-year threshold for week 1 (default 1).
+ * Number of weeks in a week-numbering year under a CLDR week rule.
+ * Defaults are ISO 8601 (`firstDay` Monday, `minimalDays` 4).
+ * @param weekYear Week-numbering year (integer)
+ * @param firstDay First day of week, 0..7 (0 or 7 = Sunday, default 1 = Monday)
+ * @param minimalDays Days of the new year required in week 1 (1..7, default 4)
  */
-export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1): number {
-  const weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear)
-  const weekOffsetNext = firstWeekOffset(year + 1, firstDayOfWeek, firstDayOfYear)
-  return (daysInYear(year) - weekOffset + weekOffsetNext) / 7
+export function weeksInYear(weekYear: number, firstDay = 1, minimalDays = 4): number {
+  if (!Number.isInteger(weekYear)) {
+    throw new RangeError('weekYear must be an integer')
+  }
+  return weeksInWeekYear(weekYear, toWeekRule(firstDay, minimalDays))
 }
 
 /**
- * Returns the week of the year for the specified date.
- * String input is parsed as local time via `asDate`.
- * @param date The date.
- * @param firstDayOfWeek First day of week (default Monday=1).
- * @param firstDayOfYear Day-of-year threshold for week 1 (default 1).
- * @param utc When true, read UTC fields instead of local fields.
+ * Week of year and week-numbering year for a date under a CLDR week rule.
+ * Defaults are ISO 8601 (`firstDay` Monday, `minimalDays` 4).
+ * String input is parsed via `asDate`.
+ * @param date The date
+ * @param firstDay First day of week, 0..7 (0 or 7 = Sunday, default 1 = Monday)
+ * @param minimalDays Days of the new year required in week 1 (1..7, default 4)
+ * @param utc When true, read UTC fields instead of local fields
  */
 export function weekOfYear(
   date: string | number | Date,
-  firstDayOfWeek = 1,
-  firstDayOfYear = 1,
+  firstDay = 1,
+  minimalDays = 4,
   utc = false
 ): { week: number; year: number } {
-  const d = typeof date === 'string' ? asDate(date, utc) : new Date(date)
-  const year = utc ? d.getUTCFullYear() : d.getFullYear()
-  const doy = dayOfYear(d, utc)
-  const weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear)
-  const week = Math.floor((doy - weekOffset - 1) / 7) + 1
-
-  if (week < 1) {
-    const resYear = year - 1
-    return {
-      week: week + weeksInYear(resYear, firstDayOfWeek, firstDayOfYear),
-      year: resYear
-    }
-  }
-  if (week > weeksInYear(year, firstDayOfWeek, firstDayOfYear)) {
-    return {
-      week: week - weeksInYear(year, firstDayOfWeek, firstDayOfYear),
-      year: year + 1
-    }
-  }
-  return { week, year }
+  const rule = toWeekRule(firstDay, minimalDays)
+  const d = toDate(date, utc)
+  if (Number.isNaN(d.getTime())) return { week: Number.NaN, year: Number.NaN }
+  const w = readWall(d.getTime(), utc)
+  return weekDateOf(dayNumber(w.year, w.month, w.day), rule)
 }
 
 /**
- * Day of year (1-366). String input is parsed as local time via `asDate` (UTC when `utc`).
- * @param input The date.
- * @param utc When true, read UTC fields instead of local fields.
+ * Day of year (1-366) from the wall date. String input is parsed via `asDate`.
+ * @param input The date
+ * @param utc When true, read UTC fields instead of local fields
  */
 export function dayOfYear(input: string | number | Date, utc = false): number {
-  const d = typeof input === 'string' ? asDate(input, utc) : new Date(input)
-  const start = new Date(0)
-  if (utc) {
-    d.setUTCHours(0, 0, 0, 0)
-    start.setUTCFullYear(d.getUTCFullYear(), 0, 1)
-    start.setUTCHours(0, 0, 0, 0)
-  } else {
-    d.setHours(0, 0, 0, 0)
-    start.setFullYear(d.getFullYear(), 0, 1)
-    start.setHours(0, 0, 0, 0)
-  }
-  return Math.round((d.getTime() - start.getTime()) / 864e5) + 1
+  const d = toDate(input, utc)
+  if (Number.isNaN(d.getTime())) return Number.NaN
+  const w = readWall(d.getTime(), utc)
+  return dayNumber(w.year, w.month, w.day) - dayNumber(w.year, 1, 1) + 1
 }

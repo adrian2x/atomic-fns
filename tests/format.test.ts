@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { daysInMonth, IntlDate } from '../src/i18n/date/index.js'
 import { asDate, formatDate, strftime } from '../src/i18n/format.js'
 
 describe('SPEC-R85 formatDate America/New_York', () => {
@@ -283,5 +284,85 @@ describe('SPEC-R87 asDate', () => {
     const after = Date.now()
     expect(d.getTime()).toBeGreaterThanOrEqual(before)
     expect(d.getTime()).toBeLessThanOrEqual(after)
+  })
+})
+
+describe('asDate grammar', () => {
+  const prev = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York'
+  })
+  afterAll(() => {
+    if (prev === undefined) delete process.env.TZ
+    else process.env.TZ = prev
+  })
+
+  it('literal small years', () => {
+    expect(new IntlDate('0050-03-01').year).toBe(50)
+    expect(new IntlDate('0000-02-15').year).toBe(0)
+    expect(daysInMonth('0000-02-15')).toBe(29)
+    expect(asDate('0099-12-31T00:00:00Z').getUTCFullYear()).toBe(99)
+  })
+
+  it('overflow is invalid', () => {
+    for (const s of [
+      '2021-02-30',
+      '2021-13-01',
+      '2021-01-01T25:61',
+      '2021-02-29',
+      '2021-01-01T12:60',
+      '2021-01-01T12:00:60',
+      '2021-01-01T24:01'
+    ]) {
+      expect(Number.isNaN(asDate(s).getTime())).toBe(true)
+    }
+    expect(asDate('2020-02-29').getDate()).toBe(29)
+  })
+
+  it('hour 24 rolls to next day', () => {
+    const d = asDate('2021-01-31T24:00')
+    expect(d.getDate()).toBe(1)
+    expect(d.getMonth()).toBe(1)
+  })
+
+  it('offsets and separators', () => {
+    expect(asDate('2021-06-01T12:00:00+05:30').getTime()).toBe(Date.UTC(2021, 5, 1, 6, 30))
+    expect(asDate('2021-06-01T12:00:00-0130').getTime()).toBe(Date.UTC(2021, 5, 1, 13, 30))
+    expect(asDate('2021-06-01T12:00:00+05').getTime()).toBe(Date.UTC(2021, 5, 1, 7))
+    expect(asDate('2021-06-01t12:00:00z').getTime()).toBe(Date.UTC(2021, 5, 1, 12))
+    const local = asDate('2021-06-01 12:00')
+    expect(local.getFullYear()).toBe(2021)
+    expect(local.getMonth()).toBe(5)
+    expect(local.getDate()).toBe(1)
+    expect(local.getHours()).toBe(12)
+    expect(local.getMinutes()).toBe(0)
+  })
+
+  it('comma fraction and 10-digit fraction invalid', () => {
+    expect(asDate('2020-01-01T00:00:00,25').getMilliseconds()).toBe(250)
+    expect(Number.isNaN(asDate('2020-01-01T00:00:00.1234567890').getTime())).toBe(true)
+  })
+
+  it('expanded years', () => {
+    expect(asDate('+010000-01-01T00:00:00Z').getUTCFullYear()).toBe(10000)
+    expect(asDate('-000001-01-01T00:00:00Z').getUTCFullYear()).toBe(-1)
+    expect(Number.isNaN(asDate('-000000-01-01').getTime())).toBe(true)
+  })
+
+  it('local date-only', () => {
+    expect(asDate('2021').getTime()).toBe(new Date(2021, 0, 1).getTime())
+    expect(asDate('2021-03').getDate()).toBe(1)
+  })
+
+  it('DST gap resolves forward', () => {
+    const d = asDate('2021-03-14T02:30')
+    expect(d.getHours()).toBe(3)
+    expect(d.getMinutes()).toBe(30)
+  })
+
+  it('fallback and committed invalid', () => {
+    expect(asDate('March 7, 2020').getFullYear()).toBe(2020)
+    expect(Number.isNaN(asDate('x'.repeat(129)).getTime())).toBe(true)
+    expect(Number.isNaN(asDate('2021-01-01junk').getTime())).toBe(true)
   })
 })
