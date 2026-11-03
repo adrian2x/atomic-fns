@@ -263,12 +263,20 @@ export class Decimal {
   static readonly MAX_PRECISION = 10_000
 
   /**
-   * Maximum normalized coefficient decimal digit count. Work and results of every arithmetic
-   * operation are bounded by this (not by {@link Decimal.MAX_EXPONENT}); larger results throw
-   * {@link RangeError}. Exact terminating / perfect-square results may still use any allowed
-   * exponent when their significant digit count fits.
+   * Maximum normalized coefficient decimal digit count (significant digits after stripping leading
+   * and trailing zeros). Work and results of every arithmetic operation are bounded by this (not
+   * by {@link Decimal.MAX_EXPONENT}); larger results throw {@link RangeError}. Exact terminating /
+   * perfect-square results may still use any allowed exponent when their significant digit count
+   * fits.
    */
   static readonly MAX_DIGITS = 10_000
+
+  /**
+   * Maximum raw decimal string length accepted by the parser. Enough for any value within
+   * {@link Decimal.MAX_EXPONENT} written in plain notation. Longer inputs throw {@link ValueError}
+   * before scanning so parsing stays linear in the allowed length.
+   */
+  static readonly MAX_INPUT_LENGTH = 1_100_000
 
   #i = 0n
   #e = 0
@@ -359,13 +367,15 @@ export class Decimal {
   }
 
   static #parseString(value: string): { i: bigint; e: number } {
+    if (value.length > Decimal.MAX_INPUT_LENGTH) {
+      throw new ValueError('Decimal input too long')
+    }
     const leading: (string | undefined)[] | null = PARSE_LEADING_DIGITS.exec(value)
     if (leading) {
       const sign = leading[1] === '-' ? '-' : ''
       const intDigits = leading[2] ?? '0'
       const frac = leading[3] ?? ''
       const exp = Decimal.#parseExponent(leading[4])
-      Decimal.#assertDigitsBound(intDigits.length + frac.length)
       const i = BigInt(sign + intDigits + frac)
       return Decimal.#checked(normalizeIE(i, -frac.length + exp))
     }
@@ -374,7 +384,6 @@ export class Decimal {
       const sign = dotted[1] === '-' ? '-' : ''
       const frac = dotted[2] ?? ''
       const exp = Decimal.#parseExponent(dotted[3])
-      Decimal.#assertDigitsBound(frac.length)
       const i = BigInt(sign + (frac || '0'))
       return Decimal.#checked(normalizeIE(i, -frac.length + exp))
     }

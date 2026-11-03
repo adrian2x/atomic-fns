@@ -84,7 +84,7 @@ const o = {
 
 ## New Types
 
-[`Decimal`](https://atomic-stack.github.io/atomic-fns/classes/decimal.Decimal.html) provides support for correct rounded floating point arithmetic, with arbitrary precision.
+[`Decimal`](https://atomic-stack.github.io/atomic-fns/classes/decimal.Decimal.html) provides support for correct rounded floating point arithmetic: exact decimal arithmetic up to 10,000 significant digits (`MAX_DIGITS`) and 10,000 fractional digits of precision (`MAX_PRECISION`).
 
 This fixes precision issues with float arithmetic, for example:
 

@@ -294,11 +294,16 @@ describe('F-055 linear-time parse and normalize', () => {
     }, 50)
   })
 
-  it('rejects a digit run above MAX_DIGITS within budget', { timeout: 2000 }, () => {
-    expectFast(() => {
-      expect(() => decimal('1' + '0'.repeat(Decimal.MAX_DIGITS))).toThrow(RangeError)
-    }, 50)
-  })
+  it(
+    'accepts a trailing-zero run above MAX_DIGITS as one significant digit',
+    { timeout: 2000 },
+    () => {
+      expectFast(() => {
+        const d = decimal('1' + '0'.repeat(Decimal.MAX_DIGITS))
+        expect(d.eq('1e10000')).toBe(true)
+      }, 50)
+    }
+  )
 
   it('adds 1e1000000 succeeds exactly', { timeout: 2000 }, () => {
     expectFast(() => {
@@ -394,6 +399,22 @@ describe('Decimal.MAX_DIGITS', () => {
   it('R13-F2: digit literal above MAX_DIGITS throws', () => {
     expect(() => decimal('9'.repeat(Decimal.MAX_DIGITS + 1))).toThrow(RangeError)
     expect(() => decimal('9'.repeat(Decimal.MAX_DIGITS + 1))).toThrow(/result exceeds 10000 digits/)
+  })
+
+  it('R15-B: MAX_DIGITS counts significant digits after strip zeros', () => {
+    expect(decimal('1' + '0'.repeat(10000)).eq('1e10000')).toBe(true)
+    expect(decimal('0.' + '0'.repeat(10000) + '1').eq('1e-10001')).toBe(true)
+    expect(decimal('1e10000').eq('1e10000')).toBe(true)
+    expect(() => decimal('9'.repeat(10_001))).toThrow(RangeError)
+    expect(() => decimal('9'.repeat(10_001))).toThrow(/result exceeds 10000 digits/)
+  })
+
+  it('R15-B: MAX_INPUT_LENGTH rejects before scanning', { timeout: 2000 }, () => {
+    const huge = '1'.repeat(Decimal.MAX_INPUT_LENGTH + 1)
+    expectFast(() => {
+      expect(() => decimal(huge)).toThrow(ValueError)
+      expect(() => decimal(huge)).toThrow(/Decimal input too long/)
+    }, 5)
   })
 
   it('R14-C: every op at MAX_DIGITS finishes within budget', { timeout: 2000 }, () => {
