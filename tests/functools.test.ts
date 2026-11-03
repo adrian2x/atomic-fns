@@ -267,15 +267,25 @@ describe('functools', () => {
       assert.deepEqual(seen, ['b'])
     })
 
-    it('R14-D: debounce rejects waits outside setTimeout range', () => {
+    it('SPEC-R56 debounce clamps negative wait; rejects NaN and oversized', () => {
       const nop = (): undefined => undefined
-      for (const wait of [2 ** 31, 1e10, Infinity, NaN, -1]) {
+      for (const wait of [2 ** 31, 1e10, Infinity, NaN]) {
         expect(() => debounce(nop, wait)).toThrow(RangeError)
         expect(() => debounce(nop, wait)).toThrow('wait must be between 0 and 2147483647 ms')
       }
+      expect(() => debounce(nop, -1)).not.toThrow()
       expect(() => debounce(nop, 0)).not.toThrow()
       expect(() => debounce(nop, 2147483647)).not.toThrow()
       expect(() => debounce(nop, 10, { maxWait: Infinity })).toThrow(RangeError)
+      expect(() => debounce(nop, 10, { maxWait: -5 })).not.toThrow()
+      const seen: string[] = []
+      const d = debounce((x: string) => {
+        seen.push(x)
+        return x
+      }, -1)
+      d('a')
+      vi.advanceTimersByTime(0)
+      assert.deepEqual(seen, ['a'])
     })
 
     it('SPEC-R56 debounce returns last result on intermediate calls', () => {
@@ -296,14 +306,22 @@ describe('functools', () => {
       vi.useRealTimers()
     })
 
-    it('R14-D: throttle rejects waits outside setTimeout range', () => {
+    it('SPEC-R56 throttle clamps negative wait; rejects NaN and oversized', () => {
       const nop = (): undefined => undefined
-      for (const wait of [2 ** 31, 1e10, Infinity, NaN, -1]) {
+      for (const wait of [2 ** 31, 1e10, Infinity, NaN]) {
         expect(() => throttle(nop, wait)).toThrow(RangeError)
         expect(() => throttle(nop, wait)).toThrow('wait must be between 0 and 2147483647 ms')
       }
+      expect(() => throttle(nop, -1)).not.toThrow()
       expect(() => throttle(nop, 0)).not.toThrow()
       expect(() => throttle(nop, 2147483647)).not.toThrow()
+      const seen: number[] = []
+      const t = throttle((x: number) => {
+        seen.push(x)
+        return x
+      }, -1)
+      t(1)
+      assert.deepEqual(seen, [1])
     })
 
     it('SPEC-R57 throttle leading and trailing with latest args', () => {

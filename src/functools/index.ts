@@ -203,14 +203,17 @@ export interface Debounced<F extends AnyFunction> {
 /** Inclusive max for `setTimeout` / `setInterval` delays (signed 32-bit). */
 const MAX_TIMER_WAIT_MS = 2_147_483_647
 
-function assertTimerWait(wait: number): void {
-  if (!Number.isFinite(wait) || wait < 0 || wait > MAX_TIMER_WAIT_MS) {
+/** Clamp negative finite waits to 0; throw on NaN or values above {@link MAX_TIMER_WAIT_MS}. */
+function assertTimerWait(wait: number): number {
+  if (Number.isFinite(wait) && wait < 0) return 0
+  if (!Number.isFinite(wait) || wait > MAX_TIMER_WAIT_MS) {
     throw new RangeError('wait must be between 0 and 2147483647 ms')
   }
+  return wait
 }
 
 /**
- * Creates a debounced function that delays invoking `fn` until after `wait` milliseconds have elapsed since the last call. Trailing invocations use the latest arguments. When `maxWait` elapses since the first pending call, `fn` is invoked with the latest arguments and later calls start a new window. Returns the last result. `wait` and `maxWait` must be finite numbers in `[0, 2147483647]`; `maxWait < wait` is raised to `wait`.
+ * Creates a debounced function that delays invoking `fn` until after `wait` milliseconds have elapsed since the last call. Trailing invocations use the latest arguments. When `maxWait` elapses since the first pending call, `fn` is invoked with the latest arguments and later calls start a new window. Returns the last result. Negative finite `wait` / `maxWait` clamp to 0; NaN and values above 2147483647 throw `RangeError`. `maxWait < wait` is raised to `wait`.
  * @param fn The function to debounce.
  * @param wait The number of milliseconds to delay.
  * @param options Optional `maxWait` ceiling.
@@ -221,10 +224,10 @@ export function debounce<F extends AnyFunction>(
   wait: number,
   options?: { maxWait?: number }
 ): Debounced<F> {
-  assertTimerWait(wait)
+  wait = assertTimerWait(wait)
   let maxWait = options?.maxWait
   if (maxWait !== undefined) {
-    assertTimerWait(maxWait)
+    maxWait = assertTimerWait(maxWait)
     if (maxWait < wait) maxWait = wait
   }
 
@@ -293,8 +296,8 @@ export function debounce<F extends AnyFunction>(
  * Creates a throttled function that invokes `fn` at most once per `wait` milliseconds on the
  * leading edge, and once more on the trailing edge with the latest arguments when calls arrived
  * during the window (Lodash defaults: leading + trailing). `wait` of 0 still batches via
- * `setTimeout(0)`: one leading invoke plus at most one trailing per macrotask. `wait` must be a
- * finite number in `[0, 2147483647]`.
+ * `setTimeout(0)`: one leading invoke plus at most one trailing per macrotask. Negative finite
+ * `wait` clamps to 0; NaN and values above 2147483647 throw `RangeError`.
  * @param fn The function to throttle.
  * @param wait The number of milliseconds to throttle invocations to.
  * @returns The new throttled function.
@@ -303,7 +306,7 @@ export function throttle<F extends AnyFunction>(
   fn: F,
   wait: number
 ): (...args: Parameters<F>) => ReturnType<F> | undefined {
-  assertTimerWait(wait)
+  wait = assertTimerWait(wait)
   let cooling = false
   let lastResult: ReturnType<F> | undefined
   let pending: { thisArg: unknown; args: Parameters<F> } | undefined
