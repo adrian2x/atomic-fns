@@ -524,6 +524,20 @@ export class Decimal {
   }
 
   /**
+   * True when `|this| > Number.MAX_VALUE`. Uses coefficient digit count plus exponent so extreme
+   * exponents stay cheap; only the `[1e308, 1e309)` band does an exact compare.
+   */
+  greaterThanMaxValue(): boolean {
+    const absI = this.#i < 0n ? -this.#i : this.#i
+    if (absI === 0n) return false
+    const digs = Decimal.#digitLength(absI)
+    const order = this.#e + digs - 1
+    if (order < 308) return false
+    if (order >= 309) return true
+    return this.abs().gt(Number.MAX_VALUE)
+  }
+
+  /**
    * True when this is greater than or equal to `x`.
    * @param x Other value.
    */

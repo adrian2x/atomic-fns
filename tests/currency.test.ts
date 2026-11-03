@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { decimal } from '../src/decimal/index.js'
 import { Currency } from '../src/i18n/index.js'
 import { compare, eq } from '../src/operators/index.js'
 import { protocol } from '../src/operators/protocol.js'
@@ -40,6 +41,20 @@ describe('SPEC-R71 Currency', () => {
     expect(neg.toJSON().length).toBeGreaterThan(100)
     expect(() => neg.toString()).toThrow(RangeError)
     expect(() => neg.format()).toThrow(RangeError)
+
+    const tTiny = performance.now()
+    expect(decimal('1e-999999').greaterThanMaxValue()).toBe(false)
+    expect(performance.now() - tTiny).toBeLessThan(1)
+    const tBig = performance.now()
+    expect(decimal('1e999999').greaterThanMaxValue()).toBe(true)
+    expect(performance.now() - tBig).toBeLessThan(1)
+    expect(() => new Currency('1e-999999', 'USD', 'en-US').toString()).not.toThrow()
+    expect(() => new Currency('1e999999', 'USD', 'en-US').toString()).toThrow(RangeError)
+
+    expect(() => new Currency(String(Number.MAX_VALUE), 'USD', 'en-US').toString()).not.toThrow()
+    expect(() => new Currency('1.7976931348623159e+308', 'USD', 'en-US').toString()).toThrow(
+      RangeError
+    )
   })
 
   it('SPEC-R71 opts are not mutated', () => {

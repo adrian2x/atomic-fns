@@ -11,7 +11,7 @@ function formatExact(fmt: Intl.NumberFormat, decimalStr: string): string {
 }
 
 function assertFormattable(amount: Decimal): void {
-  if (amount.abs().gt(Number.MAX_VALUE)) {
+  if (amount.greaterThanMaxValue()) {
     throw new RangeError('amount is outside the formattable range')
   }
 }
