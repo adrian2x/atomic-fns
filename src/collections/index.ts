@@ -712,7 +712,10 @@ export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = 
 }
 
 /**
- * Assigns own enumerable string keyed properties of source objects onto the destination for keys whose current value is `undefined`. Source objects are applied from left to right. Once a property is set, additional values of the same property are ignored.
+ * Assigns own enumerable string keyed properties of source objects onto the destination for keys
+ * that are missing as own properties or whose own value is `undefined` (fills names like
+ * `toString` that are only inherited). Source objects are applied from left to right. Once a
+ * property is set, additional values of the same property are ignored.
  * **Note:** This method mutates `object`.
 
  * @param {Object} object The destination object.
@@ -728,7 +731,7 @@ export function defaults<T extends object>(object: T, ...sources: object[]): T {
   const target = object as Record<string, unknown>
   for (const source of sources) {
     for (const key of Object.keys(source)) {
-      if (target[key] === undefined) {
+      if (!Object.hasOwn(object, key) || target[key] === undefined) {
         target[key] = (source as Record<string, unknown>)[key]
       }
     }
