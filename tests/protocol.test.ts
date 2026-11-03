@@ -67,18 +67,20 @@ const migrated: Migrated[] = [
   {
     name: 'BTree',
     create: () => new BTree<number, string>().set(1, 'a').set(2, 'b'),
-    sample: 1
+    sample: 1,
+    skipOld: ['at']
   },
   {
     name: 'SortedMap',
     create: () => new SortedMap<number, string>().set(1, 'a').set(2, 'b'),
-    sample: 1
+    sample: 1,
+    skipOld: ['at']
   },
   {
     name: 'SortedSet',
     create: () => new SortedSet([1, 2]),
     sample: 1,
-    skipOld: ['add']
+    skipOld: ['add', 'at']
   },
   {
     name: 'Deque',

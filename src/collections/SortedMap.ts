@@ -105,4 +105,11 @@ export class SortedMap<K, V> extends MapCollection<K, V> {
   entries(): IteratorObject<[K, V]> {
     return this.#tree.entries()
   }
+
+  /**
+   * Entry at `index` (Array.prototype.at rules), or `undefined` out of range.
+   */
+  at(index: number): [K, V] | undefined {
+    return this.#tree.at(index)
+  }
 }

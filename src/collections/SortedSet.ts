@@ -19,10 +19,10 @@ export class SortedSet<T> extends ValueCollection<T> {
   constructor(values?: Iterable<T>, compareFn?: Comparer<T>) {
     super()
     this.#compareFn = compareFn
-    this.#tree = new BTree<T, true>(undefined, compareFn)
-    if (values) {
-      for (const x of values) this.add(x)
-    }
+    // Reverse so bulk-load collapse keeps the earliest equal value (first insert wins).
+    this.#tree = values
+      ? new BTree(Array.from(values, (v): [T, true] => [v, true]).reverse(), compareFn)
+      : new BTree<T, true>(undefined, compareFn)
   }
 
   get size(): number {
@@ -95,5 +95,13 @@ export class SortedSet<T> extends ValueCollection<T> {
   unfreeze(): this {
     this.#tree.unfreeze()
     return this
+  }
+
+  /**
+   * Value at `index` (Array.prototype.at rules), or `undefined` out of range.
+   */
+  at(index: number): T | undefined {
+    const entry = this.#tree.at(index)
+    return entry === undefined ? undefined : entry[0]
   }
 }
