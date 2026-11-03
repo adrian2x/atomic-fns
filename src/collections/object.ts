@@ -64,7 +64,7 @@ function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown 
   return ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function'
 }
 
-/** Pairs (source, target) already merged within one top-level `merge` call. */
+/** Pairs (source, target) already merged within one top-level source argument. */
 type MergedPairs = WeakMap<object, WeakSet<object>>
 
 function mergeKey(
@@ -121,7 +121,7 @@ function mergeInto(
 ): void {
   enterNesting()
   try {
-    // Already merged this source into this target in this call - nothing changes.
+    // Already merged this source into this target under the current top-level source - skip.
     let targets = pairs.get(s)
     if (targets?.has(t)) return
     if (targets === undefined) {
@@ -165,11 +165,12 @@ function mergeInto(
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
  * Nesting deeper than 1000 levels throws `RangeError`. Each key gets its own fresh copy of a
- * shared source (the seen map is path-scoped for cycle protection only). Within one call,
- * (source, target) pairs already merged are skipped (merging the same source into the same
- * target again changes nothing). Re-expanding a shared source more than 100000 times throws
- * `RangeError('input repeats shared objects more than 100000 times')`. On either throw,
- * `target` may already hold a partial merge of earlier keys at shallower levels.
+ * shared source (the seen map is path-scoped for cycle protection only). Within one top-level
+ * source argument, (source, target) pairs already merged are skipped (merging the same source
+ * into the same target again changes nothing); each later source argument gets a fresh pair
+ * cache so a source re-applied later is merged again. Re-expanding a shared source more than
+ * 100000 times throws `RangeError('input repeats shared objects more than 100000 times')`.
+ * On either throw, `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.
  * @returns `target`
@@ -182,9 +183,12 @@ export function merge<T extends object>(target: T, ...sources: (object | null | 
         throw new TypeError('merge target must be an object')
       }
       const seen = new WeakMap<object, object>()
-      const pairs: MergedPairs = new WeakMap()
       for (const s of sources) {
-        if (s != null) mergeInto(target, s, seen, pairs, 1)
+        if (s != null) {
+          // Fresh pair cache per top-level source so a later re-applied source is not skipped.
+          const pairs: MergedPairs = new WeakMap()
+          mergeInto(target, s, seen, pairs, 1)
+        }
       }
       return target
     })

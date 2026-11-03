@@ -99,4 +99,15 @@ describe('merge', () => {
     expect(merge({ a: { 0: 'x', b: 1 } }, { a: [1] })).toEqual({ a: [1] })
     expect(merge({ a: [1, 2] }, { a: [null] })).toEqual({ a: [null, 2] })
   })
+
+  it('R13-A: re-applied source after an override is not skipped by the pair cache', () => {
+    const a = { x: 1 }
+    expect((merge({}, a, { x: 2 }, a) as { x: number }).x).toBe(1)
+
+    const common = { timeout: 30 }
+    const out = merge({}, { http: common }, { http: { timeout: 5 } }, { http: common }) as {
+      http: { timeout: number }
+    }
+    expect(out.http.timeout).toBe(30)
+  })
 })
