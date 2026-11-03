@@ -245,6 +245,9 @@ function toDecimalInput(o: unknown): DecimalInput {
 
 /**
  * Exact decimal arithmetic with per-operation precision and rounding.
+ * Near {@link Decimal.MAX_DIGITS}, each arithmetic operation costs on the order of 0.2 ms, so
+ * a running total over many attacker-chosen items grows linearly with the item count - size-limit
+ * untrusted lists before reducing them.
  */
 export class Decimal {
   /**
@@ -541,6 +544,7 @@ export class Decimal {
   /**
    * Exact sum of this and `x`. Result significant digits and intermediate alignment work are
    * bounded by {@link Decimal.MAX_DIGITS} (independent of {@link Decimal.MAX_EXPONENT}).
+   * Near the digit cap each add is on the order of 0.2 ms; size-limit untrusted running totals.
    * @param x Addend.
    * @example
    * decimal('0.1').add('0.2').toString() // '0.3'

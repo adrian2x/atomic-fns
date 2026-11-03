@@ -84,7 +84,7 @@ const o = {
 
 ## New Types
 
-[`Decimal`](https://atomic-stack.github.io/atomic-fns/classes/decimal.Decimal.html) provides support for correct rounded floating point arithmetic: exact decimal arithmetic up to 10,000 significant digits (`MAX_DIGITS`) and 10,000 fractional digits of precision (`MAX_PRECISION`).
+[`Decimal`](https://atomic-stack.github.io/atomic-fns/classes/decimal.Decimal.html) provides support for correct rounded floating point arithmetic: exact decimal arithmetic up to 10,000 significant digits (`MAX_DIGITS`) and 10,000 fractional digits of precision (`MAX_PRECISION`). Near the digit cap each operation costs on the order of 0.2 ms, so totals over many attacker-chosen items grow linearly - size-limit untrusted lists.
 
 This fixes precision issues with float arithmetic, for example:
 
