@@ -5,9 +5,7 @@
  */
 
 import {
-  call,
   get,
-  isArrayLike,
   isBool,
   isEmpty,
   isFunction,
@@ -16,11 +14,13 @@ import {
   isNumber,
   isObject,
   isString,
-  keys
+  keys,
+  ValueError
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
+import { isPlainObject } from './object.js'
 
 export * from './abc.js'
 export * from './BTree.js'
@@ -33,6 +33,29 @@ export * from './SortedSet.js'
 export * from './SortedTree.js'
 export * from './SplayTree.js'
 export * from './Trie.js'
+export {
+  defineData,
+  isPlainObject,
+  merge,
+  pick,
+  omit,
+  clone,
+  cloneArray,
+  cloneTypedArray
+} from './object.js'
+export { bisect, bisectLeft, binarySearch, insort, insortLeft } from './bisect.js'
+
+/** Predicate for remove/reject: function, plain-object shape, or property path. */
+export type Predicate<T> =
+  ((value: T, index: number, coll: unknown) => unknown) | Partial<T> | string
+
+function resolvePredicate<T>(
+  predicate: Predicate<T>
+): (value: T, index: number, coll: unknown) => unknown {
+  if (typeof predicate === 'function') return predicate
+  if (typeof predicate === 'string') return (obj) => get(predicate, obj)
+  return matches(predicate)
+}
 
 /**
  * Creates a new array with all falsy and empty values removed.
@@ -47,15 +70,15 @@ compact([0, 1, false, 2, '', 3])
 export function compact<T>(arr: T[]): T[]
 export function compact<T>(arr: T): Partial<T>
 export function compact<T>(arr: T | T[]): T[] | Partial<T> {
-  if (!arr) return
+  if (!arr) return Array.isArray(arr) ? [] : {}
   if (Array.isArray(arr)) return arr.filter((x) => !isEmpty(x))
-  const result = {}
+  const result: Record<string, unknown> = {}
   for (const key of Object.keys(arr)) {
-    if (!isEmpty(arr[key])) {
-      result[key] = arr[key]
+    if (!isEmpty((arr as Record<string, unknown>)[key])) {
+      result[key] = (arr as Record<string, unknown>)[key]
     }
   }
-  return result
+  return result as Partial<T>
 }
 
 /**
@@ -76,10 +99,10 @@ count(['one', 'two', 'three'], x => x.length);
 export function count<T>(obj: T[], fn: Iteratee<T>): Record<string, number>
 export function count<T>(obj: Object, fn: Iteratee<T>): Record<string, number>
 export function count<T>(obj: T[] | Object, func: Iteratee<T>): Record<string, number> {
-  const counters = {}
+  const counters = Object.create(null) as Record<string, number>
   forEach(obj, (value, key) => {
-    const result = func(value as T, key)
-    counters[result] = get(result, counters, 0) + 1
+    const result = String(func(value as T, key))
+    counters[result] = (counters[result] ?? 0) + 1
   })
   return counters
 }
@@ -115,13 +138,13 @@ export function filter<T>(arr: T[], fn?: Iteratee<T>): T[]
 export function filter<T>(arr: T[], fn?: Object): T[]
 export function filter<T>(arr: Object, fn?: Iteratee<T>): T[]
 export function filter<T>(arr: Object, fn?: Object): T[]
-export function filter<T>(arr: T[] | Object, fn: Iteratee<T> | Object = isNull): T[] {
-  if (!arr) return
+export function filter<T>(arr: T[] | Object, fn: Iteratee<T> | Object = identity): T[] {
+  if (!arr) return []
   const predicate = isFunction(fn)
     ? fn
     : isObject(fn)
       ? matches(fn)
-      : (obj) => get(fn as PropertyKey, obj)
+      : (obj: unknown) => get(fn as PropertyKey, obj)
   const results: T[] = []
   forEach(arr, (value: T, key) => {
     if (predicate(value, key, arr)) results.push(value)
@@ -162,13 +185,18 @@ export function find<T>(arr: Object, fn: Iteratee<T>): T | undefined
 export function find<T>(arr: Object, fn: Object): T | undefined
 export function find<T>(arr: Object, fn: PropertyKey): T | undefined
 export function find<T>(arr: T[] | Object, fn: Iteratee<T> | Object | PropertyKey): T | undefined {
-  const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn as PropertyKey, obj)
+  const it = isFunction(fn)
+    ? fn
+    : isObject(fn)
+      ? matches(fn)
+      : (obj: unknown) => get(fn as PropertyKey, obj)
   if (Array.isArray(arr)) {
     return arr.find(it)
   } else if (isObject(arr)) {
-    for (const key of Object.keys(arr)) {
-      if (it(arr[key], key, arr)) {
-        return arr[key] as T
+    const record = arr as Record<string, T>
+    for (const key of Object.keys(record)) {
+      if (it(record[key], key, arr)) {
+        return record[key]
       }
     }
   }
@@ -205,14 +233,36 @@ filter(objects, matches({ a: 4, c: 6 }))
  * @param shape
  * @returns
  */
-export function matches(shape): (obj) => boolean {
+export function matches(shape: unknown): (obj: unknown) => boolean {
+  if (shape === null || typeof shape !== 'object') {
+    return () => false
+  }
   return function (obj) {
-    if (!shape || !obj) return false
-    for (const key in shape) {
-      if (obj[key] !== shape[key]) return false
+    return matchDeep(shape, obj)
+  }
+}
+
+function matchDeep(shape: unknown, obj: unknown): boolean {
+  if (shape === null || typeof shape !== 'object') return eq(obj, shape)
+  if (obj === null || typeof obj !== 'object') return false
+  if (Array.isArray(shape)) {
+    if (!Array.isArray(obj)) return false
+    for (let i = 0; i < shape.length; i++) {
+      if (!matchDeep(shape[i], obj[i])) return false
     }
     return true
   }
+  if (isPlainObject(shape)) {
+    for (const key of Object.keys(shape)) {
+      if (
+        !matchDeep((shape as Record<string, unknown>)[key], (obj as Record<string, unknown>)[key])
+      ) {
+        return false
+      }
+    }
+    return true
+  }
+  return eq(obj, shape)
 }
 
 /**
@@ -241,6 +291,7 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
 export function forEach<T>(collection: Iterable<T>, fn: Iteratee<T>): void
 export function forEach<T>(collection: Object, fn: Iteratee<T>): void
 export function forEach<T>(collection: Iterable<T> | Object, fn: Iteratee<T>): void {
+  if (collection == null) return
   if (Array.isArray(collection)) {
     for (let i = 0; i < collection.length; i++) {
       const res = fn(collection[i], i, collection)
@@ -307,10 +358,17 @@ forEachRight([1, 2], console.log)
 export function forEachRight<T>(collection: T[], fn: Iteratee<T>): void
 export function forEachRight<T>(collection: Object, fn: Iteratee<T>): void
 export function forEachRight<T>(collection: T[] | Object, fn: Iteratee<T>): void {
+  if (collection == null) return
   if (Array.isArray(collection)) {
     for (let i = collection.length - 1; i >= 0; i--) {
       const value = collection[i]
       const res = fn(value, i, collection)
+      if (res === false) return
+    }
+  } else if (isIterable(collection)) {
+    const items = Array.from(collection as Iterable<T>)
+    for (let i = items.length - 1; i >= 0; i--) {
+      const res = fn(items[i], i, collection)
       if (res === false) return
     }
   } else if (isObject(collection)) {
@@ -364,17 +422,30 @@ flatten({
  */
 export function flatten<T>(arr: T[], depth?: boolean | number): T[]
 export function flatten(arr: Object, depth?: boolean | number): Object
-export function flatten<T>(arr: T[] | Object, depth = 1): T[] | Object {
-  if (!depth) return arr
-  if (Array.isArray(arr)) return flattenArray(arr, depth, []) as T[]
-  if (isObject(arr)) return flattenObj(arr)
+export function flatten<T>(arr: T[] | Object, depth: boolean | number = 1): T[] | Object {
+  if (Array.isArray(arr)) {
+    const d = depth === true ? Infinity : Number(depth)
+    if (!(d > 0)) return arr.slice()
+    return flattenArray(arr, d)
+  }
+  if (isObject(arr)) return flattenObj(arr as Record<string, unknown>)
   return arr
 }
 
-function flattenArray(arr: any[], depth: boolean | number = 1, result: any[] = []) {
-  for (const value of arr) {
-    if (depth && Array.isArray(value)) {
-      flattenArray(value, typeof depth === 'number' ? depth - 1 : depth, result)
+function flattenArray<T>(arr: T[], depth: number): T[] {
+  const result: T[] = []
+  for (let i = 0; i < arr.length; i++) {
+    if (!(i in arr)) {
+      result.length++
+      continue
+    }
+    const value = arr[i]
+    if (depth > 0 && Array.isArray(value)) {
+      const nested = flattenArray(value as T[], depth - 1)
+      for (let j = 0; j < nested.length; j++) {
+        if (j in nested) result.push(nested[j])
+        else result.length++
+      }
     } else {
       result.push(value)
     }
@@ -382,29 +453,40 @@ function flattenArray(arr: any[], depth: boolean | number = 1, result: any[] = [
   return result
 }
 
-function flattenObj(obj, prefix = '', result = {}, keepNull = false) {
-  if (isString(obj) || isNumber(obj) || isBool(obj) || (keepNull && isNull(obj))) {
-    result[prefix] = obj
+function flattenObj(
+  obj: unknown,
+  prefix = '',
+  result: Record<string, unknown> = {},
+  seen: WeakSet<object> = new WeakSet()
+): Record<string, unknown> {
+  if (isString(obj) || isNumber(obj) || isBool(obj) || isNull(obj)) {
+    if (prefix) result[prefix] = obj
     return result
   }
 
-  if (Array.isArray(obj) || isObject(obj)) {
+  if (obj !== null && typeof obj === 'object') {
+    if (seen.has(obj)) throw new ValueError('cyclic structure')
+    if (!isPlainObject(obj) && !Array.isArray(obj)) {
+      if (prefix) result[prefix] = obj
+      return result
+    }
+    seen.add(obj)
     for (const i of Object.keys(obj)) {
       let pref = prefix
       if (Array.isArray(obj)) {
         pref = `${pref}[${i}]`
+      } else if (prefix) {
+        pref = `${prefix}.${i}`
       } else {
-        if (prefix) {
-          pref = `${prefix}.${i}`
-        } else {
-          pref = i
-        }
+        pref = i
       }
-      flattenObj(obj[i], pref, result, keepNull)
+      flattenObj((obj as Record<string, unknown>)[i], pref, result, seen)
     }
+    seen.delete(obj)
     return result
   }
 
+  if (prefix) result[prefix] = obj
   return result
 }
 
@@ -444,7 +526,7 @@ export function map<T, TResult>(
   arr: T[] | Object,
   fn: Iteratee<T, PropertyKey, TResult> | PropertyKey
 ): TResult[] {
-  const it = isFunction(fn) ? fn : (obj) => get<TResult>(fn as PropertyKey, obj)
+  const it = isFunction(fn) ? fn : (obj: unknown) => get<TResult>(fn as PropertyKey, obj)
   if (Array.isArray(arr)) {
     return arr.map((x, i) => it(x, i, arr))
   }
@@ -452,86 +534,7 @@ export function map<T, TResult>(
     const obj = arr as Record<PropertyKey, T>
     return Object.keys(obj).map((key) => it(obj[key], key, arr))
   }
-}
-
-/**
- * Creates an object composed of the picked object properties.
- * @param {Object} obj The source object.
- * @param {Iteratee|PropertyKey[]} paths The properties to pick. If `paths` is a function, it will be invoked per property with two values `(value, key)`.
- * @returns A new object with the properties.
- * @example
-```js
-let object = { a: 1, b: '2', c: 3 }
-
-pick(object, ['a', 'c'])
-// { a: 1, c: 3 }
-
-pick(object, x => isNumber(x))
-// { a: 1, c: 3 }
-```
- *
- * @see {@link omit}
- */
-export function pick<T>(obj: T, paths: Iteratee): Partial<T>
-export function pick<T>(obj: T, paths: PropertyKey[]): Partial<T>
-export function pick<T>(obj: T, paths: Iteratee | PropertyKey[]): Partial<T> {
-  if (!obj) return {}
-
-  const result: Partial<T> = {}
-
-  if (isFunction(paths)) {
-    for (const key of Object.keys(obj)) {
-      if (paths(obj[key], key)) {
-        result[key] = obj[key]
-      }
-    }
-    return result
-  }
-
-  for (const key of paths) {
-    result[key] = get(key, obj)
-  }
-  return result
-}
-
-/**
- * The opposite of {@link pick} - this method creates an object composed of the own and inherited enumerable property paths of `object` that are not omitted.
- * @example
-```js
-let object = { 'a': 1, 'b': '2', 'c': 3 }
-
-omit(object, ['a', 'c'])
-// { 'b': '2' }
-
-omit(object, x => isNumber(x))
-// { 'b': '2' }
-```
- * @param {Object} obj The source object.
- * @param {Iteratee|PropertyKey[]} paths The property paths to omit.
- * @returns {Object} Returns the new object.
- * @see {@link pick}
- */
-export function omit<T>(obj: T, paths: Iteratee): Partial<T>
-export function omit<T>(obj: T, paths: PropertyKey[]): Partial<T>
-export function omit<T>(obj: T, paths: Iteratee | PropertyKey[]): Partial<T> {
-  if (!obj) return {}
-
-  const result: Partial<T> = {}
-
-  if (isFunction(paths)) {
-    for (const key of Object.keys(obj)) {
-      if (!paths(obj[key], key)) {
-        result[key] = obj[key]
-      }
-    }
-    return result
-  }
-
-  Object.assign(result, obj)
-  for (const key of paths) {
-    delete result[key]
-  }
-  return result
+  return []
 }
 
 /**
@@ -577,7 +580,7 @@ export function findIndex<T>(obj: T[], fn: Iteratee<T> | Object | PropertyKey, s
     ? fn
     : isObject(fn)
       ? matches(fn)
-      : (item) => get(fn as PropertyKey, item)
+      : (item: unknown) => get(fn as PropertyKey, item)
   for (; start < length; start++) {
     if (it(obj[start], start, obj)) return start
   }
@@ -604,8 +607,6 @@ indexOf([1, 2, 1, 2], 2, 2)
  */
 export function indexOf<T>(obj: T[], value: T, start = 0): number {
   if (!obj) return -1
-  const op = call<number>(obj, 'indexOf', value, start)
-  if (op != null) return op
   const length = obj.length
   if (length && start < 0) {
     start = Math.max(start + length, 0)
@@ -661,12 +662,13 @@ export function findLastIndex<T>(
     ? fn
     : isObject(fn)
       ? matches(fn)
-      : (item) => get(fn as PropertyKey, item)
+      : (item: unknown) => get(fn as PropertyKey, item)
   for (; start >= 0; start--) {
     if (it(arr[start], start, arr)) return start
   }
   return -1
 }
+
 /**
  * This method is like {@link indexOf} except that it iterates the collection from right to left.
  * @param {Array} obj The array to inspect.
@@ -687,11 +689,10 @@ lastIndexOf([1, 2, 1, 2], 2, 2)
  */
 export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
   if (obj == null) return -1
-  const op = call<number>(obj, 'lastIndexOf', value, start)
-  if (op != null) return op
   const length = obj.length
   if (start == null) start = length - 1
   if (!length || start < 0) return -1
+  if (start >= length) start = length - 1
   for (; start >= 0; start--) {
     if (eq(value, obj[start])) return start
   }
@@ -699,65 +700,7 @@ export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
 }
 
 /**
- * Creates a shallow clone of `value`. If `deep` is `true` it will clone it recursively.
- * @param {*} value
- * @param {boolean} [deep=false]
- * @return The clone value
- * @see {@link cloneArray}
- * @see {@link cloneTypedArray}
- */
-export function clone<T>(value: T, deep?: boolean): T
-export function clone<T>(value: T[], deep?: boolean): T[]
-export function clone(value, deep = false) {
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
-    return cloneTypedArray(value, deep)
-  }
-  if (Array.isArray(value) || isArrayLike(value)) {
-    return cloneArray(value, deep)
-  }
-  if (isObject(value)) {
-    if (isFunction(value.clone)) {
-      return value.clone()
-    }
-    const copy = {}
-    for (const key in value) {
-      if (deep) {
-        copy[key] = clone(value[key], deep)
-      } else {
-        copy[key] = value[key]
-      }
-    }
-    return copy
-  }
-  return value
-}
-
-/**
- * Clones an array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used.
- * @param arr The array to clone
- * @param [deep=false] Creates a deep clone using `structuredClone` if true.
- * @returns The new array
- * @see {@link clone}
- */
-export function cloneArray<T>(arr: T[], deep = false): T[] {
-  if (!deep) return Array.from(arr)
-  return structuredClone(arr)
-}
-
-/**
- * Clones a typed array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used.
- * @param arr The array to clone
- * @param [deep=false] Creates a deep clone using `structuredClone` if true.
- * @returns The new array
- * @see {@link clone}
- */
-export function cloneTypedArray(typedArray, isDeep = false) {
-  const buffer = isDeep ? structuredClone(typedArray) : typedArray.buffer
-  return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length)
-}
-
-/**
- * Creates a duplicate-free version of an array, using a `Set` for equality comparisons, in which only the first occurrence of each element is kept. The order of result values is not guaranteed.
+ * Creates a duplicate-free version of an array, using SameValueZero equality on `iteratee` keys, keeping the first element for each key.
  * @param arr The array containing duplicated elements
  * @param fn The iteratee invoked per element.
  * @returns Returns the new duplicate free array.
@@ -775,12 +718,16 @@ uniq([2.1, 1.2, 2.3], Math.floor)
 export function uniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
 export function uniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
 export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
-  const keys = new Set<T>()
-  const it = isFunction(fn) ? fn : (x) => get(fn, x)
+  const seen = new Set<unknown>()
+  const result: T[] = []
+  const it = isFunction(fn) ? fn : (x: T) => get(fn, x)
   for (const x of arr) {
-    keys.add(it(x))
+    const key = it(x)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(x)
   }
-  return Array.from(keys.values())
+  return result
 }
 
 /**
@@ -803,93 +750,6 @@ export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = 
   return values
 }
 
-function baseMergeDeep(obj, source, key, stack) {
-  const objValue = obj[key]
-  const srcValue = source[key]
-  const stacked = stack.get(srcValue)
-  if (stacked && (objValue !== stacked || !(key in obj))) {
-    obj[key] = stacked
-    return
-  }
-
-  let newValue: any
-  let isCommon = newValue === undefined
-  const isArray = Array.isArray(srcValue)
-  const isTyped = ArrayBuffer.isView(srcValue)
-
-  if (isArray || isTyped) {
-    if (Array.isArray(objValue)) {
-      newValue = objValue
-    } else if (isArrayLike(objValue)) {
-      newValue = Array.from(objValue)
-    } else if (isTyped) {
-      isCommon = false
-      newValue = cloneTypedArray(srcValue, true)
-    } else {
-      newValue = []
-    }
-  } else if (isObject(srcValue)) {
-    newValue = objValue
-    if (!isObject(objValue)) {
-      newValue = srcValue
-    }
-  } else {
-    isCommon = false
-  }
-  if (isCommon) {
-    stack.set(srcValue, newValue)
-    baseMerge(newValue, srcValue, stack)
-    stack.delete(srcValue)
-  }
-  obj[key] = newValue
-}
-
-function baseMerge(obj, source, stack?) {
-  if (obj === source) return obj
-  for (const key of Object.keys(source)) {
-    const srcValue = source[key]
-    const objValue = obj[key]
-    if (typeof srcValue === 'object' && srcValue !== null) {
-      baseMergeDeep(obj, source, key, stack || new WeakMap())
-    } else {
-      if (objValue !== srcValue) {
-        obj[key] = srcValue
-      }
-    }
-  }
-}
-
-/**
- * Recursively merges own and inherited enumerable string keyed properties of source objects into the destination object. Source properties that resolve to `undefined` are skipped if a destination value exists. Array and plain object properties are merged recursively. Other objects and value types are overridden by assignment. Source objects are applied from left to right. Subsequent sources overwrite property assignments of previous sources.
- *
- * Note: this method mutates `object`
- *
- *
- * @param {Object} object The destination object.
- * @param {...Object} sources The source objects.
- * @returns Returns `object`.
- *
- * @example
-```js
-let object = {
-  'a': [{ 'b': 2 }, { 'd': 4 }]
-}
-
-let other = {
-  'a': [{ 'c': 3 }, { 'e': 5 }]
-}
-
-merge(object, other)
-// { 'a': [{ 'b': 2, 'c': 3 }, { 'd': 4, 'e': 5 }] }
-```
- */
-export function merge(object: Object, ...sources: Object[]): Object {
-  for (const source of sources) {
-    baseMerge(object, source)
-  }
-  return object
-}
-
 /**
  * Assigns own and inherited enumerable string keyed properties of source objects to the destination object for all destination properties that resolve to `undefined`. Source objects are applied from left to right. Once a property is set, additional values of the same property are ignored.
  * **Note:** This method mutates `object`.
@@ -903,11 +763,12 @@ defaults({ 'a': 1 }, { 'b': 2 }, { 'a': 3 })
 // { 'a': 1, 'b': 2 }
 ```
  */
-export function defaults(object: Object, ...sources: Object[]): Object {
+export function defaults<T extends object>(object: T, ...sources: object[]): T {
+  const target = object as Record<string, unknown>
   for (const source of sources) {
-    for (const key in source) {
-      if (object[key] === undefined) {
-        object[key] = source[key]
+    for (const key of Object.keys(source)) {
+      if (target[key] === undefined) {
+        target[key] = (source as Record<string, unknown>)[key]
       }
     }
   }
@@ -915,81 +776,56 @@ export function defaults(object: Object, ...sources: Object[]): Object {
 }
 
 /**
- * Returns a generator of array values not included in the other given arrays using a `Set` for equality comparisons. The order and references of result values are not guaranteed.
- * @param args The initial arrays
- * @example
-```js
-[...difference([2, 1], [2, 3])]
-// [1]
-```
+ * Yield elements of `first` not present in any of `rest` (SameValueZero), in first-occurrence order.
+ * @param first Source iterable.
+ * @param rest Exclusion iterables.
  * @see {@link union}
  * @see {@link intersection}
  */
-export function* difference<T>(...args: Array<Iterable<T>>): Generator<T> {
-  const sets = args.map((arr) => new Set(arr))
-  const setA = sets[0]
-
-  for (let i = 1; i < sets.length; i++) {
-    for (const x of sets[i].values()) {
-      if (!setA.delete(x)) setA.add(x)
-    }
+export function difference<T>(first: Iterable<T>, ...rest: Iterable<T>[]): IteratorObject<T> {
+  let result = new Set(first)
+  for (const r of rest) {
+    result = result.difference(new Set(r))
   }
-
-  for (const x of setA.values()) {
-    yield x
-  }
+  return result.values()
 }
 
 /**
- * Creates a generator of unique values that are included in all given arrays.
- * @param args The arrays to inspect
- * @example
-```js
-[...intersection([2, 1], [2, 3])]
-// [2]
-```
-* @see {@link difference}
+ * Yield elements present in exactly one of `a` or `b` (SameValueZero).
+ * @param a First iterable.
+ * @param b Second iterable.
+ */
+export function symmetricDifference<T>(a: Iterable<T>, b: Iterable<T>): IteratorObject<T> {
+  return new Set(a).symmetricDifference(new Set(b)).values()
+}
+
+/**
+ * Yield elements present in every input iterable (SameValueZero), in first-seen order of the first.
+ * @param its Input iterables (at least one).
+ * @see {@link difference}
  * @see {@link union}
  */
-export function* intersection<T>(...args: Array<Iterable<T>>): Generator<T> {
-  const sets = args.map((arr) => new Set(arr))
-  // build a counter map to find items in all
-  const results = new Map<T, number>()
-  const total = sets.length
-
-  for (let i = 0; i < total; i++) {
-    for (const x of sets[i].values()) {
-      const count = results.get(x) || 0
-      results.set(x, count + 1)
-    }
+export function intersection<T>(...its: Iterable<T>[]): IteratorObject<T> {
+  if (its.length === 0) return new Set<T>().values()
+  let result = new Set(its[0])
+  for (let i = 1; i < its.length; i++) {
+    result = result.intersection(new Set(its[i]))
   }
-
-  for (const [key, value] of results.entries()) {
-    if (value === total) yield key
-  }
+  return result.values()
 }
 
 /**
- * Creates a generator of unique values from all given arrays using `Set` for equality comparisons.
- * @param args The arrays to perform union on.
- * @example
-```js
-[...union([2], [1, 2])]
-// [2, 1]
-```
+ * Yield all distinct elements from the inputs in first-seen order (SameValueZero).
+ * @param its Input iterables.
  * @see {@link difference}
  * @see {@link intersection}
  */
-export function* union<T>(...args: Array<Iterable<T>>): Generator<T> {
-  const results = new Set<T>()
-  for (const arr of args) {
-    for (const item of arr) {
-      results.add(item)
-    }
+export function union<T>(...its: Iterable<T>[]): IteratorObject<T> {
+  let result = new Set<T>()
+  for (const it of its) {
+    result = result.union(new Set(it))
   }
-  for (const item of results.values()) {
-    yield item
-  }
+  return result.values()
 }
 
 /**
@@ -1009,23 +845,13 @@ groupBy(['one', 'two', 'three'], 'length')
 // { '3': ['one', 'two'], '5': ['three'] }
 ```
  */
-export function groupBy<T>(arr: Iterable<T>, fn: Iteratee<T>): Record<PropertyKey, T[]>
-export function groupBy<T>(arr: Iterable<T>, fn: PropertyKey): Record<PropertyKey, T[]>
-export function groupBy<T>(arr: Object, fn: Iteratee<T>): Record<PropertyKey, T[]>
-export function groupBy<T>(arr: Object, fn: PropertyKey): Record<PropertyKey, T[]>
-export function groupBy<T>(
-  arr: Iterable<T> | Object,
-  func: Iteratee<T> | PropertyKey = identity
-): Record<PropertyKey, T[]> {
-  const useKey = isFunction(func) ? func : (obj) => get(func, obj)
-  const results: Record<PropertyKey, T[]> = {}
-  forEach(arr, (value: T) => {
-    const groupKey = useKey(value)
-    const values = results[groupKey] || []
-    values.push(value)
-    results[groupKey] = values
-  })
-  return results
+export function groupBy<T, K extends PropertyKey>(
+  coll: Iterable<T> | Record<string, T>,
+  fn: ((v: T) => K) | string
+): Partial<Record<K, T[]>> {
+  const values = toValues(coll)
+  const keyFn = typeof fn === 'function' ? fn : (v: T) => get(fn, v) as K
+  return Object.groupBy(values, (v) => keyFn(v)) as Partial<Record<K, T[]>>
 }
 
 /**
@@ -1046,133 +872,68 @@ groupByMap(['one', 'two', 'three'], 'length')
 // Map { 3: ['one', 'two'], 5: ['three'] }
 ```
  */
-export function groupByMap<V>(arr: Iterable<V>, fn: Iteratee<V>): Map<any, V[]>
-export function groupByMap<V>(arr: Iterable<V>, fn: PropertyKey): Map<any, V[]>
-export function groupByMap<V>(arr: Object, fn: Iteratee<V>): Map<any, V[]>
-export function groupByMap<V>(arr: Object, fn: PropertyKey): Map<any, V[]>
-export function groupByMap<V = any>(
-  arr: Iterable<V> | Object,
-  func: Iteratee | PropertyKey = identity
-): Map<any, V[]> {
-  const results = new Map<any, V[]>()
-  const useKey = isFunction(func) ? func : (obj) => get(func, obj)
-  forEach(arr, (value: V) => {
-    const groupKey = useKey(value)
-    const values = results.get(groupKey) || []
-    values.push(value)
-    results.set(groupKey, values)
+export function groupByMap<T, K>(
+  coll: Iterable<T> | Record<string, T>,
+  fn: ((v: T) => K) | string
+): Map<K, T[]> {
+  const values = toValues(coll)
+  const keyFn = typeof fn === 'function' ? fn : (v: T) => get(fn, v) as K
+  return Map.groupBy(values, (v) => keyFn(v))
+}
+
+function toValues<T>(coll: Iterable<T> | Record<string, T>): T[] {
+  if (coll == null) return []
+  if (isPlainObject(coll)) return Object.values(coll)
+  if (isIterable(coll)) return Array.from(coll as Iterable<T>)
+  return Object.values(coll as Record<string, T>)
+}
+
+/**
+ * Remove every element for which `predicate` is truthy from `arr` in place; return the removed elements in original order.
+ * @param arr Array to mutate.
+ * @param predicate Function, plain-object shape, or property path.
+ */
+export function remove<T>(arr: T[], predicate: Predicate<T>): T[] {
+  if (!Array.isArray(arr)) throw new TypeError('remove expects an array')
+  const pred = resolvePredicate(predicate)
+  const removed: T[] = []
+  let write = 0
+  for (let read = 0; read < arr.length; read++) {
+    if (pred(arr[read], read, arr)) {
+      removed.push(arr[read])
+    } else {
+      arr[write++] = arr[read]
+    }
+  }
+  arr.length = write
+  return removed
+}
+
+/**
+ * Return a new array of elements for which `predicate` is falsy; does not mutate.
+ * @param collection Iterable or plain object.
+ * @param predicate Function, plain-object shape, or property path.
+ */
+export function reject<T>(
+  collection: Iterable<T> | Record<string, T>,
+  predicate: Predicate<T>
+): T[] {
+  const pred = resolvePredicate(predicate)
+  const result: T[] = []
+  let index = 0
+  forEach(collection as Iterable<T> | Object, (value: T) => {
+    if (!pred(value, index, collection)) result.push(value)
+    index++
   })
-  return results
+  return result
 }
 
 /**
- * Removes all elements from array that `func` returns truthy for and returns an array of the removed elements.
- * @param arr The array to remove from.
- * @param func The function invoked per iteration or value(s) or value to remove.
- * @returns
+ * Return a new array excluding every element SameValueZero-equal to one of `values`.
+ * @param array Source array (not mutated).
+ * @param values Values to exclude.
  */
-export function remove<T>(arr: T[], func: T): T[]
-export function remove<T>(arr: T[], func: T[]): T[]
-export function remove<T>(arr: T[], func: Iteratee<T>): T[]
-export function remove<T>(arr: T[], func: T | T[] | Iteratee<T>): T[] {
-  const it = isFunction(func)
-    ? func
-    : Array.isArray(func)
-      ? (x) => func.includes(x)
-      : (x) => func === x
-  return arr.filter((x, i) => !it(x, i, arr))
-}
-
-/**
- * Returns the index of `x` in a **sorted** array if found, in `O(log n)` using binary search.
- * If the element is not found, returns a negative integer.
- * @param arr The array to sort
- * @param x The element to find
- * @param lo The starting index
- * @param hi The end index to search within
- * @param comp The compare function to check for `x`
- * @returns {number} The index if the element is found or a negative integer.
- */
-export function binarySearch(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
-  hi = hi ?? arr.length - 1
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    const check = comp(x, arr[mid])
-    if (check === 0) return mid
-    if (check > 0) lo = mid + 1
-    else hi = mid - 1
-  }
-  if (comp(x, arr[lo]) === 0) return lo
-  // Returns (-lo - 1) where n is the insertion point for new element in the range
-  return -lo - 1
-}
-
-/**
- * Returns an insertion index which comes after any existing entries of `x` in a **sorted** array, using binary search.
- * @param arr The array to sort
- * @param x The element to find
- * @param lo The starting index
- * @param hi The end index to search within
- * @param comp The compare function to check for `x`
- * @returns {number}
- */
-export function bisect(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
-  hi = hi ?? arr.length
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    const check = comp(x, arr[mid])
-    if (check >= 0) lo = mid + 1
-    else hi = mid - 1
-  }
-  return lo
-}
-
-/**
- * Returns an insertion index which comes before any existing entries of `x` in a **sorted** array, using binary search.
- * @param arr The array to sort
- * @param x The element to find
- * @param lo The starting index
- * @param hi The end index to search within
- * @param comp The compare function to check for `x`
- * @returns {number}
- */
-export function bisectLeft(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
-  hi = hi ?? arr.length
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    const check = comp(x, arr[mid])
-    if (check <= 0) hi = mid - 1
-    else lo = mid + 1
-  }
-  return lo
-}
-
-/**
- * Runs {@link bisect} first to locate an insertion point, and inserts the value `x` in the sorted array after any existing entries of `x` to maintain sort order.
- * Please note this method is `O(n)` because insertion resizes the array.
- * @param arr The array to insert into
- * @param x The element to insert
- * @param lo The starting index
- * @param hi The end index to search within
- * @param comp The compare function to check for `x`
- * @returns {Array}
- */
-export function insort<T>(arr: T[], x: any, lo = 0, hi?, comp = compare): T[] {
-  const index = bisect(arr, x, lo, hi, comp)
-  return insert(arr, index, x)
-}
-
-/**
- * Runs {@link bisectLeft} first to locate an insertion point, and inserts the value `x` in the sorted array before any existing entries of `x` to maintain sort order.
- * Please note this method is `O(n)` because insertion resizes the array.
- * @param arr The array to insert into
- * @param x The element to insert
- * @param lo The starting index
- * @param hi The end index to search within
- * @param comp The compare function to check for `x`
- * @returns {Array}
- */
-export function insortLeft<T>(arr: T[], x: any, lo = 0, hi?, comp = compare): T[] {
-  const index = bisectLeft(arr, x, lo, hi, comp)
-  return insert(arr, index, x)
+export function without<T>(array: readonly T[], ...values: T[]): T[] {
+  const exclude = new Set(values)
+  return array.filter((x) => !exclude.has(x))
 }
