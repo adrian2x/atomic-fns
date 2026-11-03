@@ -4,24 +4,14 @@
  * @module string
  */
 
-const WORDS_REGEX = new RegExp(
-  [
-    '[A-Z\\xc0-\\xd6\\xd8-\\xde]?[a-z\\xdf-\\xf6\\xf8-\\xff]+',
-    "(?:['\\u2019](?:d|ll|m|re|s|t|ve))?",
-    '(?=[\\xac\\xb1\\xd7\\xf7\\u0000-\\u002f\\u003a-\\u0040\\u005b-\\u0060\\u007b-\\u00bf\\u2000-\\u206f \\t\\x0b\\f\\xa0\\ufeff\\n\\r\\u2028\\u2029\\u1680\\u180e\\u2000\\u2001\\u2002\\u2003\\u2004\\u2005\\u2006\\u2007\\u2008\\u2009\\u200a\\u202f\\u205f\\u3000]|[A-Z\\xc0-\\xd6\\xd8-\\xde]|$)',
-    '|(?:[A-Z\\xc0-\\xd6\\xd8-\\xde]|[^\\ud800-\\udfff\\xac\\xb1\\xd7\\xf7\\u0000-\\u002f\\u003a-\\u0040\\u005b-\\u0060\\u007b-\\u00bf\\u2000-\\u206f \\t\\x0b\\f\\xa0\\ufeff\\n\\r\\u2028\\u2029\\u1680\\u180e\\u2000\\u2001\\u2002\\u2003\\u2004\\u2005\\u2006\\u2007\\u2008\\u2009\\u200a\\u202f\\u205f\\u3000\\d+\\u2700-\\u27bfa-z\\xdf-\\xf6\\xf8-\\xffA-Z\\xc0-\\xd6\\xd8-\\xde])+',
-    "(?:['\\u2019](?:D|LL|M|RE|S|T|VE))?",
-    '(?=[\\xac\\xb1\\xd7\\xf7\\u0000-\\u002f\\u003a-\\u0040\\u005b-\\u0060\\u007b-\\u00bf\\u2000-\\u206f \\t\\x0b\\f\\xa0\\ufeff\\n\\r\\u2028\\u2029\\u1680\\u180e\\u2000\\u2001\\u2002\\u2003\\u2004\\u2005\\u2006\\u2007\\u2008\\u2009\\u200a\\u202f\\u205f\\u3000]|[A-Z\\xc0-\\xd6\\xd8-\\xde](?:[a-z\\xdf-\\xf6\\xf8-\\xff]|[^\\ud800-\\udfff\\xac\\xb1\\xd7\\xf7\\u0000-\\u002f\\u003a-\\u0040\\u005b-\\u0060\\u007b-\\u00bf\\u2000-\\u206f \\t\\x0b\\f\\xa0\\ufeff\\n\\r\\u2028\\u2029\\u1680\\u180e\\u2000\\u2001\\u2002\\u2003\\u2004\\u2005\\u2006\\u2007\\u2008\\u2009\\u200a\\u202f\\u205f\\u3000\\d+\\u2700-\\u27bfa-z\\xdf-\\xf6\\xf8-\\xffA-Z\\xc0-\\xd6\\xd8-\\xde])|$)',
-    '|[A-Z\\xc0-\\xd6\\xd8-\\xde]?(?:[a-z\\xdf-\\xf6\\xf8-\\xff]|[^\\ud800-\\udfff\\xac\\xb1\\xd7\\xf7\\u0000-\\u002f\\u003a-\\u0040\\u005b-\\u0060\\u007b-\\u00bf\\u2000-\\u206f \\t\\x0b\\f\\xa0\\ufeff\\n\\r\\u2028\\u2029\\u1680\\u180e\\u2000\\u2001\\u2002\\u2003\\u2004\\u2005\\u2006\\u2007\\u2008\\u2009\\u200a\\u202f\\u205f\\u3000\\d+\\u2700-\\u27bfa-z\\xdf-\\xf6\\xf8-\\xffA-Z\\xc0-\\xd6\\xd8-\\xde])+',
-    "(?:['\\u2019](?:d|ll|m|re|s|t|ve))?",
-    "|[A-Z\\xc0-\\xd6\\xd8-\\xde]+(?:['\\u2019](?:D|LL|M|RE|S|T|VE))?",
-    '|\\d*(?:1ST|2ND|3RD|(?![123])\\dTH)(?=\\b|[a-z_])',
-    '|\\d*(?:1st|2nd|3rd|(?![123])\\dth)(?=\\b|[A-Z_])',
-    '|\\d+',
-    '|(?:[\\u2700-\\u27bf]|(?:\\ud83c[\\udde6-\\uddff]){2}|[\\ud800-\\udbff][\\udc00-\\udfff])[\\ufe0e\\ufe0f]?(?:[\\u0300-\\u036f\\ufe20-\\ufe2f\\u20d0-\\u20ff]|\\ud83c[\\udffb-\\udfff])?(?:\\u200d(?:[^\\ud800-\\udfff]|(?:\\ud83c[\\udde6-\\uddff]){2}|[\\ud800-\\udbff][\\udc00-\\udfff])[\\ufe0e\\ufe0f]?(?:[\\u0300-\\u036f\\ufe20-\\ufe2f\\u20d0-\\u20ff]|\\ud83c[\\udffb-\\udfff])?)*'
-  ].join(''),
-  'g'
-)
+import {
+  camelCase as camelCaseWords,
+  join as joinWords,
+  kebabCase as kebabCaseWords,
+  pascalCase as pascalCaseWords,
+  snakeCase as snakeCaseWords,
+  words as splitWords
+} from './words.js'
 
 function firstCodePoint(s: string): { first: string; rest: string } {
   if (!s) return { first: '', rest: '' }
@@ -87,18 +77,28 @@ export function capitalize(s: string): string {
 
 /**
  * Split a string into an array of its words.
+ * Without `pattern`, uses `Intl.Segmenter` word granularity plus Unicode letter/digit,
+ * ordinal (`11th`), plural-acronym (`IDs`), and RGI emoji rules. Format characters
+ * (ZWNJ, soft hyphen) stay inside words. With `pattern`, treats it as a separator
+ * (`String.prototype.split`); empty pieces are dropped. A user `RegExp` is the caller's
+ * responsibility (capture groups appear in the output per `split`).
  * @param s The string to split
- * @param pattern The pattern to match words
+ * @param pattern Optional separator (`string` or `RegExp`)
  * @returns The words array.
  * @example
 ```js
 words('lord of the rings')
 // ['lord', 'of', 'the', 'rings']
+
+words('XMLHttpRequest')
+// ['XML', 'Http', 'Request']
+
+words('equipment0class0name', '0')
+// ['equipment', 'class', 'name']
 ```
  */
 export function words(s: string, pattern?: RegExp | string): string[] {
-  if (pattern != null) return s.split(pattern)
-  return s.match(WORDS_REGEX) ?? []
+  return splitWords(s, pattern)
 }
 
 /**
@@ -113,7 +113,7 @@ join('Lord Of The Rings', '-')
 ```
  */
 export function join(s: string, sep = ' '): string {
-  return words(s).join(sep)
+  return joinWords(s, sep)
 }
 
 /**
@@ -251,43 +251,60 @@ titleCase('lord of the rings')
  */
 export function titleCase(s: string): string {
   if (!s) return s
-  return s.replace(WORDS_REGEX, (word) => sentenceCase(word))
+  let remaining = s
+  let out = ''
+  for (const word of words(s)) {
+    const idx = remaining.indexOf(word)
+    if (idx < 0) {
+      out += remaining
+      remaining = ''
+      break
+    }
+    out += remaining.slice(0, idx) + sentenceCase(word)
+    remaining = remaining.slice(idx + word.length)
+  }
+  return out + remaining
 }
 
 /**
- * Converts the string to camel case.
+ * Converts the string to camel case. Apostrophes are removed from parts.
+ * Later parts use `toUpperCase` on the first code point (not Unicode titlecase),
+ * so digraphs follow the uppercase mapping (`pascalCase('ǆemal') === 'Ǆemal'`).
  * @param s The string to convert
  * @returns The camel cased string.
  * @example
 ```js
 camelCase('Equipment class name')
 // 'equipmentClassName'
+
+camelCase("don't stop")
+// 'dontStop'
 ```
  */
 export function camelCase(s: string): string {
-  return words(s).reduce(
-    (acc, next) =>
-      `${acc}${!acc ? next.toLowerCase() : next[0].toUpperCase() + next.slice(1).toLowerCase()}`,
-    ''
-  )
+  return camelCaseWords(s)
 }
 
 /**
- * Converts the string to Pascal case.
+ * Converts the string to Pascal case. Apostrophes are removed from parts.
+ * Uses `toUpperCase` on each part's first code point (not Unicode titlecase).
  * @param s The string to convert
  * @returns The Pascal cased string.
  * @example
 ```js
 pascalCase('equipment class name')
 // 'EquipmentClassName'
+
+pascalCase('ǆemal')
+// 'Ǆemal'
 ```
  */
 export function pascalCase(s: string): string {
-  return sentenceCase(camelCase(s))
+  return pascalCaseWords(s)
 }
 
 /**
- * Converts the string to snake case.
+ * Converts the string to snake case. Apostrophes are removed from parts.
  * @param s The string to convert
  * @returns The snake cased string.
  * @example
@@ -297,11 +314,11 @@ snakeCase('Equipment Class Name')
 ```
  */
 export function snakeCase(s: string): string {
-  return join(s, '_').toLowerCase()
+  return snakeCaseWords(s)
 }
 
 /**
- * Converts a string to kebab case.
+ * Converts a string to kebab case. Apostrophes are removed from parts.
  * @param s The string
  * @returns The kebab cased string.
  * @example
@@ -314,7 +331,7 @@ kebabCase('equipment_class_name')
 ```
  */
 export function kebabCase(s: string): string {
-  return join(s, '-').toLowerCase()
+  return kebabCaseWords(s)
 }
 
 /**

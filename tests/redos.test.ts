@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ValueError } from '../src/globals/errors.js'
 import { Duration } from '../src/i18n/duration.js'
 import { asDate, formatDate, strftime } from '../src/i18n/format.js'
-import { words } from '../src/string/index.js'
+import { camelCase, words } from '../src/string/index.js'
 
 describe('NFR-4 ReDoS guards', () => {
   it('SPEC-R63 words finishes on 1e5-char adversarial input', () => {
@@ -10,6 +10,30 @@ describe('NFR-4 ReDoS guards', () => {
     const t0 = performance.now()
     words(input)
     expect(performance.now() - t0).toBeLessThan(200)
+  })
+
+  it('SPEC-R63 D9 words and camelCase stay linear on 100k-char vectors', () => {
+    const vectors = [
+      ' a'.repeat(5e4),
+      'a'.repeat(1e5),
+      'A'.repeat(1e5),
+      'aA'.repeat(5e4),
+      '1'.repeat(1e5),
+      "a'".repeat(5e4),
+      '1t'.repeat(5e4),
+      '👨‍👩‍👧'.repeat(1e4),
+      'é'.repeat(1e5),
+      '!'.repeat(1e5),
+      "A'S".repeat(33_333)
+    ]
+    for (const s of vectors) {
+      const t0 = performance.now()
+      words(s)
+      expect(performance.now() - t0).toBeLessThan(100)
+      const t1 = performance.now()
+      camelCase(s.slice(0, 20_000))
+      expect(performance.now() - t1).toBeLessThan(100)
+    }
   })
 
   it('SPEC-R87 asDate finishes on 1e5-char adversarial input', () => {
