@@ -60,32 +60,6 @@ import {
   words
 } from '../src/string/index.js'
 
-function deepEqualLoose(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true
-  if (a == null || b == null) return a === b
-  if (typeof a !== typeof b) return false
-  if (typeof a !== 'object') return false
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false
-    return a.every((v, i) => deepEqualLoose(v, b[i]))
-  }
-  if (Array.isArray(a) !== Array.isArray(b)) return false
-  const ao = a as Record<string, unknown>
-  const bo = b as Record<string, unknown>
-  const keys = new Set([...Object.keys(ao), ...Object.keys(bo)])
-  for (const k of keys) {
-    if (!deepEqualLoose(ao[k], bo[k])) return false
-  }
-  return true
-}
-
-function expectLoose(actual: unknown, expected: unknown): void {
-  expect(
-    deepEqualLoose(actual, expected),
-    `${JSON.stringify(actual)} !== ${JSON.stringify(expected)}`
-  ).toBe(true)
-}
-
 function countExampleBlocks(dir: string): number {
   let total = 0
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -115,15 +89,12 @@ describe('SPEC-R107 JSDoc @example', () => {
   })
 
   it('src/collections/index.ts #1', () => {
-    expectLoose(compact([0, 1, false, 2, '', 3]), [1, 2, 3])
+    expect(compact([0, 1, false, 2, '', 3])).toEqual([1, 2, 3])
   })
 
   it('src/collections/index.ts #2', () => {
-    expectLoose(count([6.1, 4.2, 6.3], Math.floor), { '4': 1, '6': 2 })
-    expectLoose(
-      count(['one', 'two', 'three'], (x) => x.length),
-      { '3': 2, '5': 1 }
-    )
+    expect(count([6.1, 4.2, 6.3], Math.floor)).toEqual({ '4': 1, '6': 2 })
+    expect(count(['one', 'two', 'three'], (x) => x.length)).toEqual({ '3': 2, '5': 1 })
   })
 
   it('src/collections/index.ts #3', () => {
@@ -131,18 +102,9 @@ describe('SPEC-R107 JSDoc @example', () => {
       { user: 'barney', age: 36, active: true },
       { user: 'fred', age: 40, active: false }
     ]
-    expectLoose(
-      filter(users, (o) => !o.active).map((u) => u.user),
-      ['fred']
-    )
-    expectLoose(
-      filter(users, { age: 36, active: true }).map((u) => u.user),
-      ['barney']
-    )
-    expectLoose(
-      filter(users, 'active').map((u) => u.user),
-      ['barney']
-    )
+    expect(filter(users, (o) => !o.active).map((u) => u.user)).toEqual(['fred'])
+    expect(filter(users, { age: 36, active: true }).map((u) => u.user)).toEqual(['barney'])
+    expect(filter(users, 'active').map((u) => u.user)).toEqual(['barney'])
   })
 
   it('src/collections/index.ts #4', () => {
@@ -151,9 +113,9 @@ describe('SPEC-R107 JSDoc @example', () => {
       { user: 'fred', age: 40, active: false },
       { user: 'pebbles', age: 1, active: true }
     ]
-    expectLoose(find(users, (o) => o.age < 40)?.user, 'barney')
-    expectLoose(find(users, { age: 1, active: true })?.user, 'pebbles')
-    expectLoose(find(users, 'active')?.user, 'barney')
+    expect(find(users, (o) => o.age < 40)?.user).toEqual('barney')
+    expect(find(users, { age: 1, active: true })?.user).toEqual('pebbles')
+    expect(find(users, 'active')?.user).toEqual('barney')
   })
 
   it('src/collections/index.ts #5', () => {
@@ -161,7 +123,7 @@ describe('SPEC-R107 JSDoc @example', () => {
       { a: 1, b: 2, c: 3 },
       { a: 4, b: 5, c: 6 }
     ]
-    expectLoose(filter(objects, matches({ a: 4, c: 6 })), [{ a: 4, b: 5, c: 6 }])
+    expect(filter(objects, matches({ a: 4, c: 6 }))).toEqual([{ a: 4, b: 5, c: 6 }])
   })
 
   it('src/collections/index.ts #6', () => {
@@ -169,19 +131,16 @@ describe('SPEC-R107 JSDoc @example', () => {
     forEach([1, 2], (value) => {
       out.push(value)
     })
-    expectLoose(out, [1, 2])
+    expect(out).toEqual([1, 2])
     const keysOut: string[] = []
     forEach({ a: 1, b: 2 }, (_value, key) => {
       keysOut.push(String(key))
     })
-    expectLoose(keysOut, ['a', 'b'])
+    expect(keysOut).toEqual(['a', 'b'])
   })
 
   it('src/collections/index.ts #7', () => {
-    expectLoose(
-      findLast([1, 2, 3, 4], (n) => n % 2 === 1),
-      3
-    )
+    expect(findLast([1, 2, 3, 4], (n) => n % 2 === 1)).toEqual(3)
   })
 
   it('src/collections/index.ts #8', () => {
@@ -189,12 +148,12 @@ describe('SPEC-R107 JSDoc @example', () => {
     forEachRight([1, 2], (value) => {
       out.push(value)
     })
-    expectLoose(out, [2, 1])
+    expect(out).toEqual([2, 1])
   })
 
   it('src/collections/index.ts #9', () => {
-    expectLoose(flatten([1, [2, [3, [4]], 5]]), [1, 2, [3, [4]], 5])
-    expectLoose(
+    expect(flatten([1, [2, [3, [4]], 5]])).toEqual([1, 2, [3, [4]], 5])
+    expect(
       flatten({
         dates: {
           expiry_date: '30 sep 2018',
@@ -202,26 +161,25 @@ describe('SPEC-R107 JSDoc @example', () => {
           min_contract_period: [{ id: 1, name: '1 month' }]
         },
         price: { currency: 'RM', value: 1500 }
-      }),
-      {
-        'dates.expiry_date': '30 sep 2018',
-        'dates.available': '30 sep 2017',
-        'dates.min_contract_period[0].id': 1,
-        'dates.min_contract_period[0].name': '1 month',
-        'price.currency': 'RM',
-        'price.value': 1500
-      }
-    )
+      })
+    ).toEqual({
+      'dates.expiry_date': '30 sep 2018',
+      'dates.available': '30 sep 2017',
+      'dates.min_contract_period[0].id': 1,
+      'dates.min_contract_period[0].name': '1 month',
+      'price.currency': 'RM',
+      'price.value': 1500
+    })
   })
 
   it('src/collections/index.ts #10', () => {
     function square(n: number) {
       return n * n
     }
-    expectLoose(map([4, 8], square), [16, 64])
-    expectLoose(map({ a: 4, b: 8 }, square), [16, 64])
+    expect(map([4, 8], square)).toEqual([16, 64])
+    expect(map({ a: 4, b: 8 }, square)).toEqual([16, 64])
     const users = [{ user: 'barney' }, { user: 'fred' }]
-    expectLoose(map(users, 'user'), ['barney', 'fred'])
+    expect(map(users, 'user')).toEqual(['barney', 'fred'])
   })
 
   it('src/collections/index.ts #11', () => {
@@ -230,17 +188,14 @@ describe('SPEC-R107 JSDoc @example', () => {
       { user: 'fred', active: false },
       { user: 'pebbles', active: true }
     ]
-    expectLoose(
-      findIndex(users, (o) => o.user == 'barney'),
-      0
-    )
-    expectLoose(findIndex(users, { user: 'fred', active: false }), 1)
-    expectLoose(findIndex(users, 'active'), 2)
+    expect(findIndex(users, (o) => o.user == 'barney')).toEqual(0)
+    expect(findIndex(users, { user: 'fred', active: false })).toEqual(1)
+    expect(findIndex(users, 'active')).toEqual(2)
   })
 
   it('src/collections/index.ts #12', () => {
-    expectLoose(indexOf([1, 2, 1, 2], 2), 1)
-    expectLoose(indexOf([1, 2, 1, 2], 2, 2), 3)
+    expect(indexOf([1, 2, 1, 2], 2)).toEqual(1)
+    expect(indexOf([1, 2, 1, 2], 2, 2)).toEqual(3)
   })
 
   it('src/collections/index.ts #13', () => {
@@ -249,152 +204,144 @@ describe('SPEC-R107 JSDoc @example', () => {
       { user: 'fred', active: false },
       { user: 'pebbles', active: false }
     ]
-    expectLoose(
-      findLastIndex(users, (o) => o.user == 'pebbles'),
-      2
-    )
-    expectLoose(findLastIndex(users, { user: 'barney', active: true }), 0)
-    expectLoose(findLastIndex(users, 'active'), 0)
+    expect(findLastIndex(users, (o) => o.user == 'pebbles')).toEqual(2)
+    expect(findLastIndex(users, { user: 'barney', active: true })).toEqual(0)
+    expect(findLastIndex(users, 'active')).toEqual(0)
   })
 
   it('src/collections/index.ts #14', () => {
-    expectLoose(lastIndexOf([1, 2, 1, 2], 2), 3)
-    expectLoose(lastIndexOf([1, 2, 1, 2], 2, 2), 1)
+    expect(lastIndexOf([1, 2, 1, 2], 2)).toEqual(3)
+    expect(lastIndexOf([1, 2, 1, 2], 2, 2)).toEqual(1)
   })
 
   it('src/collections/index.ts #15', () => {
-    expectLoose(uniq([2, 1, 2]), [2, 1])
-    expectLoose(uniq([2.1, 1.2, 2.3], Math.floor), [2.1, 1.2])
+    expect(uniq([2, 1, 2])).toEqual([2, 1])
+    expect(uniq([2.1, 1.2, 2.3], Math.floor)).toEqual([2.1, 1.2])
   })
 
   it('src/collections/index.ts #16', () => {
-    expectLoose(sortedUniq([2, 1, 2]), [1, 2])
+    expect(sortedUniq([2, 1, 2])).toEqual([1, 2])
   })
 
   it('src/collections/index.ts #17', () => {
-    expectLoose(defaults({ a: 1 }, { b: 2 }, { a: 3 }), { a: 1, b: 2 })
+    expect(defaults({ a: 1 }, { b: 2 }, { a: 3 })).toEqual({ a: 1, b: 2 })
   })
 
   it('src/collections/index.ts #18', () => {
-    expectLoose(groupBy([6.1, 4.2, 6.3], Math.floor), { '4': [4.2], '6': [6.1, 6.3] })
-    expectLoose(groupBy(['one', 'two', 'three'], 'length'), { '3': ['one', 'two'], '5': ['three'] })
+    expect(groupBy([6.1, 4.2, 6.3], Math.floor)).toEqual({ '4': [4.2], '6': [6.1, 6.3] })
+    expect(groupBy(['one', 'two', 'three'], 'length')).toEqual({
+      '3': ['one', 'two'],
+      '5': ['three']
+    })
   })
 
   it('src/collections/index.ts #19', () => {
-    expectLoose(
-      [...groupByMap([6.1, 4.2, 6.3], Math.floor)],
-      [
-        [6, [6.1, 6.3]],
-        [4, [4.2]]
-      ]
-    )
-    expectLoose(
-      [...groupByMap(['one', 'two', 'three'], 'length')],
-      [
-        [3, ['one', 'two']],
-        [5, ['three']]
-      ]
-    )
+    expect([...groupByMap([6.1, 4.2, 6.3], Math.floor)]).toEqual([
+      [6, [6.1, 6.3]],
+      [4, [4.2]]
+    ])
+    expect([...groupByMap(['one', 'two', 'three'], 'length')]).toEqual([
+      [3, ['one', 'two']],
+      [5, ['three']]
+    ])
   })
 
   it('src/decimal/index.ts #1', () => {
-    expectLoose(decimal('5').negated().toString(), '-5')
+    expect(decimal('5').negated().toString()).toEqual('-5')
   })
 
   it('src/decimal/index.ts #2', () => {
-    expectLoose(decimal('0.1').add('0.2').toString(), '0.3')
+    expect(decimal('0.1').add('0.2').toString()).toEqual('0.3')
   })
 
   it('src/functools/index.ts #1', () => {
     const single = once((x: number) => x) as (x: number) => number
-    expectLoose(single(1), 1)
-    expectLoose(single(2), 1)
-    expectLoose(single(3), 1)
+    expect(single(1)).toEqual(1)
+    expect(single(2)).toEqual(1)
+    expect(single(3)).toEqual(1)
   })
 
   it('src/globals/index.ts #1', () => {
-    expectLoose(uniqueId('user_').startsWith('user_'), true)
-    expectLoose(typeof uniqueId(), 'string')
+    expect(uniqueId('user_').startsWith('user_')).toEqual(true)
+    expect(typeof uniqueId()).toEqual('string')
   })
 
   it('src/globals/index.ts #2', () => {
-    expectLoose(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(uuid()),
-      true
-    )
+    expect(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(uuid())
+    ).toEqual(true)
   })
 
   it('src/i18n/date/index.ts #1', () => {
-    expectLoose(new IntlDate(new Date(2022, 9, 31)).format('MM/DD/YYYY'), '10/31/2022')
+    expect(new IntlDate(new Date(2022, 9, 31)).format('MM/DD/YYYY')).toEqual('10/31/2022')
   })
 
   it('src/i18n/date/index.ts #2', () => {
-    expectLoose(new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toSeconds(), 1667256270)
+    expect(new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toSeconds()).toEqual(1667256270)
   })
 
   it('src/i18n/date/index.ts #3', () => {
-    expectLoose(
-      new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOString(),
+    expect(new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOString()).toEqual(
       '2022-10-31T22:44:30.652Z'
     )
   })
 
   it('src/i18n/date/index.ts #4', () => {
-    expectLoose(new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISODate(), '2022-10-31')
+    expect(new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISODate()).toEqual('2022-10-31')
   })
 
   it('src/i18n/date/index.ts #5', () => {
-    expectLoose(new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime(), '22:44:30.652Z')
+    expect(new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime()).toEqual('22:44:30.652Z')
   })
 
   it('src/i18n/duration.ts #1', () => {
-    expectLoose(new Duration({ years: 2, days: 3 }).get('years'), 2)
+    expect(new Duration({ years: 2, days: 3 }).get('years')).toEqual(2)
   })
 
   it('src/i18n/duration.ts #2', () => {
-    expectLoose(new Duration({ years: 2, days: 3 }).get('months'), 0)
+    expect(new Duration({ years: 2, days: 3 }).get('months')).toEqual(0)
   })
 
   it('src/i18n/duration.ts #3', () => {
-    expectLoose(new Duration({ years: 2, days: 3 }).get('days'), 3)
+    expect(new Duration({ years: 2, days: 3 }).get('days')).toEqual(3)
   })
 
   it('src/i18n/duration.ts #4', () => {
-    expectLoose(new Duration({ hours: 1, seconds: 30 }).negated().toObject(), {
+    expect(new Duration({ hours: 1, seconds: 30 }).negated().toObject()).toEqual({
       hours: -1,
       seconds: -30
     })
   })
 
   it('src/i18n/duration.ts #5', () => {
-    expectLoose(new Duration({ hours: 1, seconds: -30 }).abs().toObject(), {
+    expect(new Duration({ hours: 1, seconds: -30 }).abs().toObject()).toEqual({
       hours: 1,
       seconds: 30
     })
   })
 
   it('src/i18n/duration.ts #6', () => {
-    expectLoose(new Duration({ years: 3, seconds: 45 }).toString(), 'P3YT45S')
+    expect(new Duration({ years: 3, seconds: 45 }).toString()).toEqual('P3YT45S')
   })
 
   it('src/i18n/duration.ts #7', () => {
-    expectLoose(new Duration({ months: 4, seconds: 45 }).toString(), 'P4MT45S')
+    expect(new Duration({ months: 4, seconds: 45 }).toString()).toEqual('P4MT45S')
   })
 
   it('src/i18n/duration.ts #8', () => {
-    expectLoose(new Duration({ months: 5 }).toString(), 'P5M')
+    expect(new Duration({ months: 5 }).toString()).toEqual('P5M')
   })
 
   it('src/i18n/duration.ts #9', () => {
-    expectLoose(new Duration({ minutes: 5 }).toString(), 'PT5M')
+    expect(new Duration({ minutes: 5 }).toString()).toEqual('PT5M')
   })
 
   it('src/i18n/duration.ts #10', () => {
-    expectLoose(new Duration({ milliseconds: 6 }).toString(), 'PT0.006S')
+    expect(new Duration({ milliseconds: 6 }).toString()).toEqual('PT0.006S')
   })
 
   it('src/i18n/duration.ts #11', () => {
-    expectLoose(Duration.fromISO('P3Y6M1W4DT12H30M5S').toObject(), {
+    expect(Duration.fromISO('P3Y6M1W4DT12H30M5S').toObject()).toEqual({
       years: 3,
       months: 6,
       weeks: 1,
@@ -403,179 +350,152 @@ describe('SPEC-R107 JSDoc @example', () => {
       minutes: 30,
       seconds: 5
     })
-    expectLoose(Duration.fromISO('PT23H').toObject(), { hours: 23 })
-    expectLoose(Duration.fromISO('P5Y3M').toObject(), { years: 5, months: 3 })
+    expect(Duration.fromISO('PT23H').toObject()).toEqual({ hours: 23 })
+    expect(Duration.fromISO('P5Y3M').toObject()).toEqual({ years: 5, months: 3 })
   })
 
   it('src/i18n/format.ts #1', () => {
-    expectLoose(formatDate('MM/DD/YYYY', new Date(2022, 9, 31)), '10/31/2022')
+    expect(formatDate('MM/DD/YYYY', new Date(2022, 9, 31))).toEqual('10/31/2022')
   })
 
   it('src/i18n/format.ts #2', () => {
-    expectLoose(strftime('%A, %d/%m/%y', new Date(2020, 1, 1)), 'Saturday, 01/02/20')
+    expect(strftime('%A, %d/%m/%y', new Date(2020, 1, 1))).toEqual('Saturday, 01/02/20')
   })
 
   it('src/itertools/index.ts #1', () => {
-    expectLoose(all([0]), false)
-    expectLoose(all([1, 2, 3]), true)
-    expectLoose(
-      all([2, 4, 6], (n) => n > 1),
-      true
-    )
+    expect(all([0])).toEqual(false)
+    expect(all([1, 2, 3])).toEqual(true)
+    expect(all([2, 4, 6], (n) => n > 1)).toEqual(true)
   })
 
   it('src/itertools/index.ts #2', () => {
-    expectLoose(any([0]), false)
-    expectLoose(any([0, 1, null, undefined]), true)
-    expectLoose(
-      any([1, 4, 5], (n) => n % 2 === 0),
-      true
-    )
+    expect(any([0])).toEqual(false)
+    expect(any([0, 1, null, undefined])).toEqual(true)
+    expect(any([1, 4, 5], (n) => n % 2 === 0)).toEqual(true)
   })
 
   it('src/itertools/index.ts #3', () => {
-    expectLoose(contains([1, 2, 3], 1), true)
-    expectLoose(contains({ a: 1, b: 2 }, 1), true)
-    expectLoose(contains('abcd', 'bc'), true)
+    expect(contains([1, 2, 3], 1)).toEqual(true)
+    expect(contains({ a: 1, b: 2 }, 1)).toEqual(true)
+    expect(contains('abcd', 'bc')).toEqual(true)
   })
 
   it('src/itertools/index.ts #4', () => {
-    expectLoose(
-      [...enumerate(['hello', 'world'])],
-      [
-        [0, 'hello'],
-        [1, 'world']
-      ]
-    )
-    expectLoose(
-      [...enumerate(['hello', 'world'], 1)],
-      [
-        [1, 'hello'],
-        [2, 'world']
-      ]
-    )
+    expect([...enumerate(['hello', 'world'])]).toEqual([
+      [0, 'hello'],
+      [1, 'world']
+    ])
+    expect([...enumerate(['hello', 'world'], 1)]).toEqual([
+      [1, 'hello'],
+      [2, 'world']
+    ])
   })
 
   it('src/itertools/index.ts #5', () => {
-    expectLoose([...icompact([0, 1, false, 2, '', 3])], [1, 2, 3])
+    expect([...icompact([0, 1, false, 2, '', 3])]).toEqual([1, 2, 3])
   })
 
   it('src/itertools/index.ts #6', () => {
-    expectLoose(
-      [
-        ...iflatten([
-          [0, 1],
-          [2, 3]
-        ])
-      ],
-      [0, 1, 2, 3]
-    )
+    expect([
+      ...iflatten([
+        [0, 1],
+        [2, 3]
+      ])
+    ]).toEqual([0, 1, 2, 3])
   })
 
   it('src/itertools/index.ts #7', () => {
-    expectLoose([...range(5)], [0, 1, 2, 3, 4])
-    expectLoose([...range(2, 5)], [2, 3, 4])
-    expectLoose([...range(0, 5, 2)], [0, 2, 4])
-    expectLoose([...range(5, 0, -1)], [5, 4, 3, 2, 1])
-    expectLoose([...range(-3)], [])
+    expect([...range(5)]).toEqual([0, 1, 2, 3, 4])
+    expect([...range(2, 5)]).toEqual([2, 3, 4])
+    expect([...range(0, 5, 2)]).toEqual([0, 2, 4])
+    expect([...range(5, 0, -1)]).toEqual([5, 4, 3, 2, 1])
+    expect([...range(-3)]).toEqual([])
   })
 
   it('src/itertools/index.ts #8', () => {
-    expectLoose(
-      reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0),
-      15
-    )
+    expect(reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0)).toEqual(15)
   })
 
   it('src/itertools/index.ts #9', () => {
-    expectLoose(
-      [...zip([1, 2, 3], ['sugar', 'spice', 'nice'])],
-      [
-        [1, 'sugar'],
-        [2, 'spice'],
-        [3, 'nice']
-      ]
-    )
+    expect([...zip([1, 2, 3], ['sugar', 'spice', 'nice'])]).toEqual([
+      [1, 'sugar'],
+      [2, 'spice'],
+      [3, 'nice']
+    ])
   })
 
   it('src/math/index.ts #1', () => {
     const objects = [{ n: 4 }, { n: 2 }, { n: 8 }, { n: 6 }]
-    expectLoose(
-      mean(objects, (o) => o.n),
-      5
-    )
+    expect(mean(objects, (o) => o.n)).toEqual(5)
   })
 
   it('src/math/index.ts #2', () => {
-    expectLoose(sum([1, 2, 3, 4]), 10)
-    expectLoose(
-      sum([{ n: 1 }, { n: 2 }], (o) => o.n),
-      3
-    )
+    expect(sum([1, 2, 3, 4])).toEqual(10)
+    expect(sum([{ n: 1 }, { n: 2 }], (o) => o.n)).toEqual(3)
   })
 
   it('src/string/index.ts #1', () => {
-    expectLoose(sentenceCase('a test'), 'A test')
-    expectLoose(sentenceCase('TEST'), 'TEST')
+    expect(sentenceCase('a test')).toEqual('A test')
+    expect(sentenceCase('TEST')).toEqual('TEST')
   })
 
   it('src/string/index.ts #2', () => {
-    expectLoose(capitalize('TEST'), 'Test')
+    expect(capitalize('TEST')).toEqual('Test')
   })
 
   it('src/string/index.ts #3', () => {
-    expectLoose(words('lord of the rings'), ['lord', 'of', 'the', 'rings'])
+    expect(words('lord of the rings')).toEqual(['lord', 'of', 'the', 'rings'])
   })
 
   it('src/string/index.ts #4', () => {
-    expectLoose(join('Lord Of The Rings', '-'), 'Lord-Of-The-Rings')
+    expect(join('Lord Of The Rings', '-')).toEqual('Lord-Of-The-Rings')
   })
 
   it('src/string/index.ts #5', () => {
-    expectLoose(isAlnum('alpha1234'), true)
-    expectLoose(isAlnum('oops!'), false)
+    expect(isAlnum('alpha1234')).toEqual(true)
+    expect(isAlnum('oops!')).toEqual(false)
   })
 
   it('src/string/index.ts #6', () => {
-    expectLoose(isAlpha('alpha1234'), false)
-    expectLoose(isAlpha('letters'), true)
+    expect(isAlpha('alpha1234')).toEqual(false)
+    expect(isAlpha('letters')).toEqual(true)
   })
 
   it('src/string/index.ts #7', () => {
-    expectLoose(isNumeric('alpha1234'), false)
-    expectLoose(isNumeric('1234'), true)
+    expect(isNumeric('alpha1234')).toEqual(false)
+    expect(isNumeric('1234')).toEqual(true)
   })
 
   it('src/string/index.ts #8', () => {
-    expectLoose(asciify('äÄçÇéÉêPHP-MySQLöÖÐþúÚ'), 'PHP-MySQL')
+    expect(asciify('äÄçÇéÉêPHP-MySQLöÖÐþúÚ')).toEqual('PHP-MySQL')
   })
 
   it('src/string/index.ts #9', () => {
-    expectLoose(removeAccents('Antoine de Saint-Exupéry'), 'Antoine de Saint-Exupery')
+    expect(removeAccents('Antoine de Saint-Exupéry')).toEqual('Antoine de Saint-Exupery')
   })
 
   it('src/string/index.ts #10', () => {
-    expectLoose(titleCase('lord of the rings'), 'Lord Of The Rings')
+    expect(titleCase('lord of the rings')).toEqual('Lord Of The Rings')
   })
 
   it('src/string/index.ts #11', () => {
-    expectLoose(camelCase('Equipment class name'), 'equipmentClassName')
+    expect(camelCase('Equipment class name')).toEqual('equipmentClassName')
   })
 
   it('src/string/index.ts #12', () => {
-    expectLoose(pascalCase('equipment class name'), 'EquipmentClassName')
+    expect(pascalCase('equipment class name')).toEqual('EquipmentClassName')
   })
 
   it('src/string/index.ts #13', () => {
-    expectLoose(snakeCase('Equipment Class Name'), 'equipment_class_name')
+    expect(snakeCase('Equipment Class Name')).toEqual('equipment_class_name')
   })
 
   it('src/string/index.ts #14', () => {
-    expectLoose(kebabCase('Equipment Class Name'), 'equipment-class-name')
-    expectLoose(kebabCase('equipment_class_name'), 'equipment-class-name')
+    expect(kebabCase('Equipment Class Name')).toEqual('equipment-class-name')
+    expect(kebabCase('equipment_class_name')).toEqual('equipment-class-name')
   })
 
   it('src/string/index.ts #15', () => {
-    expectLoose(slugify('Antoine de Saint-Exupéry'), 'Antoine-de-Saint-Exupery')
+    expect(slugify('Antoine de Saint-Exupéry')).toEqual('Antoine-de-Saint-Exupery')
   })
 })

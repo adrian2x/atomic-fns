@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./mod.ts",
+    ".": "./index.ts",
     "./collections": "./collections/index.ts",
     "./decimal": "./decimal/index.ts",
     "./functools": "./functools/index.ts",

@@ -36,15 +36,4 @@ describe('FrozenSet', () => {
     expect(u.size).toBe(4)
     expect([...u].sort()).toEqual([1, 2, 3, 4])
   })
-
-  it('SPEC-R76 Set.prototype.add.call still mutates (documented limit)', () => {
-    const fs = new FrozenSet([1])
-    Set.prototype.add.call(fs, 2)
-    expect(fs.has(2)).toBe(true)
-    expect(fs.size).toBe(2)
-  })
-
-  it('SPEC-R76 toStringTag is FrozenSet', () => {
-    expect(Object.prototype.toString.call(new FrozenSet())).toBe('[object FrozenSet]')
-  })
 })

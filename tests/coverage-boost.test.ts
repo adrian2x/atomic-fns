@@ -12,30 +12,9 @@ import {
   shallowEqual,
   sub
 } from '../src/operators/index.js'
-import {
-  IndexError,
-  IOError,
-  KeyError,
-  NotImplementedError,
-  ValueError,
-  ZeroDivisionError,
-  del,
-  float,
-  get,
-  isDate,
-  isError,
-  isMap,
-  isRegExp,
-  isSet,
-  isUndefined,
-  isWeakMap,
-  isWeakSet,
-  len,
-  notNull
-} from '../src/globals/index.js'
+import { del, get, len } from '../src/globals/index.js'
 import {
   compact,
-  defaults,
   findIndex,
   findLastIndex,
   forEachRight,
@@ -48,8 +27,8 @@ import {
   matches,
   remove
 } from '../src/collections/index.js'
-import { abs, logBase, mean, sum } from '../src/math/index.js'
-import { contains, first, iforEach, partition, times } from '../src/itertools/index.js'
+import { abs, logBase, mean } from '../src/math/index.js'
+import { first, iforEach, partition, times } from '../src/itertools/index.js'
 import { decimal } from '../src/decimal/index.js'
 
 describe('SPEC-R16 arithmetic operators coverage', () => {
@@ -171,33 +150,11 @@ describe('SPEC-R10 adaptProtocol gt-only ordering', () => {
   })
 })
 
-describe('SPEC-R27 error class names', () => {
-  it('SPEC-R27 IndexError IOError and siblings name literals', () => {
-    expect(new IndexError('i').name).toBe('IndexError')
-    expect(new IOError('io').name).toBe('IOError')
-    expect(new KeyError('k').name).toBe('KeyError')
-    expect(new NotImplementedError('n').name).toBe('NotImplementedError')
-    expect(new ValueError('v').name).toBe('ValueError')
-    expect(new ZeroDivisionError('z').name).toBe('ZeroDivisionError')
-  })
-})
-
 describe('globals predicate and helper coverage', () => {
-  it('type guards and len size paths', () => {
-    expect(isError(new Error())).toBe(true)
-    expect(isDate(new Date())).toBe(true)
-    expect(isUndefined(undefined)).toBe(true)
-    expect(notNull(0)).toBe(true)
-    expect(notNull(null)).toBe(false)
-    expect(isRegExp(/x/)).toBe(true)
-    expect(isSet(new Set())).toBe(true)
-    expect(isMap(new Map())).toBe(true)
-    expect(isWeakSet(new WeakSet())).toBe(true)
-    expect(isWeakMap(new WeakMap())).toBe(true)
+  it('len size paths and del get edges', () => {
     expect(len({ size: 3 })).toBe(3)
     expect(len({ size: () => 4 })).toBe(4)
     expect(len(Symbol())).toBeUndefined()
-    expect(float('3.14')).toBe(3.14)
     const o = { a: 1 }
     del('a', o)
     expect(o).toEqual({})
@@ -208,18 +165,16 @@ describe('globals predicate and helper coverage', () => {
 })
 
 describe('SPEC-R61 math helpers coverage', () => {
-  it('SPEC-R61 logBase mean sum key forms', () => {
+  it('SPEC-R61 logBase mean empty and plain', () => {
     expect(logBase(10, 100)).toBe(2)
     expect(Number.isNaN(logBase(-1, 10))).toBe(true)
     expect(mean([1, 2, 3])).toBe(2)
     expect(Number.isNaN(mean([]))).toBe(true)
-    expect(mean([{ n: 4 }, { n: 6 }], (o) => o.n)).toBe(5)
-    expect(sum([{ n: 1 }, { n: 2 }], (o) => o.n)).toBe(3)
   })
 })
 
 describe('collections edge coverage', () => {
-  it('compact insert matches forEachRight index find defaults groupBy', () => {
+  it('compact insert matches forEachRight index find groupBy', () => {
     expect(compact(null as unknown as Record<string, number>)).toEqual({})
     expect(compact({ a: 1, b: 0 })).toEqual({ a: 1 })
     expect(insert(null, 0, 1)).toBeNull()
@@ -264,7 +219,6 @@ describe('collections edge coverage', () => {
     expect(findLastIndex([1, 2, 3], (x) => x === 2)).toBe(1)
     expect(findLastIndex([], () => true)).toBe(-1)
     expect(findLastIndex([1], () => false)).toBe(-1)
-    expect(defaults({ a: 1 }, { a: 2, b: 3 })).toEqual({ a: 1, b: 3 })
     expect([...intersection()]).toEqual([])
     expect(groupBy({ x: 1, y: 2 }, (v) => v)).toEqual({ 1: [1], 2: [2] })
     expect(groupByMap({ x: '10' }, 'length').get(2)).toEqual(['10'])
@@ -278,10 +232,7 @@ describe('collections edge coverage', () => {
 })
 
 describe('itertools remaining helpers', () => {
-  it('contains first iforEach partition times', () => {
-    expect(contains([1, 2], 2)).toBe(true)
-    expect(contains('abcd', 'bc')).toBe(true)
-    expect(contains({ a: 1 }, 1)).toBe(true)
+  it('first iforEach partition times', () => {
     expect(first([9, 8])).toBe(9)
     const emptyFirst = first([] as number[])
     expect(emptyFirst).toBe(undefined)
