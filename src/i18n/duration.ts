@@ -158,6 +158,26 @@ type OrderedUnit = (typeof orderedUnits)[number]
 
 const reverseUnits = orderedUnits.slice(0).reverse()
 
+const FORMAT_UNITS = [
+  'years',
+  'months',
+  'weeks',
+  'days',
+  'hours',
+  'minutes',
+  'seconds',
+  'milliseconds',
+  'microseconds',
+  'nanoseconds'
+] as const
+
+type FormatUnit = (typeof FORMAT_UNITS)[number]
+
+const SUB_MILLISECOND_UNITS: ReadonlySet<FormatUnit> = new Set(['microseconds', 'nanoseconds'])
+
+/** Overflow carries up through days into weeks; weeks never carry into months. */
+const MIN_CARRY_UP_INDEX = FORMAT_UNITS.indexOf('weeks')
+
 function unitValue(value: number | undefined): number {
   return value === undefined || value === 0 || Number.isNaN(value) ? 0 : value
 }
@@ -168,8 +188,8 @@ function unitValue(value: number | undefined): number {
  * ISO-8601 strings go through {@link Duration.fromISO}.
  */
 export class Duration {
-  /** The stored unit fields. */
-  readonly values: DurationObject
+  /** The stored unit fields. Frozen: assigning to it throws in strict mode. */
+  readonly values: Readonly<DurationObject>
   readonly #exact: boolean
   readonly #matrix: ConversionMatrix
 
@@ -181,18 +201,20 @@ export class Duration {
     if (typeof dur === 'string') {
       throw new ValueError('use Duration.fromISO')
     }
+    let values: DurationObject
     if (dur instanceof Duration) {
-      this.values = { ...dur.values }
+      values = { ...dur.values }
       this.#exact = exact ?? dur.#exact
     } else if (isNumber(dur)) {
-      this.values = { milliseconds: dur }
+      values = { milliseconds: dur }
       this.#exact = exact ?? false
     } else if (isObject(dur)) {
-      this.values = normalizeUnits(dur)
+      values = normalizeUnits(dur)
       this.#exact = exact ?? false
     } else {
       throw new ValueError('Duration input must be a number, Duration, or DurationObject')
     }
+    this.values = Object.freeze(values)
     this.#matrix = this.#exact ? exactMatrix : casualMatrix
   }
 
@@ -457,25 +479,76 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
 
   /**
    * Format with `Intl.DurationFormat` when available; otherwise {@link toISOString}.
+   * `Intl.DurationFormat` only accepts whole numbers, so fractional parts are carried down to the
+   * next smaller unit (1.5 hours -> 1 hour 30 minutes) and sub-nanosecond remainders are rounded.
    * @param locale BCP 47 locale tag.
    * @param options `Intl.DurationFormat` options.
+   * @throws RangeError when the fields have mixed signs.
    */
   format(locale?: string, options?: Record<string, unknown>): string {
+    const fields = this.#formatFields()
     const intl = Intl as typeof Intl & {
       DurationFormat?: new (
         locales?: string | string[],
         opts?: Record<string, unknown>
-      ) => { format(duration: DurationObject): string }
+      ) => { format(duration: Record<string, number>): string }
     }
     if (typeof intl.DurationFormat !== 'function') {
       return this.toISOString()
     }
-    const obj = this.toObject()
-    if (obj.quarters) {
-      obj.months = (obj.months ?? 0) + obj.quarters * 3
-      delete obj.quarters
+    return new intl.DurationFormat(locale, options).format(fields)
+  }
+
+  /** Whole-number fields for `Intl.DurationFormat` with quarters folded into months. */
+  #formatFields(): Record<FormatUnit, number> {
+    const source: Record<FormatUnit, number> = {
+      years: this.years,
+      months: this.months + this.quarters * 3,
+      weeks: this.weeks,
+      days: this.days,
+      hours: this.hours,
+      minutes: this.minutes,
+      seconds: this.seconds,
+      milliseconds: this.milliseconds,
+      microseconds: 0,
+      nanoseconds: 0
     }
-    return new intl.DurationFormat(locale, options).format(obj)
+
+    const signs = new Set(Object.values(source).map(Math.sign))
+    if (signs.has(1) && signs.has(-1)) {
+      throw new RangeError('cannot format a duration with mixed signs')
+    }
+    const sign = signs.has(-1) ? -1 : 1
+
+    const fields = {} as Record<FormatUnit, number>
+    const factor = (from: FormatUnit, to: FormatUnit): number =>
+      SUB_MILLISECOND_UNITS.has(to) ? 1000 : this.#matrix[from][to]
+    let carry = 0
+    FORMAT_UNITS.forEach((unit, i) => {
+      const value = Math.abs(source[unit]) + carry
+      if (i === FORMAT_UNITS.length - 1) {
+        fields[unit] = Math.round(value)
+        return
+      }
+      fields[unit] = Math.trunc(value)
+      carry = (value - fields[unit]) * factor(unit, FORMAT_UNITS[i + 1])
+    })
+
+    // Rounding the last unit (or float noise such as 59.999999) can overflow a unit; carry it up.
+    for (let i = FORMAT_UNITS.length - 1; i > MIN_CARRY_UP_INDEX; i--) {
+      const unit = FORMAT_UNITS[i]
+      const parent = FORMAT_UNITS[i - 1]
+      const size = factor(parent, unit)
+      if (fields[unit] >= size) {
+        fields[unit] -= size
+        fields[parent] += 1
+      }
+    }
+
+    for (const unit of FORMAT_UNITS) {
+      fields[unit] = fields[unit] === 0 ? 0 : fields[unit] * sign
+    }
+    return fields
   }
 
   /**

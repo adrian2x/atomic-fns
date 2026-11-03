@@ -82,6 +82,77 @@ describe('Duration', () => {
     expect(d.format('en')).toBe('PT1H30M')
   })
 
+  it('SPEC-R94 values is frozen and the Duration is immutable', () => {
+    const d = new Duration({ years: 2, hours: 3 })
+    expect(Object.isFrozen(d.values)).toBe(true)
+    expect(() => {
+      // @ts-expect-error values is readonly
+      d.values.years = 9
+    }).toThrow(TypeError)
+    expect(() => {
+      // @ts-expect-error values is readonly
+      d.values.days = 1
+    }).toThrow(TypeError)
+    expect(d.years).toBe(2)
+    expect(d.days).toBe(0)
+    expect(d.toObject()).toEqual({ years: 2, hours: 3 })
+  })
+
+  it('SPEC-R94 values does not alias the constructor input or other Durations', () => {
+    const input = { hours: 1 }
+    const d = new Duration(input)
+    input.hours = 5
+    expect(d.hours).toBe(1)
+
+    const copy = new Duration(d)
+    expect(copy.values).not.toBe(d.values)
+    expect(Object.isFrozen(copy.values)).toBe(true)
+
+    const obj = d.toObject()
+    obj.hours = 7
+    expect(d.hours).toBe(1)
+  })
+
+  it('SPEC-R94 format carries fractional parts down before formatting', () => {
+    expect(new Duration({ hours: 1.5 }).format('en')).toBe('1 hr, 30 min')
+    expect(new Duration({ hours: 1.5 }).format('en', { style: 'long' })).toBe('1 hour, 30 minutes')
+    expect(new Duration({ minutes: 2.25 }).format('en')).toBe('2 min, 15 sec')
+    expect(new Duration({ days: 1.5 }).format('en')).toBe('1 day, 12 hr')
+    expect(new Duration({ years: 1.5 }).format('en')).toBe('1 yr, 6 mths')
+    expect(new Duration({ quarters: 0.5 }).format('en')).toBe('1 mth, 2 wks')
+  })
+
+  it('SPEC-R94 format carries fractional milliseconds into microseconds and nanoseconds', () => {
+    expect(new Duration({ milliseconds: 1.5 }).format('en', { style: 'long' })).toBe(
+      '1 millisecond, 500 microseconds'
+    )
+    expect(new Duration({ milliseconds: 1.000001 }).format('en', { style: 'long' })).toBe(
+      '1 millisecond, 1 nanosecond'
+    )
+    expect(new Duration({ milliseconds: 0.0000004 }).format('en', { style: 'long' })).toBe('')
+  })
+
+  it('SPEC-R94 format absorbs float noise and rounding overflow', () => {
+    expect(new Duration({ hours: 2.3 }).format('en')).toBe('2 hr, 18 min')
+    expect(new Duration({ hours: 1.1 }).format('en')).toBe('1 hr, 6 min')
+    expect(new Duration({ milliseconds: 0.9999999 }).format('en', { style: 'long' })).toBe(
+      '1 millisecond'
+    )
+  })
+
+  it('SPEC-R94 format keeps negative durations negative', () => {
+    expect(new Duration({ hours: -1.5 }).format('en')).toBe('-1 hr, 30 min')
+    expect(new Duration({ hours: -1.5 }).format('en', { style: 'narrow' })).toBe('-1h 30m')
+  })
+
+  it('SPEC-R94 format throws RangeError on mixed signs', () => {
+    expect(() => new Duration({ hours: 1, minutes: -30 }).format('en')).toThrow(RangeError)
+    expect(() => new Duration({ hours: 1, minutes: -30 }).format('en')).toThrow(
+      'cannot format a duration with mixed signs'
+    )
+    expect(() => new Duration({ years: -1, quarters: 1 }).format('en')).toThrow(RangeError)
+  })
+
   it('SPEC-R94 get and singular unit aliases', () => {
     const d = new Duration({ years: 2, quarters: 1, days: 3 })
     expect(d.get('years')).toBe(2)

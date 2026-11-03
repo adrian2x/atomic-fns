@@ -112,6 +112,91 @@ describe('SPEC-R85 formatDate localized tokens', () => {
     const d = new Date(2020, 1, 1)
     expect(formatDate('[Year:] YYYY', d)).toBe('Year: 2020')
   })
+
+  it('SPEC-R85 Do renders English ordinal suffixes', () => {
+    const expected: Record<number, string> = {
+      1: '1st',
+      2: '2nd',
+      3: '3rd',
+      4: '4th',
+      11: '11th',
+      12: '12th',
+      13: '13th',
+      21: '21st',
+      22: '22nd',
+      23: '23rd',
+      31: '31st'
+    }
+    for (const [day, ordinal] of Object.entries(expected)) {
+      expect(formatDate('Do', new Date(2022, 0, Number(day)), 'en')).toBe(ordinal)
+    }
+    expect(formatDate('Do MMMM YYYY', new Date(2022, 9, 1), { locale: 'en' })).toBe(
+      '1st October 2022'
+    )
+  })
+
+  it('SPEC-R85 Do does not append an English suffix for other languages', () => {
+    expect(formatDate('Do', new Date(2022, 0, 1), 'de')).toBe('1')
+    expect(formatDate('[Do] D', new Date(2022, 0, 2), 'en')).toBe('Do 2')
+  })
+})
+
+describe('SPEC-R85 formatDate and strftime UTC view America/New_York', () => {
+  const prev = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York'
+  })
+  afterAll(() => {
+    if (prev === undefined) delete process.env.TZ
+    else process.env.TZ = prev
+  })
+
+  const instant = new Date('2022-01-05T13:07:09Z')
+
+  it('SPEC-R85 utc reads UTC fields and zero offset', () => {
+    expect(formatDate('YYYY-MM-DD HH:mm:ss', instant, { utc: true })).toBe('2022-01-05 13:07:09')
+    expect(formatDate('Z', instant, { utc: true })).toBe('+00:00')
+    expect(formatDate('ZZ', instant, { utc: true })).toBe('+0000')
+    expect(formatDate('z', instant, { utc: true })).toBe('UTC')
+    expect(formatDate('', instant, { utc: true })).toBe('2022-01-05T13:07:09+00:00')
+  })
+
+  it('SPEC-R85 without utc the local view is unchanged', () => {
+    expect(formatDate('HH:mm Z', instant)).toBe('08:07 -05:00')
+    expect(formatDate('HH:mm Z', instant, { utc: false })).toBe('08:07 -05:00')
+  })
+
+  it('SPEC-R85 utc X and x come from the true instant', () => {
+    expect(formatDate('X', instant, { utc: true })).toBe(String(instant.getTime() / 1000))
+    expect(formatDate('x', instant, { utc: true })).toBe(String(instant.getTime()))
+    expect(formatDate('X', instant)).toBe(formatDate('X', instant, { utc: true }))
+  })
+
+  it('SPEC-R85 utc wall times inside a local DST gap are not shifted', () => {
+    const gap = new Date('2024-03-10T02:30:00Z')
+    expect(formatDate('HH:mm', gap, { utc: true })).toBe('02:30')
+    expect(formatDate('HH:mm', gap)).toBe('21:30')
+  })
+
+  it('SPEC-R85 utc applies to Intl backed tokens', () => {
+    const lateUtc = new Date('2022-01-01T02:00:00Z')
+    expect(formatDate('D MMM', lateUtc, { locale: 'en', utc: true })).toBe('1 Jan')
+    expect(formatDate('D MMM', lateUtc, { locale: 'en' })).toBe('31 Dec')
+    expect(formatDate('ll', lateUtc, { locale: 'en', utc: true })).toBe('Jan 1, 2022')
+    expect(formatDate('zzz', lateUtc, { locale: 'en', utc: true })).toBe(
+      'Coordinated Universal Time'
+    )
+  })
+
+  it('SPEC-R86 strftime utc reads UTC fields', () => {
+    expect(strftime('%Y-%m-%d %H:%M:%S %z %Z', instant, { utc: true })).toBe(
+      '2022-01-05 13:07:09 +0000 UTC'
+    )
+    expect(strftime('%H:%M %z', instant)).toBe('08:07 -0500')
+    expect(strftime('%A %d', new Date('2022-01-01T02:00:00Z'), { locale: 'en', utc: true })).toBe(
+      'Saturday 01'
+    )
+  })
 })
 
 describe('SPEC-R86 strftime', () => {

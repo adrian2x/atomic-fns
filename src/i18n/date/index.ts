@@ -78,18 +78,6 @@ function toDurationObject(duration: number | Duration | DurationObject): Duratio
   }
 }
 
-function utcMirror(date: Date): Date {
-  const m = new Date(0)
-  m.setFullYear(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-  m.setHours(
-    date.getUTCHours(),
-    date.getUTCMinutes(),
-    date.getUTCSeconds(),
-    date.getUTCMilliseconds()
-  )
-  return m
-}
-
 /**
  * A date tied to a locale (default system locale) with calendar-correct arithmetic
  * and an optional UTC view of the same instant.
@@ -99,10 +87,10 @@ export class IntlDate implements Comparable, Equatable {
   declare readonly [protocol.compare]: (other: unknown) => number | undefined
   declare readonly [protocol.equals]: (other: unknown) => boolean
 
-  private _date: Date
+  readonly #date: Date
   readonly locale?: string
   readonly utc: boolean
-  private _relativeFormat?: Intl.RelativeTimeFormat
+  #relativeFormat?: Intl.RelativeTimeFormat
 
   /** Parses the provided value as a UTC-view date or returns the current instant in UTC view. */
   static UTC(value?: DateLike, locale?: string): IntlDate {
@@ -132,68 +120,68 @@ export class IntlDate implements Comparable, Equatable {
     this.locale = opts.locale
 
     if (obj instanceof IntlDate) {
-      this._date = new Date(obj._date.getTime())
+      this.#date = new Date(obj.#date.getTime())
       this.utc = opts.utc ?? obj.utc
     } else {
       this.utc = Boolean(opts.utc)
       if (typeof obj === 'string') {
-        this._date = asDate(obj, this.utc)
+        this.#date = asDate(obj, this.utc)
       } else if (typeof obj === 'number' || obj instanceof Date) {
-        this._date = new Date(obj)
+        this.#date = new Date(obj)
       } else if (isDateObject(obj)) {
-        this._date = fieldsToDate(obj, this.utc)
+        this.#date = fieldsToDate(obj, this.utc)
       } else if (obj === null) {
-        this._date = asDate(null)
+        this.#date = asDate(null)
       } else {
-        this._date = asDate(undefined)
+        this.#date = asDate(undefined)
       }
     }
   }
 
   /** Get the date's year. */
   get year(): number {
-    return this.utc ? this._date.getUTCFullYear() : this._date.getFullYear()
+    return this.utc ? this.#date.getUTCFullYear() : this.#date.getFullYear()
   }
 
   /** Get this date's month as a number from 1 to 12, inclusive. */
   get month(): number {
-    return (this.utc ? this._date.getUTCMonth() : this._date.getMonth()) + 1
+    return (this.utc ? this.#date.getUTCMonth() : this.#date.getMonth()) + 1
   }
 
   /** Weekday 1-7 where Monday is 1 and Sunday is 7. */
   get dayOfWeek(): number {
-    const dow = this.utc ? this._date.getUTCDay() : this._date.getDay()
+    const dow = this.utc ? this.#date.getUTCDay() : this.#date.getDay()
     return dow === 0 ? 7 : dow
   }
 
   /** Day of the month. */
   get day(): number {
-    return this.utc ? this._date.getUTCDate() : this._date.getDate()
+    return this.utc ? this.#date.getUTCDate() : this.#date.getDate()
   }
 
   /** Hour of day. */
   get hour(): number {
-    return this.utc ? this._date.getUTCHours() : this._date.getHours()
+    return this.utc ? this.#date.getUTCHours() : this.#date.getHours()
   }
 
   /** Minute of hour. */
   get minute(): number {
-    return this.utc ? this._date.getUTCMinutes() : this._date.getMinutes()
+    return this.utc ? this.#date.getUTCMinutes() : this.#date.getMinutes()
   }
 
   /** Second of minute. */
   get second(): number {
-    return this.utc ? this._date.getUTCSeconds() : this._date.getSeconds()
+    return this.utc ? this.#date.getUTCSeconds() : this.#date.getSeconds()
   }
 
   /** Millisecond of second. */
   get millisecond(): number {
-    return this.utc ? this._date.getUTCMilliseconds() : this._date.getMilliseconds()
+    return this.utc ? this.#date.getUTCMilliseconds() : this.#date.getMilliseconds()
   }
 
   /** Whether this date represents a valid instant. */
   isValid(): boolean {
-    return !Number.isNaN(this._date.getTime())
+    return !Number.isNaN(this.#date.getTime())
   }
 
   /** Days in this date's month. */
@@ -214,7 +202,7 @@ export class IntlDate implements Comparable, Equatable {
 
   /** Day of year (1-366). */
   dayOfYear(): number {
-    return dayOfYear(this.utc ? utcMirror(this._date) : this._date)
+    return dayOfYear(this.#date, this.utc)
   }
 
   /** Whether this date's year is a leap year. */
@@ -234,20 +222,21 @@ export class IntlDate implements Comparable, Equatable {
 
   /** Week of the year. */
   week(): number {
-    return weekOfYear(this.utc ? utcMirror(this._date) : this._date).week
+    return weekOfYear(this.#date, 1, 1, this.utc).week
   }
 
   /** ISO week of the year. */
   isoWeek(): number {
-    return weekOfYear(this.utc ? utcMirror(this._date) : this._date, 1, 4).week
+    return weekOfYear(this.#date, 1, 4, this.utc).week
   }
 
   /**
-   * Localized string via `Intl.DateTimeFormat`.
+   * Localized string via `Intl.DateTimeFormat`. UTC-view dates default to the UTC time zone.
    * @param opts DateTimeFormat options
    */
   toString(opts?: Intl.DateTimeFormatOptions): string {
-    return this._date.toLocaleString(this.locale, opts)
+    const resolved = this.utc ? { timeZone: 'UTC', ...opts } : opts
+    return this.#date.toLocaleString(this.locale, resolved)
   }
 
   /**
@@ -259,12 +248,12 @@ new IntlDate(new Date(2022, 9, 31)).format('MM/DD/YYYY') // '10/31/2022'
 ```
    */
   format(str: string): string {
-    return formatDate(str, this.utc ? utcMirror(this._date) : this._date, this.locale)
+    return formatDate(str, this.#date, { locale: this.locale, utc: this.utc })
   }
 
   /** A new copy of the native `Date` for this instant. */
   toDate(): Date {
-    return new Date(this.isValid() ? this._date.getTime() : NaN)
+    return new Date(this.isValid() ? this.#date.getTime() : NaN)
   }
 
   /**
@@ -296,7 +285,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOString() // '2022-10-31T
 ```
    */
   toISOString(): string {
-    return this._date.toISOString()
+    return this.#date.toISOString()
   }
 
   /**
@@ -307,7 +296,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISODate() // '2022-10-31'
 ```
    */
   toISODate(): string {
-    return this._date.toISOString().slice(0, 10)
+    return this.#date.toISOString().slice(0, 10)
   }
 
   /**
@@ -318,7 +307,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
 ```
    */
   toISOTime(): string {
-    return this._date.toISOString().slice(11)
+    return this.#date.toISOString().slice(11)
   }
 
   /** Object of calendar fields in this date's view (local or UTC). */
@@ -336,7 +325,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
 
   /** Milliseconds since the Unix Epoch. */
   getTime(): number {
-    return this.isValid() ? this._date.getTime() : NaN
+    return this.isValid() ? this.#date.getTime() : NaN
   }
 
   /** Alias of {@link IntlDate.getTime}. */
@@ -360,7 +349,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
    */
   utcOffset(): number {
     if (this.utc) return 0
-    return -this._date.getTimezoneOffset()
+    return -this.#date.getTimezoneOffset()
   }
 
   /**
@@ -484,8 +473,8 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
 
   /** Cached `Intl.RelativeTimeFormat` for this instance. */
   get relativeFormat(): Intl.RelativeTimeFormat {
-    this._relativeFormat ??= new Intl.RelativeTimeFormat(this.locale)
-    return this._relativeFormat
+    this.#relativeFormat ??= new Intl.RelativeTimeFormat(this.locale)
+    return this.#relativeFormat
   }
 
   /**
@@ -540,9 +529,11 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
   diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false): number {
     const dt = new IntlDate(other)
     const dur = new Duration(this.getTime() - dt.getTime(), exact)
-    let total = dur.total(unit)
+    // Quarters are a month diff / 3, so 181 days (6 months) is 2 quarters, not 1.
+    let total =
+      UNITS_PLURAL[unit.toLowerCase()] === 'quarters' ? dur.total('months') / 3 : dur.total(unit)
     if (!exact) total = Math.trunc(total)
-    return total
+    return total === 0 ? 0 : total
   }
 
   /**
@@ -551,7 +542,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
    */
   add(duration: number | Duration | DurationObject): IntlDate {
     if (!this.isValid()) return this
-    return this.clone(addDuration(this._date, toDurationObject(duration), 1, this.utc))
+    return this.clone(addDuration(this.#date, toDurationObject(duration), 1, this.utc))
   }
 
   /**
@@ -560,7 +551,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
    */
   subtract(duration: number | Duration | DurationObject): IntlDate {
     if (!this.isValid()) return this
-    return this.clone(subDuration(this._date, toDurationObject(duration), this.utc))
+    return this.clone(subDuration(this.#date, toDurationObject(duration), this.utc))
   }
 
   /**
@@ -639,16 +630,29 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
     return new IntlDate(date ?? this, { locale: this.locale, utc: this.utc })
   }
 
-  /** Minimum of the given dates. */
-  static min(first: DateLike | DateLike[], ...rest: DateLike[]): DateLike {
-    if (rest.length === 0 && Array.isArray(first)) return minDate(first)
-    return minDate([first as DateLike, ...rest])
+  /**
+   * Earliest of the given dates, or `undefined` when none is valid. Values are parsed like the
+   * constructor parses them (strings as local time); the original value is returned.
+   */
+  static min(first: DateLike | readonly DateLike[], ...rest: DateLike[]): DateLike | undefined {
+    return minDate(IntlDate.#collect(first, rest), IntlDate.#toTime)
   }
 
-  /** Maximum of the given dates. */
-  static max(first: DateLike | DateLike[], ...rest: DateLike[]): DateLike {
-    if (rest.length === 0 && Array.isArray(first)) return maxDate(first)
-    return maxDate([first as DateLike, ...rest])
+  /**
+   * Latest of the given dates, or `undefined` when none is valid. Values are parsed like the
+   * constructor parses them (strings as local time); the original value is returned.
+   */
+  static max(first: DateLike | readonly DateLike[], ...rest: DateLike[]): DateLike | undefined {
+    return maxDate(IntlDate.#collect(first, rest), IntlDate.#toTime)
+  }
+
+  static #collect(first: DateLike | readonly DateLike[], rest: DateLike[]): readonly DateLike[] {
+    if (rest.length === 0 && Array.isArray(first)) return first as readonly DateLike[]
+    return [first as DateLike, ...rest]
+  }
+
+  static #toTime(value: DateLike): number {
+    return new IntlDate(value).getTime()
   }
 
   /** Debug representation. */

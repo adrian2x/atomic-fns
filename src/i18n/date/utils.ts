@@ -12,41 +12,58 @@ export interface DateObject {
   millisecond?: number
 }
 
-function unwrapDates<T>(args: T[]): T[] {
-  const first: unknown = args[0]
-  return Array.isArray(first) ? (first as T[]) : args
+/**
+ * Epoch milliseconds for a date-like value. Strings are parsed as local time via `asDate`,
+ * the same parsing `IntlDate` uses. Invalid input yields `NaN`.
+ */
+function defaultTime(value: unknown): number {
+  if (typeof value === 'string') return asDate(value).getTime()
+  if (value === null) return Number.NaN
+  return Number(value)
 }
 
-/**
- * Returns the minimum (most distant past) of the given date values.
- * @param dates Date-like values.
- */
-export function minDate<T>(dates: T[]): T
-export function minDate<T>(...args: T[]): T {
-  const dates = unwrapDates(args)
-  let ans = dates[0]
-  for (let i = 1; i < dates.length; i++) {
-    if (Number(dates[i]) < Number(ans)) {
-      ans = dates[i]
+function pickExtreme<T>(
+  dates: readonly T[],
+  toTime: (value: T) => number,
+  better: (candidate: number, current: number) => boolean
+): T | undefined {
+  let ans: T | undefined
+  let ansTime = Number.NaN
+  for (const value of dates) {
+    const time = toTime(value)
+    if (Number.isNaN(time)) continue
+    if (ans === undefined || better(time, ansTime)) {
+      ans = value
+      ansTime = time
     }
   }
   return ans
 }
 
 /**
- * Returns the maximum (most distant future) of the given date values.
+ * Returns the minimum (most distant past) of the given date values, or `undefined` when the
+ * list has no valid date. Invalid dates are ignored. String input is parsed as local time.
  * @param dates Date-like values.
+ * @param toTime Optional converter to epoch milliseconds.
  */
-export function maxDate<T>(dates: T[]): T
-export function maxDate<T>(...args: T[]): T {
-  const dates = unwrapDates(args)
-  let ans = dates[0]
-  for (let i = 1; i < dates.length; i++) {
-    if (Number(dates[i]) > Number(ans)) {
-      ans = dates[i]
-    }
-  }
-  return ans
+export function minDate<T>(
+  dates: readonly T[],
+  toTime: (value: T) => number = defaultTime
+): T | undefined {
+  return pickExtreme(dates, toTime, (candidate, current) => candidate < current)
+}
+
+/**
+ * Returns the maximum (most distant future) of the given date values, or `undefined` when the
+ * list has no valid date. Invalid dates are ignored. String input is parsed as local time.
+ * @param dates Date-like values.
+ * @param toTime Optional converter to epoch milliseconds.
+ */
+export function maxDate<T>(
+  dates: readonly T[],
+  toTime: (value: T) => number = defaultTime
+): T | undefined {
+  return pickExtreme(dates, toTime, (candidate, current) => candidate > current)
 }
 
 /**
@@ -191,15 +208,17 @@ export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1
  * @param date The date.
  * @param firstDayOfWeek First day of week (default Monday=1).
  * @param firstDayOfYear Day-of-year threshold for week 1 (default 1).
+ * @param utc When true, read UTC fields instead of local fields.
  */
 export function weekOfYear(
   date: string | number | Date,
   firstDayOfWeek = 1,
-  firstDayOfYear = 1
+  firstDayOfYear = 1,
+  utc = false
 ): { week: number; year: number } {
-  const d = typeof date === 'string' ? asDate(date) : new Date(date)
-  const year = d.getFullYear()
-  const doy = dayOfYear(d)
+  const d = typeof date === 'string' ? asDate(date, utc) : new Date(date)
+  const year = utc ? d.getUTCFullYear() : d.getFullYear()
+  const doy = dayOfYear(d, utc)
   const weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear)
   const week = Math.floor((doy - weekOffset - 1) / 7) + 1
 
@@ -225,14 +244,21 @@ export function isoWeeksInYear(year: number): number {
 }
 
 /**
- * Day of year (1-366). String input is parsed as local time via `asDate`.
+ * Day of year (1-366). String input is parsed as local time via `asDate` (UTC when `utc`).
  * @param input The date.
+ * @param utc When true, read UTC fields instead of local fields.
  */
-export function dayOfYear(input: string | number | Date): number {
-  const d = typeof input === 'string' ? asDate(input) : new Date(input)
-  d.setHours(0, 0, 0, 0)
+export function dayOfYear(input: string | number | Date, utc = false): number {
+  const d = typeof input === 'string' ? asDate(input, utc) : new Date(input)
   const start = new Date(0)
-  start.setFullYear(d.getFullYear(), 0, 1)
-  start.setHours(0, 0, 0, 0)
+  if (utc) {
+    d.setUTCHours(0, 0, 0, 0)
+    start.setUTCFullYear(d.getUTCFullYear(), 0, 1)
+    start.setUTCHours(0, 0, 0, 0)
+  } else {
+    d.setHours(0, 0, 0, 0)
+    start.setFullYear(d.getFullYear(), 0, 1)
+    start.setHours(0, 0, 0, 0)
+  }
   return Math.round((d.getTime() - start.getTime()) / 864e5) + 1
 }

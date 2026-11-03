@@ -250,6 +250,61 @@ describe('IntlDate', () => {
     expect(IntlDate.max([start, end])).toBe(end)
   })
 
+  it('SPEC-R85 diff in quarters is month diff / 3 truncated toward zero', () => {
+    const jul = mockDate('2022-07-01')
+    const jan = mockDate('2022-01-01')
+    expect(jul.diff(jan, 'quarters')).toBe(2)
+    expect(jan.diff(jul, 'quarters')).toBe(-2)
+    expect(jul.diff(jan, 'quarter')).toBe(2)
+    expect(mockDate('2022-03-01').diff(jan, 'quarters')).toBe(0)
+    expect(Object.is(mockDate('2022-03-01').diff(jan, 'quarters'), 0)).toBe(true)
+    expect(jul.diff(jan, 'months')).toBe(6)
+  })
+
+  it('SPEC-R95 min/max parse strings like the constructor', () => {
+    expect(IntlDate.min('2022-03-01', '2021-12-31', '2022-01-01')).toBe('2021-12-31')
+    expect(IntlDate.max(['2022-03-01', '2021-12-31', '2022-01-01'])).toBe('2022-03-01')
+    expect(IntlDate.min('2022-03-01', new Date(2022, 0, 1))).toStrictEqual(new Date(2022, 0, 1))
+    expect(IntlDate.max(new Date(2022, 0, 1), '2022-03-01')).toBe('2022-03-01')
+    // lexical order of these strings differs from chronological order
+    expect(IntlDate.min('2022-1-15', '2022-01-02')).toBe('2022-01-02')
+    expect(IntlDate.max(0, 5, -3)).toBe(5)
+    expect(IntlDate.min(0, 5, -3)).toBe(-3)
+  })
+
+  it('SPEC-R95 min/max return the original value', () => {
+    const a = mockDate('2022-01-01')
+    const b = mockDate('2023-01-01')
+    expect(IntlDate.min(b, a)).toBe(a)
+    expect(IntlDate.max([a, b])).toBe(b)
+    expect(IntlDate.min(a)).toBe(a)
+  })
+
+  it('SPEC-R95 min/max of an empty list or only invalid dates is undefined', () => {
+    expect(IntlDate.min([])).toBeUndefined()
+    expect(IntlDate.max([])).toBeUndefined()
+    expect(IntlDate.min(null, 'nope')).toBeUndefined()
+    expect(IntlDate.min(null, '2022-01-01')).toBe('2022-01-01')
+    expect(IntlDate.max('2022-01-01', null)).toBe('2022-01-01')
+  })
+
+  it('SPEC-R85 toString honors the UTC view', () => {
+    const instant = new Date('2022-01-01T02:00:00Z')
+    const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false }
+    const utc = new IntlDate(instant, { locale: 'en-US', utc: true }).toString(opts)
+    expect(utc).toBe('02:00')
+    const local = new IntlDate(instant, { locale: 'en-US' }).toString({ ...opts, timeZone: 'UTC' })
+    expect(local).toBe('02:00')
+  })
+
+  it('SPEC-R102 internals are not exposed as properties', () => {
+    const d = mockDate('2022-01-01')
+    expect(Object.keys(d)).not.toContain('_date')
+    expect(Object.keys(d)).not.toContain('_relativeFormat')
+    expect('_date' in d).toBe(false)
+    expect('_relativeFormat' in d).toBe(false)
+  })
+
   it('startOf calendar units', () => {
     const date = mockDate('1964-07-02')
     expect(date.startOf('year').year).toBe(1964)
@@ -502,5 +557,58 @@ describe('SPEC-R90 DST-correct arithmetic America/New_York', () => {
     expect(daysInMonth('2022-03-01')).toBe(31)
     expect(dayOfYear('2022-03-01')).toBe(60)
     expect(weekOfYear('2022-03-01').week).toBeGreaterThan(0)
+  })
+})
+
+describe('SPEC-R85 IntlDate UTC view America/New_York', () => {
+  const prev = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York'
+  })
+  afterAll(() => {
+    if (prev === undefined) delete process.env.TZ
+    else process.env.TZ = prev
+  })
+
+  it('SPEC-R85 format reads UTC fields with a zero offset', () => {
+    const d = IntlDate.UTC('2022-01-05T13:07:09Z')
+    expect(d.format('Z')).toBe('+00:00')
+    expect(d.format('ZZ')).toBe('+0000')
+    expect(d.format('HH:mm:ss')).toBe('13:07:09')
+    expect(d.format('X')).toBe(String(d.toSeconds()))
+    expect(d.format('x')).toBe(String(d.getTime()))
+  })
+
+  it('SPEC-R85 local view of the same instant keeps the local offset', () => {
+    const d = new IntlDate('2022-01-05T13:07:09Z')
+    expect(d.format('Z')).toBe('-05:00')
+    expect(d.format('HH:mm')).toBe('08:07')
+    expect(d.format('X')).toBe(String(d.toSeconds()))
+  })
+
+  it('SPEC-R85 UTC wall time in a local DST gap is not shifted', () => {
+    expect(IntlDate.UTC('2024-03-10T02:30:00Z').format('HH:mm')).toBe('02:30')
+    expect(IntlDate.UTC('2024-03-10T02:30:00Z').hour).toBe(2)
+  })
+
+  it('SPEC-R85 zone helpers and week fields use the UTC view', () => {
+    const d = IntlDate.UTC('2024-03-10T02:30:00Z', 'en')
+    expect(d.zone()).toBe('+0000')
+    expect(d.zoneName()).toBe('Coordinated Universal Time')
+    // 2022-01-01T02:00Z is still Dec 31 locally in New York
+    const newYear = IntlDate.UTC('2022-01-01T02:00:00Z')
+    expect(newYear.dayOfYear()).toBe(1)
+    expect(newYear.week()).toBe(weekOfYear('2022-01-01').week)
+    expect(newYear.isoWeek()).toBe(52)
+    const local = new IntlDate('2022-01-01T02:00:00Z')
+    expect(local.dayOfYear()).toBe(365)
+  })
+
+  it('SPEC-R85 dayOfYear and weekOfYear utils accept a utc flag', () => {
+    const instant = new Date('2022-01-01T02:00:00Z')
+    expect(dayOfYear(instant)).toBe(365)
+    expect(dayOfYear(instant, true)).toBe(1)
+    expect(weekOfYear(instant, 1, 4, true)).toEqual({ week: 52, year: 2021 })
+    expect(dayOfYear('2022-03-01', true)).toBe(60)
   })
 })

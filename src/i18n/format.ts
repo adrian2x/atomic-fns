@@ -2,30 +2,98 @@ const NATIVE_DATE =
   /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
 
 const TOKEN_RE =
-  /\[([^\]]*)]|YYYY|YY|Q|MMMM|MMM|MM|M|DD|D|dddd|ddd|d|E|HH|H|hh|h|kk|k|mm|m|ss|s|SSS|A|a|ZZ|Z|zzz|z|NNNN|NNN|NN|N|X|x|LTS|LT|LLLL|LLL|LL|L|llll|lll|ll|l/g
+  /\[([^\]]*)]|YYYY|YY|Q|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|d|E|HH|H|hh|h|kk|k|mm|m|ss|s|SSS|A|a|ZZ|Z|zzz|z|NNNN|NNN|NN|N|X|x|LTS|LT|LLLL|LLL|LL|L|llll|lll|ll|l/g
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
 
+/** Options shared by {@link formatDate} and {@link strftime}. */
+export interface FormatOptions {
+  /** BCP 47 locale tag (default is the system locale). */
+  locale?: string
+  /** When true, read UTC fields of the date instead of local fields. */
+  utc?: boolean
+}
+
+interface ResolvedFormatOptions {
+  locale: string | undefined
+  utc: boolean
+}
+
+function resolveOptions(
+  localeOrOptions: string | FormatOptions | undefined
+): ResolvedFormatOptions {
+  if (typeof localeOrOptions === 'object') {
+    return { locale: localeOrOptions.locale, utc: localeOrOptions.utc === true }
+  }
+  return { locale: localeOrOptions, utc: false }
+}
+
+/** Calendar and clock fields of an instant, read from the local or UTC view. */
+interface DateFields {
+  year: number
+  month: number
+  day: number
+  dow: number
+  hour: number
+  minute: number
+  second: number
+  millisecond: number
+  /** Local minus UTC, in minutes. Always 0 for the UTC view. */
+  offsetMinutes: number
+}
+
+function readFields(date: Date, utc: boolean): DateFields {
+  if (utc) {
+    return {
+      year: date.getUTCFullYear(),
+      month: date.getUTCMonth() + 1,
+      day: date.getUTCDate(),
+      dow: date.getUTCDay(),
+      hour: date.getUTCHours(),
+      minute: date.getUTCMinutes(),
+      second: date.getUTCSeconds(),
+      millisecond: date.getUTCMilliseconds(),
+      offsetMinutes: 0
+    }
+  }
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+    dow: date.getDay(),
+    hour: date.getHours(),
+    minute: date.getMinutes(),
+    second: date.getSeconds(),
+    millisecond: date.getMilliseconds(),
+    offsetMinutes: -date.getTimezoneOffset()
+  }
+}
+
 const formatterCache = new Map<string, Intl.DateTimeFormat>()
 
-function cachedFormatter(locale: string | undefined, opts: Intl.DateTimeFormatOptions) {
-  const key = String(locale) + JSON.stringify(opts)
+function cachedFormatter(
+  locale: string | undefined,
+  opts: Intl.DateTimeFormatOptions,
+  utc: boolean
+) {
+  const resolved = utc ? { ...opts, timeZone: 'UTC' } : opts
+  const key = String(locale) + JSON.stringify(resolved)
   let fmt = formatterCache.get(key)
   if (!fmt) {
-    fmt = new Intl.DateTimeFormat(locale, opts)
+    fmt = new Intl.DateTimeFormat(locale, resolved)
     formatterCache.set(key, fmt)
   }
   return fmt
 }
 
 function partValue(
-  locale: string | undefined,
+  { locale, utc }: ResolvedFormatOptions,
   opts: Intl.DateTimeFormatOptions,
   date: Date,
   type: Intl.DateTimeFormatPartTypes
 ): string {
   return (
-    cachedFormatter(locale, opts)
+    cachedFormatter(locale, opts, utc)
       .formatToParts(date)
       .find((p) => p.type === type)?.value ?? ''
   )
@@ -48,11 +116,28 @@ function formatMeridiem(hour: number, lower: boolean): string {
   return lower ? m.toLowerCase() : m
 }
 
-function zoneOffset(date: Date): { sign: string; hh: string; mm: string } {
-  const off = -date.getTimezoneOffset()
-  const sign = off >= 0 ? '+' : '-'
-  const abs = Math.abs(off)
+function zoneOffset(offsetMinutes: number): { sign: string; hh: string; mm: string } {
+  const sign = offsetMinutes >= 0 ? '+' : '-'
+  const abs = Math.abs(offsetMinutes)
   return { sign, hh: pad2(Math.trunc(abs / 60)), mm: pad2(abs % 60) }
+}
+
+/**
+ * English ordinal suffix for a day of month (`1st`, `2nd`, `3rd`, `4th`, `11th`, `21st`).
+ * Other languages return the bare number.
+ */
+function ordinalDay(day: number, locale: string | undefined): string {
+  const tag = locale ?? new Intl.DateTimeFormat().resolvedOptions().locale
+  let language: string
+  try {
+    language = new Intl.Locale(tag).language
+  } catch {
+    return String(day)
+  }
+  if (language !== 'en') return String(day)
+  const category = new Intl.PluralRules(tag, { type: 'ordinal' }).select(day)
+  const suffixes: Record<string, string> = { one: 'st', two: 'nd', few: 'rd' }
+  return `${String(day)}${suffixes[category] ?? 'th'}`
 }
 
 /**
@@ -134,18 +219,22 @@ const DATE_HUGE: Intl.DateTimeFormatOptions = {
   hourCycle: 'h12'
 }
 
-function buildValues(date: Date, locale: string | undefined): Map<string, () => string> {
-  const h = date.getHours()
-  const min = date.getMinutes()
-  const sec = date.getSeconds()
-  const ms = date.getMilliseconds()
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  const year = date.getFullYear()
-  const dow = date.getDay()
+function buildValues(date: Date, opts: ResolvedFormatOptions): Map<string, () => string> {
+  const { locale, utc } = opts
+  const f = readFields(date, utc)
+  const h = f.hour
+  const min = f.minute
+  const sec = f.second
+  const ms = f.millisecond
+  const month = f.month
+  const day = f.day
+  const year = f.year
+  const dow = f.dow
   const isoDow = dow === 0 ? 7 : dow
   const kHour = h === 0 ? 24 : h
-  const offset = () => zoneOffset(date)
+  const offset = () => zoneOffset(f.offsetMinutes)
+  const intl = (fmtOpts: Intl.DateTimeFormatOptions) =>
+    cachedFormatter(locale, fmtOpts, utc).format(date)
 
   return new Map<string, () => string>([
     ['H', () => String(h)],
@@ -167,19 +256,20 @@ function buildValues(date: Date, locale: string | undefined): Map<string, () => 
     ['YYYY', () => String(year)],
     ['M', () => String(month)],
     ['MM', () => pad2(month)],
-    ['MMM', () => partValue(locale, { month: 'short' }, date, 'month')],
-    ['MMMM', () => partValue(locale, { month: 'long' }, date, 'month')],
+    ['MMM', () => partValue(opts, { month: 'short' }, date, 'month')],
+    ['MMMM', () => partValue(opts, { month: 'long' }, date, 'month')],
     ['Q', () => String(Math.ceil(month / 3))],
     ['D', () => String(day)],
+    ['Do', () => ordinalDay(day, locale)],
     ['DD', () => pad2(day)],
     ['d', () => String(dow)],
     ['E', () => String(isoDow)],
-    ['ddd', () => partValue(locale, { weekday: 'short' }, date, 'weekday')],
-    ['dddd', () => partValue(locale, { weekday: 'long' }, date, 'weekday')],
-    ['N', () => partValue(locale, { era: 'short' }, date, 'era')],
-    ['NN', () => partValue(locale, { era: 'short' }, date, 'era')],
-    ['NNN', () => partValue(locale, { era: 'short' }, date, 'era')],
-    ['NNNN', () => partValue(locale, { era: 'long' }, date, 'era')],
+    ['ddd', () => partValue(opts, { weekday: 'short' }, date, 'weekday')],
+    ['dddd', () => partValue(opts, { weekday: 'long' }, date, 'weekday')],
+    ['N', () => partValue(opts, { era: 'short' }, date, 'era')],
+    ['NN', () => partValue(opts, { era: 'short' }, date, 'era')],
+    ['NNN', () => partValue(opts, { era: 'short' }, date, 'era')],
+    ['NNNN', () => partValue(opts, { era: 'long' }, date, 'era')],
     [
       'Z',
       () => {
@@ -194,39 +284,45 @@ function buildValues(date: Date, locale: string | undefined): Map<string, () => 
         return `${o.sign}${o.hh}${o.mm}`
       }
     ],
-    ['z', () => partValue(locale, { timeZoneName: 'short' }, date, 'timeZoneName')],
-    ['zzz', () => partValue(locale, { timeZoneName: 'long' }, date, 'timeZoneName')],
+    ['z', () => (utc ? 'UTC' : partValue(opts, { timeZoneName: 'short' }, date, 'timeZoneName'))],
+    ['zzz', () => partValue(opts, { timeZoneName: 'long' }, date, 'timeZoneName')],
     ['LT', () => `${String(hour12(h))}:${pad2(min)} ${formatMeridiem(h, false)}`],
     ['LTS', () => `${String(hour12(h))}:${pad2(min)}:${pad2(sec)} ${formatMeridiem(h, false)}`],
-    ['L', () => cachedFormatter(locale, DATE_SHORT_DD).format(date)],
-    ['LL', () => cachedFormatter(locale, DATE_FULL).format(date)],
-    ['LLL', () => cachedFormatter(locale, DATE_LONG_TIME).format(date)],
-    ['LLLL', () => cachedFormatter(locale, DATE_HUGE).format(date)],
-    ['l', () => cachedFormatter(locale, DATE_SHORT).format(date)],
-    ['ll', () => cachedFormatter(locale, DATE_MED).format(date)],
-    ['lll', () => cachedFormatter(locale, DATE_MED_TIME).format(date)],
-    ['llll', () => cachedFormatter(locale, DATE_MED_WITH_WEEKDAY).format(date)]
+    ['L', () => intl(DATE_SHORT_DD)],
+    ['LL', () => intl(DATE_FULL)],
+    ['LLL', () => intl(DATE_LONG_TIME)],
+    ['LLLL', () => intl(DATE_HUGE)],
+    ['l', () => intl(DATE_SHORT)],
+    ['ll', () => intl(DATE_MED)],
+    ['lll', () => intl(DATE_MED_TIME)],
+    ['llll', () => intl(DATE_MED_WITH_WEEKDAY)]
   ])
 }
 
 /**
- * Returns a localized string representation of this date for the given format string. Tokens overlap with {@link https://momentjs.com/docs/#/displaying/format/ moment} (`YYYY`, `MM`, `DD`, ...). Differ from moment: default format is `YYYY-MM-DDTHH:mm:ssZ`; `Z`/`ZZ` are numeric offsets; `k`/`kk`/`E` are supported; there is no `Do`.
+ * Returns a localized string representation of this date for the given format string. Tokens overlap with {@link https://momentjs.com/docs/#/displaying/format/ moment} (`YYYY`, `MM`, `DD`, ...). Differ from moment: default format is `YYYY-MM-DDTHH:mm:ssZ`; `Z`/`ZZ` are numeric offsets; `k`/`kk`/`E` are supported; `Do` renders English ordinals only (other languages render the bare day number).
+ * With `utc: true`, UTC fields are read and `Z`/`ZZ`/`z` render `+00:00`/`+0000`/`UTC`.
  * @param formatStr The format string to use
  * @param date The date value
- * @param locale The locale to use when formatting
+ * @param localeOrOptions A locale tag, or options with `locale` and `utc`
  * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
  * @example
 ```js
 formatDate('MM/DD/YYYY', new Date(2022, 9, 31)) // '10/31/2022'
+formatDate('Do MMMM', new Date(2022, 9, 1), 'en') // '1st October'
 ```
  */
-export function formatDate(formatStr: string, date: Date, locale?: string): string {
+export function formatDate(
+  formatStr: string,
+  date: Date,
+  localeOrOptions?: string | FormatOptions
+): string {
   if (Number.isNaN(date.getTime())) {
     return 'Invalid Date'
   }
 
   const str = formatStr || FORMAT_DEFAULT
-  const values = buildValues(date, locale)
+  const values = buildValues(date, resolveOptions(localeOrOptions))
 
   return str.replace(TOKEN_RE, (match, literal: string | undefined) => {
     if (literal !== undefined) return literal
@@ -235,29 +331,31 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
   })
 }
 
-function strftimeValues(date: Date, locale: string | undefined): Map<string, () => string> {
-  const h = date.getHours()
-  const min = date.getMinutes()
-  const sec = date.getSeconds()
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  const year = date.getFullYear()
+function strftimeValues(date: Date, opts: ResolvedFormatOptions): Map<string, () => string> {
+  const { utc } = opts
+  const f = readFields(date, utc)
+  const h = f.hour
+  const min = f.minute
+  const sec = f.second
+  const month = f.month
+  const day = f.day
+  const year = f.year
   const kHour = h === 0 ? 24 : h
 
   return new Map<string, () => string>([
-    ['%A', () => partValue(locale, { weekday: 'long' }, date, 'weekday')],
-    ['%a', () => partValue(locale, { weekday: 'short' }, date, 'weekday')],
+    ['%A', () => partValue(opts, { weekday: 'long' }, date, 'weekday')],
+    ['%a', () => partValue(opts, { weekday: 'short' }, date, 'weekday')],
     ['%d', () => pad2(day)],
     ['%-d', () => String(day)],
     ['%m', () => pad2(month)],
     ['%-m', () => String(month)],
-    ['%B', () => partValue(locale, { month: 'long' }, date, 'month')],
-    ['%b', () => partValue(locale, { month: 'short' }, date, 'month')],
+    ['%B', () => partValue(opts, { month: 'long' }, date, 'month')],
+    ['%b', () => partValue(opts, { month: 'short' }, date, 'month')],
     ['%bb', () => String(month)],
     ['%Y', () => String(year)],
     ['%y', () => String(year).slice(-2)],
-    ['%N', () => partValue(locale, { era: 'long' }, date, 'era')],
-    ['%n', () => partValue(locale, { era: 'short' }, date, 'era')],
+    ['%N', () => partValue(opts, { era: 'long' }, date, 'era')],
+    ['%n', () => partValue(opts, { era: 'short' }, date, 'era')],
     ['%I', () => pad2(hour12(h))],
     ['%-I', () => String(hour12(h))],
     ['%H', () => pad2(h)],
@@ -273,19 +371,20 @@ function strftimeValues(date: Date, locale: string | undefined): Map<string, () 
     [
       '%z',
       () => {
-        const o = zoneOffset(date)
+        const o = zoneOffset(f.offsetMinutes)
         return `${o.sign}${o.hh}${o.mm}`
       }
     ],
-    ['%Z', () => partValue(locale, { timeZoneName: 'short' }, date, 'timeZoneName')]
+    ['%Z', () => (utc ? 'UTC' : partValue(opts, { timeZoneName: 'short' }, date, 'timeZoneName'))]
   ])
 }
 
 /**
  * Formats a date using a formatting string in the {@link https://strftime.org/ strftime} format, in any given locale.
+ * With `utc: true`, UTC fields are read and `%z`/`%Z` render `+0000`/`UTC`.
  * @param fmt The format string to apply
  * @param date The date value
- * @param locale The locale to use when formatting (default is system locale).
+ * @param localeOrOptions A locale tag (default is system locale), or options with `locale` and `utc`.
  * @returns The string representation of date
  * @see {@link https://strftime.org/ strftime format}
  * @example
@@ -294,12 +393,16 @@ strftime('%A, %d/%m/%y', new Date(2020, 1, 1))
 // 'Saturday, 01/02/20'
 ```
  */
-export function strftime(fmt: string, date: Date, locale?: string): string {
+export function strftime(
+  fmt: string,
+  date: Date,
+  localeOrOptions?: string | FormatOptions
+): string {
   if (Number.isNaN(date.getTime())) {
     return 'Invalid Date'
   }
 
-  const values = strftimeValues(date, locale)
+  const values = strftimeValues(date, resolveOptions(localeOrOptions))
   const results: string[] = []
 
   for (let i = 0; i < fmt.length; i++) {
