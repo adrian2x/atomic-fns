@@ -363,7 +363,7 @@ describe('IntlDate', () => {
     expect(d.set(asFields({ milliseconds: 42 })).millisecond).toBe(42)
     for (const key of ['weeknumber', 'weekyear', 'ordinal', 'quarter', 'quarters', 'fortnight']) {
       expect(() => d.set(asFields({ [key]: 1 }))).toThrow(ValueError)
-      expect(() => d.set(asFields({ [key]: 1 }))).toThrow(/Invalid unit/)
+      expect(() => d.set(asFields({ [key]: 1 }))).toThrow(/unknown date field/)
     }
   })
 

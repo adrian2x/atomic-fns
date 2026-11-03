@@ -206,7 +206,7 @@ function resolveStartUnit(unit: string): DurationField | 'isoWeek' {
       return undefined
     }
   })()
-  if (field === undefined) throw new ValueError(`Invalid unit ${unit}`)
+  if (field === undefined) throw new ValueError(`unknown date field "${unit}"`)
   return field
 }
 
@@ -602,10 +602,10 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
 
     const patch: Partial<Record<keyof DateObject, number>> = {}
     for (const [key, raw] of Object.entries(values)) {
-      const field = normalizeUnit(key) as keyof DateObject
+      const field = dateFieldKey(key) as keyof DateObject
       if (raw === undefined || raw === null) continue
       if (typeof raw !== 'number' || !Number.isFinite(raw) || !Number.isInteger(raw)) {
-        throw new ValueError(`Invalid unit value ${String(raw)}`)
+        throw new ValueError(`date field ${key} must be a finite number`)
       }
       patch[field] = raw
     }
@@ -942,12 +942,12 @@ const DATE_OBJECT_KEYS: ReadonlySet<string> = new Set([
   'millisecond'
 ])
 
-function normalizeUnit(unit: string): string {
+function dateFieldKey(unit: string): string {
   const lower = unit.toLowerCase()
   if (DATE_OBJECT_KEYS.has(lower)) return lower
   if (lower.endsWith('s')) {
     const singular = lower.slice(0, -1)
     if (DATE_OBJECT_KEYS.has(singular)) return singular
   }
-  throw new ValueError(`Invalid unit ${unit}`)
+  throw new ValueError(`unknown date field "${unit}"`)
 }
