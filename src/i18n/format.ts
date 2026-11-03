@@ -1,33 +1,67 @@
 const NATIVE_DATE =
   /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
-const REGEX_FORMAT =
-  /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
+
+const TOKEN_RE =
+  /\[([^\]]*)]|YYYY|YY|Q|MMMM|MMM|MM|M|DD|D|dddd|ddd|d|E|HH|H|hh|h|kk|k|mm|m|ss|s|SSS|A|a|ZZ|Z|zzz|z|NNNN|NNN|NN|N|X|x|LTS|LT|LLLL|LLL|LL|L|llll|lll|ll|l/g
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
 
-function padStart(string, length, pad) {
-  return String(string).padStart(length, pad)
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
+
+function cachedFormatter(locale: string | undefined, opts: Intl.DateTimeFormatOptions) {
+  const key = String(locale) + JSON.stringify(opts)
+  let fmt = formatterCache.get(key)
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, opts)
+    formatterCache.set(key, fmt)
+  }
+  return fmt
 }
 
-function padZoneStr(instance: Date) {
-  const negMinutes = -instance.getTimezoneOffset()
-  const minutes = Math.abs(negMinutes)
-  const hourOffset = Math.floor(minutes / 60)
-  const minuteOffset = minutes % 60
-  return `${negMinutes <= 0 ? '+' : '-'}${padStart(hourOffset, 2, '0')}:${padStart(
-    minuteOffset,
-    2,
-    '0'
-  )}`
+function partValue(
+  locale: string | undefined,
+  opts: Intl.DateTimeFormatOptions,
+  date: Date,
+  type: Intl.DateTimeFormatPartTypes
+): string {
+  return (
+    cachedFormatter(locale, opts)
+      .formatToParts(date)
+      .find((p) => p.type === type)?.value ?? ''
+  )
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function pad3(n: number): string {
+  return String(n).padStart(3, '0')
+}
+
+function hour12(h: number): number {
+  return h % 12 || 12
+}
+
+function formatMeridiem(hour: number, lower: boolean): string {
+  const m = hour < 12 ? 'AM' : 'PM'
+  return lower ? m.toLowerCase() : m
+}
+
+function zoneOffset(date: Date): { sign: string; hh: string; mm: string } {
+  const off = -date.getTimezoneOffset()
+  const sign = off >= 0 ? '+' : '-'
+  const abs = Math.abs(off)
+  return { sign, hh: pad2(Math.trunc(abs / 60)), mm: pad2(abs % 60) }
 }
 
 /**
  * Returns a new Date from the given arguments.
- * @param {string | number | Date} date The date value
- * @param {?boolean} [utc=false] Interprets the given value as a UTC date
- * @returns {Date} The new date object
+ * @param date The date value
+ * @param utc Interprets the given value as a UTC date
+ * @returns The new date object
  */
-export function asDate(date: string | number | Date, utc = false): Date {
+export function asDate(date: string | number | Date | null | undefined, utc = false): Date {
   if (date === null) {
     return new Date(NaN)
   }
@@ -37,357 +71,296 @@ export function asDate(date: string | number | Date, utc = false): Date {
   }
 
   if (typeof date === 'string' && !/Z$/i.test(date)) {
-    const d = date.match(NATIVE_DATE) as any
+    const d = date.match(NATIVE_DATE)
 
     if (d) {
-      const m = d[2] - 1 || 0
-      const ms = (d[7] || '0').slice(0, 3)
+      const year = Number(d[1])
+      const month = d[2] !== undefined && d[2] !== '' ? Number(d[2]) - 1 : 0
+      const day = d[3] !== undefined && d[3] !== '' ? Number(d[3]) : 1
+      const hour = d[4] !== undefined ? Number(d[4]) : 0
+      const minute = d[5] !== undefined ? Number(d[5]) : 0
+      const second = d[6] !== undefined ? Number(d[6]) : 0
+      const ms = Number((d[7] ?? '0').padEnd(3, '0').slice(0, 3))
 
       if (utc) {
-        return new Date(Date.UTC(d[1], m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms))
+        return new Date(Date.UTC(year, month, day, hour, minute, second, ms))
       }
 
-      return new Date(d[1], m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms)
+      return new Date(year, month, day, hour, minute, second, ms)
     }
   }
 
-  const fromDate = new Date(date)
+  const src = new Date(date)
   if (utc) {
-    fromDate.setFullYear(fromDate.getUTCFullYear())
-    fromDate.setMonth(fromDate.getUTCMonth())
-    fromDate.setDate(fromDate.getUTCDate())
-    fromDate.setHours(fromDate.getUTCHours())
-    fromDate.setMinutes(fromDate.getUTCMinutes())
-    fromDate.setSeconds(fromDate.getUTCSeconds())
-    fromDate.setMilliseconds(fromDate.getUTCMilliseconds())
+    if (Number.isNaN(src.getTime())) return src
+    return new Date(
+      src.getUTCFullYear(),
+      src.getUTCMonth(),
+      src.getUTCDate(),
+      src.getUTCHours(),
+      src.getUTCMinutes(),
+      src.getUTCSeconds(),
+      src.getUTCMilliseconds()
+    )
   }
-  return fromDate
+  return src
 }
 
-const n = 'numeric'
-const s = 'short'
-const l = 'long'
-const dd = '2-digit'
-const STRFTIME = {
-  // weekday
-  '%A': { weekday: l },
-  '%a': { weekday: s },
-  '%aa': { weekday: n },
-  // day
-  '%d': { day: dd },
-  '%-d': { day: n },
-  // month
-  '%m': { month: dd },
-  '%-m': { month: n },
-  '%B': { month: l },
-  '%b': { month: s },
-  '%bb': { month: n },
-  // year
-  '%y': { year: n },
-  '%Y': { year: dd },
-  // hour
-  '%K': { hourCycle: 'h11', hour: dd },
-  '%I': { hourCycle: 'h12', hour: dd },
-  '%-I': { hourCycle: 'h12', hour: n },
-  '%H': { hourCycle: 'h23', hour: dd },
-  '%-H': { hourCycle: 'h23', hour: n },
-  '%k': { hourCycle: 'h24', hour: n },
-  // minutes
-  '%M': { minute: dd },
-  '%-M': { minute: n },
-  // seconds
-  '%S': { second: dd },
-  '%-S': { second: n },
-  // day period
-  '%P': { dayPeriod: l },
-  '%p': { dayPeriod: s },
-  '%pp': { dayPeriod: 'narrow' },
-  // era
-  '%N': { era: l, year: dd },
-  '%n': { era: s, year: dd },
-  '%nn': { era: n, year: 'narrow' },
-  // timeZoneName
-  // '%Z': { timeZoneName: 'longGeneric', year: dd },
-  // '%-Z': { timeZoneName: 'shortGeneric', year: dd },
-  '%z': { timeZoneName: 'longOffset', year: dd },
-  '%-z': { timeZoneName: 'shortOffset', year: dd },
-  '%Z': { timeZoneName: l, year: dd },
-  '%-Z': { timeZoneName: s, year: dd }
+const DATE_SHORT_DD: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
 }
-const TOKENS = {
-  // weekday
-  dddd: { weekday: l },
-  ddd: { weekday: s },
-  E: { weekday: n },
-  // day
-  DD: { day: dd },
-  D: { day: n },
-  // month
-  MM: { month: dd },
-  M: { month: n },
-  MMMM: { month: l },
-  MMM: { month: s },
-  // year
-  YYYY: { year: n },
-  YY: { year: dd },
-  // hour
-  hh: { hourCycle: 'h12', hour: dd },
-  h: { hourCycle: 'h12', hour: n },
-  HH: { hourCycle: 'h23', hour: dd },
-  H: { hourCycle: 'h23', hour: n },
-  kk: { hourCycle: 'h11', hour: dd },
-  k: { hourCycle: 'h24', hour: n },
-  // minutes
-  mm: { minute: dd },
-  m: { minute: n },
-  // seconds
-  ss: { second: dd },
-  s: { second: n },
-  // day period
-  A: { dayPeriod: l },
-  a: { dayPeriod: s },
-  // era
-  N: { era: s, year: dd },
-  NN: { era: s, year: dd },
-  NNN: { era: s, year: dd },
-  NNNN: { era: l, year: dd },
-  // timeZoneName
-  ZZ: { timeZoneName: 'longOffset', year: dd },
-  Z: { timeZoneName: 'shortOffset', year: dd },
-  zzz: { timeZoneName: l, year: dd },
-  z: { timeZoneName: s, year: dd }
+const DATE_SHORT: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'numeric', day: 'numeric' }
+const DATE_MED: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
+const DATE_FULL: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' }
+const DATE_MED_TIME: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  hourCycle: 'h12'
+}
+const DATE_LONG_TIME: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  hourCycle: 'h12'
+}
+const DATE_MED_WITH_WEEKDAY: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  weekday: 'short',
+  hour: 'numeric',
+  minute: 'numeric',
+  hourCycle: 'h12'
+}
+const DATE_HUGE: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+  hour: 'numeric',
+  minute: 'numeric',
+  hourCycle: 'h12'
 }
 
-const HOUR_PARTS = { '%I': 1, '%-I': 1, '%K': 1, '%k': 1 }
-const ERA_PARTS = { '%n': 1, '%N': 1, '%nn': 1 }
-const TZ_PARTS = { '%ZZ': 1, '%-ZZ': 1, '%-z': 1, '%z': 1, '%-Z': 1, '%Z': 1 }
+function buildValues(date: Date, locale: string | undefined): Map<string, () => string> {
+  const h = date.getHours()
+  const min = date.getMinutes()
+  const sec = date.getSeconds()
+  const ms = date.getMilliseconds()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const year = date.getFullYear()
+  const dow = date.getDay()
+  const isoDow = dow === 0 ? 7 : dow
+  const kHour = h === 0 ? 24 : h
+  const offset = () => zoneOffset(date)
 
-function formatter(locale: string, opts) {
-  return new Intl.DateTimeFormat(locale, opts)
-}
-
-function formatHour(h, maxLength) {
-  return String(h % 12 || 12).padStart(maxLength, '0')
-}
-
-function formatMeridiem(hour, isLowercase?) {
-  const m = hour < 12 ? 'AM' : 'PM'
-  return isLowercase ? m.toLowerCase() : m
-}
-
-function formatPart(locale, t, date) {
-  const value = formatter(locale, TOKENS[t]).format(date)
-  return value.split(/\s+/g).slice(1).join(' ')
+  return new Map<string, () => string>([
+    ['H', () => String(h)],
+    ['HH', () => pad2(h)],
+    ['h', () => String(hour12(h))],
+    ['hh', () => pad2(hour12(h))],
+    ['k', () => String(kHour)],
+    ['kk', () => pad2(kHour)],
+    ['a', () => formatMeridiem(h, true)],
+    ['A', () => formatMeridiem(h, false)],
+    ['m', () => String(min)],
+    ['mm', () => pad2(min)],
+    ['s', () => String(sec)],
+    ['ss', () => pad2(sec)],
+    ['SSS', () => pad3(ms)],
+    ['X', () => String(Math.floor(date.getTime() / 1000))],
+    ['x', () => String(date.getTime())],
+    ['YY', () => String(year).slice(-2)],
+    ['YYYY', () => String(year)],
+    ['M', () => String(month)],
+    ['MM', () => pad2(month)],
+    ['MMM', () => partValue(locale, { month: 'short' }, date, 'month')],
+    ['MMMM', () => partValue(locale, { month: 'long' }, date, 'month')],
+    ['Q', () => String(Math.ceil(month / 3))],
+    ['D', () => String(day)],
+    ['DD', () => pad2(day)],
+    ['d', () => String(dow)],
+    ['E', () => String(isoDow)],
+    ['ddd', () => partValue(locale, { weekday: 'short' }, date, 'weekday')],
+    ['dddd', () => partValue(locale, { weekday: 'long' }, date, 'weekday')],
+    ['N', () => partValue(locale, { era: 'short' }, date, 'era')],
+    ['NN', () => partValue(locale, { era: 'short' }, date, 'era')],
+    ['NNN', () => partValue(locale, { era: 'short' }, date, 'era')],
+    ['NNNN', () => partValue(locale, { era: 'long' }, date, 'era')],
+    [
+      'Z',
+      () => {
+        const o = offset()
+        return `${o.sign}${o.hh}:${o.mm}`
+      }
+    ],
+    [
+      'ZZ',
+      () => {
+        const o = offset()
+        return `${o.sign}${o.hh}${o.mm}`
+      }
+    ],
+    ['z', () => partValue(locale, { timeZoneName: 'short' }, date, 'timeZoneName')],
+    ['zzz', () => partValue(locale, { timeZoneName: 'long' }, date, 'timeZoneName')],
+    ['LT', () => `${hour12(h)}:${pad2(min)} ${formatMeridiem(h, false)}`],
+    ['LTS', () => `${hour12(h)}:${pad2(min)}:${pad2(sec)} ${formatMeridiem(h, false)}`],
+    ['L', () => cachedFormatter(locale, DATE_SHORT_DD).format(date)],
+    ['LL', () => cachedFormatter(locale, DATE_FULL).format(date)],
+    ['LLL', () => cachedFormatter(locale, DATE_LONG_TIME).format(date)],
+    ['LLLL', () => cachedFormatter(locale, DATE_HUGE).format(date)],
+    ['l', () => cachedFormatter(locale, DATE_SHORT).format(date)],
+    ['ll', () => cachedFormatter(locale, DATE_MED).format(date)],
+    ['lll', () => cachedFormatter(locale, DATE_MED_TIME).format(date)],
+    ['llll', () => cachedFormatter(locale, DATE_MED_WITH_WEEKDAY).format(date)]
+  ])
 }
 
 /**
  * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as {@link https://momentjs.com/docs/#/displaying/format/ moment}.
- * @param {string} str The format string to use
+ * @param formatStr The format string to use
+ * @param date The date value
+ * @param locale The locale to use when formatting
  * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
  * @example
 ```js
-formatDate(new Date(), 'MM/DD/YYYY') // '10/31/2022'
+formatDate('MM/DD/YYYY', new Date()) // '10/31/2022'
 ```
-  */
+ */
 export function formatDate(formatStr: string, date: Date, locale?: string): string {
+  if (Number.isNaN(date.getTime())) {
+    return 'Invalid Date'
+  }
+
   const str = formatStr || FORMAT_DEFAULT
-  const zoneStr = padZoneStr(date)
+  const values = buildValues(date, locale)
 
-  const time = {
-    H: date.getHours(),
-    HH: padStart(date.getHours(), 2, '0'),
-    h: formatHour(date.getHours(), 1),
-    hh: formatHour(date.getHours(), 2),
-    a: formatMeridiem(date.getHours(), true),
-    A: formatMeridiem(date.getHours()),
-    m: date.getMinutes(),
-    mm: padStart(date.getMinutes(), 2, '0'),
-    s: date.getSeconds(),
-    ss: padStart(date.getSeconds(), 2, '0'),
-    SSS: padStart(date.getMilliseconds(), 3, '0'),
-    X: Math.floor(date.getTime() / 1000),
-    x: date.getTime()
-  }
-
-  const matches = {
-    ...time,
-    N: formatPart(locale, 'N', date),
-    NN: formatPart(locale, 'NN', date),
-    NNN: formatPart(locale, 'NNN', date),
-    NNNN: formatPart(locale, 'NNNN', date),
-    YY: String(date.getFullYear()).slice(-2),
-    YYYY: date.getFullYear(),
-    M: date.getMonth() + 1,
-    MM: padStart(date.getMonth() + 1, 2, '0'),
-    MMM: formatter(locale, TOKENS.MMM).format(date),
-    MMMM: formatter(locale, TOKENS.MMMM).format(date),
-    Q: Math.ceil((date.getMonth() + 1) / 3),
-    D: date.getDate(),
-    DD: padStart(date.getDate(), 2, '0'),
-    d: date.getDay(),
-    ddd: formatter(locale, TOKENS.ddd).format(date),
-    dddd: formatter(locale, TOKENS.dddd).format(date),
-    Z: formatPart(locale, 'Z', date),
-    ZZ: formatPart(locale, 'ZZ', date),
-    z: formatPart(locale, 'z', date),
-    zzz: formatPart(locale, 'zzz', date),
-    LT: `${time.h}:${time.mm} ${time.A}`,
-    LTS: `${time.h}:${time.mm}:${time.ss} ${time.A}`,
-    L: formatter(locale, DATE_SHORT_DD).format(date),
-    LL: formatter(locale, DATE_FULL).format(date),
-    LLL: formatter(locale, DATE_LONG_TIME).format(date),
-    LLLL: formatter(locale, DATE_HUGE).format(date),
-    l: formatter(locale, DATE_SHORT).format(date),
-    ll: formatter(locale, DATE_MED).format(date),
-    lll: formatter(locale, DATE_MED_TIME).format(date),
-    llll: formatter(locale, DATE_MED_WITH_WEEKDAY).format(date)
-  }
-
-  return str.replace(REGEX_FORMAT, (match, $1) => $1 || matches[match] || zoneStr.replace(':', '')) // 'ZZ'
+  return str.replace(TOKEN_RE, (match, literal: string | undefined) => {
+    if (literal !== undefined) return literal
+    const getter = values.get(match)
+    return getter ? getter() : match
+  })
 }
 
-/** L: 09/04/1983 */
-const DATE_SHORT_DD = {
-  year: n,
-  month: dd,
-  day: dd
-}
+function strftimeValues(date: Date, locale: string | undefined): Map<string, () => string> {
+  const h = date.getHours()
+  const min = date.getMinutes()
+  const sec = date.getSeconds()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const year = date.getFullYear()
+  const kHour = h === 0 ? 24 : h
 
-/** l: 9/4/1983 */
-const DATE_SHORT = {
-  year: n,
-  month: n,
-  day: n
-}
-
-/** ll: Oct 14, 1983 */
-const DATE_MED = {
-  year: n,
-  month: s,
-  day: n
-}
-
-/** LL: October 14, 1983 */
-const DATE_FULL = {
-  year: n,
-  month: l,
-  day: n
-}
-
-/** lll: Oct 14, 1983 8:30 PM */
-const DATE_MED_TIME = {
-  year: n,
-  month: s,
-  day: n,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** LLL: October 14, 1983 8:30 PM */
-const DATE_LONG_TIME = {
-  year: n,
-  month: l,
-  day: n,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** llll: Fri, Oct 14, 1983, 8:30 PM */
-const DATE_MED_WITH_WEEKDAY = {
-  year: n,
-  month: s,
-  day: n,
-  weekday: s,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
-}
-
-/** LLLL: Tuesday, October 14, 1983, 8:30 PM */
-const DATE_HUGE = {
-  year: n,
-  month: l,
-  day: n,
-  weekday: l,
-  hour: n,
-  minute: n,
-  hourCycle: 'h12'
+  return new Map<string, () => string>([
+    ['%A', () => partValue(locale, { weekday: 'long' }, date, 'weekday')],
+    ['%a', () => partValue(locale, { weekday: 'short' }, date, 'weekday')],
+    ['%d', () => pad2(day)],
+    ['%-d', () => String(day)],
+    ['%m', () => pad2(month)],
+    ['%-m', () => String(month)],
+    ['%B', () => partValue(locale, { month: 'long' }, date, 'month')],
+    ['%b', () => partValue(locale, { month: 'short' }, date, 'month')],
+    ['%bb', () => String(month)],
+    ['%Y', () => String(year)],
+    ['%y', () => String(year).slice(-2)],
+    ['%N', () => partValue(locale, { era: 'long' }, date, 'era')],
+    ['%n', () => partValue(locale, { era: 'short' }, date, 'era')],
+    ['%I', () => pad2(hour12(h))],
+    ['%-I', () => String(hour12(h))],
+    ['%H', () => pad2(h)],
+    ['%-H', () => String(h)],
+    ['%K', () => pad2(h % 12)],
+    ['%k', () => pad2(kHour)],
+    ['%M', () => pad2(min)],
+    ['%-M', () => String(min)],
+    ['%S', () => pad2(sec)],
+    ['%-S', () => String(sec)],
+    ['%p', () => formatMeridiem(h, false)],
+    ['%P', () => formatMeridiem(h, true)],
+    [
+      '%z',
+      () => {
+        const o = zoneOffset(date)
+        return `${o.sign}${o.hh}${o.mm}`
+      }
+    ],
+    ['%Z', () => partValue(locale, { timeZoneName: 'short' }, date, 'timeZoneName')]
+  ])
 }
 
 /**
  * Formats a date using a formatting string in the {@link https://strftime.org/ strftime} format, in any given locale.
- * @param {string} fmt The format string to apply
- * @param {Date} date The date value
- * @param {?string} locale The locale to use when formatting (default is system locale).
- * @returns {string} The string representation of date
+ * @param fmt The format string to apply
+ * @param date The date value
+ * @param locale The locale to use when formatting (default is system locale).
+ * @returns The string representation of date
  * @see {@link https://strftime.org/ strftime format}
  * @example
 ```js
 strftime('%A, %d/%m/%y', new Date())
-// 'Saturday, 01/02/2020'
+// 'Saturday, 01/02/20'
 ```
  */
 export function strftime(fmt: string, date: Date, locale?: string): string {
+  if (Number.isNaN(date.getTime())) {
+    return 'Invalid Date'
+  }
+
+  const values = strftimeValues(date, locale)
   const results: string[] = []
-  let dayPeriod: string = ''
-  let dayPeriodIndex = -1
+
   for (let i = 0; i < fmt.length; i++) {
-    let part = fmt[i]
-    if (part === '%') {
-      // check for escaped '%'
-      if (fmt[++i] === '%') {
-        results.push('%')
-        continue
-      }
+    const ch = fmt[i]
+    if (ch !== '%') {
+      results.push(ch)
+      continue
+    }
 
-      if (fmt[i] === '-') {
-        part += fmt[i++]
-      }
+    if (i + 1 >= fmt.length) {
+      results.push('%')
+      break
+    }
 
-      part += fmt[i]
-      // add any repeated characters that come after
-      while (i < fmt.length - 1 && fmt[i + 1] === fmt[i]) part += fmt[++i]
+    const next = fmt[i + 1]
+    if (next === '%') {
+      results.push('%')
+      i++
+      continue
+    }
 
-      if (HOUR_PARTS[part]) {
-        const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
-        // save the AM/PM for the correct spot
-        results.push(res[0])
-        dayPeriod = res[1]
-        continue
-      }
+    let token = '%'
+    let j = i + 1
+    if (fmt[j] === '-') {
+      token += fmt[j]
+      j++
+    }
+    if (j >= fmt.length) {
+      results.push(token)
+      break
+    }
+    token += fmt[j]
+    while (j + 1 < fmt.length && fmt[j + 1] === fmt[j]) {
+      j++
+      token += fmt[j]
+    }
 
-      if (part === '%P' || part === '%p') {
-        // leave this flag in place for later
-        dayPeriodIndex = results.length
-        if (part === '%p' && dayPeriod) {
-          dayPeriod = dayPeriod.toLowerCase()
-        }
-        results.push(part)
-        continue
-      }
-
-      if (ERA_PARTS[part] || TZ_PARTS[part]) {
-        // the formatting includes the date/year so we take what comes after
-        const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
-        results.push(res.slice(1).join(' '))
-        continue
-      }
-
-      // format any other parts
-      let res = formatter(locale, STRFTIME[part]).format(date)
-      // fix bugs in time formatter
-      if ((part === '%S' || part === '%M') && res.length === 1) res = '0' + res
-      results.push(res)
+    const getter = values.get(token)
+    if (getter) {
+      results.push(getter())
+      i = j
     } else {
-      // output as literal
-      results.push(part)
+      results.push(token)
+      i = j
     }
   }
 
-  // insert the AM/PM at the correct spot
-  if (dayPeriodIndex >= 0) results[dayPeriodIndex] = dayPeriod || ''
-
-  return results.join('').trim()
+  return results.join('')
 }

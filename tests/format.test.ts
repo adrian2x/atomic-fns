@@ -1,0 +1,202 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { asDate, formatDate, strftime } from '../src/i18n/format.js'
+
+describe('SPEC-R85 formatDate America/New_York', () => {
+  const prev = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York'
+  })
+  afterAll(() => {
+    if (prev === undefined) delete process.env.TZ
+    else process.env.TZ = prev
+  })
+
+  it('SPEC-R85 midnight tokens and Sunday d print zero', () => {
+    const d = new Date(2020, 0, 5, 0, 0, 0)
+    expect(d.getDay()).toBe(0)
+    expect(formatDate('H:m:s', d)).toBe('0:0:0')
+    expect(formatDate('d', d)).toBe('0')
+    expect(formatDate('HH:mm:ss', d)).toBe('00:00:00')
+  })
+
+  it('SPEC-R85 Z/ZZ sign is local minus UTC', () => {
+    const d = new Date(2020, 0, 1, 0, 0, 0)
+    expect(formatDate('Z', d)).toBe('-05:00')
+    expect(formatDate('ZZ', d)).toBe('-0500')
+  })
+
+  it('SPEC-R85 unknown letter runs stay literal', () => {
+    const d = new Date(2020, 0, 1, 0, 0, 0)
+    expect(formatDate('foo YYYY brr', d)).toBe('foo 2020 brr')
+    expect(formatDate('Y', d)).toBe('Y')
+  })
+
+  it('SPEC-R85 default format is ISO 8601', () => {
+    const d = new Date(2020, 0, 1, 0, 0, 0)
+    expect(formatDate('', d)).toBe('2020-01-01T00:00:00-05:00')
+  })
+
+  it('SPEC-R85 invalid Date returns Invalid Date', () => {
+    expect(formatDate('YYYY', new Date(NaN))).toBe('Invalid Date')
+  })
+
+  it('SPEC-R85 k kk E tokens', () => {
+    const midnight = new Date(2020, 0, 1, 0, 0, 0)
+    expect(formatDate('k', midnight)).toBe('24')
+    expect(formatDate('kk', midnight)).toBe('24')
+    const sat = new Date(2020, 1, 1, 12, 0, 0)
+    expect(formatDate('E', sat)).toBe('6')
+  })
+})
+
+describe('SPEC-R85 formatDate Asia/Kolkata', () => {
+  const prev = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'Asia/Kolkata'
+  })
+  afterAll(() => {
+    if (prev === undefined) delete process.env.TZ
+    else process.env.TZ = prev
+  })
+
+  it('SPEC-R85 Z offset positive half-hour', () => {
+    const d = new Date(2020, 0, 1, 0, 0, 0)
+    expect(formatDate('Z', d)).toBe('+05:30')
+    expect(formatDate('ZZ', d)).toBe('+0530')
+  })
+})
+
+describe('SPEC-R85 formatDate era locales', () => {
+  it.each(['en', 'ja', 'ko', 'zh', 'ar'] as const)(
+    'SPEC-R85 NNNN era has no year digits (%s)',
+    (locale) => {
+      const d = new Date(2020, 1, 1)
+      const era = formatDate('NNNN', d, locale)
+      expect(era).not.toMatch(/\d/)
+      expect(era.length).toBeGreaterThan(0)
+    }
+  )
+})
+
+describe('SPEC-R85 formatDate localized tokens', () => {
+  it('covers former date.test format cases under en-US', () => {
+    const date = new Date(2020, 1, 1, 11, 1, 1, 1)
+    const locale = 'en-US'
+    expect(formatDate('YYYY MMMM DD', date, locale)).toBe('2020 February 01')
+    expect(formatDate('YYYY MMMM DD dddd', date, locale)).toBe('2020 February 01 Saturday')
+    expect(formatDate('ddd, MMM DD, YYYY', date, locale)).toBe('Sat, Feb 01, 2020')
+    expect(formatDate('ddd, MMM DD, YYYY NN', date, locale)).toBe('Sat, Feb 01, 2020 AD')
+    expect(formatDate('ddd, MMM DD, YYYY NNNN', date, locale)).toBe('Sat, Feb 01, 2020 Anno Domini')
+    expect(formatDate('hh:mm:ss', date, locale)).toMatch(/\d{2}:\d{2}:\d{2}$/)
+    expect(formatDate('HH:mm:ss', date, locale)).toMatch(/\d{2}:\d{2}:\d{2}$/)
+    expect(formatDate('hh:mm:ss A', date, locale)).toMatch(/\sPM|AM/)
+    expect(formatDate('h:m:s a', date, locale)).toMatch(/\spm|am/)
+    expect(formatDate('h:m:s', date, locale)).toMatch(/\d+:\d+:\d+$/)
+    expect(formatDate('LT', date, locale)).toMatch(/\d+:\d+\sPM|AM/)
+    expect(formatDate('LTS', date, locale)).toMatch(/\d+:\d+:\d+\sPM|AM/)
+    expect(formatDate('L', date, locale)).toBe('02/01/2020')
+    expect(formatDate('LL', date, locale)).toBe('February 1, 2020')
+    expect(formatDate('LLL', date, locale)).toContain('February 1, 2020')
+    expect(formatDate('LLL', date, locale)).toMatch(/\d+:\d+\sPM|AM/)
+    expect(formatDate('LLLL', date, locale)).toContain('Saturday, February 1, 2020')
+    expect(formatDate('LLLL', date, locale)).toMatch(/\d+:\d+\sPM|AM/)
+    expect(formatDate('l', date, locale)).toBe('2/1/2020')
+    expect(formatDate('ll', date, locale)).toBe('Feb 1, 2020')
+    expect(formatDate('lll', date, locale)).toContain('Feb 1, 2020')
+    expect(formatDate('lll', date, locale)).toMatch(/\d+:\d+\sPM|AM/)
+    expect(formatDate('llll', date, locale)).toContain('Sat, Feb 1, 2020')
+    expect(formatDate('llll', date, locale)).toMatch(/\d+:\d+\sPM|AM/)
+  })
+
+  it('SPEC-R85 bracketed literals', () => {
+    const d = new Date(2020, 1, 1)
+    expect(formatDate('[Year:] YYYY', d)).toBe('Year: 2020')
+  })
+})
+
+describe('SPEC-R86 strftime', () => {
+  it('SPEC-R86 %Y is 4 digits and %y is 2', () => {
+    const d = new Date(2020, 1, 1, 11, 1, 1, 1)
+    expect(strftime('%Y', d)).toBe('2020')
+    expect(strftime('%y', d)).toBe('20')
+  })
+
+  it('SPEC-R86 %p uppercase %P lowercase independent of hour directives', () => {
+    const pm = new Date(2020, 1, 1, 15, 0, 0)
+    const am = new Date(2020, 1, 1, 9, 0, 0)
+    expect(strftime('%p', pm)).toBe('PM')
+    expect(strftime('%P', pm)).toBe('pm')
+    expect(strftime('%p', am)).toBe('AM')
+    expect(strftime('%P', am)).toBe('am')
+    expect(strftime('%H %p', pm)).toBe('15 PM')
+  })
+
+  it('SPEC-R86 unknown directive and trailing % stay literal; no trim', () => {
+    const d = new Date(2020, 1, 1)
+    expect(strftime('%Q', d)).toBe('%Q')
+    expect(strftime('%', d)).toBe('%')
+    expect(strftime('  %d  ', d)).toBe('  01  ')
+  })
+
+  it('covers former date.test strftime cases under 2.0 semantics', () => {
+    const date = new Date(2020, 1, 1, 11, 1, 1, 1)
+    const locale = 'en-US'
+    expect(strftime('%A', date, locale)).toBe('Saturday')
+    expect(strftime('%a', date, locale)).toBe('Sat')
+    expect(strftime('%d', date, locale)).toBe('01')
+    expect(strftime('%-d', date, locale)).toBe('1')
+    expect(strftime('%m', date, locale)).toBe('02')
+    expect(strftime('%-m', date, locale)).toBe('2')
+    expect(strftime('%B', date, locale)).toBe('February')
+    expect(strftime('%b', date, locale)).toBe('Feb')
+    expect(strftime('%bb', date, locale)).toBe('2')
+    expect(strftime('%N', date, locale)).toBe('Anno Domini')
+    expect(strftime('%n', date, locale)).toBe('AD')
+    expect(strftime('%I', date, locale)).toMatch(/\d{2}/)
+    expect(strftime('%-I', date, locale)).toMatch(/\d+/)
+    expect(strftime('%H', date, locale)).toMatch(/\d{2}/)
+    expect(strftime('%-H', date, locale)).toMatch(/\d+/)
+    expect(strftime('%K', date, locale)).toMatch(/\d{2}/)
+    expect(strftime('%k', date, locale)).toMatch(/\d{2}/)
+    expect(strftime('%M', date, locale)).toBe('01')
+    expect(strftime('%-M', date, locale)).toBe('1')
+    expect(strftime('%S', date, locale)).toBe('01')
+    expect(strftime('%-S', date, locale)).toBe('1')
+    expect(strftime('%A, %d/%m/%Y', date, locale)).toBe('Saturday, 01/02/2020')
+    expect(strftime('%Y-%m-%d, %A', date, locale)).toBe('2020-02-01, Saturday')
+    expect(strftime('%Y %B %d %A', date, locale)).toBe('2020 February 01 Saturday')
+    expect(strftime('%a, %b %d, %Y %n', date, locale)).toBe('Sat, Feb 01, 2020 AD')
+    expect(strftime('%a, %b %d, %Y %N', date, locale)).toBe('Sat, Feb 01, 2020 Anno Domini')
+    expect(strftime('%I:%M:%S', date, locale)).toMatch(/\d{2}:\d{2}:\d{2}$/)
+    expect(strftime('%I:%M:%S %p', date, locale)).toMatch(/\d{2}:\d{2}:\d{2}\s*AM|PM$/)
+    expect(strftime('%-I:%-M:%-S %P', date, locale)).toMatch(/\d+:\d+:\d+\s*am|pm$/)
+    expect(strftime('%H:%M:%S', date, locale)).toMatch(/\d{2}:\d{2}:\d{2}$/)
+    expect(strftime('%-H:%-M:%-S', date, locale)).toMatch(/\d+:\d+:\d+$/)
+    expect(strftime('%K:%M:%S %p', date, locale)).toMatch(/\d+:\d+:\d+\s*AM|PM$/)
+    expect(strftime('%k:%-M:%-S %P', date, locale)).toMatch(/\d+:\d+:\d+\s*am|pm$/)
+  })
+})
+
+describe('SPEC-R87 asDate', () => {
+  it('SPEC-R87 fractional seconds right-pad to milliseconds', () => {
+    expect(asDate('2020-01-01T00:00:00.5').getMilliseconds()).toBe(500)
+    expect(asDate('2020-01-01T00:00:00.56').getMilliseconds()).toBe(560)
+    expect(asDate('2020-01-01T00:00:00.5678').getMilliseconds()).toBe(567)
+  })
+
+  it('SPEC-R87 month-end UTC input does not overflow', () => {
+    const d = asDate('2020-01-31T12:00:00', true)
+    expect(d.getUTCFullYear()).toBe(2020)
+    expect(d.getUTCMonth()).toBe(0)
+    expect(d.getUTCDate()).toBe(31)
+  })
+
+  it('SPEC-R87 null is invalid; undefined is now', () => {
+    expect(Number.isNaN(asDate(null).getTime())).toBe(true)
+    const before = Date.now()
+    const d = asDate(undefined)
+    const after = Date.now()
+    expect(d.getTime()).toBeGreaterThanOrEqual(before)
+    expect(d.getTime()).toBeLessThanOrEqual(after)
+  })
+})

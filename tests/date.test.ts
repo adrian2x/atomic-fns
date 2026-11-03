@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest'
 import assert from 'assert'
-import { IntlDate, strftime } from '../src/i18n/index.js'
+import { IntlDate } from '../src/i18n/index.js'
 
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })
@@ -299,103 +299,5 @@ describe('IntlDate', () => {
     assert(end.year === 1964)
     assert(end.month === 7)
     assert(end.day === 2)
-  })
-
-  it('format', () => {
-    const date = new Date(2020, 1, 1, 11, 1, 1, 1)
-    const d = mockDate(date, { utc: true })
-    assert(d.format('YYYY MMMM DD') === '2020 February 01')
-    assert(d.format('YYYY MMMM DD dddd') === '2020 February 01 Saturday')
-    assert(d.format('ddd, MMM DD, YYYY') === 'Sat, Feb 01, 2020')
-    assert(d.format('ddd, MMM DD, YYYY NN') === 'Sat, Feb 01, 2020 AD')
-    assert(d.format('ddd, MMM DD, YYYY NNNN') === 'Sat, Feb 01, 2020 Anno Domini')
-
-    // times
-    assert(d.format('hh:mm:ss').match(/\d{2}:\d{2}:\d{2}$/))
-    assert(d.format('HH:mm:ss').match(/\d{2}:\d{2}:\d{2}$/), d.format('HH:mm:ss'))
-    assert(d.format('hh:mm:ss A').match(/\sPM|AM/), d.format('hh:mm:ss A'))
-    assert(d.format('h:m:s a').match(/\spm|am/), d.format('h:m:s a'))
-    assert(d.format('h:m:s').match(/\d+:\d+:\d+$/), d.format('h:m:s'))
-
-    // Localized formats
-    // Note: There are some weird space characters inconsistent between node versions
-    // which is why the test just checks if the correct parts are included
-    assert(d.format('LT').match(/\d+:\d+\sPM|AM/), d.format('LT'))
-    assert(d.format('LTS').match(/\d+:\d+:\d+\sPM|AM/), d.format('LTS'))
-    assert(d.format('L') === '02/01/2020', d.format('L'))
-    assert(d.format('LL') === 'February 1, 2020', d.format('LL'))
-    assert(d.format('LLL').includes('February 1, 2020'), d.format('LLL'))
-    assert(d.format('LLL').match(/\d+:\d+\sPM|AM/), d.format('LLL'))
-    assert(d.format('LLLL').includes('Saturday, February 1, 2020'), d.format('LLLL'))
-    assert(d.format('LLLL').match(/\d+:\d+\sPM|AM/), d.format('LLLL'))
-    assert(d.format('l') === '2/1/2020', d.format('l'))
-    assert(d.format('ll') === 'Feb 1, 2020', d.format('ll'))
-    assert(d.format('lll').includes('Feb 1, 2020'), d.format('lll'))
-    assert(d.format('lll').match(/\d+:\d+\sPM|AM/), d.format('lll'))
-    assert(d.format('llll').includes('Sat, Feb 1, 2020'), d.format('llll'))
-    assert(d.format('llll').match(/\d+:\d+\sPM|AM/), d.format('llll'))
-  })
-
-  it('strftime format', () => {
-    let date = new Date(2020, 1, 1, 11, 1, 1, 1)
-    const d = mockDate(date, { utc: true })
-    date = d.toDate()
-
-    assert(strftime('%A', date) === 'Saturday')
-    assert(strftime('%a', date) === 'Sat')
-
-    assert(strftime('%d', date) === '01')
-    assert(strftime('%-d', date) === '1')
-
-    assert(strftime('%m', date) === '02')
-    assert(strftime('%-m', date) === '2')
-    assert(strftime('%B', date) === 'February')
-    assert(strftime('%b', date) === 'Feb')
-    assert(strftime('%bb', date) === '2')
-
-    assert(strftime('%Y', date) === '20')
-    assert(strftime('%y', date) === '2020')
-
-    assert(strftime('%N', date) === 'Anno Domini')
-    assert(strftime('%n', date) === 'AD')
-
-    assert(strftime('%I', date).match(/\d{2}/), strftime('%I', date))
-    assert(strftime('%-I', date).match(/\d+/), strftime('%-I', date))
-    assert(strftime('%H', date).match(/\d{2}/), strftime('%H', date))
-    assert(strftime('%-H', date).match(/\d+/), strftime('%-H', date))
-    assert(strftime('%K', date).match(/\d{2}/), strftime('%K', date))
-    assert(strftime('%k', date).match(/\d{2}/), strftime('%k', date))
-
-    assert(strftime('%M', date) === '01', strftime('%M', date))
-    assert(strftime('%-M', date) === '1', strftime('%-M', date))
-
-    assert(strftime('%S', date) === '01', strftime('%S', date))
-    assert(strftime('%-S', date) === '1', strftime('%-S', date))
-
-    assert(strftime('%A, %d/%m/%y', date) === 'Saturday, 01/02/2020')
-    assert(strftime('%y-%m-%d, %A', date) === '2020-02-01, Saturday')
-    assert(strftime('%y %B %d %A', date) === '2020 February 01 Saturday')
-    assert(strftime('%a, %b %d, %y %n', date) === 'Sat, Feb 01, 2020 AD')
-    assert(strftime('%a, %b %d, %y %N', date) === 'Sat, Feb 01, 2020 Anno Domini')
-
-    // times
-    assert(strftime('%I:%M:%S', date).match(/\d{2}:\d{2}:\d{2}$/), strftime('%I:%M:%S', date))
-    assert(
-      strftime('%I:%M:%S %P', date).match(/\d{2}:\d{2}:\d{2}\s*AM|PM$/),
-      strftime('%I:%M:%S %P', date)
-    )
-    assert(
-      strftime('%-I:%-M:%-S %p', date).match(/\d+:\d+:\d+\s*am|pm$/),
-      strftime('%-I:%-M:%-S %p', date)
-    )
-    assert(strftime('%H:%M:%S', date).match(/\d{2}:\d{2}:\d{2}$/), strftime('%H:%M:%S', date))
-    assert(strftime('%-H:%-M:%-S', date).match(/\d+:\d+:\d+$/), strftime('%-H:%-M:%-S', date))
-    // %p has effect on 12h
-    assert(
-      strftime('%K:%M:%S %P', date).match(/\d+:\d+:\d+\s*AM|PM$/),
-      strftime('%K:%M:%S %P', date)
-    )
-    // %p No effect on 24h
-    assert(strftime('%k:%-M:%-S %p', date).match(/\d+:\d+:\d+$/), strftime('%k:%-M:%-S %p', date))
   })
 })
