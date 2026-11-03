@@ -5,8 +5,10 @@ import {
   call,
   chr,
   CustomError,
+  del,
   False,
   get,
+  has,
   hash,
   hashCode,
   hex,
@@ -38,7 +40,6 @@ import {
   noop,
   ValueError,
   KeyError,
-  has,
   int,
   len
 } from '../src/globals/index.js'
@@ -437,6 +438,59 @@ describe('globals', () => {
     assert.equal(get('length', 'hi'), 2)
     assert.equal(has({}, 'toString'), false)
     assert.equal(has({ toString: 1 }, 'toString'), true)
+  })
+
+  it('POL-20 residual: inherited natives are missing; set refuses inherited walks', () => {
+    const doc = {
+      ta: new Uint8Array(4),
+      buf: Buffer.from('x'),
+      sab: new SharedArrayBuffer(8),
+      wr: new WeakRef({}),
+      it: [].values(),
+      gen: (function* () {
+        yield 1
+      })(),
+      arr: [1]
+    }
+    const f16 = typeof Float16Array === 'function' ? new Float16Array(2) : null
+    assert.equal(get('ta.fill', doc, 'D'), 'D')
+    assert.equal(get('ta.subarray', doc, 'D'), 'D')
+    assert.equal(get('sab.slice', doc, 'D'), 'D')
+    assert.equal(get('wr.deref', doc, 'D'), 'D')
+    assert.equal(get('it.next', doc, 'D'), 'D')
+    assert.equal(get('gen.next', doc, 'D'), 'D')
+    assert.equal(has(doc.ta, 'fill'), false)
+    if (f16) {
+      assert.equal(get('f16.fill', { f16 }, 'D'), 'D')
+    }
+    assert.throws(
+      () => set('ta.fill.call', doc, 'pwned', true, true),
+      TypeError,
+      'refusing to write through inherited "fills"'
+    )
+    // Buffer.prototype.toString is JS (not `[native code]`), so get may resolve it, but set
+    // still refuses to descend through the inherited property.
+    assert.throws(
+      () => set('buf.toString.call', doc, 'pwned', true, true),
+      TypeError,
+      'refusing to write through inherited "toString"'
+    )
+    const ta = new Uint8Array(2)
+    ta.fill(9)
+    del('ta.fill.name', doc)
+    ta.fill(7)
+    assert.equal(ta[0], 7)
+    class Widget {
+      greet() {
+        return 'hi'
+      }
+    }
+    const greet = get('greet', new Widget())
+    assert.equal(typeof greet, 'function')
+    assert.equal((greet as { name: string }).name, 'greet')
+    const own = { fn: () => 1 }
+    set('fn.x', own, 2, true, true)
+    assert.equal((own.fn as { x?: number }).x, 2)
   })
 
   it('POL-20 path walks refuse prototype-reaching segments', () => {

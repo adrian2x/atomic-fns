@@ -339,56 +339,6 @@ export function keys<T extends object>(object: T): (keyof T & string)[] {
 
 const DANGEROUS_SEGMENTS = new Set<PropertyKey>(['__proto__', 'constructor', 'prototype'])
 
-/** Prototypes whose inherited function-valued members are treated as missing (R5-4). */
-const BUILTIN_METHOD_PROTOS: Set<object> = (() => {
-  const protos: object[] = [
-    Object.prototype,
-    Function.prototype,
-    Array.prototype,
-    String.prototype,
-    Number.prototype,
-    Boolean.prototype,
-    BigInt.prototype,
-    Symbol.prototype,
-    RegExp.prototype,
-    Date.prototype,
-    Map.prototype,
-    Set.prototype,
-    WeakMap.prototype,
-    WeakSet.prototype,
-    Promise.prototype,
-    Error.prototype,
-    ArrayBuffer.prototype,
-    DataView.prototype,
-    Int8Array.prototype,
-    Uint8Array.prototype,
-    Uint8ClampedArray.prototype,
-    Int16Array.prototype,
-    Uint16Array.prototype,
-    Int32Array.prototype,
-    Uint32Array.prototype,
-    Float32Array.prototype,
-    Float64Array.prototype,
-    BigInt64Array.prototype,
-    BigUint64Array.prototype
-  ]
-  const asyncFnProto: unknown = Object.getPrototypeOf(async function sampleAsync() {
-    return await Promise.resolve(0)
-  })
-  const genFnProto: unknown = Object.getPrototypeOf(function* sampleGen() {
-    yield 0
-  })
-  const asyncGenFnProto: unknown = Object.getPrototypeOf(async function* sampleAsyncGen() {
-    yield await Promise.resolve(0)
-  })
-  if (asyncFnProto !== null && typeof asyncFnProto === 'object') protos.push(asyncFnProto)
-  if (genFnProto !== null && typeof genFnProto === 'object') protos.push(genFnProto)
-  if (asyncGenFnProto !== null && typeof asyncGenFnProto === 'object') protos.push(asyncGenFnProto)
-  const IteratorCtor = (globalThis as { Iterator?: { prototype: object } }).Iterator
-  if (IteratorCtor) protos.push(IteratorCtor.prototype)
-  return new Set(protos)
-})()
-
 function pathSegments(key: PropertyKey | PropertyKey[]): PropertyKey[] {
   if (typeof key === 'string') return key.split('.')
   if (Array.isArray(key)) return key
@@ -411,10 +361,20 @@ function isOwnDataProperty(base: object, key: PropertyKey): boolean {
   )
 }
 
+/** True when `fn` is a native function (`Function.prototype.toString` contains `[native code]`). */
+function isNativeFunction(fn: (...args: never[]) => unknown): boolean {
+  try {
+    return Function.prototype.toString.call(fn).includes('[native code]')
+  } catch {
+    return true
+  }
+}
+
 /**
  * True when `key` must be treated as missing on `base`: dangerous segments that are not an own
  * data property of a plain object or array; other members found only on Object.prototype /
- * Function.prototype; inherited function-valued members of other built-in prototypes.
+ * Function.prototype; inherited (non-own) function-valued members whose function is native.
+ * User-class methods and getters stay readable.
  */
 function isForbiddenPathSegment(base: object, key: PropertyKey): boolean {
   if (Object.hasOwn(base, key)) {
@@ -429,17 +389,14 @@ function isForbiddenPathSegment(base: object, key: PropertyKey): boolean {
   while (proto) {
     if (Object.hasOwn(proto, key)) {
       if (proto === Object.prototype || proto === Function.prototype) return true
-      if (BUILTIN_METHOD_PROTOS.has(proto)) {
-        const desc = Object.getOwnPropertyDescriptor(proto, key)
-        if (
-          desc &&
-          desc.get === undefined &&
-          desc.set === undefined &&
-          typeof desc.value === 'function'
-        ) {
-          return true
-        }
-        return false
+      const desc = Object.getOwnPropertyDescriptor(proto, key)
+      if (
+        desc &&
+        desc.get === undefined &&
+        desc.set === undefined &&
+        typeof desc.value === 'function'
+      ) {
+        return isNativeFunction(desc.value as (...args: never[]) => unknown)
       }
       return false
     }
@@ -448,12 +405,16 @@ function isForbiddenPathSegment(base: object, key: PropertyKey): boolean {
   return false
 }
 
+/** True when `key` is present on `base` only via the prototype chain (not own). */
+function isInheritedKey(base: object, key: PropertyKey): boolean {
+  return !Object.hasOwn(base, key) && Reflect.has(base, key)
+}
+
 /**
  * Check if a given property is present in a given object.
  * Own properties and user-class prototype members count; `Object.prototype` /
  * `Function.prototype` members, prototype-reaching `__proto__`/`constructor`/`prototype`
- * segments (unless own data on a plain object or array), and inherited function-valued
- * members of other built-in prototypes do not.
+ * segments (unless own data on a plain object or array), and inherited native functions do not.
  * @param obj The object to check.
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
@@ -469,10 +430,10 @@ export function has(obj: unknown, attr: PropertyKey): boolean {
  * Check if the attribute is present in the object or return a default value instead.
  * Path segments that would reach a built-in prototype via `__proto__`, `constructor`, or
  * `prototype` (unless that segment is an own data property of a plain object or array), or that
- * resolve only to `Object.prototype` / `Function.prototype` members, or to inherited
- * function-valued members of other built-in prototypes, are treated as missing (return `value`).
- * Own properties and user-class prototype members (getters, methods) still resolve. Array /
- * string `length` and non-function accessors such as `Map.prototype.size` remain readable.
+ * resolve only to `Object.prototype` / `Function.prototype` members, or to inherited native
+ * functions, are treated as missing (return `value`). Own properties and user-class prototype
+ * members (getters, methods) still resolve. Array / string `length` and non-function accessors
+ * such as `Map.prototype.size` remain readable.
  * @param key
  * @param obj
  * @param value
@@ -502,7 +463,8 @@ export function get<V = unknown>(key: PropertyKey | PropertyKey[], obj: unknown,
 /**
  * Deletes a property at a path. Dot-separated strings and key arrays walk like {@link get}.
  * A `__proto__`, `constructor`, or `prototype` segment that is not an own data property of a
- * plain object or array is a no-op (the object is returned unchanged).
+ * plain object or array is a no-op (the object is returned unchanged). Descending through an
+ * inherited (non-own) property is also a no-op.
  * @param attr The property name or path.
  * @param x The given object.
  * @returns The modified object.
@@ -522,12 +484,14 @@ export function del<T extends object | null | undefined>(
     if (t !== 'object' && t !== 'function') return x
     const base = Object(cur) as object
     if (isForbiddenPathSegment(base, seg)) return x
+    if (isInheritedKey(base, seg)) return x
     cur = (cur as Record<PropertyKey, unknown>)[seg]
   }
   const last = paths[paths.length - 1]
   if (cur == null || (typeof cur !== 'object' && typeof cur !== 'function')) return x
   const parent = Object(cur) as object
   if (isForbiddenPathSegment(parent, last) && !Object.hasOwn(parent, last)) return x
+  if (isInheritedKey(parent, last)) return x
   if (
     DANGEROUS_SEGMENTS.has(last) &&
     !(isPlainObjectOrArray(parent) && Object.hasOwn(parent, last))
@@ -542,8 +506,9 @@ export function del<T extends object | null | undefined>(
  * Adds a property to an object, or modifies the existing value. Dot-separated strings and key
  * arrays walk like {@link get}. Writing through a `__proto__`, `constructor`, or `prototype`
  * segment that is not an own data property of a plain object or array throws
- * `TypeError('refusing to write through "<segment>"')`. Always sets `configurable: true` so a
- * second call on the same key replaces it.
+ * `TypeError('refusing to write through "<segment>"')`. Descending through an inherited (non-own)
+ * property throws `TypeError('refusing to write through inherited "<segment>"')`. Always sets
+ * `configurable: true` so a second call on the same key replaces it.
  * @param attr The name, Symbol, or path of the property to be defined or modified.
  * @param obj The container object.
  * @param value The value associated with the property
@@ -568,6 +533,9 @@ export function set<T extends object>(
       !(isPlainObjectOrArray(cur) && isOwnDataProperty(cur, seg))
     ) {
       throw new TypeError(`refusing to write through "${String(seg)}"`)
+    }
+    if (isInheritedKey(cur, seg)) {
+      throw new TypeError(`refusing to write through inherited "${String(seg)}"`)
     }
     if (isForbiddenPathSegment(cur, seg)) {
       throw new TypeError(`refusing to write through "${String(seg)}"`)
