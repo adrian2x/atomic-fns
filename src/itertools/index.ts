@@ -4,7 +4,8 @@
  * @module itertools
  */
 
-import { call, isEmpty, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
+import { call, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
+import { isCompactEmpty } from '../internal/compactEmpty.js'
 import { arrayFromIterable } from '../internal/iterable.js'
 import { add, bool, compare, eq, identity, type Comparer } from '../operators/index.js'
 import type { Iteratee, Predicate } from '../types.js'
@@ -182,7 +183,8 @@ export function first<T>(iterable: Iterable<T>): T | undefined {
 }
 
 /**
- * Creates a new generator that filters all falsy and empty values from iterable.
+ * Creates a new generator that filters all falsy and empty values from iterable (SPEC-R40).
+ * Shares `isCompactEmpty` with `compact`; does not change `isEmpty`.
  * @param arr The array to compact
  * @returns A new array with the filtered values.
  * @example
@@ -192,7 +194,7 @@ export function first<T>(iterable: Iterable<T>): T | undefined {
 ```
  */
 export function icompact<T>(iterable: Iterable<T>): IteratorObject<T> {
-  return Iterator.from(iterable).filter((value) => !isEmpty(value))
+  return Iterator.from(iterable).filter((value) => !isCompactEmpty(value))
 }
 
 /**

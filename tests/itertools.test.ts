@@ -160,6 +160,28 @@ describe('itertools', () => {
     assert.deepEqual([...it], [true])
   })
 
+  it('SPEC-R40 icompact keeps functions, Decimal, IntlDate, private-field instances', async () => {
+    const { decimal } = await import('../src/decimal/index.js')
+    const { IntlDate } = await import('../src/i18n/date/index.js')
+    function fn() {
+      return 1
+    }
+    class Priv {
+      #secret = 1
+      value() {
+        return this.#secret
+      }
+    }
+    assert.deepEqual([...icompact([fn])], [fn])
+    assert.equal([...icompact([decimal(0)])].length, 1)
+    assert.equal([...icompact([new IntlDate()])].length, 1)
+    assert.equal([...icompact([new Priv()])].length, 1)
+    assert.deepEqual(
+      [...icompact([false, 0, -0, 0n, '', null, undefined, NaN, [], {}, new Map(), new Set()])],
+      []
+    )
+  })
+
   it('ifilter', () => {
     const users = [
       { user: 'barney', age: 36, active: true },

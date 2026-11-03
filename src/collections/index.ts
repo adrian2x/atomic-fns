@@ -4,7 +4,8 @@
  * @module collections
  */
 
-import { get, isEmpty, isIterable, isObject, keys, ValueError } from '../globals/index.js'
+import { get, isIterable, isObject, keys, ValueError } from '../globals/index.js'
+import { isCompactEmpty } from '../internal/compactEmpty.js'
 import { arrayFromIterable } from '../internal/iterable.js'
 import { assertNestingDepth, withNesting } from '../internal/nesting.js'
 import { enumerate } from '../itertools/index.js'
@@ -33,27 +34,8 @@ function toIteratee<T>(fn: Iteratee<T> | object | PropertyKey): Iteratee<T> {
 }
 
 /**
- * True when `compact` should drop `x` (SPEC-R40).
- * Plain objects / arrays / strings / Maps / Sets use emptiness; other objects are kept
- * unless they expose `size` or `length` equal to 0. `isEmpty` itself keeps Lodash meaning.
- */
-function isCompactEmpty(x: unknown): boolean {
-  if (x == null || x === false || x === '' || Number.isNaN(x)) return true
-  if (x === 0 || Object.is(x, -0) || x === 0n) return true
-  if (typeof x === 'string' || Array.isArray(x)) return x.length === 0
-  if (x instanceof Map || x instanceof Set) return x.size === 0
-  if (isPlainObject(x)) return Object.keys(x).length === 0
-  if (typeof x === 'object') {
-    const v = x as { length?: unknown; size?: unknown }
-    if (typeof v.length === 'number') return v.length === 0
-    if (typeof v.size === 'number') return v.size === 0
-    return false
-  }
-  return isEmpty(x)
-}
-
-/**
- * Creates a new array with all falsy and empty values removed.
+ * Creates a new array with all falsy and empty values removed (SPEC-R40).
+ * Shares `isCompactEmpty` with `icompact`; does not change `isEmpty`.
  * @param arr The array to compact
  * @example
 ```js

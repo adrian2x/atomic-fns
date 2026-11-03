@@ -581,6 +581,36 @@ describe('collections', () => {
     expect(compact([{}, []])).toEqual([])
   })
 
+  it('SPEC-R40 compact keeps functions, Decimal, IntlDate, private-field instances', async () => {
+    const { decimal } = await import('../src/decimal/index.js')
+    const { IntlDate } = await import('../src/i18n/date/index.js')
+    function authMiddleware() {
+      return 'auth'
+    }
+    class Priv {
+      #secret = 1
+      value() {
+        return this.#secret
+      }
+    }
+    expect(compact([authMiddleware, false])).toEqual([authMiddleware])
+    expect(compact([decimal(0)])).toHaveLength(1)
+    expect(compact([new IntlDate()])).toHaveLength(1)
+    expect(compact([new Priv()])).toHaveLength(1)
+    expect(
+      compact([false, 0, -0, 0n, '', null, undefined, NaN, [], {}, new Map(), new Set()])
+    ).toEqual([])
+    expect(compact([new Map([[1, 2]]), new Set([1]), { a: 1 }, [1], 'x', 1n, true])).toEqual([
+      new Map([[1, 2]]),
+      new Set([1]),
+      { a: 1 },
+      [1],
+      'x',
+      1n,
+      true
+    ])
+  })
+
   it('compact and flattenObj resist __proto__ assignment', () => {
     const c = compact(JSON.parse('{"name":"u","__proto__":{"isAdmin":true}}') as object) as Record<
       string,
