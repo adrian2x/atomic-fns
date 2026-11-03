@@ -77,7 +77,7 @@ export class SortedMap<K, V> extends LegacyMapping<K, V> {
    * @returns {boolean} `true` if key was removed, otherwise `false`.
    */
   delete(item: K): boolean {
-    return this.store.remove(item) !== undefined
+    return this.store.delete(item)
   }
 
   /**
@@ -100,7 +100,7 @@ export class SortedMap<K, V> extends LegacyMapping<K, V> {
    * @returns {boolean} `true` if is empty.
    */
   empty(): boolean {
-    return this.store.empty()
+    return this.store.size === 0
   }
 
   /**
@@ -109,7 +109,7 @@ export class SortedMap<K, V> extends LegacyMapping<K, V> {
    * @returns {boolean} `true` if key is found, otherwise `false`.
    */
   contains(key: K): boolean {
-    return this.store.contains(key)
+    return this.store.has(key)
   }
 
   /**
@@ -118,7 +118,7 @@ export class SortedMap<K, V> extends LegacyMapping<K, V> {
    * @returns {boolean} `true` if key is found, otherwise `false`.
    */
   has(key: K): boolean {
-    return this.store.contains(key)
+    return this.store.has(key)
   }
 
   /**

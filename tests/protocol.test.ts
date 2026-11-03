@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FrozenSet } from '../src/collections/frozenset.js'
 import { Heap } from '../src/collections/Heap.js'
 import { LRUCache } from '../src/collections/LRUCache.js'
+import { SplayTree } from '../src/collections/SplayTree.js'
 import { Trie } from '../src/collections/Trie.js'
 
 const oldNames = [
@@ -53,6 +54,11 @@ const migrated: Migrated[] = [
     create: () => new Trie(['ab', 'ac']),
     sample: 'ab',
     skipOld: ['add']
+  },
+  {
+    name: 'SplayTree',
+    create: () => new SplayTree<number, string>().set(1, 'a').set(2, 'b'),
+    sample: 1
   }
 ]
 

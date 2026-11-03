@@ -8,7 +8,7 @@ import { SplayTree } from './SplayTree.js'
  * @template K, V
  */
 export class SortedSet<T> extends LegacyCollection {
-  private readonly store: SplayTree<T>
+  private readonly store: SplayTree<T, true>
   /**
    * Creates a new `SortedSet` object.
    * @param {Iterable<T>} [iterable] Initialize the set with entries.
@@ -19,7 +19,7 @@ export class SortedSet<T> extends LegacyCollection {
     this.store = new SplayTree(compareFn)
     if (iterable) {
       for (const key of iterable) {
-        this.store.add(key)
+        this.store.set(key, true)
       }
     }
   }
@@ -30,7 +30,7 @@ export class SortedSet<T> extends LegacyCollection {
    * @returns {this} Returns the Set object.
    */
   add(value: T): this {
-    this.store.add(value)
+    this.store.set(value, true)
     return this
   }
 
@@ -56,7 +56,7 @@ export class SortedSet<T> extends LegacyCollection {
    * @returns {boolean} `true` if the value was found and removed.
    */
   delete(value: T): boolean {
-    return this.store.remove(value) !== undefined
+    return this.store.delete(value)
   }
 
   /**
@@ -79,7 +79,7 @@ export class SortedSet<T> extends LegacyCollection {
    * @returns {boolean} `true` if is empty.
    */
   empty(): boolean {
-    return this.store.empty()
+    return this.store.size === 0
   }
 
   /**
@@ -88,7 +88,7 @@ export class SortedSet<T> extends LegacyCollection {
    * @returns {boolean} `true` if value is found, otherwise `false`.
    */
   contains(value: T): boolean {
-    return this.store.contains(value)
+    return this.store.has(value)
   }
 
   /**
@@ -97,7 +97,7 @@ export class SortedSet<T> extends LegacyCollection {
    * @returns {boolean} `true` if value is found, otherwise `false`.
    */
   has(value: T): boolean {
-    return this.store.contains(value)
+    return this.store.has(value)
   }
 
   /**
