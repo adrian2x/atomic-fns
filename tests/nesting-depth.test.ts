@@ -208,8 +208,9 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
     expect(getNestingDepth()).toBe(0)
   })
 
-  it('headroom: depth 1000 succeeds inside 3000 caller frames', () => {
-    const deep = nestArray(1000)
+  it('headroom: depth 1000 succeeds inside environment-relative caller frames', () => {
+    // Measure how deep the same rec helper can go here (coverage frames are larger).
+    // Use 30% of that as caller headroom; the capped walk must fit in the remaining 70%.
     function rec(n: number, fn: () => void): void {
       if (n === 0) {
         fn()
@@ -217,35 +218,75 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
       }
       rec(n - 1, fn)
     }
-    expect(() => {
-      rec(3000, () => {
-        expect(deepEqual(deep, nestArray(1000))).toBe(true)
-      })
-    }).not.toThrow()
-    expect(() => {
-      rec(3000, () => {
-        expect(clone(deep, true)).toEqual(deep)
-      })
-    }).not.toThrow()
-    expect(() => {
-      rec(3000, () => {
-        expect(merge({}, nestObject(1000) as object)).toEqual(nestObject(1000))
-      })
-    }).not.toThrow()
-    expect(() => {
-      rec(3000, () => {
-        expect(matches(nestObject(1000))(nestObject(1000))).toBe(true)
-      })
-    }).not.toThrow()
-    expect(() => {
-      rec(3000, () => {
-        expect(flatten(deep as unknown[], true)).toEqual([])
-      })
-    }).not.toThrow()
-    expect(() => {
-      rec(3000, () => {
-        expect(omit({ a: { b: 1 } }, ['a.b'])).toEqual({ a: {} })
-      })
-    }).not.toThrow()
+    // Recurse until RangeError, record n, unwind. Exponential grow then binary search
+    // so the measurement uses the same rec frame shape as the walks below.
+    let measured = 0
+    {
+      let n = 1
+      for (;;) {
+        try {
+          rec(n, () => undefined)
+          measured = n
+          n *= 2
+        } catch (e) {
+          if (!(e instanceof RangeError)) throw e
+          let lo = measured
+          let hi = n
+          while (hi - lo > 1) {
+            const mid = (lo + hi) >> 1
+            try {
+              rec(mid, () => undefined)
+              lo = mid
+            } catch (e2) {
+              if (!(e2 instanceof RangeError)) throw e2
+              hi = mid
+            }
+          }
+          measured = lo
+          break
+        }
+      }
+    }
+    const callerFrames = Math.floor(measured * 0.3)
+    expect(callerFrames).toBeGreaterThan(0)
+
+    const deep = nestArray(1000)
+    const obj1000 = nestObject(1000)
+
+    let deepEqualOk = false
+    rec(callerFrames, () => {
+      deepEqualOk = deepEqual(deep, nestArray(1000))
+    })
+    expect(deepEqualOk).toBe(true)
+
+    let cloned: unknown
+    rec(callerFrames, () => {
+      cloned = clone(deep, true)
+    })
+    expect(cloned).toEqual(deep)
+
+    let merged: unknown
+    rec(callerFrames, () => {
+      merged = merge({}, obj1000 as object)
+    })
+    expect(merged).toEqual(obj1000)
+
+    let matchesOk = false
+    rec(callerFrames, () => {
+      matchesOk = matches(obj1000)(obj1000)
+    })
+    expect(matchesOk).toBe(true)
+
+    let flattened: unknown
+    rec(callerFrames, () => {
+      flattened = flatten(deep as unknown[], true)
+    })
+    expect(flattened).toEqual([])
+
+    let omitted: unknown
+    rec(callerFrames, () => {
+      omitted = omit({ a: { b: 1 } }, ['a.b'])
+    })
+    expect(omitted).toEqual({ a: {} })
   })
 })
