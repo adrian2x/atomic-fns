@@ -512,7 +512,9 @@ export function forEachRight<T>(
 /**
  * Flattens an array or object. Arrays will be flattened recursively up to `depth` times. Objects will be flattened recursively.
  * Structural nesting deeper than 1000 levels throws `RangeError`. Re-expanding shared sources beyond
- * 500000 copied nodes throws `RangeError('input repeats shared objects beyond 500000 copied nodes')`.
+ * 250000 work units throws
+ * `RangeError('input repeats shared objects beyond 250000 output keys')` (flatten's own cap;
+ * merge keeps 500000).
  * @example
 ```js
 flatten([1, [2, [3, [4]], 5]])

@@ -4,6 +4,7 @@ import { Duration, durationField } from '../src/i18n/duration.js'
 import { canonicalKey } from '../src/internal/canonicalKey.js'
 import {
   getSharedWorkCharged,
+  MAX_FLATTEN_SHARED_WORK,
   MAX_SHARED_WORK,
   subtreeContainerCount
 } from '../src/internal/nesting.js'
@@ -38,9 +39,15 @@ function nestIn(d: number, inner: object): object {
 }
 
 const SHARED_REVISIT = 'input repeats shared objects beyond 500000 copied nodes'
+const FLATTEN_REVISIT = 'input repeats shared objects beyond 250000 output keys'
 const BUDGET = 250
 
-function expectBudgetTrip(run: () => void, src: object): void {
+function expectBudgetTrip(
+  run: () => void,
+  src: object,
+  message = SHARED_REVISIT,
+  limit = MAX_SHARED_WORK
+): void {
   let err: unknown
   try {
     run()
@@ -48,21 +55,21 @@ function expectBudgetTrip(run: () => void, src: object): void {
     err = e
   }
   expect(err).toBeInstanceOf(RangeError)
-  expect((err as Error).message).toBe(SHARED_REVISIT)
+  expect((err as Error).message).toBe(message)
   const largest = subtreeContainerCount(src)
-  expect(getSharedWorkCharged()).toBeLessThanOrEqual(MAX_SHARED_WORK + largest)
+  expect(getSharedWorkCharged()).toBeLessThanOrEqual(limit + largest)
 }
 
 describe('shared-reference DAG budgets', () => {
   it('flatten depth-20 DAG throws the revisit error', () => {
     const src = dag(20)
-    expectBudgetTrip(() => flatten(src), src)
+    expectBudgetTrip(() => flatten(src), src, FLATTEN_REVISIT, MAX_FLATTEN_SHARED_WORK)
   })
 
   it('flatten of a nested-array depth-20 DAG throws the revisit error', () => {
     let x: unknown[] = [1]
     for (let i = 0; i < 20; i++) x = [x, x]
-    expectBudgetTrip(() => flatten(x, true), x)
+    expectBudgetTrip(() => flatten(x, true), x, FLATTEN_REVISIT, MAX_FLATTEN_SHARED_WORK)
   })
 
   it('flatten of 10001 shared row objects works', () => {
@@ -115,8 +122,15 @@ describe('shared-reference DAG budgets', () => {
     ] as const) {
       const src = fan(f, d)
       expectBudgetTrip(() => merge({}, src), src)
-      expectBudgetTrip(() => flatten(src), src)
+      expectBudgetTrip(() => flatten(src), src, FLATTEN_REVISIT, MAX_FLATTEN_SHARED_WORK)
     }
+  })
+
+  it('dos-31: flattenFan4d12 throws within expectFast 100 ms', { timeout: 2000 }, () => {
+    const src = fan(4, 12)
+    expectFast(() => {
+      expect(() => flatten(src)).toThrow(FLATTEN_REVISIT)
+    }, 100)
   })
 
   it('matches depth-40 DAG shape and value within budget', () => {
@@ -183,7 +197,7 @@ describe('shared-reference DAG budgets', () => {
   })
 
   it('a failed flatten does not leak revisit state into the next call', () => {
-    expect(() => flatten(dag(20))).toThrow(SHARED_REVISIT)
+    expect(() => flatten(dag(20))).toThrow(FLATTEN_REVISIT)
     const shared = {}
     expect(merge({}, { a: shared, b: shared })).toEqual({ a: {}, b: {} })
     const out = merge({}, { a: shared, b: shared }) as { a: object; b: object }

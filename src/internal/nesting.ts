@@ -2,11 +2,17 @@
 export const MAX_NESTING_DEPTH = 1000
 
 /**
- * Max shared-object work units per top-level merge or flatten call.
+ * Max shared-object work units per top-level merge call.
  * Each re-expansion of an already-expanded container charges that container's subtree
  * size (plain-object / array count, cached per source node for the call). First visits are free.
  */
 export const MAX_SHARED_WORK = 500_000
+
+/**
+ * Max shared-object work units per top-level flatten call (lower than merge: each re-expanded
+ * leaf emits an output key string).
+ */
+export const MAX_FLATTEN_SHARED_WORK = 250_000
 
 /**
  * Levels charged per nested collection hop (dispatch + hook body together).
@@ -31,6 +37,7 @@ export function setHookNestingCost(cost: number): void {
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
 const SHARED_REVISIT_ERROR = 'input repeats shared objects beyond 500000 copied nodes'
+const FLATTEN_SHARED_REVISIT_ERROR = 'input repeats shared objects beyond 250000 output keys'
 
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
 let currentDepth = 0
@@ -38,6 +45,8 @@ let currentDepth = 0
 let sharedWork = 0
 let lastSharedWork = 0
 let revisitGuardDepth = 0
+let sharedWorkLimit = MAX_SHARED_WORK
+let sharedWorkError = SHARED_REVISIT_ERROR
 let expanded = new WeakSet<object>()
 let subtreeCache = new WeakMap<object, number>()
 
@@ -152,9 +161,11 @@ function computeSubtreeCount(obj: object, stack: Set<object>): number {
   return n
 }
 
-function withRevisitGuard<T>(fn: () => T): T {
+function withRevisitGuard<T>(fn: () => T, limit: number, error: string): T {
   if (revisitGuardDepth === 0) {
     sharedWork = 0
+    sharedWorkLimit = limit
+    sharedWorkError = error
     expanded = new WeakSet<object>()
     subtreeCache = new WeakMap<object, number>()
   }
@@ -165,6 +176,8 @@ function withRevisitGuard<T>(fn: () => T): T {
     revisitGuardDepth--
     if (revisitGuardDepth === 0) {
       sharedWork = 0
+      sharedWorkLimit = MAX_SHARED_WORK
+      sharedWorkError = SHARED_REVISIT_ERROR
       expanded = new WeakSet<object>()
       subtreeCache = new WeakMap<object, number>()
     }
@@ -176,15 +189,15 @@ function withRevisitGuard<T>(fn: () => T): T {
  * {@link MAX_SHARED_WORK}. Re-entrant calls share the outer set and budget.
  */
 export function guardSharedRevisits<T>(fn: () => T): T {
-  return withRevisitGuard(fn)
+  return withRevisitGuard(fn, MAX_SHARED_WORK, SHARED_REVISIT_ERROR)
 }
 
 /**
  * Run `fn` under a fresh expanded-container set and a shared-work budget of
- * {@link MAX_SHARED_WORK}.
+ * {@link MAX_FLATTEN_SHARED_WORK}.
  */
 export function guardFlattenSharedRevisits<T>(fn: () => T): T {
-  return withRevisitGuard(fn)
+  return withRevisitGuard(fn, MAX_FLATTEN_SHARED_WORK, FLATTEN_SHARED_REVISIT_ERROR)
 }
 
 /**
@@ -199,7 +212,8 @@ export function getSharedWorkCharged(): number {
 /**
  * Record that container `obj` is being expanded under the active revisit guard
  * (no-op outside a guard). The first expansion is free. Each later expansion charges the
- * subtree container count of `obj` against {@link MAX_SHARED_WORK}, unless `prepaid` is set
+ * subtree container count of `obj` against the active guard's budget
+ * ({@link MAX_SHARED_WORK} or {@link MAX_FLATTEN_SHARED_WORK}), unless `prepaid` is set
  * because an ancestor already paid for this subtree on the current walk.
  *
  * @returns `true` when this call charged a subtree (descendants on this walk are prepaid).
@@ -214,8 +228,8 @@ export function noteExpanded(obj: object, prepaid = false): boolean {
   const cost = subtreeContainerCount(obj)
   sharedWork += cost
   lastSharedWork = sharedWork
-  if (sharedWork > MAX_SHARED_WORK) {
-    throw new RangeError(SHARED_REVISIT_ERROR)
+  if (sharedWork > sharedWorkLimit) {
+    throw new RangeError(sharedWorkError)
   }
   return true
 }
