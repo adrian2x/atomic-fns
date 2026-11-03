@@ -28,16 +28,32 @@ import {
   zip
 } from '../src/itertools/index.js'
 import { max } from '../src/math/index.js'
+import { decimal } from '../src/decimal/index.js'
+import { ValueError } from '../src/globals/index.js'
 
 const Falsy = (x) => !x
+
+function* infiniteCounter() {
+  let i = 0
+  while (true) yield i++
+}
 
 describe('itertools', () => {
   it('accumulate', () => {
     assert.deepEqual([...accumulate([1, 2, 3, 4])], [1, 3, 6, 10])
     assert.deepEqual(
-      [...accumulate([3, 4, 6, 2, 1, 9, 0, 7, 5, 8], (x, y) => max([x, y]))],
+      [...accumulate([3, 4, 6, 2, 1, 9, 0, 7, 5, 8], (x, y) => max([x as number, y as number]))],
       [3, 4, 6, 6, 6, 9, 9, 9, 9, 9]
     )
+  })
+
+  it('SPEC-R46 accumulate with initial yields seed then folds', () => {
+    assert.deepEqual(
+      [...accumulate([1, 2, 3], (a, b) => (a as number) + (b as number), 10)],
+      [10, 11, 13, 16]
+    )
+    assert.deepEqual([...accumulate([], (a, b) => (a as number) + (b as number), 10)], [10])
+    assert.deepEqual([...accumulate([])], [])
   })
 
   it('all', () => {
@@ -62,9 +78,23 @@ describe('itertools', () => {
     assert(!contains([4, 7, 1, 9], NaN))
   })
 
+  it('SPEC-R49 contains uses eq for arrays and object values, substring for strings', () => {
+    assert.equal(contains({ a: 1, b: 2 }, 1), true)
+    assert.equal(contains('abcd', 'bc'), true)
+    assert.equal(contains([decimal(1)], 1), true)
+    assert.equal(contains(null, 1), false)
+  })
+
   it('dropWhile', () => {
     const it = dropWhile([false, 0, '', true, '', []], Falsy)
     assert.deepEqual([...it], [true, '', []])
+  })
+
+  it('SPEC-R45 dropWhile terminates when source ends before predicate fails', () => {
+    const start = performance.now()
+    assert.deepEqual([...dropWhile([1, 2], () => true)], [])
+    assert.ok(performance.now() - start < 100)
+    assert.deepEqual([...dropWhile([{ a: 1 }], (o) => (o as { a: number }).a)], [])
   })
 
   it('enumerate', () => {
@@ -81,15 +111,19 @@ describe('itertools', () => {
     assert(first(['foo', 'bar']) === 'foo')
     assert(first([0, 1]) === 0)
     assert(first([1, 1]) === 1)
+    assert(first([]) === undefined)
   })
 
   it('flatMap', () => {
     assert.deepEqual(
       [
-        ...flatMap([
-          [1, 2],
-          [3, 4]
-        ])
+        ...flatMap(
+          [
+            [1, 2],
+            [3, 4]
+          ],
+          (x) => x
+        )
       ],
       [1, 2, 3, 4]
     )
@@ -105,6 +139,10 @@ describe('itertools', () => {
       ],
       [2, 4, 6, 8]
     )
+  })
+
+  it('SPEC-R52 flatMap string result throws TypeError', () => {
+    assert.throws(() => [...flatMap([1], () => 'ab' as unknown as Iterable<string>)], TypeError)
   })
 
   it('icompact', () => {
@@ -134,6 +172,10 @@ describe('itertools', () => {
     assert.deepEqual([...it], [1, 2, 4, 8])
   })
 
+  it('SPEC-R52 imap with parseInt passes only the value', () => {
+    assert.deepEqual([...imap(['10', '10'], parseInt)], [10, 10])
+  })
+
   it('islice', () => {
     assert.deepEqual([...islice([1, 2, 3], 1)], [2, 3])
     assert.deepEqual([...islice([1, 2, 3, 4], 2)], [3, 4])
@@ -142,9 +184,30 @@ describe('itertools', () => {
     assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 4, 2)], [1, 3])
   })
 
+  it('SPEC-R47 islice table and early stop', () => {
+    assert.deepEqual([...islice(range(10), 1, 4, 2)], [1, 3])
+    assert.deepEqual([...islice(range(10), 0, 5, 3)], [0, 3])
+    assert.deepEqual([...islice(range(10), 0, 0)], [])
+    assert.deepEqual([...islice(infiniteCounter(), 0, 3)], [0, 1, 2])
+  })
+
+  it('SPEC-R47 islice rejects negative bounds and non-positive step', () => {
+    assert.throws(() => [...islice([1], -1)], ValueError)
+    assert.throws(() => [...islice([1], 0, -1)], ValueError)
+    assert.throws(() => [...islice([1], 0, 1, 0)], ValueError)
+    assert.throws(() => [...islice([1], 0, 1, -1)], ValueError)
+    assert.throws(() => [...islice([1], 2, 1)], ValueError)
+  })
+
   it('itake', () => {
     const it = itake(3, [false, 0, '', true, '', []])
     assert.deepEqual([...it], [false, 0, ''])
+  })
+
+  it('SPEC-R52 itake and take RangeError on negative or NaN', () => {
+    assert.throws(() => [...itake(-1, [1])], RangeError)
+    assert.throws(() => [...itake(NaN, [1])], RangeError)
+    assert.throws(() => take(-1, [1]), RangeError)
   })
 
   it('take', () => {
@@ -161,14 +224,32 @@ describe('itertools', () => {
   it('range', () => {
     assert.deepEqual([...range(0)], [])
     assert.deepEqual([...range(4)], [0, 1, 2, 3])
-    assert.deepEqual([...range(-4)], [0, -1, -2, -3])
     assert.deepEqual([...range(0, -4, -1)], [0, -1, -2, -3])
     assert.deepEqual([...range(1, 5)], [1, 2, 3, 4])
     assert.deepEqual([...range(0, 20, 5)], [0, 5, 10, 15])
   })
 
+  it('SPEC-R51 range table, step 0 and NaN', () => {
+    assert.deepEqual([...range(-3)], [])
+    assert.equal([...range(0, 1, 0.1)].length, 10)
+    assert.deepEqual([...range(5, 0, -1)], [5, 4, 3, 2, 1])
+    assert.throws(() => [...range(0, 5, 0)], RangeError)
+    assert.throws(() => [...range(NaN)], /range bounds must be numbers/)
+    assert.throws(() => [...range(0, NaN)], /range bounds must be numbers/)
+    const lazy = range(0, Infinity)
+    assert.deepEqual([...itake(3, lazy)], [0, 1, 2])
+  })
+
   it('reduce', () => {
     assert(reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0) === 15)
+  })
+
+  it('SPEC-R52 reduce empty TypeError and index base without initial', () => {
+    assert.throws(() => reduce([], (a, b) => (a as number) + (b as number)), TypeError)
+    assert.equal(
+      reduce([1, 2, 3], (acc, _v, i) => (acc as number) + i),
+      4
+    )
   })
 
   it('reversed', () => {
@@ -190,8 +271,7 @@ describe('itertools', () => {
 
   it('sorted', () => {
     const arr = [3, 2, 1]
-    assert.deepEqual(sorted(arr), arr.sort())
-    // sorted in reverse
+    assert.deepEqual(sorted(arr), [1, 2, 3])
     assert.deepEqual(sorted([3, 1, 2], true), [3, 2, 1])
   })
 
@@ -200,7 +280,6 @@ describe('itertools', () => {
       { user: 'fred', age: 40 },
       { user: 'barney', age: 36 }
     ]
-    // compare by age key
     assert.deepEqual(
       sorted(users, (u) => u.age),
       [
@@ -208,7 +287,6 @@ describe('itertools', () => {
         { user: 'fred', age: 40 }
       ]
     )
-    // using key and reverse
     assert.deepEqual(
       sorted(users, (u) => u.age, true),
       [
@@ -229,6 +307,36 @@ describe('itertools', () => {
         { user: 'barney', age: 36 },
         { user: 'fred', age: 40 }
       ]
+    )
+  })
+
+  it('SPEC-R48 sorted overloads, stability and numeric comparator', () => {
+    assert.deepEqual(sorted([3, 1, 2], false), [1, 2, 3])
+    assert.deepEqual(
+      sorted([3, 1, 2], true, (a, b) => a - b),
+      [3, 2, 1]
+    )
+    assert.deepEqual(sorted([3, 1, 2], { reverse: false }), [1, 2, 3])
+    assert.deepEqual(sorted([3, 1, 2], { reverse: true, compare: (a, b) => a - b }), [3, 2, 1])
+
+    const items = [
+      { k: 1, id: 'a' },
+      { k: 1, id: 'b' },
+      { k: 0, id: 'c' }
+    ]
+    assert.deepEqual(
+      sorted(items, true, (a, b) => a.k - b.k).map((x) => x.id),
+      ['a', 'b', 'c']
+    )
+  })
+
+  it('SPEC-R48 sorted key fn that throws propagates', () => {
+    assert.throws(
+      () =>
+        sorted([1, 2], () => {
+          throw new Error('boom')
+        }),
+      /boom/
     )
   })
 
@@ -263,5 +371,49 @@ describe('itertools', () => {
     const [second1, second2] = results[1]
     assert(second1 === users1[1])
     assert(second2 === users2[1])
+  })
+
+  it('SPEC-R50 zip with no arguments yields nothing', () => {
+    assert.deepEqual([...zip()], [])
+  })
+
+  it('SPEC-R50 zip stops at the shortest finite input', () => {
+    assert.deepEqual(
+      [...zip(infiniteCounter(), [10, 20])],
+      [
+        [0, 10],
+        [1, 20]
+      ]
+    )
+  })
+
+  it('SPEC-R53 every lazy API returns an Iterator', () => {
+    const samples = [
+      accumulate([1, 2]),
+      chain([1], [2]),
+      dropWhile([1, 2], () => false),
+      enumerate([1]),
+      icompact([1]),
+      ifilter([1, 2], (x) => x > 0),
+      imap([1], (x) => x),
+      iflatten([[1]]),
+      flatMap([[1]], (x) => x),
+      islice([1, 2, 3], 0, 2),
+      itake(1, [1, 2]),
+      range(3),
+      takeWhile([1], () => true),
+      times(1, (i) => i),
+      zip([1], [2])
+    ]
+    for (const result of samples) {
+      assert.equal(result instanceof Iterator, true)
+      assert.equal(typeof result.map, 'function')
+    }
+  })
+  it('SPEC-R48 (a,b)=>a-b comparators type-check under npm run typecheck', () => {
+    const byOptions: number[] = sorted([3, 1, 2], { compare: (a, b) => a - b })
+    const byPositional: number[] = sorted([3, 1, 2], true, (a, b) => a - b)
+    assert.deepEqual(byOptions, [1, 2, 3])
+    assert.deepEqual(byPositional, [3, 2, 1])
   })
 })
