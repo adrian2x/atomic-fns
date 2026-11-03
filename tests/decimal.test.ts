@@ -263,3 +263,61 @@ describe('Decimal clone and abs', () => {
     expect(a.negated().toString()).toBe('1.5')
   })
 })
+
+describe('F-055 linear-time parse and normalize', () => {
+  it('parses a long digit run under 250ms', { timeout: 2000 }, () => {
+    const start = performance.now()
+    expect(decimal('1' + '0'.repeat(200000)).toString()).toBe('1' + '0'.repeat(200000))
+    expect(performance.now() - start).toBeLessThan(250)
+  })
+
+  it('adds 1e1000000 under 250ms', { timeout: 2000 }, () => {
+    const start = performance.now()
+    expect(decimal(0).add('1e1000000').eq('1e1000000')).toBe(true)
+    expect(performance.now() - start).toBeLessThan(250)
+  })
+
+  it('divides 1e1000000 under 250ms', { timeout: 2000 }, () => {
+    const start = performance.now()
+    expect(decimal('1e1000000').div(100).eq('1e999998')).toBe(true)
+    expect(performance.now() - start).toBeLessThan(250)
+  })
+
+  it('rejects a long invalid digit run under 250ms', { timeout: 2000 }, () => {
+    const bad = '1'.repeat(40000) + 'x'
+    const start = performance.now()
+    expect(() => decimal(bad)).toThrow(ValueError)
+    expect(performance.now() - start).toBeLessThan(250)
+  })
+
+  it('sqrt of 1e80000 under 250ms', { timeout: 2000 }, () => {
+    const start = performance.now()
+    expect(decimal('1e80000').sqrt().toString().length).toBeGreaterThan(0)
+    expect(performance.now() - start).toBeLessThan(250)
+  })
+})
+
+describe('Decimal ValueError truncation and immutable defaultPrecision', () => {
+  it('truncates long invalid inputs in ValueError messages', () => {
+    const bad = '1'.repeat(40) + 'x'
+    expect(() => decimal(bad)).toThrow(ValueError)
+    try {
+      decimal(bad)
+    } catch (e) {
+      const msg = (e as Error).message
+      expect(msg).toMatch(/^invalid Decimal string: 1{32}\.\.\.$/)
+      expect(msg).not.toContain(bad)
+      expect(msg.includes(bad.slice(0, 33))).toBe(false)
+    }
+  })
+
+  it('defaultPrecision is immutable and stays 20', () => {
+    expect(Decimal.defaultPrecision).toBe(20)
+    expect(() => {
+      // @ts-expect-error assignment must fail at runtime
+      Decimal.defaultPrecision = 5
+    }).toThrow()
+    expect(Decimal.defaultPrecision).toBe(20)
+    expect(decimal(1).div(3).toString()).toBe('0.33333333333333333333')
+  })
+})

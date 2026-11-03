@@ -19,7 +19,9 @@ export interface DivOptions {
 /** Values accepted by the {@link Decimal} constructor and arithmetic methods. */
 export type DecimalInput = Decimal | number | bigint | string
 
-const PARSE = /^\s*([+-]?)(\d+\.?\d*|\.\d+)(?:e([+-]?\d+))?\s*$/i
+/** Unambiguous decimal grammar (SPEC-R65 language; no overlapping optional digit runs). */
+const PARSE_LEADING_DIGITS = /^\s*([+-]?)(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?\s*$/i
+const PARSE_LEADING_DOT = /^\s*([+-]?)\.(\d+)(?:e([+-]?\d+))?\s*$/i
 
 /**
  * Casts the given value as a {@link Decimal}.
@@ -29,17 +31,17 @@ export function decimal(x: DecimalInput): Decimal {
   return x instanceof Decimal ? x : new Decimal(x)
 }
 
-function normalizeIE(i: bigint, e: number): { i: bigint; e: number } {
-  if (i === 0n) return { i: 0n, e: 0 }
-  while (i % 10n === 0n) {
-    i /= 10n
-    e++
-  }
-  return { i, e }
-}
-
 function pow10(k: number): bigint {
   return 10n ** BigInt(k)
+}
+
+function normalizeIE(i: bigint, e: number): { i: bigint; e: number } {
+  if (i === 0n) return { i: 0n, e: 0 }
+  const s = i.toString()
+  let zeros = 0
+  for (let k = s.length - 1; k >= 0 && s[k] === '0'; k--) zeros++
+  if (zeros === 0) return { i, e }
+  return { i: i / pow10(zeros), e: e + zeros }
 }
 
 function absBig(n: bigint): bigint {
@@ -133,8 +135,14 @@ function toDecimalInput(o: unknown): DecimalInput {
  * Protocol symbol methods are installed on the prototype below.
  */
 export class Decimal {
-  /** Default fractional digit count for {@link Decimal.div} and {@link Decimal.sqrt}. */
-  static readonly defaultPrecision = 20
+  /**
+   * Default fractional digit count for {@link Decimal.div} and {@link Decimal.sqrt}.
+   * Getter-only so assignment throws at runtime (a `readonly` field is TypeScript-only).
+   */
+  // eslint-disable-next-line @typescript-eslint/class-literal-property-style -- runtime immutability
+  static get defaultPrecision(): 20 {
+    return 20
+  }
 
   /** Maximum absolute stored exponent; larger values throw {@link ValueError}. */
   static readonly MAX_EXPONENT = 1_000_000
@@ -171,30 +179,41 @@ export class Decimal {
     throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
   }
 
+  static #truncateForError(value: string): string {
+    return value.length > 32 ? `${value.slice(0, 32)}...` : value
+  }
+
+  static #parseExponent(expRaw: string | undefined): number {
+    if (expRaw === undefined) return 0
+    const n = Number(expRaw)
+    if (!Number.isFinite(n) || !Number.isSafeInteger(n)) {
+      throw new ValueError('exponent out of range')
+    }
+    if (Math.abs(n) > Decimal.MAX_EXPONENT) {
+      throw new ValueError('exponent out of range')
+    }
+    return n
+  }
+
   static #parseString(value: string): { i: bigint; e: number } {
-    const m = PARSE.exec(value)
-    if (!m) {
-      throw new ValueError(`invalid Decimal string: ${value}`)
+    const leading: (string | undefined)[] | null = PARSE_LEADING_DIGITS.exec(value)
+    if (leading) {
+      const sign = leading[1] === '-' ? '-' : ''
+      const intDigits = leading[2] ?? '0'
+      const frac = leading[3] ?? ''
+      const exp = Decimal.#parseExponent(leading[4])
+      const i = BigInt(sign + intDigits + frac)
+      return Decimal.#checked(normalizeIE(i, -frac.length + exp))
     }
-    const sign = m[1] === '-' ? '-' : ''
-    const digits = m[2]
-    const expRaw = m[3] as string | undefined
-    const dot = digits.indexOf('.')
-    const frac = dot === -1 ? '' : digits.slice(dot + 1)
-    const intDigits = digits.replace('.', '')
-    const i = BigInt(sign + (intDigits || '0'))
-    let exp = 0
-    if (expRaw !== undefined) {
-      const n = Number(expRaw)
-      if (!Number.isFinite(n) || !Number.isSafeInteger(n)) {
-        throw new ValueError('exponent out of range')
-      }
-      if (Math.abs(n) > Decimal.MAX_EXPONENT) {
-        throw new ValueError('exponent out of range')
-      }
-      exp = n
+    const dotted: (string | undefined)[] | null = PARSE_LEADING_DOT.exec(value)
+    if (dotted) {
+      const sign = dotted[1] === '-' ? '-' : ''
+      const frac = dotted[2] ?? ''
+      const exp = Decimal.#parseExponent(dotted[3])
+      const i = BigInt(sign + (frac || '0'))
+      return Decimal.#checked(normalizeIE(i, -frac.length + exp))
     }
-    return Decimal.#checked(normalizeIE(i, -frac.length + exp))
+    throw new ValueError(`invalid Decimal string: ${Decimal.#truncateForError(value)}`)
   }
 
   static #checked(ie: { i: bigint; e: number }): { i: bigint; e: number } {
