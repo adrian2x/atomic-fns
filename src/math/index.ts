@@ -6,7 +6,7 @@
 
 import { decimal } from '../decimal/index.js'
 import { assertNotHugeSparse } from '../internal/arrayKeys.js'
-import { arrayFromIterableMap } from '../internal/iterable.js'
+import { arrayFromIterableMap, forEachArrayElement, isTypedArray } from '../internal/iterable.js'
 import { gt, hasMethod, identity, lt, protocol } from '../operators/index.js'
 import type { Predicate } from '../types.js'
 
@@ -145,6 +145,13 @@ export function sum(args: number[]): number
 export function sum<T>(args: Iterable<T>, key?: Predicate<T, number>): number
 export function sum<T>(args: Iterable<T>, key: Predicate<T, number> = (x) => x as number): number {
   let initial = 0
+  if (isTypedArray<T>(args)) {
+    forEachArrayElement(args, (x) => {
+      initial += key(x)
+      return undefined
+    })
+    return initial
+  }
   for (const x of args) {
     initial += key(x)
   }

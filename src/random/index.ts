@@ -47,6 +47,7 @@ export function sample<T>(arr: readonly T[], k: number): T[] {
   if (k > arr.length) {
     throw new ValueError('sample size larger than population')
   }
+  if (Array.isArray(arr)) assertNotHugeSparse(arr as unknown[])
   return shuffle(arr.slice()).slice(0, k)
 }
 

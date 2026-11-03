@@ -6,7 +6,13 @@
 
 import { call, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
 import { isCompactEmpty } from '../internal/compactEmpty.js'
-import { arrayFromIterable } from '../internal/iterable.js'
+import {
+  arrayElements,
+  arrayFromIterable,
+  assertArrayNotHugeSparse,
+  forEachArrayElement,
+  isTypedArray
+} from '../internal/iterable.js'
 import { add, bool, compare, eq, identity, type Comparer } from '../operators/index.js'
 import type { Iteratee, Predicate } from '../types.js'
 
@@ -29,8 +35,9 @@ export function accumulate<T>(
   initial?: unknown
 ): IteratorObject<unknown> {
   const hasInitial = arguments.length >= 3
+  const source: Iterable<T> = Array.isArray(iterable) ? arrayElements(iterable) : iterable
   return (function* () {
-    const it = Iterator.from(iterable)
+    const it = Iterator.from(source)
     let total: unknown
     if (hasInitial) {
       total = initial
@@ -73,6 +80,17 @@ all([2, 4, 6], n => n > 1)
 @see {@link any}
  */
 export function all<T>(iterable: Iterable<T>, fn: Predicate<T> = bool): boolean {
+  if (isTypedArray<T>(iterable)) {
+    let ok = true
+    forEachArrayElement(iterable, (item) => {
+      if (!fn(item)) {
+        ok = false
+        return false
+      }
+      return undefined
+    })
+    return ok
+  }
   for (const item of iterable) {
     if (!fn(item)) return false
   }
@@ -98,6 +116,17 @@ any([1, 4, 5], n => n % 2 === 0)
 @see {@link all}
  */
 export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool): boolean {
+  if (isTypedArray<T>(iterable)) {
+    let hit = false
+    forEachArrayElement(iterable, (item) => {
+      if (fn(item)) {
+        hit = true
+        return false
+      }
+      return undefined
+    })
+    return hit
+  }
   for (const item of iterable) {
     if (fn(item)) return true
   }
@@ -105,6 +134,7 @@ export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool): boolean 
 }
 
 export function chain<T>(...iterables: Iterable<T>[]): IteratorObject<T> {
+  for (const it of iterables) assertArrayNotHugeSparse(it)
   return iflatten(iterables)
 }
 
@@ -174,6 +204,7 @@ export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
 ```
  */
 export function enumerate<T>(iterable: Iterable<T>, start = 0): IteratorObject<[number, T]> {
+  assertArrayNotHugeSparse(iterable)
   let index = start
   return Iterator.from(iterable).map((item) => [index++, item] as [number, T])
 }
@@ -184,6 +215,14 @@ export function enumerate<T>(iterable: Iterable<T>, start = 0): IteratorObject<[
  * @returns The first element found or undefined if iterable is empty.
  */
 export function first<T>(iterable: Iterable<T>): T | undefined {
+  if (isTypedArray<T>(iterable)) {
+    let found: { v: T } | undefined
+    forEachArrayElement(iterable, (v) => {
+      found = { v }
+      return false
+    })
+    return found === undefined ? undefined : found.v
+  }
   const it = Iterator.from(iterable)
   const result = it.next()
   if (result.done) return undefined
@@ -203,6 +242,13 @@ export function first<T>(iterable: Iterable<T>): T | undefined {
 ```
  */
 export function icompact<T>(iterable: Iterable<T>): IteratorObject<T> {
+  if (Array.isArray(iterable)) {
+    return (function* () {
+      for (const value of arrayElements(iterable)) {
+        if (!isCompactEmpty(value)) yield value
+      }
+    })()
+  }
   return Iterator.from(iterable).filter((value) => !isCompactEmpty(value))
 }
 
@@ -214,6 +260,7 @@ export function ifilter<T>(iterable: Iterable<T>, fn: (v: T) => unknown): Iterat
 }
 
 export function imap<T, R>(iterable: Iterable<T>, fn: (v: T) => R): IteratorObject<R> {
+  assertArrayNotHugeSparse(iterable)
   return Iterator.from(iterable).map((v) => fn(v))
 }
 
@@ -274,6 +321,7 @@ export function iter<T>(obj: unknown): Iterator<T> {
 }
 
 export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T, boolean>): [T[], T[]] {
+  assertArrayNotHugeSparse(iterable)
   const left = [] as T[]
   const right = [] as T[]
   for (const value of iterable) {
@@ -348,6 +396,25 @@ export function reduce(
   fn: (acc: unknown, v: unknown, i: number) => unknown,
   initial?: unknown
 ): unknown {
+  if (Array.isArray(iterable)) {
+    let hasAcc = arguments.length >= 3
+    let acc: unknown = initial
+    let i = 0
+    forEachArrayElement(iterable, (v) => {
+      if (!hasAcc) {
+        acc = v
+        hasAcc = true
+        i++
+        return
+      }
+      acc = fn(acc, v, i)
+      i++
+    })
+    if (!hasAcc) {
+      throw new TypeError('Reduce of empty iterable with no initial value')
+    }
+    return acc
+  }
   const it = Iterator.from(iterable)
   if (arguments.length >= 3) return it.reduce(fn, initial)
   return it.reduce(fn)
@@ -453,6 +520,7 @@ export function sort<T>(args: T[], reverse?: boolean | Comparer, compareFn?: Com
 }
 
 export function take<T>(n: number, iterable: Iterable<T>): T[] {
+  assertArrayNotHugeSparse(iterable)
   return itake(n, iterable).toArray()
 }
 
@@ -502,6 +570,7 @@ export function zip<T extends unknown[]>(
     const open = new Set<Iterator<unknown>>()
     try {
       for (const a of args as Iterable<unknown>[]) {
+        assertArrayNotHugeSparse(a)
         const iterator = Iterator.from(a)
         iterators.push(iterator)
         open.add(iterator)

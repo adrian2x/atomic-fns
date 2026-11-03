@@ -1,8 +1,13 @@
-import { assertNotHugeSparse } from './arrayKeys.js'
+import { assertNotHugeSparse, walkArray } from './arrayKeys.js'
 
 function isIterable(x: unknown): x is Iterable<unknown> {
   if (x == null) return false
   return typeof (x as Iterable<unknown>)[Symbol.iterator] === 'function'
+}
+
+/** Array.isArray as a typed guard (avoids `any[]` narrowing). */
+export function isTypedArray<T>(x: Iterable<T>): x is T[] {
+  return Array.isArray(x)
 }
 
 /** Materialize an iterable; throw before allocating when the value is not iterable. */
@@ -39,4 +44,49 @@ export function arrayFromIterableMap<U>(
     i++
   }
   return out
+}
+
+/**
+ * Visit array elements in own-element time: each own value, and each hole run once as
+ * `undefined` at the run's start index. Return `false` from `visit` to stop.
+ */
+export function forEachArrayElement<T>(
+  arr: T[],
+  visit: (value: T, index: number) => boolean | undefined
+): void {
+  walkArray(arr, (ev) => {
+    if (ev.kind === 'value') return visit(ev.value as T, ev.index)
+    return visit(undefined as T, ev.start)
+  })
+}
+
+/**
+ * Yield array elements in own-element time (hole runs as one `undefined` each).
+ * Materializes the event list first so huge sparse arrays finish in own-element time.
+ */
+export function* arrayElements<T>(arr: T[]): Generator<T, void, undefined> {
+  const out: T[] = []
+  forEachArrayElement(arr, (v) => {
+    out.push(v)
+    return undefined
+  })
+  yield* out
+}
+
+/** Build a Set from an iterable; arrays use {@link forEachArrayElement} hole semantics. */
+export function setFromIterable<T>(it: Iterable<T>): Set<T> {
+  if (isTypedArray(it)) {
+    const s = new Set<T>()
+    forEachArrayElement(it, (v) => {
+      s.add(v)
+      return undefined
+    })
+    return s
+  }
+  return new Set(it)
+}
+
+/** Guard per-index array producers: reject absolute-length huge sparse arrays. */
+export function assertArrayNotHugeSparse(value: unknown): void {
+  if (Array.isArray(value)) assertNotHugeSparse(value as unknown[])
 }

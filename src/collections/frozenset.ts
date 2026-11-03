@@ -1,3 +1,4 @@
+import { forEachArrayElement, isTypedArray } from '../internal/iterable.js'
 import { withHookNesting } from '../internal/nesting.js'
 import { protocol } from '../operators/index.js'
 import { sameSetMembers } from './abc.js'
@@ -14,7 +15,15 @@ import { clone } from './object.js'
 export class FrozenSet<T = unknown> extends Set<T> {
   constructor(iterable?: Iterable<T> | null) {
     super()
-    for (const x of iterable ?? []) {
+    if (iterable == null) return
+    if (isTypedArray<T>(iterable)) {
+      forEachArrayElement(iterable, (x) => {
+        super.add(x)
+        return undefined
+      })
+      return
+    }
+    for (const x of iterable) {
       super.add(x)
     }
   }

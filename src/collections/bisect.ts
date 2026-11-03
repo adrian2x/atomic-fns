@@ -2,6 +2,7 @@
  * Binary search and sorted insertion (Python bisect semantics).
  */
 
+import { assertNotHugeSparse } from '../internal/arrayKeys.js'
 import { compare, type Comparer } from '../operators/index.js'
 
 function search<T>(
@@ -74,6 +75,7 @@ export function insort<T>(
   hi: number = arr.length,
   cmp: Comparer<T> = compare
 ): T[] {
+  assertNotHugeSparse(arr)
   arr.splice(bisect(arr, x, lo, hi, cmp), 0, x)
   return arr
 }

@@ -13,7 +13,7 @@ import {
   type ArrayWalkEvent
 } from '../internal/arrayKeys.js'
 import { isCompactEmpty } from '../internal/compactEmpty.js'
-import { arrayFromIterable } from '../internal/iterable.js'
+import { arrayElements, arrayFromIterable, setFromIterable } from '../internal/iterable.js'
 import {
   assertNestingDepth,
   enterNesting,
@@ -228,6 +228,7 @@ export function find<T>(arr: T[] | object, fn: Iteratee<T> | object | PropertyKe
  */
 export function insert<T, A extends T[] | null | undefined>(arr: A, index: number, value: T): A {
   if (!arr || index < 0) return arr
+  assertNotHugeSparse(arr)
   arr.splice(index, 0, value)
   return arr
 }
@@ -1017,9 +1018,9 @@ export function defaults<T extends object>(object: T, ...sources: object[]): T {
  * @see {@link intersection}
  */
 export function difference<T>(first: Iterable<T>, ...rest: Iterable<T>[]): IteratorObject<T> {
-  let result = new Set(first)
+  let result = setFromIterable(first)
   for (const r of rest) {
-    result = result.difference(new Set(r))
+    result = result.difference(setFromIterable(r))
   }
   return result.values()
 }
@@ -1030,7 +1031,7 @@ export function difference<T>(first: Iterable<T>, ...rest: Iterable<T>[]): Itera
  * @param b Second iterable.
  */
 export function symmetricDifference<T>(a: Iterable<T>, b: Iterable<T>): IteratorObject<T> {
-  return new Set(a).symmetricDifference(new Set(b)).values()
+  return setFromIterable(a).symmetricDifference(setFromIterable(b)).values()
 }
 
 /**
@@ -1041,10 +1042,11 @@ export function symmetricDifference<T>(a: Iterable<T>, b: Iterable<T>): Iterator
  */
 export function intersection<T>(...its: Iterable<T>[]): IteratorObject<T> {
   if (its.length === 0) return new Set<T>().values()
-  const rest = its.slice(1).map((it) => new Set(it))
+  const rest = its.slice(1).map((it) => setFromIterable(it))
   return (function* () {
     const seen = new Set<T>()
-    for (const value of its[0]) {
+    const first: Iterable<T> = Array.isArray(its[0]) ? arrayElements(its[0]) : its[0]
+    for (const value of first) {
       if (seen.has(value)) continue
       if (rest.every((s) => s.has(value))) {
         seen.add(value)
@@ -1063,7 +1065,7 @@ export function intersection<T>(...its: Iterable<T>[]): IteratorObject<T> {
 export function union<T>(...its: Iterable<T>[]): IteratorObject<T> {
   let result = new Set<T>()
   for (const it of its) {
-    result = result.union(new Set(it))
+    result = result.union(setFromIterable(it))
   }
   return result.values()
 }

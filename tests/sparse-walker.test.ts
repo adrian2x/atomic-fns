@@ -1,28 +1,46 @@
 import { describe, expect, it } from 'vitest'
 import {
   Deque,
+  FrozenSet,
   SortedSet,
   compact,
+  difference,
   filter,
   find,
   findIndex,
   forEach,
   groupBy,
   indexOf,
+  insert,
+  intersection,
   lastIndexOf,
   map,
   matches,
   remove,
+  union,
   uniq,
   without,
-  clone
+  clone,
+  insort
 } from '../src/collections/index.js'
 import { list } from '../src/globals/index.js'
 import { isHugeSparse, walkArray } from '../src/internal/arrayKeys.js'
-import { reversed, sorted } from '../src/itertools/index.js'
-import { max, mean, min } from '../src/math/index.js'
+import {
+  all,
+  any,
+  chain,
+  contains,
+  enumerate,
+  icompact,
+  imap,
+  partition,
+  reduce,
+  reversed,
+  sorted
+} from '../src/itertools/index.js'
+import { max, mean, min, sum } from '../src/math/index.js'
 import { deepEqual } from '../src/operators/index.js'
-import { shuffle } from '../src/random/index.js'
+import { sample, shuffle } from '../src/random/index.js'
 import { expectFast } from './helpers/perf.js'
 
 /** Pre-fix: hang on length 4e9. Hang-floor budget. */
@@ -127,6 +145,43 @@ describe('R12-E sparse-safe array walker', () => {
     const dense = Array.from({ length: 2 ** 20 }, (_, i) => i)
     expect(isHugeSparse(dense)).toBe(false)
     expect(() => map(dense, (x) => x)).not.toThrow()
+  })
+
+  it('R13-D2: iterator helpers finish or reject huge sparse within budget', () => {
+    const a = hugeSparse()
+    const labels: string[] = []
+    labels.length = 4_294_967_294
+    labels[0] = 'x'
+    labels[1e9] = 'y'
+    labels[4e9] = 'admin'
+    expectFast(() => {
+      expect([...icompact(labels)].length).toBe(3)
+      expect(reduce(a, (acc) => acc, 0)).toBe(0)
+      expect(all(a, (x) => x !== 'zzz')).toBe(true)
+      expect(any(a, (x) => x === 'zzz')).toBe(false)
+      expect(contains(a, 'zzz')).toBe(false)
+      expect([...union(a)].length).toBeGreaterThanOrEqual(3)
+      expect([...difference(a, [])].length).toBeGreaterThanOrEqual(3)
+      expect([...intersection(a, a)].length).toBeGreaterThanOrEqual(3)
+      expect(new FrozenSet(a).size).toBeGreaterThanOrEqual(3)
+      expect(sum(a, () => 0)).toBe(0)
+    }, BUDGET)
+
+    const perIndex = [
+      () => [...enumerate(a)],
+      () => [...chain(a)],
+      () => [...imap(a, (x) => x)],
+      () => partition(a, Boolean),
+      () => insort(labels, 'c'),
+      () => insert(labels, 0, 'z'),
+      () => sample(labels, 2)
+    ]
+    for (const run of perIndex) {
+      expectFast(() => {
+        expect(run).toThrow(RangeError)
+        expect(run).toThrow('sparse array too large')
+      }, BUDGET)
+    }
   })
 
   it('small sparse preserves hole vs undefined for indexOf/filter/uniq', () => {
