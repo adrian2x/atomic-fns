@@ -1,12 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { ValueError } from '../src/globals/index.js'
 import { Duration } from '../src/i18n/duration.js'
 
 describe('Duration', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
   it('SPEC-R94 total quarters from years', () => {
     expect(new Duration({ years: 1 }).total('quarters')).toBe(4)
     expect(new Duration({ years: 1 }).quarters).toBe(0)
@@ -73,13 +69,6 @@ describe('Duration', () => {
 
   it("SPEC-R94 format('en') uses Intl.DurationFormat", () => {
     expect(new Duration({ hours: 1, minutes: 30 }).format('en')).toBe('1 hr, 30 min')
-  })
-
-  it('SPEC-R94 format falls back to toISOString when DurationFormat is absent', () => {
-    vi.stubGlobal('Intl', { ...Intl, DurationFormat: undefined })
-    const d = new Duration({ hours: 1, minutes: 30 })
-    expect(d.format('en')).toBe(d.toISOString())
-    expect(d.format('en')).toBe('PT1H30M')
   })
 
   it('SPEC-R94 values is frozen and the Duration is immutable', () => {

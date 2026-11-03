@@ -239,14 +239,12 @@ describe('IntlDate', () => {
   it('min', () => {
     const start = new Date(1964, 6, 2)
     const end = mockDate()
-    expect(IntlDate.min(start, end)).toBe(start)
     expect(IntlDate.min([start, end])).toBe(start)
   })
 
   it('max', () => {
     const start = new Date(1964, 6, 2)
     const end = mockDate()
-    expect(IntlDate.max(start, end)).toBe(end)
     expect(IntlDate.max([start, end])).toBe(end)
   })
 
@@ -262,30 +260,30 @@ describe('IntlDate', () => {
   })
 
   it('SPEC-R95 min/max parse strings like the constructor', () => {
-    expect(IntlDate.min('2022-03-01', '2021-12-31', '2022-01-01')).toBe('2021-12-31')
+    expect(IntlDate.min(['2022-03-01', '2021-12-31', '2022-01-01'])).toBe('2021-12-31')
     expect(IntlDate.max(['2022-03-01', '2021-12-31', '2022-01-01'])).toBe('2022-03-01')
-    expect(IntlDate.min('2022-03-01', new Date(2022, 0, 1))).toStrictEqual(new Date(2022, 0, 1))
-    expect(IntlDate.max(new Date(2022, 0, 1), '2022-03-01')).toBe('2022-03-01')
+    expect(IntlDate.min(['2022-03-01', new Date(2022, 0, 1)])).toStrictEqual(new Date(2022, 0, 1))
+    expect(IntlDate.max([new Date(2022, 0, 1), '2022-03-01'])).toBe('2022-03-01')
     // lexical order of these strings differs from chronological order
-    expect(IntlDate.min('2022-1-15', '2022-01-02')).toBe('2022-01-02')
-    expect(IntlDate.max(0, 5, -3)).toBe(5)
-    expect(IntlDate.min(0, 5, -3)).toBe(-3)
+    expect(IntlDate.min(['2022-1-15', '2022-01-02'])).toBe('2022-01-02')
+    expect(IntlDate.max([0, 5, -3])).toBe(5)
+    expect(IntlDate.min([0, 5, -3])).toBe(-3)
   })
 
   it('SPEC-R95 min/max return the original value', () => {
     const a = mockDate('2022-01-01')
     const b = mockDate('2023-01-01')
-    expect(IntlDate.min(b, a)).toBe(a)
+    expect(IntlDate.min([b, a])).toBe(a)
     expect(IntlDate.max([a, b])).toBe(b)
-    expect(IntlDate.min(a)).toBe(a)
+    expect(IntlDate.min([a])).toBe(a)
   })
 
   it('SPEC-R95 min/max of an empty list or only invalid dates is undefined', () => {
     expect(IntlDate.min([])).toBeUndefined()
     expect(IntlDate.max([])).toBeUndefined()
-    expect(IntlDate.min(null, 'nope')).toBeUndefined()
-    expect(IntlDate.min(null, '2022-01-01')).toBe('2022-01-01')
-    expect(IntlDate.max('2022-01-01', null)).toBe('2022-01-01')
+    expect(IntlDate.min([null, 'nope'])).toBeUndefined()
+    expect(IntlDate.min([null, '2022-01-01'])).toBe('2022-01-01')
+    expect(IntlDate.max(['2022-01-01', null])).toBe('2022-01-01')
   })
 
   it('SPEC-R85 toString honors the UTC view', () => {
@@ -338,6 +336,17 @@ describe('IntlDate', () => {
 
   it('SPEC-R88 startOf unknown unit throws ValueError', () => {
     expect(() => mockDate().startOf('fortnight' as 'day')).toThrow(ValueError)
+  })
+
+  it('set unknown units throw ValueError (incl. former UNITS_SINGULAR aliases)', () => {
+    const d = mockDate('2022-01-15')
+    const asFields = (o: Record<string, number>) => o as Parameters<IntlDate['set']>[0]
+    expect(d.set(asFields({ years: 2023 })).year).toBe(2023)
+    expect(d.set(asFields({ milliseconds: 42 })).millisecond).toBe(42)
+    for (const key of ['weeknumber', 'weekyear', 'ordinal', 'quarter', 'quarters', 'fortnight']) {
+      expect(() => d.set(asFields({ [key]: 1 }))).toThrow(ValueError)
+      expect(() => d.set(asFields({ [key]: 1 }))).toThrow(/Invalid unit/)
+    }
   })
 
   it('endOf calendar units', () => {

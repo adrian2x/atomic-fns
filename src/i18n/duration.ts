@@ -478,25 +478,15 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   }
 
   /**
-   * Format with `Intl.DurationFormat` when available; otherwise {@link toISOString}.
+   * Format with `Intl.DurationFormat`.
    * `Intl.DurationFormat` only accepts whole numbers, so fractional parts are carried down to the
    * next smaller unit (1.5 hours -> 1 hour 30 minutes) and sub-nanosecond remainders are rounded.
    * @param locale BCP 47 locale tag.
    * @param options `Intl.DurationFormat` options.
    * @throws RangeError when the fields have mixed signs.
    */
-  format(locale?: string, options?: Record<string, unknown>): string {
-    const fields = this.#formatFields()
-    const intl = Intl as typeof Intl & {
-      DurationFormat?: new (
-        locales?: string | string[],
-        opts?: Record<string, unknown>
-      ) => { format(duration: Record<string, number>): string }
-    }
-    if (typeof intl.DurationFormat !== 'function') {
-      return this.toISOString()
-    }
-    return new intl.DurationFormat(locale, options).format(fields)
+  format(locale?: string, options?: Intl.DurationFormatOptions): string {
+    return new Intl.DurationFormat(locale, options).format(this.#formatFields())
   }
 
   /** Whole-number fields for `Intl.DurationFormat` with quarters folded into months. */
@@ -565,12 +555,8 @@ Duration.fromISO('P5Y3M').toObject()
 ```
    */
   static fromISO(text: string): Duration {
-    const [parsed] = parseISODuration(text)
-    if (!parsed) {
-      throw new ValueError(`The input "${text}" can't be parsed as ISO 8601`)
-    }
-    const hasUnit = Object.values(parsed).some((v) => v != null)
-    if (!hasUnit) {
+    const parsed = parseISODuration(text)
+    if (!parsed || !Object.values(parsed).some((v) => v != null)) {
       throw new ValueError(`The input "${text}" can't be parsed as ISO 8601`)
     }
     return new Duration(parsed)

@@ -42,13 +42,8 @@ describe('SPEC-R71 Currency', () => {
     expect(eq(eur, usd)).toBe(false)
     expect(eur.eq(usd)).toBe(false)
     expect(eur.eq(new Currency(10, 'EUR'))).toBe(true)
-    const equals = Reflect.get(eur, protocol.equals) as (this: Currency, o: unknown) => boolean
-    const compareFn = Reflect.get(eur, protocol.compare) as (
-      this: Currency,
-      o: unknown
-    ) => number | undefined
-    expect(equals.call(eur, usd)).toBe(false)
-    expect(compareFn.call(eur, usd)).toBe(-1)
+    expect(eur[protocol.equals](usd)).toBe(false)
+    expect(eur[protocol.compare](usd)).toBe(-1)
   })
 
   it('SPEC-R71 accounting displayName precision', () => {

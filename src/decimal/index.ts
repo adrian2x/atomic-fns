@@ -74,12 +74,18 @@ function compareIE(ai: bigint, ae: number, bi: bigint, be: number): -1 | 0 | 1 {
   return ai < scaled ? -1 : ai > scaled ? 1 : 0
 }
 
-function roundQuotient(q: bigint, r: bigint, d: bigint, mode: RoundingMode): bigint {
-  if (r === 0n) return q
+function roundQuotient(
+  q: bigint,
+  r: bigint,
+  d: bigint,
+  mode: RoundingMode,
+  inexact = false
+): bigint {
+  if (r === 0n && !inexact) return q
   const s = r < 0n !== d < 0n ? -1n : 1n
   const twice = 2n * absBig(r)
   const ad = absBig(d)
-  const cmpHalf = twice < ad ? -1 : twice > ad ? 1 : 0
+  const cmpHalf = twice < ad ? -1 : twice > ad || (twice === ad && inexact) ? 1 : 0
   let up = false
   switch (mode) {
     case 'halfEven':
@@ -132,7 +138,6 @@ function toDecimalInput(o: unknown): DecimalInput {
 
 /**
  * Exact decimal arithmetic with per-operation precision and rounding.
- * Protocol symbol methods are installed on the prototype below.
  */
 export class Decimal {
   /**
@@ -343,31 +348,7 @@ export class Decimal {
     const q = s / d
     const r = s % d
     const inexact = s * s !== N
-    const nonzero = r !== 0n || inexact
-    const cmpHalf = 2n * r > d || (2n * r === d && inexact) ? 1 : 2n * r === d ? 0 : -1
-    let up = false
-    if (nonzero) {
-      switch (rounding) {
-        case 'halfEven':
-          up = cmpHalf > 0 || (cmpHalf === 0 && q % 2n !== 0n)
-          break
-        case 'halfUp':
-          up = cmpHalf >= 0
-          break
-        case 'halfDown':
-          up = cmpHalf > 0
-          break
-        case 'up':
-        case 'ceil':
-          up = true
-          break
-        case 'down':
-        case 'floor':
-          up = false
-          break
-      }
-    }
-    return Decimal.#fromIE(up ? q + 1n : q, -precision)
+    return Decimal.#fromIE(roundQuotient(q, r, d, rounding, inexact), -precision)
   }
 
   /**
@@ -508,59 +489,36 @@ export class Decimal {
   protocolEquals(o: unknown): boolean {
     return this.protocolCompare(o) === 0
   }
-}
 
-Object.defineProperty(Decimal.prototype, protocol.rank, {
-  get: () => 1 as const,
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(Decimal.prototype, protocol.compare, {
-  value: function (this: Decimal, o: unknown) {
+  get [protocol.rank]() {
+    return 1 as const
+  }
+
+  [protocol.compare](o: unknown) {
     return this.protocolCompare(o)
-  },
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(Decimal.prototype, protocol.equals, {
-  value: function (this: Decimal, o: unknown) {
+  }
+
+  [protocol.equals](o: unknown) {
     return this.protocolEquals(o)
-  },
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(Decimal.prototype, protocol.add, {
-  value: function (this: Decimal, o: unknown) {
+  }
+
+  [protocol.add](o: unknown) {
     return this.add(toDecimalInput(o))
-  },
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(Decimal.prototype, protocol.sub, {
-  value: function (this: Decimal, o: unknown) {
+  }
+
+  [protocol.sub](o: unknown) {
     return this.sub(toDecimalInput(o))
-  },
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(Decimal.prototype, protocol.mul, {
-  value: function (this: Decimal, o: unknown) {
+  }
+
+  [protocol.mul](o: unknown) {
     return this.mul(toDecimalInput(o))
-  },
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(Decimal.prototype, protocol.div, {
-  value: function (this: Decimal, o: unknown) {
+  }
+
+  [protocol.div](o: unknown) {
     return this.div(toDecimalInput(o))
-  },
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(Decimal.prototype, protocol.abs, {
-  value: function (this: Decimal) {
+  }
+
+  [protocol.abs]() {
     return this.abs()
-  },
-  enumerable: false,
-  configurable: true
-})
+  }
+}

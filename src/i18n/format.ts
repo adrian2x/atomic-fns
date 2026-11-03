@@ -4,6 +4,8 @@ const NATIVE_DATE =
 const TOKEN_RE =
   /\[([^\]]*)]|YYYY|YY|Q|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|d|E|HH|H|hh|h|kk|k|mm|m|ss|s|SSS|A|a|ZZ|Z|zzz|z|NNNN|NNN|NN|N|X|x|LTS|LT|LLLL|LLL|LL|L|llll|lll|ll|l/g
 
+const STRFTIME_RE = /%%|%(?:-?)([A-Za-z])\1*/g
+
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
 
 /** Options shared by {@link formatDate} and {@link strftime}. */
@@ -403,52 +405,10 @@ export function strftime(
   }
 
   const values = strftimeValues(date, resolveOptions(localeOrOptions))
-  const results: string[] = []
 
-  for (let i = 0; i < fmt.length; i++) {
-    const ch = fmt[i]
-    if (ch !== '%') {
-      results.push(ch)
-      continue
-    }
-
-    if (i + 1 >= fmt.length) {
-      results.push('%')
-      break
-    }
-
-    const next = fmt[i + 1]
-    if (next === '%') {
-      results.push('%')
-      i++
-      continue
-    }
-
-    let token = '%'
-    let j = i + 1
-    if (fmt[j] === '-') {
-      token += fmt[j]
-      j++
-    }
-    if (j >= fmt.length) {
-      results.push(token)
-      break
-    }
-    token += fmt[j]
-    while (j + 1 < fmt.length && fmt[j + 1] === fmt[j]) {
-      j++
-      token += fmt[j]
-    }
-
-    const getter = values.get(token)
-    if (getter) {
-      results.push(getter())
-      i = j
-    } else {
-      results.push(token)
-      i = j
-    }
-  }
-
-  return results.join('')
+  return fmt.replace(STRFTIME_RE, (match) => {
+    if (match === '%%') return '%'
+    const getter = values.get(match)
+    return getter ? getter() : match
+  })
 }

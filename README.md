@@ -154,6 +154,8 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 - `remove(arr, pred)` mutates and returns removed elements (Lodash). Prefer `without(arr, ...values)` for the old pure value form; `reject` is the pure predicate form.
 - `compare` is a total order across kinds; `eq` is semantic equality (see Protocol operators). Decimal compare/equals with numbers uses exact binary values (`decimal('0.1').eq(0.1) === false`).
 - Decimal exponent bound `|e| <= 1e6`. `range(NaN)` throws. `uuid` throws without Web Crypto. `difference` is set difference. `strftime %Y` / `%y` follow C/POSIX. Decimal `valueOf` throws.
+- `IntlDate.set` accepts only `DateObject` field names (singular or plural). Unknown units throw `ValueError`. Keys that 1.x silently ignored via `UNITS_SINGULAR` (`weeknumber`, `weekyear`, `ordinal`, `quarter`, and their plurals) now throw.
+- `IntlDate.min` / `IntlDate.max` take one `readonly DateLike[]` (no varargs); empty or all-invalid still returns `undefined`.
 
 ### Platform
 

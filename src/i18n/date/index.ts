@@ -2,7 +2,7 @@ import { isObject, ValueError } from '../../globals/index.js'
 import { protocol, type Comparable, type Equatable } from '../../operators/protocol.js'
 import { Duration, UNITS_PLURAL, type DurationObject, type DurationUnit } from '../duration.js'
 import { asDate, formatDate, strftime } from '../format.js'
-import { addDuration, subDuration } from './arith.js'
+import { addDuration, lastDayOfMonth, subDuration } from './arith.js'
 import {
   asNumber,
   dayOfYear,
@@ -30,7 +30,7 @@ export {
   weeksInYear
 }
 
-export { addDuration, subDuration }
+export { addDuration, lastDayOfMonth, subDuration }
 export type { DurationObject, DateObject }
 export type DateLike = number | string | Date | IntlDate | DateObject | null
 
@@ -83,14 +83,22 @@ function toDurationObject(duration: number | Duration | DurationObject): Duratio
  * and an optional UTC view of the same instant.
  */
 export class IntlDate implements Comparable, Equatable {
-  declare readonly [protocol.rank]: 5
-  declare readonly [protocol.compare]: (other: unknown) => number | undefined
-  declare readonly [protocol.equals]: (other: unknown) => boolean
-
   readonly #date: Date
   readonly locale?: string
   readonly utc: boolean
   #relativeFormat?: Intl.RelativeTimeFormat
+
+  get [protocol.rank]() {
+    return 5 as const
+  }
+
+  [protocol.compare](o: unknown): number | undefined {
+    return this.protocolCompare(o)
+  }
+
+  [protocol.equals](o: unknown): boolean {
+    return this.protocolEquals(o)
+  }
 
   /** Parses the provided value as a UTC-view date or returns the current instant in UTC view. */
   static UTC(value?: DateLike, locale?: string): IntlDate {
@@ -186,13 +194,7 @@ export class IntlDate implements Comparable, Equatable {
 
   /** Days in this date's month. */
   daysInMonth(): number {
-    const end = new Date(0)
-    if (this.utc) {
-      end.setUTCFullYear(this.year, this.month, 0)
-      return end.getUTCDate()
-    }
-    end.setFullYear(this.year, this.month, 0)
-    return end.getDate()
+    return lastDayOfMonth(this.year, this.month - 1, this.utc)
   }
 
   /** Days in this date's year. */
@@ -382,10 +384,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
    * @param other Another date
    */
   isSame(other: Date | IntlDate): boolean {
-    if (other instanceof IntlDate) {
-      return this.isValid() && other.isValid() && this.getTime() === other.getTime()
-    }
-    return this.isValid() && !Number.isNaN(other.getTime()) && this.getTime() === other.getTime()
+    return this[protocol.equals](other)
   }
 
   /** True when this instant is before `other`. */
@@ -451,14 +450,8 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
     const mixed: DateObject = { ...this.toObject(), ...normalized }
 
     if (normalized.day === undefined && mixed.year !== undefined && mixed.month !== undefined) {
-      const end = new Date(0)
-      if (this.utc) {
-        end.setUTCFullYear(mixed.year, mixed.month, 0)
-        mixed.day = Math.min(mixed.day ?? end.getUTCDate(), end.getUTCDate())
-      } else {
-        end.setFullYear(mixed.year, mixed.month, 0)
-        mixed.day = Math.min(mixed.day ?? end.getDate(), end.getDate())
-      }
+      const last = lastDayOfMonth(mixed.year, mixed.month - 1, this.utc)
+      mixed.day = Math.min(mixed.day ?? last, last)
     }
 
     let result = this.clone(fieldsToDate(mixed, this.utc))
@@ -587,8 +580,6 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
         break
       case 'milliseconds':
         break
-      default:
-        throw new ValueError(`Invalid unit ${unit}`)
     }
 
     if (normalizedUnit === 'quarters') {
@@ -598,12 +589,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
 
     if (normalizedUnit === 'weeks') {
       const dow = this.dayOfWeek
-      return this.subtract({ days: dow - 1 }).set({
-        hour: 0,
-        minute: 0,
-        second: 0,
-        millisecond: 0
-      })
+      return this.subtract({ days: dow - 1 }).set(obj)
     }
 
     return this.set(obj)
@@ -634,21 +620,16 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
    * Earliest of the given dates, or `undefined` when none is valid. Values are parsed like the
    * constructor parses them (strings as local time); the original value is returned.
    */
-  static min(first: DateLike | readonly DateLike[], ...rest: DateLike[]): DateLike | undefined {
-    return minDate(IntlDate.#collect(first, rest), IntlDate.#toTime)
+  static min(dates: readonly DateLike[]): DateLike | undefined {
+    return minDate(dates, IntlDate.#toTime)
   }
 
   /**
    * Latest of the given dates, or `undefined` when none is valid. Values are parsed like the
    * constructor parses them (strings as local time); the original value is returned.
    */
-  static max(first: DateLike | readonly DateLike[], ...rest: DateLike[]): DateLike | undefined {
-    return maxDate(IntlDate.#collect(first, rest), IntlDate.#toTime)
-  }
-
-  static #collect(first: DateLike | readonly DateLike[], rest: DateLike[]): readonly DateLike[] {
-    if (rest.length === 0 && Array.isArray(first)) return first as readonly DateLike[]
-    return [first as DateLike, ...rest]
+  static max(dates: readonly DateLike[]): DateLike | undefined {
+    return maxDate(dates, IntlDate.#toTime)
   }
 
   static #toTime(value: DateLike): number {
@@ -661,56 +642,20 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
   }
 }
 
-Object.defineProperty(IntlDate.prototype, protocol.rank, {
-  get: () => 5 as const,
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(IntlDate.prototype, protocol.compare, {
-  value: function (this: IntlDate, o: unknown) {
-    return this.protocolCompare(o)
-  },
-  enumerable: false,
-  configurable: true
-})
-Object.defineProperty(IntlDate.prototype, protocol.equals, {
-  value: function (this: IntlDate, o: unknown) {
-    return this.protocolEquals(o)
-  },
-  enumerable: false,
-  configurable: true
-})
-
-const UNITS_SINGULAR: Record<string, string> = {
-  year: 'year',
-  years: 'year',
-  month: 'month',
-  months: 'month',
-  day: 'day',
-  days: 'day',
-  hour: 'hour',
-  hours: 'hour',
-  minute: 'minute',
-  minutes: 'minute',
-  quarter: 'quarter',
-  quarters: 'quarter',
-  second: 'second',
-  seconds: 'second',
-  millisecond: 'millisecond',
-  milliseconds: 'millisecond',
-  weekday: 'weekday',
-  weekdays: 'weekday',
-  weeknumber: 'weekNumber',
-  weeksnumber: 'weekNumber',
-  weeknumbers: 'weekNumber',
-  weekyear: 'weekYear',
-  weekyears: 'weekYear',
-  ordinal: 'ordinal'
-}
+const DATE_OBJECT_KEYS: ReadonlySet<string> = new Set<keyof DateObject>([
+  'year',
+  'month',
+  'day',
+  'weekday',
+  'hour',
+  'minute',
+  'second',
+  'millisecond'
+])
 
 function normalizeUnit(unit: string): string {
-  const normalized = UNITS_SINGULAR[unit.toLowerCase()]
-  if (!normalized) throw new ValueError(`Invalid unit ${unit}`)
+  const normalized = unit.toLowerCase().replace(/s$/, '')
+  if (!DATE_OBJECT_KEYS.has(normalized)) throw new ValueError(`Invalid unit ${unit}`)
   return normalized
 }
 

@@ -1,3 +1,4 @@
+import { lastDayOfMonth } from './arith.js'
 import { asDate } from '../format.js'
 
 /** Calendar fields for IntlDate object construction and `set`. */
@@ -89,11 +90,7 @@ export function daysInYear(year: number): number {
  */
 export function daysInMonth(date: string | number | Date): number {
   const d = typeof date === 'string' ? asDate(date) : new Date(date)
-  const year = d.getFullYear()
-  const month = d.getMonth()
-  const end = new Date(0)
-  end.setFullYear(year, month + 1, 0)
-  return end.getDate()
+  return lastDayOfMonth(d.getFullYear(), d.getMonth(), false)
 }
 
 /**
@@ -122,7 +119,8 @@ function parseMilliseconds(str: string | undefined) {
   }
 }
 
-interface ISODurationFields {
+/** Calendar and clock fields parsed from an ISO-8601 duration string. */
+export interface ISODurationFields {
   years?: number
   months?: number
   weeks?: number
@@ -133,7 +131,7 @@ interface ISODurationFields {
   milliseconds?: number
 }
 
-function extractISODuration(match: RegExpExecArray): [ISODurationFields] {
+function extractISODuration(match: RegExpExecArray): ISODurationFields {
   const [s] = match
   const groups: (string | undefined)[] = match
   const [, yearStr, monthStr, weekStr, dayStr, hourStr, minuteStr, secondStr, millisecondsStr] =
@@ -145,30 +143,28 @@ function extractISODuration(match: RegExpExecArray): [ISODurationFields] {
   const maybeNegate = (num: number | undefined, force = false) =>
     num !== undefined && (force || (num && hasNegativePrefix)) ? -num : num
 
-  return [
-    {
-      years: maybeNegate(parseFloating(yearStr)),
-      months: maybeNegate(parseFloating(monthStr)),
-      weeks: maybeNegate(parseFloating(weekStr)),
-      days: maybeNegate(parseFloating(dayStr)),
-      hours: maybeNegate(parseFloating(hourStr)),
-      minutes: maybeNegate(parseFloating(minuteStr)),
-      seconds: maybeNegate(parseFloating(secondStr), secondStr === '-0'),
-      milliseconds: maybeNegate(parseMilliseconds(millisecondsStr), Boolean(negativeSeconds))
-    }
-  ]
+  return {
+    years: maybeNegate(parseFloating(yearStr)),
+    months: maybeNegate(parseFloating(monthStr)),
+    weeks: maybeNegate(parseFloating(weekStr)),
+    days: maybeNegate(parseFloating(dayStr)),
+    hours: maybeNegate(parseFloating(hourStr)),
+    minutes: maybeNegate(parseFloating(minuteStr)),
+    seconds: maybeNegate(parseFloating(secondStr), secondStr === '-0'),
+    milliseconds: maybeNegate(parseMilliseconds(millisecondsStr), Boolean(negativeSeconds))
+  }
 }
 
-/** Parses an ISO-8601 duration string into a duration object. */
-export function parseISODuration(s: string | null | undefined): [ISODurationFields] | [null, null] {
+/** Parses an ISO-8601 duration string into a duration object, or `null` when it does not match. */
+export function parseISODuration(s: string | null | undefined): ISODurationFields | null {
   if (s == null) {
-    return [null, null]
+    return null
   }
   const m = isoDuration.exec(s)
   if (m) {
     return extractISODuration(m)
   }
-  return [null, null]
+  return null
 }
 
 function createUTCDate(y: number, m = 0, d = 1, h = 0, min = 0, s = 0, ms = 0) {
@@ -236,11 +232,6 @@ export function weekOfYear(
     }
   }
   return { week, year }
-}
-
-/** ISO weeks in year (Monday start, first week contains Jan 4). */
-export function isoWeeksInYear(year: number): number {
-  return weeksInYear(year, 1, 4)
 }
 
 /**

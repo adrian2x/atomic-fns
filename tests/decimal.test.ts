@@ -189,6 +189,23 @@ describe('SPEC-R68 sqrt', () => {
     expect(decimal('1.01').sqrt({ precision: 0, rounding: 'halfEven' }).toString()).toBe('1')
   })
 
+  it('SPEC-R68 inexact sqrt rounding modes at precision 0', () => {
+    // sqrt(2)≈1.414 and sqrt(1.01)≈1.005; both inexact, fraction below half at p=0.
+    const expected: Record<RoundingMode, string> = {
+      up: '2',
+      down: '1',
+      ceil: '2',
+      floor: '1',
+      halfUp: '1',
+      halfDown: '1',
+      halfEven: '1'
+    }
+    for (const rounding of MODES) {
+      expect(decimal(2).sqrt({ precision: 0, rounding }).toString()).toBe(expected[rounding])
+      expect(decimal('1.01').sqrt({ precision: 0, rounding }).toString()).toBe(expected[rounding])
+    }
+  })
+
   it('SPEC-R68 negative sqrt throws and writes no console', () => {
     const spy = vi.spyOn(console, 'log')
     expect(() => decimal(-1).sqrt()).toThrow(ValueError)
@@ -237,9 +254,9 @@ describe('SPEC-R70 Decimal protocol', () => {
   it('SPEC-R70 protocol arithmetic and rank', () => {
     expect(Reflect.get(decimal(1), protocol.rank)).toBe(1)
     expect(String(add(decimal('0.1'), '0.2'))).toBe('0.3')
-    const abs = Reflect.get(decimal(3), protocol.abs) as (this: Decimal) => Decimal
-    expect(abs.call(decimal(3)).toString()).toBe('3')
-    expect(abs.call(decimal(-3)).toString()).toBe('3')
+    expect(decimal(3)[protocol.abs]().toString()).toBe('3')
+    expect(decimal(-3)[protocol.abs]().toString()).toBe('3')
+    expect(Object.prototype.propertyIsEnumerable.call(Decimal.prototype, protocol.add)).toBe(false)
   })
 
   it('SPEC-R70 lt gt lte gte', () => {

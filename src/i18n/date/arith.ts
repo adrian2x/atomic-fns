@@ -5,7 +5,13 @@ export type { DurationObject }
 
 const CALENDAR_UNITS = ['years', 'quarters', 'months', 'weeks', 'days'] as const
 
-function lastDayOfMonth(year: number, monthIndex: number, utc: boolean): number {
+/**
+ * Last calendar day of the month for `year` and 0-based `monthIndex`.
+ * @param year Calendar year.
+ * @param monthIndex Month index 0-11.
+ * @param utc When true, use UTC accessors.
+ */
+export function lastDayOfMonth(year: number, monthIndex: number, utc: boolean): number {
   const d = new Date(0)
   if (utc) {
     d.setUTCFullYear(year, monthIndex + 1, 0)
