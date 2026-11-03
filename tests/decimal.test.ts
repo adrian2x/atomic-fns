@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { decimal, Decimal, isqrt } from '../src/decimal/index.js'
+import { decimal, Decimal } from '../src/decimal/index.js'
+import { isqrt } from '../src/decimal/isqrt.js'
 import type { RoundingMode } from '../src/decimal/index.js'
 import { ValueError, ZeroDivisionError } from '../src/globals/errors.js'
 import { add, compare, eq } from '../src/operators/index.js'
@@ -332,6 +333,11 @@ describe('isqrt precision-doubling', () => {
     expect(x * x <= N).toBe(true)
     expect((x + 1n) * (x + 1n) > N).toBe(true)
   }
+
+  it('rejects negative inputs', () => {
+    expect(() => isqrt(-1n)).toThrow(RangeError)
+    expect(() => isqrt(-1n)).toThrow(/isqrt of a negative number/)
+  })
 
   it('exact floor root on edges and 2000 random bit lengths', () => {
     const edges = [0n, 1n, 2n, 3n, 4n, (1n << 52n) - 1n, 1n << 52n, (1n << 52n) + 1n, 1n << 104n]

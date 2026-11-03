@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BTree } from '../src/collections/BTree.js'
+import { checkInvariants } from '../src/collections/internal.js'
 import { SortedMap } from '../src/collections/SortedMap.js'
 import { SortedSet } from '../src/collections/SortedSet.js'
 
@@ -185,7 +186,7 @@ describe('BTree', () => {
     expect(() => tree.set(Number.NaN, 2)).toThrow('comparator must return a finite number')
     expect(tree.size).toBe(1)
     expect(tree.toArray()).toEqual([[1, 1]])
-    tree.assertInvariants()
+    tree[checkInvariants]()
   })
 
   it('SPEC-R79 differential fuzz vs Map', () => {
@@ -221,11 +222,11 @@ describe('BTree', () => {
             .sort((a, b) => a[0] - b[0])
           expect(fromTree).toEqual(fromMap)
         }
-        if (op % 500 === 0) tree.assertInvariants()
+        if (op % 500 === 0) tree[checkInvariants]()
       }
       expect(tree.size).toBe(map.size)
       expect([...tree.entries()]).toEqual([...map.entries()].sort((a, b) => a[0] - b[0]))
-      tree.assertInvariants()
+      tree[checkInvariants]()
     }
   })
 
@@ -244,7 +245,7 @@ describe('BTree', () => {
     expect(t.has(1)).toBe(true)
     t.set(3, 3)
     expect(t.size).toBe(3)
-    t.assertInvariants()
+    t[checkInvariants]()
   })
 
   it('SPEC-R79 undefined is a valid key in iteration, ranges and lookups', () => {
@@ -284,7 +285,7 @@ describe('BTree', () => {
       t.set(k, k)
       expect(visited).toBeLessThan(10_000)
     }
-    t.assertInvariants()
+    t[checkInvariants]()
     let reversed = 0
     for (const [k] of t.entriesDescending()) {
       reversed++
@@ -292,7 +293,7 @@ describe('BTree', () => {
       if (k > 0 && k % 5 === 0) t.set(k - 1000, 0)
       expect(reversed).toBeLessThan(10_000)
     }
-    t.assertInvariants()
+    t[checkInvariants]()
     for (const k of t.keys()) t.delete(k)
     expect(t.size).toBe(0)
     expect([...t.entries()]).toEqual([])
@@ -324,7 +325,7 @@ describe('BTree', () => {
     const model = new Map<number, string | undefined>()
     const sync = () => {
       expect(t.toArray()).toEqual([...model.entries()].sort((a, b) => a[0] - b[0]))
-      t.assertInvariants()
+      t[checkInvariants]()
     }
     for (const k of [1, 2, 3, 4]) {
       t.set(k, undefined)
@@ -398,8 +399,8 @@ describe('BTree', () => {
     t.set(0, 1)
     expect(c.get(0)).toBe(0)
     expect(c.size).toBe(497)
-    t.assertInvariants()
-    c.assertInvariants()
+    t[checkInvariants]()
+    c[checkInvariants]()
   })
 
   it('A4 clone isolation', () => {
@@ -438,9 +439,9 @@ describe('BTree', () => {
           t.delete(i / 2)
           expect(t.size).toBe(i / 2 + 50)
         }
-        if (i % 500 === 0) t.assertInvariants()
+        if (i % 500 === 0) t[checkInvariants]()
       }
-      t.assertInvariants()
+      t[checkInvariants]()
     }
   })
 
@@ -503,7 +504,7 @@ describe('BTree', () => {
     for (const v of values) expect(mixed.has(v)).toBe(true)
     expect(mixed.has(0)).toBe(true)
     expect(mixed.has(-0)).toBe(true)
-    mixed.assertInvariants()
+    mixed[checkInvariants]()
   })
 
   it('A7 model fuzz with clones', () => {
@@ -555,11 +556,11 @@ describe('BTree', () => {
         } else {
           expect(cur.get(k)).toBe(model.get(k))
         }
-        if (op % 500 === 0) cur.assertInvariants()
+        if (op % 500 === 0) cur[checkInvariants]()
       }
       for (const s of snaps) {
         expect(s.tree.toArray()).toEqual([...s.map.entries()].sort((a, b) => a[0] - b[0]))
-        s.tree.assertInvariants()
+        s.tree[checkInvariants]()
       }
     }
   })
@@ -663,7 +664,7 @@ describe('BTree', () => {
     calls = 0
     const t = new BTree(sorted, cmp)
     expect(calls).toBe(9_999)
-    t.assertInvariants()
+    t[checkInvariants]()
     expect(t.height).toBe(2)
     const u = new BTree([
       [2, 'a'],
@@ -721,7 +722,7 @@ describe('BTree', () => {
         else if (op === 1) t.delete(rnd() % 200)
         else if (op === 2) t.clear()
       }
-      t.assertInvariants()
+      t[checkInvariants]()
     }
   })
 
@@ -750,7 +751,7 @@ describe('BTree', () => {
     const t = new BTree<K, string>(undefined, (a, b) => a.id - b.id, { nodeCapacity: 8 })
     for (let id = 0; id < 20; id++) t.set({ id }, 'v')
     t.set({ id: 3, tag: 'new' }, 'x')
-    t.assertInvariants()
+    t[checkInvariants]()
     expect([...t.keys()][3]?.tag).toBe('new')
   })
 })

@@ -1,5 +1,6 @@
 import { compare, protocol, type Comparer } from '../operators/index.js'
 import { MapCollection, sameSequenceItems } from './abc.js'
+import { checkInvariants } from './internal.js'
 import { clone } from './object.js'
 
 /** Construction options for {@link BTree}. */
@@ -476,7 +477,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
    * @internal
    * @throws {Error} when an invariant fails
    */
-  assertInvariants(): void {
+  [checkInvariants](): void {
     const fail = (name: string): never => {
       throw new Error(`BTree invariant violated: ${name}`)
     }
