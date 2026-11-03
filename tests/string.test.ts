@@ -40,12 +40,53 @@ describe('string', () => {
 
   it('removeAccents', () => {
     expect(string.removeAccents('Antoine de Saint-Exupéry')).toBe('Antoine de Saint-Exupery')
-    expect(string.removeAccents('Œuvre ß ø Ł đ Æ þ')).toBe('OEuvre ss o L d AE th')
+    expect(string.removeAccents('Œuvre ß ø Ł đ Æ þ')).toBe('Oeuvre ss o L d Ae th')
     expect(string.removeAccents('Crème Brûlée Ångström')).toBe('Creme Brulee Angstrom')
     expect(string.removeAccents('й')).toBe('й')
     expect(string.removeAccents('が')).toBe('が')
     expect(string.removeAccents('が').length).toBe(1)
     expect(string.removeAccents('a⃝ b︠')).toBe('a b')
+  })
+
+  it('removeAccents Lodash deburr letter folds', () => {
+    const folds: [string, string][] = [
+      ['Æ', 'Ae'],
+      ['æ', 'ae'],
+      ['Þ', 'Th'],
+      ['þ', 'th'],
+      ['ß', 'ss'],
+      ['Œ', 'Oe'],
+      ['œ', 'oe'],
+      ['Ĳ', 'IJ'],
+      ['ĳ', 'ij'],
+      ['Ŀ', 'L'],
+      ['ŀ', 'l'],
+      ['ŉ', "'n"],
+      ['ſ', 's'],
+      ['Ð', 'D'],
+      ['ð', 'd'],
+      ['Đ', 'D'],
+      ['đ', 'd'],
+      ['Ħ', 'H'],
+      ['ħ', 'h'],
+      ['ı', 'i'],
+      ['ĸ', 'k'],
+      ['Ł', 'L'],
+      ['ł', 'l'],
+      ['Ŋ', 'N'],
+      ['ŋ', 'n'],
+      ['Ŧ', 'T'],
+      ['ŧ', 't'],
+      ['Ø', 'O'],
+      ['ø', 'o']
+    ]
+    for (const [src, dest] of folds) {
+      expect(string.removeAccents(src)).toBe(dest)
+    }
+    expect(string.removeAccents('Æsir')).toBe('Aesir')
+    expect(string.removeAccents('Œuvre')).toBe('Oeuvre')
+    expect(string.removeAccents('Þór')).toBe('Thor')
+    expect(string.slugify('Ærøskøbing')).toBe('Aeroskobing')
   })
 
   it('words', () => {
@@ -173,9 +214,40 @@ describe('string', () => {
     expect(string.slugify('equipment_class_name')).toBe('equipment-class-name')
     expect(string.slugify('equipment class name')).toBe('equipment-class-name')
     expect(string.slugify('Antoine de Saint-Exupéry')).toBe('Antoine-de-Saint-Exupery')
-    expect(string.slugify('Ægir og Ødin')).toBe('AEgir-og-Odin')
+    expect(string.slugify('Ægir og Ødin')).toBe('Aegir-og-Odin')
     expect(string.slugify('がぎ')).toBe('がぎ')
     expect(string.slugify('Йога')).toBe('Йога')
     expect(string.slugify('')).toBe('')
+  })
+
+  it('words covers ASCII and Unicode splitter edges', () => {
+    expect(string.words('APIsfoo')).toEqual(['AP', 'Isfoo'])
+    expect(string.words('1STX')).toEqual(['1', 'STX'])
+    expect(string.words('1stX')).toEqual(['1st', 'X'])
+    expect(string.words('2ab')).toEqual(['2', 'ab'])
+    expect(string.words("O'Shea")).toEqual(["O'", 'Shea'])
+    expect(string.words('don\u2019t')).toEqual(['don\u2019t'])
+    expect(string.words('a\u2019b')).toEqual(['a\u2019b'])
+    expect(string.words('foo\u00B7bar')).toEqual(['foo', 'bar'])
+    expect(string.words('føoAPIs')).toEqual(['føo', 'APIs'])
+    expect(string.words('føoAPIsFoo')).toEqual(['føo', 'APIs', 'Foo'])
+    expect(string.words('APIs\u0391')).toEqual(['APIs', '\u0391'])
+    expect(string.words('XML\u00CDs')).toEqual(['XML\u00CDs'])
+    expect(string.words('HTMLParser\u00E9')).toEqual(['HTML', 'Parser\u00E9'])
+    expect(string.words('١st')).toEqual(['١st'])
+    expect(string.words('١stPlace')).toEqual(['١st', 'Place'])
+    expect(string.words('١thX')).toEqual(['١th', 'X'])
+    expect(string.words('١THx')).toEqual(['١', 'T', 'Hx'])
+    expect(string.words('٢a')).toEqual(['٢', 'a'])
+    expect(string.words('٢st\u0301')).toEqual(['٢st\u0301'])
+    expect(string.words('11th\u00E9')).toEqual(['11', 'th\u00E9'])
+    expect(string.words('5thx\u00E9')).toEqual(['5', 'thx\u00E9'])
+    expect(string.words('foo2bar\u00E9')).toEqual(['foo', '2', 'bar\u00E9'])
+    expect(string.words('cafe\u0301 bar')).toEqual(['cafe\u0301', 'bar'])
+    expect(string.words('é\u20192')).toEqual(['é', '2'])
+    expect(string.words('می\u200Cخواهم')).toHaveLength(1)
+    expect(string.camelCase('don\u2019t stop')).toBe('dontStop')
+    expect(string.pascalCase('føo bar')).toBe('FøoBar')
+    expect(() => segmenterWords(1 as never)).toThrow(new TypeError('words expects a string'))
   })
 })

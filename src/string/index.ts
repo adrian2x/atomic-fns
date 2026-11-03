@@ -188,19 +188,35 @@ export function asciify(s: string): string {
 
 /** Non-decomposable Latin letters folded like Lodash `deburr`. */
 const LATIN_FOLDS: Record<string, string> = {
-  Œ: 'OE',
-  œ: 'oe',
+  Æ: 'Ae',
+  æ: 'ae',
+  Þ: 'Th',
+  þ: 'th',
   ß: 'ss',
-  ø: 'o',
-  Ø: 'O',
+  Œ: 'Oe',
+  œ: 'oe',
+  Ĳ: 'IJ',
+  ĳ: 'ij',
+  Ŀ: 'L',
+  ŀ: 'l',
+  ŉ: "'n",
+  ſ: 's',
+  Ð: 'D',
+  ð: 'd',
+  Đ: 'D',
+  đ: 'd',
+  Ħ: 'H',
+  ħ: 'h',
+  ı: 'i',
+  ĸ: 'k',
   Ł: 'L',
   ł: 'l',
-  đ: 'd',
-  Đ: 'D',
-  Æ: 'AE',
-  æ: 'ae',
-  þ: 'th',
-  Þ: 'TH'
+  Ŋ: 'N',
+  ŋ: 'n',
+  Ŧ: 'T',
+  ŧ: 't',
+  Ø: 'O',
+  ø: 'o'
 }
 
 const IS_MARK = /\p{M}/u

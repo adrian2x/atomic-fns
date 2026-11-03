@@ -1,5 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { dayOfYear, daysInMonth, IntlDate, weekOfYear } from '../src/i18n/date/index.js'
+import {
+  dayOfYear,
+  daysInMonth,
+  daysInYear,
+  IntlDate,
+  isLeapYear,
+  maxDate,
+  minDate,
+  weekOfYear,
+  weeksInYear
+} from '../src/i18n/date/index.js'
 import { compare, eq } from '../src/operators/index.js'
 import { protocol } from '../src/operators/protocol.js'
 import { ValueError } from '../src/globals/index.js'
@@ -583,6 +593,52 @@ describe('SPEC-R90 DST-correct arithmetic America/New_York', () => {
     expect(daysInMonth('2022-03-01')).toBe(31)
     expect(dayOfYear('2022-03-01')).toBe(60)
     expect(weekOfYear('2022-03-01').week).toBeGreaterThan(0)
+  })
+})
+
+describe('date utils coverage', () => {
+  it('minDate/maxDate empty, mixed, and invalid inputs', () => {
+    expect(minDate([] as (string | number | Date | null)[])).toBe(undefined)
+    expect(maxDate([] as (string | number | Date | null)[])).toBe(undefined)
+    expect(minDate([null, 'nope', Number.NaN])).toBe(undefined)
+    expect(maxDate([null, 'nope', Number.NaN])).toBe(undefined)
+
+    const early = new Date(2020, 0, 1)
+    const late = new Date(2022, 5, 15)
+    expect(minDate([late, '2021-06-01', early.getTime()])).toBe(early.getTime())
+    expect(maxDate([early, '2021-06-01', late])).toBe(late)
+    expect(minDate(['2022-03-01', early, 0])).toBe(0)
+    expect(maxDate([null, early, 'nope'])).toBe(early)
+  })
+
+  it('isLeapYear/daysInYear century rules', () => {
+    expect(isLeapYear(1900)).toBe(false)
+    expect(isLeapYear(2000)).toBe(true)
+    expect(isLeapYear(2100)).toBe(false)
+    expect(isLeapYear(2024)).toBe(true)
+    expect(isLeapYear(2023)).toBe(false)
+    expect(daysInYear(1900)).toBe(365)
+    expect(daysInYear(2000)).toBe(366)
+    expect(daysInYear(2100)).toBe(365)
+  })
+
+  it('daysInMonth leap February and string/number/Date inputs', () => {
+    expect(daysInMonth('2024-02-15')).toBe(29)
+    expect(daysInMonth('2023-02-15')).toBe(28)
+    expect(daysInMonth(new Date(2024, 1, 10))).toBe(29)
+    expect(daysInMonth(new Date(2023, 1, 10).getTime())).toBe(28)
+  })
+
+  it('weeksInYear rejects non-integer; weekOfYear/dayOfYear invalid and utc', () => {
+    expect(() => weeksInYear(2020.5)).toThrow(RangeError)
+    expect(() => weeksInYear(Number.NaN)).toThrow(RangeError)
+    expect(weekOfYear(new Date(Number.NaN))).toEqual({ week: Number.NaN, year: Number.NaN })
+    expect(weekOfYear('nope', 1, 4, true)).toEqual({ week: Number.NaN, year: Number.NaN })
+    expect(dayOfYear(new Date(Number.NaN))).toBeNaN()
+    expect(dayOfYear('nope', true)).toBeNaN()
+    const instant = new Date('2022-01-01T02:00:00Z')
+    expect(weekOfYear(instant, 1, 4, true).year).toBe(2021)
+    expect(dayOfYear(instant, true)).toBe(1)
   })
 })
 

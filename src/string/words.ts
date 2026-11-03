@@ -65,6 +65,7 @@ function isLetter(cls: CharClass): boolean {
 function readCp(s: string, i: number): CpRef | undefined {
   if (i >= s.length) return undefined
   const cp = s.codePointAt(i)
+  // codePointAt is defined for every in-range index of a JS string
   if (cp === undefined) return undefined
   const ch = String.fromCodePoint(cp)
   return { cp, ch, end: i + ch.length }
@@ -80,6 +81,7 @@ function isPluralAcronym(s: string, afterUpperEnd: number, cache: Map<number, Ch
 }
 
 function isOrdinalSuffix(s: string, start: number, cache: Map<number, CharClass>): boolean {
+  // Called only while splitRun is on a letter code point, so start is in range.
   const a = readCp(s, start)
   if (a === undefined) return false
   const b = readCp(s, a.end)
@@ -120,9 +122,8 @@ function splitRunAscii(s: string): string[] {
     }
     if (cls === 'A') {
       const nextCls = classAt(i + 1)
-      if (prev !== undefined && isLetter(prev) && nextCls !== undefined && isLetter(nextCls)) {
-        if (wordStart < 0) wordStart = i
-      } else {
+      // Mid-word apostrophe: wordStart is already set whenever prev is a letter.
+      if (!(prev !== undefined && isLetter(prev) && nextCls !== undefined && isLetter(nextCls))) {
         flush(i)
       }
       continue
@@ -192,7 +193,7 @@ function splitRun(s: string, cache: Map<number, CharClass>): string[] {
     const cls = classifyCp(cur.cp, cur.ch, cache)
 
     if (cls === 'K') {
-      if (wordStart < 0) wordStart = i
+      // Segmenter word-like runs do not start with marks/format; wordStart is already set.
       i = cur.end
       continue
     }
@@ -203,14 +204,13 @@ function splitRun(s: string, cache: Map<number, CharClass>): string[] {
     }
     if (cls === 'A') {
       const next = readCp(s, cur.end)
-      if (
+      // Mid-word apostrophe: wordStart is already set whenever prev is a letter.
+      if (!(
         prev !== undefined &&
         isLetter(prev) &&
         next !== undefined &&
         isLetter(classifyCp(next.cp, next.ch, cache))
-      ) {
-        if (wordStart < 0) wordStart = i
-      } else {
+      )) {
         flush(i)
       }
       i = cur.end
@@ -300,6 +300,7 @@ function toParts(s: string): string[] {
 }
 
 function upperFirstLowerRest(part: string): string {
+  // Callers only pass non-empty parts from toParts.
   const first = readCp(part, 0)
   if (first === undefined) return ''
   return first.ch.toUpperCase() + part.slice(first.end).toLowerCase()
