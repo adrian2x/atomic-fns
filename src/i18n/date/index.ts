@@ -168,7 +168,8 @@ function calendarDiff(
       const idx = a.year * 12 + a.month - 1 + step * size
       const y = Math.floor(idx / 12)
       const m = idx - 12 * y + 1
-      return sign * compare3([y, m, a.day], [bd.year, bd.month, bd.day]) > 0
+      const day = Math.min(a.day, daysInMonthOf(y, m))
+      return sign * compare3([y, m, day], [bd.year, bd.month, bd.day]) > 0
     }
     while (k !== 0 && surpasses(k)) k -= sign
   }

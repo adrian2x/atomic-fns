@@ -872,16 +872,73 @@ describe('SPEC-R89/R90/R91 Temporal-consistent arithmetic', () => {
     expect(u('2000-01-01').diff(u('0001-01-01'), 'years')).toBe(1999)
     expect(u('2024-02-29').diff(u('2020-02-29'), 'years')).toBe(4)
     expect(u('2024-01-01').diff(u('2000-01-01'), 'years')).toBe(24)
-    expect(u('2021-02-28').diff(u('2021-01-31'), 'months')).toBe(0)
-    expect(u('2021-02-28').diff(u('2020-02-29'), 'years')).toBe(0)
+    // Temporal trunc: clamped anchor day (Jan 31 + 1M = Feb 28 <= end)
+    expect(u('2021-02-28').diff(u('2021-01-31'), 'months')).toBe(1)
+    expect(u('2021-02-28').diff(u('2020-02-29'), 'years')).toBe(1)
+    // Short-month clamp after time-of-day day borrow
+    expect(u('2024-07-01T01:00:00').diff(u('2023-12-31T12:00:00'), 'months')).toBe(6)
+    expect(u('2025-03-01T01:00:00').diff(u('2024-02-29T12:00:00'), 'years')).toBe(1)
+    // Month-end clamp pairs are not antisymmetric under Temporal trunc (Jan31↔Feb28).
     for (const [a, b, unit] of [
       [u('2021-03-01'), u('2021-02-01'), 'months'],
-      [u('2021-02-28'), u('2021-01-31'), 'months'],
-      [u('2020-02-29'), u('2019-03-01'), 'years']
+      [u('2020-02-29'), u('2019-03-01'), 'years'],
+      [u('2024-07-01T01:00:00'), u('2023-12-31T12:00:00'), 'months'],
+      [u('2025-03-01T01:00:00'), u('2024-02-29T12:00:00'), 'years']
     ] as const) {
       expect(a.diff(b, unit)).toBe(zeroNegZero(-b.diff(a, unit)))
     }
   })
+
+  it.skipIf(typeof globalThis.Temporal === 'undefined')(
+    'C4 Temporal trunc months/years over 5000 random pairs',
+    () => {
+      function mulberry32(seed: number) {
+        let a = seed >>> 0
+        return () => {
+          a = (a + 0x6d2b79f5) >>> 0
+          let t = a
+          t = Math.imul(t ^ (t >>> 15), t | 1)
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+        }
+      }
+
+      const TemporalApi = globalThis.Temporal
+      const rand = mulberry32(2024_11_03)
+      const units = [
+        ['months', 'month'],
+        ['years', 'year']
+      ] as const
+
+      for (let i = 0; i < 5000; i++) {
+        const y0 = 1995 + Math.floor(rand() * 50)
+        const y1 = 1995 + Math.floor(rand() * 50)
+        const m0 = 1 + Math.floor(rand() * 12)
+        const m1 = 1 + Math.floor(rand() * 12)
+        const d0 = 1 + Math.floor(rand() * 31)
+        const d1 = 1 + Math.floor(rand() * 31)
+        const ms0 = Math.floor(rand() * 86_400_000)
+        const ms1 = Math.floor(rand() * 86_400_000)
+        const t0 = Date.UTC(y0, m0 - 1, d0) + ms0
+        const t1 = Date.UTC(y1, m1 - 1, d1) + ms1
+        if (!Number.isFinite(t0) || !Number.isFinite(t1)) continue
+        const s = Math.min(t0, t1)
+        const e = Math.max(t0, t1)
+        const a = IntlDate.UTC(new Date(s))
+        const b = IntlDate.UTC(new Date(e))
+        const zdtS = TemporalApi.Instant.fromEpochMilliseconds(s).toZonedDateTimeISO('UTC')
+        const zdtE = TemporalApi.Instant.fromEpochMilliseconds(e).toZonedDateTimeISO('UTC')
+        for (const [ours, temporalUnit] of units) {
+          const until = zdtS.until(zdtE, {
+            largestUnit: temporalUnit,
+            smallestUnit: temporalUnit,
+            roundingMode: 'trunc'
+          })
+          expect(b.diff(a, ours)).toBe(until[ours])
+        }
+      }
+    }
+  )
 
   it('C1 month-end clamp chain and mixed units (10:00 wall)', () => {
     withTz('America/New_York', () => {
@@ -976,10 +1033,10 @@ describe('SPEC-R89/R90/R91 Temporal-consistent arithmetic', () => {
     withTz('America/New_York', () => {
       expect(
         mockDate(new Date(2021, 4, 1, 0, 0)).diff(mockDate(new Date(2021, 2, 31, 0, 30)), 'months')
-      ).toBe(0)
+      ).toBe(1)
       expect(
         mockDate(new Date(2022, 4, 1, 2, 15)).diff(mockDate(new Date(2020, 0, 31, 3, 15)), 'months')
-      ).toBe(26)
+      ).toBe(27)
       expect(
         mockDate(new Date(2021, 1, 28, 3, 30)).diff(
           mockDate(new Date(2022, 6, 31, 0, 30)),
