@@ -92,10 +92,25 @@ export class Trie extends ValueCollection<string> {
     return Iterator.from(this.#walk(start, prefix)).take(limit)
   }
 
-  *#walk(node: TrieNode, path: string): Generator<string> {
-    if (node.isWord) yield path
-    for (const [c, child] of node.children) {
-      yield* this.#walk(child, path + c)
+  *#walk(start: TrieNode, prefix: string): Generator<string> {
+    const stack: {
+      node: TrieNode
+      path: string
+      iter: Iterator<[string, TrieNode]> | null
+    }[] = [{ node: start, path: prefix, iter: null }]
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1]
+      if (frame.iter === null) {
+        if (frame.node.isWord) yield frame.path
+        frame.iter = frame.node.children.entries()
+      }
+      const next = frame.iter.next()
+      if (next.done) {
+        stack.pop()
+        continue
+      }
+      const [c, child] = next.value
+      stack.push({ node: child, path: frame.path + c, iter: null })
     }
   }
 

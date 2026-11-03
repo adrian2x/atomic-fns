@@ -90,6 +90,13 @@ describe('Trie', () => {
     expect(tree.size).toBe(0)
   })
 
+  it('100k-char word values and matches without stack overflow', () => {
+    const word = 'a'.repeat(100_000)
+    const tree = new Trie([word])
+    expect([...tree.values()]).toEqual([word])
+    expect([...tree.matches(word.slice(0, 10))]).toEqual([word])
+  })
+
   it('SPEC-R81 non-string add throws TypeError', () => {
     const tree = new Trie()
     expect(() => tree.add(1 as unknown as string)).toThrow(TypeError)
