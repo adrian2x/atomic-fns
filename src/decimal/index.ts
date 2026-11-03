@@ -114,6 +114,17 @@ function absBig(n: bigint): bigint {
   return n < 0n ? -n : n
 }
 
+function gcdBig(a: bigint, b: bigint): bigint {
+  let x = absBig(a)
+  let y = absBig(b)
+  while (y !== 0n) {
+    const t = x % y
+    x = y
+    y = t
+  }
+  return x
+}
+
 /** Exact binary value of a finite number as decimal `(i, e)`. */
 function toExact(n: number): { i: bigint; e: number } {
   const dv = new DataView(new ArrayBuffer(8))
@@ -249,10 +260,15 @@ export class Decimal {
   static readonly MAX_EXPONENT = 1_000_000
 
   /** Maximum fractional precision for {@link Decimal.div}, {@link Decimal.sqrt}, and {@link Decimal.round}. */
-  static readonly MAX_PRECISION = 100_000
+  static readonly MAX_PRECISION = 10_000
 
-  /** Maximum normalized coefficient decimal digit count; larger results throw {@link RangeError}. */
-  static readonly MAX_DIGITS = 1_000_000
+  /**
+   * Maximum normalized coefficient decimal digit count. Work and results of every arithmetic
+   * operation are bounded by this (not by {@link Decimal.MAX_EXPONENT}); larger results throw
+   * {@link RangeError}. Exact terminating / perfect-square results may still use any allowed
+   * exponent when their significant digit count fits.
+   */
+  static readonly MAX_DIGITS = 10_000
 
   #i = 0n
   #e = 0
@@ -261,13 +277,13 @@ export class Decimal {
 
   static #assertDigitsBound(bound: number): void {
     if (bound > Decimal.MAX_DIGITS) {
-      throw new RangeError('result exceeds 1000000 digits')
+      throw new RangeError('result exceeds 10000 digits')
     }
   }
 
   static #assertDivPrecision(precision: number): void {
     if (!Number.isInteger(precision) || precision < 0 || precision > Decimal.MAX_PRECISION) {
-      throw new RangeError('precision must be an integer from 0 to 100000')
+      throw new RangeError('precision must be an integer from 0 to 10000')
     }
   }
 
@@ -385,10 +401,60 @@ export class Decimal {
 
   #scaleRound(n0: bigint, d0: bigint, e0: number, precision: number, mode: RoundingMode): Decimal {
     const k = e0 + precision
+    const nDigits = Decimal.#digitLength(n0)
+    const dDigits = Decimal.#digitLength(d0)
+    // Intermediates may reach about 2 * MAX_DIGITS; quotient significant digits at most MAX_DIGITS+1.
+    const maxWork = 2 * Decimal.MAX_DIGITS
+    const maxSig = Decimal.MAX_DIGITS + 1
+    if (k >= 0) {
+      if (nDigits + k > maxWork || Math.max(1, nDigits + k - dDigits + 1) > maxSig) {
+        throw new RangeError('result exceeds 10000 digits')
+      }
+    } else if (dDigits - k > maxWork || Math.max(1, nDigits - (dDigits - k) + 1) > maxSig) {
+      throw new RangeError('result exceeds 10000 digits')
+    }
     const n = k >= 0 ? n0 * pow10(k) : n0
     const d = k >= 0 ? d0 : d0 * pow10(-k)
     const q = roundQuotient(n / d, n % d, d, mode)
     return Decimal.#fromIE(q, -precision)
+  }
+
+  /**
+   * Exact terminating quotient of coefficients, or `undefined` when the denominator has a
+   * prime factor other than 2 or 5 (after cancelling gcd). Exponent is adjusted; coefficient
+   * growth is capped at {@link Decimal.MAX_DIGITS}.
+   */
+  static #exactTerminating(
+    i1: bigint,
+    e1: number,
+    i2: bigint,
+    e2: number
+  ): { i: bigint; e: number } | undefined {
+    const sign = i1 < 0n !== i2 < 0n ? -1n : 1n
+    let n = absBig(i1)
+    let d = absBig(i2)
+    const g = gcdBig(n, d)
+    n /= g
+    d /= g
+    let e = e1 - e2
+    while (d % 2n === 0n) {
+      d /= 2n
+      n *= 5n
+      e -= 1
+      if (Decimal.#digitLength(n) > Decimal.MAX_DIGITS) {
+        throw new RangeError('result exceeds 10000 digits')
+      }
+    }
+    while (d % 5n === 0n) {
+      d /= 5n
+      n *= 2n
+      e -= 1
+      if (Decimal.#digitLength(n) > Decimal.MAX_DIGITS) {
+        throw new RangeError('result exceeds 10000 digits')
+      }
+    }
+    if (d !== 1n) return undefined
+    return { i: sign * n, e }
   }
 
   /**
@@ -408,7 +474,8 @@ export class Decimal {
   }
 
   /**
-   * Exact sum of this and `x`.
+   * Exact sum of this and `x`. Result significant digits and intermediate alignment work are
+   * bounded by {@link Decimal.MAX_DIGITS} (independent of {@link Decimal.MAX_EXPONENT}).
    * @param x Addend.
    * @example
    * decimal('0.1').add('0.2').toString() // '0.3'
@@ -420,8 +487,12 @@ export class Decimal {
     const d1 = this.#digitCount()
     const d2 = b.#digitCount()
     const e = Math.min(this.#e, b.#e)
-    // Upper bound on aligned sum digits: max(e1+d1, e2+d2) - min(e1,e2) + 1
-    Decimal.#assertDigitsBound(Math.max(this.#e + d1, b.#e + d2) - e + 1)
+    // Upper bound on aligned sum digits (incl. carry): max(e1+d1, e2+d2) - min(e1,e2) + 1.
+    // Allow one carry digit above MAX_DIGITS; normalize then enforces the hard cap.
+    const span = Math.max(this.#e + d1, b.#e + d2) - e + 1
+    if (span > Decimal.MAX_DIGITS + 1) {
+      throw new RangeError('result exceeds 10000 digits')
+    }
     const ai = this.#i * pow10(this.#e - e)
     const bi = b.#i * pow10(b.#e - e)
     return Decimal.#fromIE(ai + bi, e)
@@ -436,7 +507,7 @@ export class Decimal {
   }
 
   /**
-   * Exact product of this and `x`.
+   * Exact product of this and `x`. Checks `digits(this) + digits(x)` before multiplying.
    * @param x Multiplier.
    */
   mul(x: DecimalInput): Decimal {
@@ -446,7 +517,9 @@ export class Decimal {
   }
 
   /**
-   * Quotient rounded to `precision` fractional digits.
+   * Quotient rounded to `precision` fractional digits. Exponents are factored out so work is
+   * bounded by {@link Decimal.MAX_DIGITS}; an exact terminating result of any allowed exponent
+   * succeeds when its significant digit count fits.
    * @param x Divisor.
    * @param opts Precision and rounding mode.
    */
@@ -458,13 +531,9 @@ export class Decimal {
     if (b.#i === 0n) {
       throw new ZeroDivisionError('division by zero')
     }
-    // Integer-digits + precision; skip when both operands are small enough that the
-    // normalized quotient cannot exceed MAX_DIGITS (covers 1e1000000/100 and similar).
-    const d1 = this.#digitCount()
-    const d2 = b.#digitCount()
-    const intDigits = Math.max(1, this.#e + d1 - (b.#e + d2) + 1)
-    if (intDigits + precision > Decimal.MAX_DIGITS && d1 + d2 + precision > Decimal.MAX_DIGITS) {
-      Decimal.#assertDigitsBound(intDigits + precision)
+    const exact = Decimal.#exactTerminating(this.#i, this.#e, b.#i, b.#e)
+    if (exact !== undefined) {
+      return Decimal.#fromIE(exact.i, exact.e).round(precision, rounding)
     }
     return this.#scaleRound(this.#i, b.#i, this.#e - b.#e, precision, rounding)
   }
@@ -473,7 +542,8 @@ export class Decimal {
    * Rounds to `precision` fractional digits (negative precision rounds to tens, hundreds, ...).
    * `precision` must be an integer in `[-MAX_EXPONENT, MAX_PRECISION]`. When the rounding
    * unit is larger than this value's magnitude, returns 0 or `±10^(-precision)` without
-   * building a huge power of ten.
+   * building a huge power of ten. The digit bound applies to the rounded result (not a looser
+   * pre-estimate).
    * @param precision Fractional digits (may be negative).
    * @param rounding Rounding mode (default halfEven).
    */
@@ -484,8 +554,6 @@ export class Decimal {
     }
     const digs = this.#digitCount()
     if (digs === 0) return Decimal.#fromIE(0n, 0)
-    // Coefficient cannot grow past digs + |precision| slack from rounding carry.
-    Decimal.#assertDigitsBound(digs + Math.max(0, precision) + 1)
     const msdExp = this.#e + digs - 1
     const unitExp = -precision
     if (msdExp < unitExp) {
@@ -538,7 +606,9 @@ export class Decimal {
   }
 
   /**
-   * Square root rounded to `precision` fractional digits.
+   * Square root rounded to `precision` fractional digits. Exponents are factored out so work is
+   * bounded by {@link Decimal.MAX_DIGITS}; a perfect-square result of any allowed exponent
+   * succeeds when its significant digit count fits.
    * @param opts Precision and rounding mode.
    */
   sqrt(opts?: DivOptions): Decimal {
@@ -551,16 +621,38 @@ export class Decimal {
     if (this.#i === 0n) {
       return decimal(0)
     }
-    const intDigits = Math.ceil((this.#e + this.#digitCount()) / 2) + 1
-    Decimal.#assertDigitsBound(intDigits + precision)
-    const g = Math.max(0, Math.ceil(-(this.#e + 2 * (precision + 1)) / 2))
-    const t = -(precision + 1 + g)
-    const N = this.#i * pow10(this.#e - 2 * t)
-    const { root: s, exact } = isqrtRoot(N)
-    const d = pow10(1 + g)
-    const q = s / d
-    const r = s % d
-    return Decimal.#fromIE(roundQuotient(q, r, d, rounding, !exact), -precision)
+    // Factor exponent: i * 10^e = coeff * 10^(2*half) with coeff = i or i*10.
+    let coeff = this.#i
+    let halfExp = this.#e
+    if (halfExp % 2 !== 0) {
+      coeff *= 10n
+      halfExp -= 1
+    }
+    halfExp = halfExp / 2
+    const coeffDigits = Decimal.#digitLength(coeff)
+    Decimal.#assertDigitsBound(coeffDigits)
+    const { root, exact } = isqrtRoot(coeff)
+    if (exact) {
+      return Decimal.#fromIE(root, halfExp).round(precision, rounding)
+    }
+    // s ≈ sqrt(coeff) * 10^(halfExp + precision + 1); round off one guard digit.
+    const g = halfExp + precision + 1
+    if (g < 0) {
+      return Decimal.#fromIE(root, halfExp).round(precision, rounding)
+    }
+    if (coeffDigits + 2 * g > 2 * Decimal.MAX_DIGITS) {
+      throw new RangeError('result exceeds 10000 digits')
+    }
+    if (Math.ceil((coeffDigits + 2 * g) / 2) + 1 > Decimal.MAX_DIGITS + 1) {
+      throw new RangeError('result exceeds 10000 digits')
+    }
+    const N = coeff * pow10(2 * g)
+    const scaled = isqrtRoot(N)
+    const d = 10n
+    return Decimal.#fromIE(
+      roundQuotient(scaled.root / d, scaled.root % d, d, rounding, !scaled.exact),
+      -precision
+    )
   }
 
   /**

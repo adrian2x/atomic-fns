@@ -287,47 +287,55 @@ describe('Decimal clone and abs', () => {
 })
 
 describe('F-055 linear-time parse and normalize', () => {
-  it('parses a long digit run within budget', { timeout: 2000 }, () => {
+  it('parses a MAX_DIGITS digit run within budget', { timeout: 2000 }, () => {
+    const s = '1' + '0'.repeat(Decimal.MAX_DIGITS - 1)
     expectFast(() => {
-      expect(decimal('1' + '0'.repeat(200000)).toString()).toBe('1' + '0'.repeat(200000))
-    }, 250)
+      expect(decimal(s).toString()).toBe(s)
+    }, 50)
   })
 
-  it('adds 1e1000000 within budget', { timeout: 2000 }, () => {
+  it('rejects a digit run above MAX_DIGITS within budget', { timeout: 2000 }, () => {
+    expectFast(() => {
+      expect(() => decimal('1' + '0'.repeat(Decimal.MAX_DIGITS))).toThrow(RangeError)
+    }, 50)
+  })
+
+  it('adds 1e1000000 succeeds exactly', { timeout: 2000 }, () => {
     expectFast(() => {
       expect(decimal(0).add('1e1000000').eq('1e1000000')).toBe(true)
-    }, 370)
+    }, 50)
   })
 
-  it('divides 1e1000000 within budget', { timeout: 2000 }, () => {
+  it('divides 1e999999 by 1 succeeds exactly', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal('1e1000000').div(100).eq('1e999998')).toBe(true)
-    }, 370)
+      expect(decimal('1e999999').div(1).eq('1e999999')).toBe(true)
+    }, 50)
   })
 
   it('rejects a long invalid digit run within budget', { timeout: 2000 }, () => {
     const bad = '1'.repeat(40000) + 'x'
     expectFast(() => {
       expect(() => decimal(bad)).toThrow(ValueError)
-    }, 250)
+    }, 50)
   })
 
-  it('sqrt of 1e80000 within budget', { timeout: 2000 }, () => {
+  it('sqrt of 1e80000 succeeds exactly', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal('1e80000').sqrt().toString().length).toBeGreaterThan(0)
-    }, 250)
+      expect(decimal('1e80000').sqrt().eq('1e40000')).toBe(true)
+    }, 50)
   })
 
-  it('sqrt of 1e1000000 within budget', { timeout: 2000 }, () => {
+  it('sqrt of 1e1000000 succeeds exactly', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal('1e1000000').sqrt().toString().length).toBeGreaterThan(0)
-    }, 440)
+      expect(decimal('1e1000000').sqrt().eq('1e500000')).toBe(true)
+    }, 50)
   })
 
-  it('sqrt of 2e999999 within budget', { timeout: 2000 }, () => {
+  it('sqrt of 2e999999 throws RangeError fast', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal('2e999999').sqrt().toString().length).toBeGreaterThan(0)
-    }, 525)
+      expect(() => decimal('2e999999').sqrt()).toThrow(RangeError)
+      expect(() => decimal('2e999999').sqrt()).toThrow(/result exceeds 10000 digits/)
+    }, 50)
   })
 })
 
@@ -373,27 +381,62 @@ describe('isqrt precision-doubling', () => {
 
 describe('Decimal.MAX_DIGITS', () => {
   it('R13-F2: probe wide ops throw before bigint work', () => {
-    const t0 = performance.now()
-    expect(() => new Decimal('1e999999').add('1e-999999')).toThrow(RangeError)
-    expect(() => new Decimal('1e999999').add('1e-999999')).toThrow(/result exceeds 1000000 digits/)
-    expect(performance.now() - t0).toBeLessThan(5)
-    // Bound check must not build the wide value first.
-    expect(() => {
-      const a = new Decimal('1e999999').add('1e-999999')
-      a.round(2)
-    }).toThrow(RangeError)
-  })
-
-  it('R13-F2: 1000001-digit literal throws', () => {
-    expect(() => decimal('9'.repeat(1_000_001))).toThrow(RangeError)
-    expect(() => decimal('9'.repeat(1_000_001))).toThrow(/result exceeds 1000000 digits/)
-  })
-
-  it('R13-F2: MAX_EXPONENT sqrt still allowed', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal('2e999999').sqrt().toString().length).toBeGreaterThan(0)
-    }, 250)
+      expect(() => new Decimal('1e999999').add('1e-999999')).toThrow(RangeError)
+      expect(() => new Decimal('1e999999').add('1e-999999')).toThrow(/result exceeds 10000 digits/)
+      expect(() => {
+        const a = new Decimal('1e999999').add('1e-999999')
+        a.round(2)
+      }).toThrow(RangeError)
+    }, 50)
   })
+
+  it('R13-F2: digit literal above MAX_DIGITS throws', () => {
+    expect(() => decimal('9'.repeat(Decimal.MAX_DIGITS + 1))).toThrow(RangeError)
+    expect(() => decimal('9'.repeat(Decimal.MAX_DIGITS + 1))).toThrow(/result exceeds 10000 digits/)
+  })
+
+  it('R14-C: every op at MAX_DIGITS finishes within budget', { timeout: 2000 }, () => {
+    const a = decimal('9'.repeat(Decimal.MAX_DIGITS))
+    const b = decimal('1')
+    expectFast(() => {
+      expect(a.add(b).toString().length).toBeGreaterThan(0)
+    }, 50)
+    expectFast(() => {
+      expect(a.sub(b).toString().length).toBeGreaterThan(0)
+    }, 50)
+    expectFast(() => {
+      expect(() => a.mul(b.add(1))).toThrow(RangeError)
+    }, 50)
+    expectFast(() => {
+      expect(a.div(b).eq(a)).toBe(true)
+    }, 50)
+    expectFast(() => {
+      expect(a.round(0).toString().length).toBeGreaterThan(0)
+    }, 50)
+  })
+
+  it('R14-C: round at the cap passes when the rounded result fits', () => {
+    const a = decimal('9'.repeat(Decimal.MAX_DIGITS))
+    expect(a.round(0).eq(a)).toBe(true)
+    expect(a.round(2).eq(a)).toBe(true)
+  })
+
+  it(
+    'R14-C: r9 running sum of 1000 attacker items finishes within budget',
+    { timeout: 2000 },
+    () => {
+      const items = Array.from({ length: 1000 }, (_, i) => (i % 2 ? '1e-9' : '1e999000'))
+      expectFast(() => {
+        let total = decimal(0)
+        try {
+          for (const x of items) total = total.add(x)
+        } catch (e) {
+          expect(e).toBeInstanceOf(RangeError)
+        }
+      }, 250)
+    }
+  )
 })
 
 describe('Decimal.MAX_PRECISION', () => {
@@ -418,7 +461,7 @@ describe('Decimal.MAX_PRECISION', () => {
     expectFast(() => {
       const s = decimal('1').div('3', { precision: Decimal.MAX_PRECISION }).toString()
       expect(s.length).toBeGreaterThan(Decimal.MAX_PRECISION)
-    }, 250)
+    }, 50)
   })
 })
 
@@ -550,10 +593,10 @@ describe('magnitude-first Decimal comparison', () => {
 
   it('R13-F1: cached digit counts keep wide compares fast', { timeout: 30_000 }, () => {
     // Wide coeffs under MAX_DIGITS (probe 1eN+1e-N is rejected by MAX_DIGITS).
-    const pad = '9'.repeat(80_000)
-    const vals = Array.from({ length: 12 }, (_, k) => decimal(`${String(k + 1)}${pad}`))
+    const pad = '9'.repeat(Decimal.MAX_DIGITS - 1)
+    const vals = Array.from({ length: 9 }, (_, k) => decimal(`${String(k + 1)}${pad}`))
     expectFast(() => {
-      expect(sorted(vals.slice().reverse()).length).toBe(12)
+      expect(sorted(vals.slice().reverse()).length).toBe(9)
     }, 250)
 
     const a = vals[0]
