@@ -173,6 +173,9 @@ describe('Deque', () => {
     expect(() => new Deque([], { maxlen: NaN })).toThrow(RangeError)
   })
 
+  // F-074: slot clearing after pop/shift/clear is covered by the tests below via observable
+  // buffer reuse (no leaked prior values). A WeakRef/FinalizationRegistry pin is not deterministic
+  // without --expose-gc, so that form of the check is skipped.
   it('SPEC-R80 after pop vacated Array slot is undefined', () => {
     const deque = new Deque([1, 2, 3])
     expect(deque.pop()).toBe(3)

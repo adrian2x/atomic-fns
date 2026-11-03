@@ -297,4 +297,25 @@ describe('BTree', () => {
     }
     expect(back).toEqual([2])
   })
+
+  it('F-080 takeFromLeft keeps keys aligned with values including undefined', () => {
+    const t = new BTree<number, string | undefined>(undefined, undefined, 4)
+    for (const k of [1, 2, 3, 4]) t.set(k, undefined)
+    for (const k of [5, 6]) t.set(k, `v${String(k)}`)
+    const root = (t as unknown as { root: { children: LeafLike[] } }).root
+    const [left, right] = root.children
+    right.takeFromLeft(left)
+    expect(right.keys.length).toBe(right.values.length)
+    expect(left.keys.length).toBe(left.values.length)
+    expect(right.keys).toEqual([2, 3, 4, 5, 6])
+    expect(right.values).toEqual([undefined, undefined, undefined, 'v5', 'v6'])
+    expect(left.keys).toEqual([1])
+    expect(left.values).toEqual([undefined])
+  })
 })
+
+interface LeafLike {
+  keys: number[]
+  values: (string | undefined)[]
+  takeFromLeft(lhs: LeafLike): void
+}

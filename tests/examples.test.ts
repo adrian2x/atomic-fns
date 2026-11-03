@@ -2,6 +2,8 @@
  * SPEC-R107: every public @example holds when executed.
  * One `it` per @example block under src/.
  */
+import { readdirSync, readFileSync } from 'node:fs'
+import { join as pathJoin } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   compact,
@@ -84,9 +86,32 @@ function expectLoose(actual: unknown, expected: unknown): void {
   ).toBe(true)
 }
 
+function countExampleBlocks(dir: string): number {
+  let total = 0
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = pathJoin(dir, entry.name)
+    if (entry.isDirectory()) {
+      total += countExampleBlocks(path)
+    } else if (entry.name.endsWith('.ts')) {
+      const text = readFileSync(path, 'utf8')
+      const matches = text.match(/@example/g)
+      if (matches) total += matches.length
+    }
+  }
+  return total
+}
+
 describe('SPEC-R107 JSDoc @example', () => {
   it('finds public @example blocks', () => {
-    expect(68).toBe(68)
+    const srcRoot = pathJoin(import.meta.dirname, '../src')
+    const blockCount = countExampleBlocks(srcRoot)
+    const exampleTests = [
+      ...readFileSync(pathJoin(import.meta.dirname, 'examples.test.ts'), 'utf8').matchAll(
+        /it\('src\//g
+      )
+    ].length
+    expect(blockCount).toBe(exampleTests)
+    expect(blockCount).toBeGreaterThan(0)
   })
 
   it('src/collections/index.ts #1', () => {

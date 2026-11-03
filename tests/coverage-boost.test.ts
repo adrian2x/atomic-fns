@@ -240,10 +240,18 @@ describe('collections edge coverage', () => {
       objSeen.push(String(k))
     })
     expect(objSeen).toEqual(['b', 'a'])
-    forEachRight(new Set([1]), () => false)
+    const setSeen: unknown[] = []
+    forEachRight(new Set([1]), (v) => {
+      setSeen.push(v)
+      return false
+    })
+    expect(setSeen).toEqual([1])
+    let nullCalls = 0
     forEachRight(null, () => {
+      nullCalls++
       throw new Error('no')
     })
+    expect(nullCalls).toBe(0)
     expect(findIndex(null, () => true)).toBe(-1)
     expect(findIndex([1, 2, 3], (x) => x === 2, -2)).toBe(1)
     expect(findIndex([], () => true)).toBe(-1)

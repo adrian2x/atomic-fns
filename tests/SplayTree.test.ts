@@ -84,6 +84,20 @@ describe('SplayTree', () => {
     expect(one.height).toBe(0)
   })
 
+  it('F-067 min and max splay drop degenerate height', () => {
+    const tree = new SplayTree<number, number>()
+    for (let i = 0; i < 1000; i++) tree.set(i, i)
+    const before = tree.height
+    expect(before).toBeGreaterThan(100)
+    tree.min()
+    const afterMin = tree.height
+    expect(afterMin).toBeLessThan(before)
+    tree.max()
+    expect(tree.height).toBeLessThanOrEqual(afterMin + 1)
+    expect(tree.min()).toBe(0)
+    expect(tree.max()).toBe(999)
+  })
+
   it('SPEC-R77 delete present and missing', () => {
     const tree = new SplayTree<number, number>()
     tree.set(42, 42)

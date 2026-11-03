@@ -377,6 +377,13 @@ describe('globals', () => {
     assert(hash(obj) === hashCode(obj))
   })
 
+  it('F-099 FNV-1a reference vectors (32-bit over UTF-16 code units)', () => {
+    // Standard 32-bit FNV-1a (offset basis 0x811c9dc5, prime 0x01000193) over UTF-16 units.
+    assert.equal(hashCode(''), 0x811c9dc5)
+    assert.equal(hashCode('a'), 0xe40c292c)
+    assert.equal(hashCode('foobar'), 0xbf9cf968)
+  })
+
   it('bin', () => {
     assert(bin(42) === (42).toString(2))
   })
