@@ -36,8 +36,8 @@ describe('SPEC-R65 Decimal construction', () => {
   it('SPEC-R65 exponent bound', () => {
     expect(() => decimal('1e400000000')).toThrow(ValueError)
     expect(() => decimal('1e400000000')).toThrow(/exponent out of range/)
-    expect(() => decimal('1e1000001')).toThrow(ValueError)
-    expect(() => decimal('1e1000000')).not.toThrow()
+    expect(() => decimal('1e10001')).toThrow(ValueError)
+    expect(() => decimal('1e10000')).not.toThrow()
   })
 })
 
@@ -305,15 +305,15 @@ describe('F-055 linear-time parse and normalize', () => {
     }
   )
 
-  it('adds 1e1000000 succeeds exactly', { timeout: 2000 }, () => {
+  it('adds 1e10000 succeeds exactly', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal(0).add('1e1000000').eq('1e1000000')).toBe(true)
+      expect(decimal(0).add('1e10000').eq('1e10000')).toBe(true)
     }, 50)
   })
 
-  it('divides 1e999999 by 1 succeeds exactly', { timeout: 2000 }, () => {
+  it('divides 1e10000 by 1 succeeds exactly', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal('1e999999').div(1).eq('1e999999')).toBe(true)
+      expect(decimal('1e10000').div(1).eq('1e10000')).toBe(true)
     }, 50)
   })
 
@@ -324,22 +324,27 @@ describe('F-055 linear-time parse and normalize', () => {
     }, 50)
   })
 
-  it('sqrt of 1e80000 succeeds exactly', { timeout: 2000 }, () => {
+  it('old MAX_EXPONENT literals throw exponent out of range fast', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal('1e80000').sqrt().eq('1e40000')).toBe(true)
+      expect(() => decimal('1e1000000')).toThrow(ValueError)
+      expect(() => decimal('1e1000000')).toThrow(/exponent out of range/)
+      expect(() => decimal('1e999999')).toThrow(ValueError)
+      expect(() => decimal('1e80000')).toThrow(ValueError)
     }, 50)
   })
 
-  it('sqrt of 1e1000000 succeeds exactly', { timeout: 2000 }, () => {
+  it('sqrt of 1e10000 succeeds exactly', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(decimal('1e1000000').sqrt().eq('1e500000')).toBe(true)
+      expect(decimal('1e10000').sqrt().eq('1e5000')).toBe(true)
     }, 50)
   })
 
-  it('sqrt of 2e999999 throws RangeError fast', { timeout: 2000 }, () => {
+  it('sqrt of 2e10000 at high precision throws RangeError fast', { timeout: 2000 }, () => {
     expectFast(() => {
-      expect(() => decimal('2e999999').sqrt()).toThrow(RangeError)
-      expect(() => decimal('2e999999').sqrt()).toThrow(/result exceeds 10000 digits/)
+      expect(() => decimal('2e10000').sqrt({ precision: 9998 })).toThrow(RangeError)
+      expect(() => decimal('2e10000').sqrt({ precision: 9998 })).toThrow(
+        /result exceeds 10000 digits/
+      )
     }, 50)
   })
 })
@@ -436,8 +441,9 @@ describe('R15-D1 exactTerminating linear', () => {
     }, 50)
     const s5 = (5n ** 14000n).toString()
     expectFast(() => {
-      // Exact path fits; default precision 20 rounds the tiny value to 0.
-      expect(decimal('1').div(s5).toString()).toBe('0')
+      // Exact coeff fits digits but exponent -14000 exceeds MAX_EXPONENT.
+      expect(() => decimal('1').div(s5)).toThrow(ValueError)
+      expect(() => decimal('1').div(s5)).toThrow(/exponent out of range/)
     }, 50)
     const s3 = (3n * 2n ** 16000n).toString()
     expectFast(() => {
@@ -487,10 +493,10 @@ describe('R15-D1 exactTerminating linear', () => {
 describe('Decimal.MAX_DIGITS', () => {
   it('R13-F2: probe wide ops throw before bigint work', () => {
     expectFast(() => {
-      expect(() => new Decimal('1e999999').add('1e-999999')).toThrow(RangeError)
-      expect(() => new Decimal('1e999999').add('1e-999999')).toThrow(/result exceeds 10000 digits/)
+      expect(() => new Decimal('1e9999').add('1e-9999')).toThrow(RangeError)
+      expect(() => new Decimal('1e9999').add('1e-9999')).toThrow(/result exceeds 10000 digits/)
       expect(() => {
-        const a = new Decimal('1e999999').add('1e-999999')
+        const a = new Decimal('1e9999').add('1e-9999')
         a.round(2)
       }).toThrow(RangeError)
     }, 50)
@@ -503,7 +509,7 @@ describe('Decimal.MAX_DIGITS', () => {
 
   it('R15-B: MAX_DIGITS counts significant digits after strip zeros', () => {
     expect(decimal('1' + '0'.repeat(10000)).eq('1e10000')).toBe(true)
-    expect(decimal('0.' + '0'.repeat(10000) + '1').eq('1e-10001')).toBe(true)
+    expect(decimal('0.' + '0'.repeat(9999) + '1').eq('1e-10000')).toBe(true)
     expect(decimal('1e10000').eq('1e10000')).toBe(true)
     expect(() => decimal('9'.repeat(10_001))).toThrow(RangeError)
     expect(() => decimal('9'.repeat(10_001))).toThrow(/result exceeds 10000 digits/)
@@ -547,7 +553,7 @@ describe('Decimal.MAX_DIGITS', () => {
     'R14-C: r9 running sum of 1000 attacker items finishes within budget',
     { timeout: 2000 },
     () => {
-      const items = Array.from({ length: 1000 }, (_, i) => (i % 2 ? '1e-9' : '1e999000'))
+      const items = Array.from({ length: 1000 }, (_, i) => (i % 2 ? '1e-4990' : '1e5000'))
       expectFast(() => {
         let total = decimal(0)
         try {
@@ -706,7 +712,7 @@ describe('magnitude-first Decimal comparison', () => {
 
   it('sorted of 200 extreme-exponent Decimals finishes within budget', { timeout: 2000 }, () => {
     // Pre-fix: scale-by-gap compare hang. Revert of fb3c9cf fails this.
-    const vals = Array.from({ length: 200 }, (_, i) => decimal(i % 2 ? '1e-999999' : '1e999999'))
+    const vals = Array.from({ length: 200 }, (_, i) => decimal(i % 2 ? '1e-9999' : '1e9999'))
     expectFast(() => {
       expect(sorted(vals).length).toBe(200)
     }, 250)
@@ -737,10 +743,25 @@ describe('magnitude-first Decimal comparison', () => {
     'math.max over 900 extreme-exponent Decimals finishes within budget',
     { timeout: 2000 },
     () => {
-      const vals = Array.from({ length: 900 }, (_, i) => decimal(i % 2 ? '1e-999999' : '1e999999'))
+      const vals = Array.from({ length: 900 }, (_, i) => decimal(i % 2 ? '1e-9999' : '1e9999'))
       expectFast(() => {
-        expect(max(vals)?.eq('1e999999')).toBe(true)
+        expect(max(vals)?.eq('1e9999')).toBe(true)
       }, 250)
     }
   )
+})
+
+describe('R15-D2 MAX_EXPONENT 10000 and toNumber', () => {
+  it('toNumber matches Number for representative values', () => {
+    expect(decimal('1e9999').toNumber()).toBe(Number('1e9999'))
+    expect(decimal('-1.5e-9999').toNumber()).toBe(Number('-1.5e-9999'))
+    expect(decimal('123.456').toNumber()).toBe(Number('123.456'))
+  })
+
+  it('1000x toJSON of largest allowed value stays within budget', { timeout: 2000 }, () => {
+    const d = decimal('1e10000')
+    expectFast(() => {
+      for (let i = 0; i < 1000; i++) d.toJSON()
+    }, 100)
+  })
 })

@@ -257,7 +257,7 @@ export class Decimal {
   }
 
   /** Maximum absolute stored exponent; larger values throw {@link ValueError}. */
-  static readonly MAX_EXPONENT = 1_000_000
+  static readonly MAX_EXPONENT = 10_000
 
   /** Maximum fractional precision for {@link Decimal.div}, {@link Decimal.sqrt}, and {@link Decimal.round}. */
   static readonly MAX_PRECISION = 10_000
@@ -750,10 +750,22 @@ export class Decimal {
   }
 
   /**
-   * Number nearest to this Decimal (`Number(toString())`).
+   * Number nearest to this Decimal. Builds at most 17 significant digits plus an exponent
+   * (never the full plain `toString()`), so extreme exponents stay cheap.
    */
   toNumber(): number {
-    return Number(this.toString())
+    if (this.#i === 0n) return 0
+    const neg = this.#i < 0n
+    const abs = neg ? -this.#i : this.#i
+    const digs = this.#digitCount()
+    const keep = digs > 17 ? 17 : digs
+    const drop = digs - keep
+    const top = drop > 0 ? abs / pow10(drop) : abs
+    const exp = this.#e + drop
+    const body = top.toString()
+    const signed = neg ? '-' + body : body
+    if (exp === 0) return Number(signed)
+    return Number(signed + 'e' + String(exp))
   }
 
   /**
