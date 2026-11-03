@@ -444,6 +444,9 @@ describe('globals', () => {
     assert(!isEmpty(2))
     assert(isEmpty(new Map()))
     assert(!isEmpty(new Set([1])))
+    // POL-19: length/size-shaped plain objects are not empty
+    assert(!isEmpty({ size: 0, x: 1 }))
+    assert(!isEmpty({ length: 0, admin: true }))
   })
 
   it('SPEC-R29 removed names are absent; keys remains', async () => {

@@ -159,12 +159,42 @@ export function notNull(x: unknown): boolean {
 }
 
 /**
- * Returns `true` for empty collections or falsy values. Functions are empty unless they have
- * own enumerable properties (arity is irrelevant). Dates and non-zero numbers are not empty.
+ * Returns `true` for empty collections or falsy values. Length is consulted only for arrays,
+ * strings, arguments objects, typed arrays / Buffers, and objects with a callable `splice`.
+ * Size is consulted only for Map, Set, and non-plain library collections. Plain objects that
+ * merely own a `length` or `size` key count own enumerable string keys (Lodash-aligned).
+ * Functions are empty unless they have own enumerable properties (arity is irrelevant).
+ * Dates and non-zero numbers are not empty.
  */
 export function isEmpty(x: unknown): boolean {
+  if (x == null) return true
+  if (typeof x === 'boolean') return !x
+  if (typeof x === 'number') return x === 0 || Number.isNaN(x)
+  if (typeof x === 'bigint') return x === 0n
+  if (typeof x === 'string') return x.length === 0
+  if (typeof x === 'symbol') return false
   if (typeof x === 'function') return Object.keys(x).length === 0
-  return len(x) === 0 ? true : !x
+  if (typeof x !== 'object') return !x
+
+  if (x instanceof Date) return false
+  if (Array.isArray(x)) return x.length === 0
+  if (ArrayBuffer.isView(x)) return x.byteLength === 0
+  if (Object.prototype.toString.call(x) === '[object Arguments]') {
+    return (x as { length: number }).length === 0
+  }
+  if (
+    typeof (x as { length?: unknown }).length === 'number' &&
+    typeof (x as { splice?: unknown }).splice === 'function'
+  ) {
+    return (x as { length: number }).length === 0
+  }
+  if (x instanceof Map || x instanceof Set) return x.size === 0
+  const proto: unknown = Object.getPrototypeOf(x)
+  const plain = proto === Object.prototype || proto === null
+  if (!plain && typeof (x as { size?: unknown }).size === 'number') {
+    return (x as { size: number }).size === 0
+  }
+  return Object.keys(x).length === 0
 }
 
 /** Check if value is a `RegExp` type */
