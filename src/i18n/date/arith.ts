@@ -1,17 +1,7 @@
 import { ValueError } from '../../globals/index.js'
+import type { DurationObject } from '../duration.js'
 
-/** Calendar and clock fields for duration arithmetic. */
-export interface DurationObject {
-  years?: number
-  quarters?: number
-  months?: number
-  weeks?: number
-  days?: number
-  hours?: number
-  minutes?: number
-  seconds?: number
-  milliseconds?: number
-}
+export type { DurationObject }
 
 const CALENDAR_UNITS = ['years', 'quarters', 'months', 'weeks', 'days'] as const
 

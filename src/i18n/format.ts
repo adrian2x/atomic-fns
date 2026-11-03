@@ -90,20 +90,7 @@ export function asDate(date: string | number | Date | null | undefined, utc = fa
     }
   }
 
-  const src = new Date(date)
-  if (utc) {
-    if (Number.isNaN(src.getTime())) return src
-    return new Date(
-      src.getUTCFullYear(),
-      src.getUTCMonth(),
-      src.getUTCDate(),
-      src.getUTCHours(),
-      src.getUTCMinutes(),
-      src.getUTCSeconds(),
-      src.getUTCMilliseconds()
-    )
-  }
-  return src
+  return new Date(date)
 }
 
 const DATE_SHORT_DD: Intl.DateTimeFormatOptions = {

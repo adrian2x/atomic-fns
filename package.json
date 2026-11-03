@@ -25,7 +25,8 @@
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\" \"*.md\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.json\" \"*.md\"",
-    "strict:files": "node scripts/strict-files.mjs"
+    "strict:files": "node scripts/strict-files.mjs",
+    "test:tz": "for tz in UTC America/Los_Angeles America/New_York Asia/Kolkata Pacific/Kiritimati; do TZ=$tz vitest run tests/date.test.ts tests/format.test.ts tests/duration.test.ts || exit 1; done"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

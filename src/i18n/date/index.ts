@@ -1,8 +1,8 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { protocol } from '../../operators/protocol.js'
-import { Duration, UNITS_PLURAL, type DurationUnit, type TDuration } from '../duration.js'
+import { Duration, UNITS_PLURAL, type DurationObject, type DurationUnit } from '../duration.js'
 import { asDate, formatDate, strftime } from '../format.js'
-import { addDuration, subDuration, type DurationObject } from './arith.js'
+import { addDuration, subDuration } from './arith.js'
 import {
   asNumber,
   dayOfYear,
@@ -31,8 +31,7 @@ export {
 }
 
 export { addDuration, subDuration }
-export type { DurationObject }
-export type { DateObject }
+export type { DurationObject, DateObject }
 export type DateLike = number | string | Date | IntlDate | DateObject
 
 type DateCtorOpts = { locale?: string; utc?: boolean }
@@ -60,13 +59,12 @@ function fieldsToDate(fields: DateObject, utc: boolean): Date {
   return d
 }
 
-function toDurationObject(
-  duration: number | Duration | DurationObject | TDuration
-): DurationObject {
+function toDurationObject(duration: number | Duration | DurationObject): DurationObject {
   if (typeof duration === 'number') return { milliseconds: duration }
   const src = duration instanceof Duration ? duration.values : duration
-  const out: DurationObject = {
+  return {
     years: src.years,
+    quarters: src.quarters,
     months: src.months,
     weeks: src.weeks,
     days: src.days,
@@ -75,11 +73,6 @@ function toDurationObject(
     seconds: src.seconds,
     milliseconds: src.milliseconds
   }
-  if (Object.hasOwn(src, 'quarters')) {
-    const q = Reflect.get(src, 'quarters')
-    if (typeof q === 'number') out.quarters = q
-  }
-  return out
 }
 
 function utcMirror(date: Date): Date {
@@ -214,7 +207,7 @@ export class IntlDate {
 
   /** Day of year (1-366). */
   dayOfYear(): number {
-    return dayOfYear(this._date)
+    return dayOfYear(this.utc ? utcMirror(this._date) : this._date)
   }
 
   /** Whether this date's year is a leap year. */
@@ -234,12 +227,12 @@ export class IntlDate {
 
   /** Week of the year. */
   week(): number {
-    return weekOfYear(this._date).week
+    return weekOfYear(this.utc ? utcMirror(this._date) : this._date).week
   }
 
   /** ISO week of the year. */
   isoWeek(): number {
-    return weekOfYear(this._date, 1, 4).week
+    return weekOfYear(this.utc ? utcMirror(this._date) : this._date, 1, 4).week
   }
 
   /**
@@ -551,7 +544,7 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
    * Adds a duration with calendar-correct month/year clamp and DST-safe calendar units.
    * @param duration Duration fields, ms number, or Duration
    */
-  add(duration: number | Duration | DurationObject | TDuration): IntlDate {
+  add(duration: number | Duration | DurationObject): IntlDate {
     if (!this.isValid()) return this
     return this.clone(addDuration(this._date, toDurationObject(duration), 1, this.utc))
   }
@@ -560,7 +553,7 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
    * Subtracts a duration with calendar-correct month/year clamp.
    * @param duration Duration fields, ms number, or Duration
    */
-  subtract(duration: number | Duration | DurationObject | TDuration): IntlDate {
+  subtract(duration: number | Duration | DurationObject): IntlDate {
     if (!this.isValid()) return this
     return this.clone(subDuration(this._date, toDurationObject(duration), this.utc))
   }

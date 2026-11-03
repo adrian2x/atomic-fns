@@ -1,4 +1,3 @@
-import { pick } from '../collections/index.js'
 import { isNumber, isObject, ValueError } from '../globals/index.js'
 import { round } from '../math/index.js'
 import { parseISODuration } from './date/utils.js'
@@ -23,8 +22,10 @@ export type DurationUnit =
   | 'millisecond'
   | 'milliseconds'
 
-export interface TDuration {
+/** Calendar and clock fields for a Duration. */
+export interface DurationObject {
   years?: number
+  quarters?: number
   months?: number
   weeks?: number
   days?: number
@@ -117,6 +118,9 @@ const exactMatrix = {
   ...lowOrderMatrix
 }
 
+type ConversionMatrix = Record<string, Record<string, number>>
+
+/** Maps singular and plural unit names to the plural form. */
 export const UNITS_PLURAL: Record<DurationUnit, DurationUnit> = {
   year: 'years',
   years: 'years',
@@ -148,30 +152,54 @@ const orderedUnits = [
   'minutes',
   'seconds',
   'milliseconds'
-]
+] as const
+
+type OrderedUnit = (typeof orderedUnits)[number]
+
 const reverseUnits = orderedUnits.slice(0).reverse()
 
+/**
+ * An immutable length of time in calendar and clock units.
+ * Construct from a number (milliseconds), a field object, or another Duration.
+ * ISO-8601 strings go through {@link Duration.fromISO}.
+ */
 export class Duration {
-  values: TDuration
-  private matrix = casualMatrix
+  /** The stored unit fields. */
+  readonly values: DurationObject
+  readonly #exact: boolean
+  readonly #matrix: ConversionMatrix
 
-  constructor(dur: number | TDuration | Duration = {}, exact = false) {
+  /**
+   * @param dur Milliseconds, unit fields, or another Duration.
+   * @param exact When true, year/month conversions use average Gregorian lengths.
+   */
+  constructor(dur: number | DurationObject | Duration = {}, exact?: boolean) {
+    if (typeof dur === 'string') {
+      throw new ValueError('use Duration.fromISO')
+    }
     if (dur instanceof Duration) {
       this.values = { ...dur.values }
+      this.#exact = exact ?? dur.#exact
     } else if (isNumber(dur)) {
       this.values = { milliseconds: dur }
+      this.#exact = exact ?? false
     } else if (isObject(dur)) {
       this.values = normalizeUnits(dur)
+      this.#exact = exact ?? false
+    } else {
+      throw new ValueError('Duration input must be a number, Duration, or DurationObject')
     }
-    if (exact) {
-      // Set the conversion matrix to use
-      this.matrix = exactMatrix
-    }
+    this.#matrix = this.#exact ? exactMatrix : casualMatrix
   }
 
   /** Get the years. */
   get years() {
     return this.values.years || 0
+  }
+
+  /** Get the quarters. */
+  get quarters() {
+    return this.values.quarters || 0
   }
 
   /** Get the months. */
@@ -194,7 +222,7 @@ export class Duration {
     return this.values.hours || 0
   }
 
-  /** et the minutes. */
+  /** Get the minutes. */
   get minutes() {
     return this.values.minutes || 0
   }
@@ -211,19 +239,23 @@ export class Duration {
 
   /**
    * Get the value of unit.
-   * @param {string} unit - a unit such as 'minute' or 'day'
-   * @example Duration.fromObject({years: 2, days: 3}).get('years') // 2
-   * @example Duration.fromObject({years: 2, days: 3}).get('months') // 0
-   * @example Duration.fromObject({years: 2, days: 3}).get('days') // 3
-   * @return {number}
+   * @param unit a unit such as 'minute' or 'day'
+   * @example new Duration({years: 2, days: 3}).get('years') // 2
+   * @example new Duration({years: 2, days: 3}).get('months') // 0
+   * @example new Duration({years: 2, days: 3}).get('days') // 3
    */
   get(unit: string): number {
-    return this[UNITS_PLURAL[unit.toLowerCase()]]
+    const key = UNITS_PLURAL[unit.toLowerCase() as DurationUnit]
+    return key ? this[key as OrderedUnit] : 0
   }
 
-  add(duration: TDuration) {
+  /**
+   * Add another duration. Returns a new Duration; keeps this instance's exact mode.
+   * @param duration The amount to add.
+   */
+  add(duration: number | DurationObject | Duration) {
     const dur = new Duration(duration)
-    const result = {}
+    const result: DurationObject = {}
 
     for (const k of orderedUnits) {
       if (dur.values[k] || this.values[k]) {
@@ -231,15 +263,14 @@ export class Duration {
       }
     }
 
-    return new Duration(result)
+    return new Duration(result, this.#exact)
   }
 
   /**
    * Make this Duration shorter by the specified amount. Return a newly-constructed Duration.
-   * @param {Duration|Object|number} duration - The amount to subtract.
-   * @return {Duration}
+   * @param duration The amount to subtract.
    */
-  subtract(duration: Duration | TDuration | number) {
+  subtract(duration: number | DurationObject | Duration) {
     const dur = new Duration(duration)
     return this.add(dur.negated())
   }
@@ -251,14 +282,14 @@ export class Duration {
 new Duration({ hours: 1, seconds: 30 }).negated().toObject()
 // { hours: -1, seconds: -30 }
 ```
-   * @returns {Duration}
    */
   negated() {
-    const negated = {}
-    for (const k of Object.keys(this.values)) {
-      negated[k] = this.values[k] === 0 ? 0 : -this.values[k]
+    const negated: DurationObject = {}
+    for (const k of Object.keys(this.values) as OrderedUnit[]) {
+      const v = this.values[k]
+      negated[k] = v === 0 ? 0 : -(v as number)
     }
-    return new Duration(negated)
+    return new Duration(negated, this.#exact)
   }
 
   /**
@@ -268,18 +299,17 @@ new Duration({ hours: 1, seconds: 30 }).negated().toObject()
 new Duration({ hours: 1, seconds: -30 }).abs().toObject()
 // { hours: 1, seconds: 30 }
 ```
-   * @returns {Duration}
    */
   abs() {
-    const parts = {}
-    for (const k of Object.keys(this.values)) {
-      parts[k] = Math.abs(this.values[k])
+    const parts: DurationObject = {}
+    for (const k of Object.keys(this.values) as OrderedUnit[]) {
+      parts[k] = Math.abs(this.values[k] as number)
     }
-    return new Duration(parts)
+    return new Duration(parts, this.#exact)
   }
 
-  private shiftToAll() {
-    return this.shiftTo(
+  #shiftToAll() {
+    return this.#shiftTo(
       'years',
       'months',
       'weeks',
@@ -291,42 +321,39 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
     )
   }
 
-  private shiftTo(...units: string[]) {
+  #shiftTo(...units: string[]) {
     if (units.length === 0) {
       return this
     }
 
-    units = units.map((u) => UNITS_PLURAL[u.toLowerCase()])
+    const targetUnits = units.map((u) => UNITS_PLURAL[u.toLowerCase() as DurationUnit])
 
-    const built: TDuration = {}
-    const accumulated: TDuration = {}
+    const built: DurationObject = {}
+    const accumulated: DurationObject = {}
     const vals = this.toObject()
-    let lastUnit
+    let lastUnit: OrderedUnit | undefined
 
     for (const toUnit of orderedUnits) {
-      if (units.includes(toUnit)) {
+      if (targetUnits.includes(toUnit)) {
         lastUnit = toUnit
         let own = 0
 
-        // anything we haven't boiled down yet should get boiled to this unit
         for (const fromUnit in accumulated) {
-          own += accumulated[fromUnit] * this.matrix[fromUnit][toUnit]
-          accumulated[fromUnit] = 0
+          own += (accumulated[fromUnit as OrderedUnit] as number) * this.#matrix[fromUnit][toUnit]
+          accumulated[fromUnit as OrderedUnit] = 0
         }
 
-        // plus anything that's already in this unit
         if (typeof vals[toUnit] === 'number') {
-          own += vals[toUnit]
+          own += vals[toUnit] as number
         }
 
         const i = Math.trunc(own)
         built[toUnit] = i
         accumulated[toUnit] = (own * 1000 - i * 1000) / 1000
 
-        // plus anything further down the chain that should be rolled up in to this
         for (const fromUnit in vals) {
-          if (orderedUnits.indexOf(fromUnit) > orderedUnits.indexOf(toUnit)) {
-            convert(this.matrix, vals, fromUnit, built, toUnit)
+          if (orderedUnits.indexOf(fromUnit as OrderedUnit) > orderedUnits.indexOf(toUnit)) {
+            convert(this.#matrix, vals, fromUnit as OrderedUnit, built, toUnit)
           }
         }
       } else if (isNumber(vals[toUnit])) {
@@ -334,57 +361,79 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
       }
     }
 
-    // anything leftover becomes the decimal for the last unit
-    // lastUnit must be defined since units is not empty
     for (const key in accumulated) {
-      if (accumulated[key] !== 0) {
-        built[lastUnit] +=
-          key === lastUnit ? accumulated[key] : accumulated[key] / this.matrix[lastUnit][key]
+      if (accumulated[key as OrderedUnit] !== 0 && lastUnit !== undefined) {
+        built[lastUnit] =
+          (built[lastUnit] as number) +
+          (key === lastUnit
+            ? (accumulated[key as OrderedUnit] as number)
+            : (accumulated[key as OrderedUnit] as number) / this.#matrix[lastUnit][key])
       }
     }
 
-    return new Duration(built)
+    return new Duration(built, this.#exact)
   }
 
+  /**
+   * Convert this duration to a single unit total.
+   * @param unit Target unit.
+   */
   total(unit: DurationUnit) {
-    return this.shiftTo(unit).get(unit)
+    return this.#shiftTo(unit).get(unit)
   }
 
-  exact(unit?: DurationUnit) {
-    this.matrix = exactMatrix
-    if (!unit) return this
-    return this.total(unit)
+  /**
+   * Return a Duration using exact (average Gregorian) conversions, or the total in `unit`.
+   * Never mutates the receiver.
+   * @param unit Optional unit for a numeric total.
+   */
+  exact(unit: DurationUnit): number
+  exact(): Duration
+  exact(unit?: DurationUnit): Duration | number {
+    const d = new Duration(this.values, true)
+    if (!unit) return d
+    return d.total(unit)
   }
 
+  /** Shallow copy of the unit fields. */
   toObject() {
     return { ...this.values }
   }
 
+  /**
+   * Normalize overlapping units (e.g. 90 minutes -> 1 hour 30 minutes).
+   * Returns a new Duration; the receiver is unchanged.
+   */
   normalize() {
-    normalizeValues(this.matrix, this.values)
-    return new Duration(this.values)
+    const vals = { ...this.values }
+    normalizeValues(this.#matrix, vals)
+    return new Duration(vals, this.#exact)
   }
 
+  /**
+   * Normalize, shift to all units, and drop zeroes.
+   */
   rescale() {
-    const dur = this.normalize().shiftToAll()
+    const dur = this.normalize().#shiftToAll()
     const vals = removeZeroes(dur.values)
-    return new Duration(vals)
+    return new Duration(vals, this.#exact)
   }
 
   /**
    * Returns an ISO 8601-compliant string representation of this Duration.
+   * Quarters are folded into months (3 months per quarter).
    * @see https://en.wikipedia.org/wiki/ISO_8601#Durations
-   * @example Duration.fromObject({ years: 3, seconds: 45 }).toString() // 'P3YT45S'
-   * @example Duration.fromObject({ months: 4, seconds: 45 }).toString() // 'P4MT45S'
-   * @example Duration.fromObject({ months: 5 }).toString() // 'P5M'
-   * @example Duration.fromObject({ minutes: 5 }).toString() // 'PT5M'
-   * @example Duration.fromObject({ milliseconds: 6 }).toString() // 'PT0.006S'
-   * @return {string}
+   * @example new Duration({ years: 3, seconds: 45 }).toString() // 'P3YT45S'
+   * @example new Duration({ months: 4, seconds: 45 }).toString() // 'P4MT45S'
+   * @example new Duration({ months: 5 }).toString() // 'P5M'
+   * @example new Duration({ minutes: 5 }).toString() // 'PT5M'
+   * @example new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
    */
   toISOString() {
     let s = 'P'
     if (this.years !== 0) s += this.years + 'Y'
-    if (this.months !== 0) s += this.months + 'M'
+    const months = this.months + this.quarters * 3
+    if (months !== 0) s += months + 'M'
     if (this.weeks !== 0) s += this.weeks + 'W'
     if (this.days !== 0) s += this.days + 'D'
     if (this.hours !== 0 || this.minutes !== 0 || this.seconds !== 0 || this.milliseconds !== 0)
@@ -392,15 +441,37 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
     if (this.hours !== 0) s += this.hours + 'H'
     if (this.minutes !== 0) s += this.minutes + 'M'
     if (this.seconds !== 0 || this.milliseconds !== 0)
-      // this will handle "floating point madness" by removing extra decimal places
-      // https://stackoverflow.com/questions/588004/is-floating-point-math-broken
       s += round(this.seconds + this.milliseconds / 1000, 3) + 'S'
     if (s === 'P') s += 'T0S'
     return s
   }
 
+  /** Same as {@link toISOString}. */
   toString() {
     return this.toISOString()
+  }
+
+  /**
+   * Format with `Intl.DurationFormat` when available; otherwise {@link toISOString}.
+   * @param locale BCP 47 locale tag.
+   * @param options `Intl.DurationFormat` options.
+   */
+  format(locale?: string, options?: Record<string, unknown>): string {
+    const intl = Intl as typeof Intl & {
+      DurationFormat?: new (
+        locales?: string | string[],
+        opts?: Record<string, unknown>
+      ) => { format(duration: DurationObject): string }
+    }
+    if (typeof intl.DurationFormat !== 'function') {
+      return this.toISOString()
+    }
+    const obj = this.toObject()
+    if (obj.quarters) {
+      obj.months = (obj.months ?? 0) + obj.quarters * 3
+      delete obj.quarters
+    }
+    return new intl.DurationFormat(locale, options).format(obj)
   }
 
   /**
@@ -415,42 +486,53 @@ Duration.fromISO('PT23H').toObject()
 Duration.fromISO('P5Y3M').toObject()
 // { years: 5, months: 3 }
 ```
-   * @return {Duration}
    */
   static fromISO(text: string) {
     const [parsed] = parseISODuration(text)
-    if (parsed) return new Duration(parsed)
-    throw new ValueError(`The input "${text}" can't be parsed as ISO 8601`)
+    if (!parsed) {
+      throw new ValueError(`The input "${text}" can't be parsed as ISO 8601`)
+    }
+    const hasUnit = Object.values(parsed).some((v) => v != null)
+    if (!hasUnit) {
+      throw new ValueError(`The input "${text}" can't be parsed as ISO 8601`)
+    }
+    return new Duration(parsed)
   }
 }
 
-function normalizeUnits(obj) {
-  const vals = {}
+function normalizeUnits(obj: Record<string, unknown>): DurationObject {
+  const vals: DurationObject = {}
   for (const unit of Object.keys(obj)) {
-    vals[UNITS_PLURAL[unit]] = obj[unit]
+    const plural = UNITS_PLURAL[unit as DurationUnit]
+    if (plural && typeof obj[unit] === 'number') {
+      vals[plural as OrderedUnit] = obj[unit] as number
+    }
   }
   return vals
 }
 
-function antiTrunc(n) {
+function antiTrunc(n: number) {
   return n < 0 ? Math.floor(n) : Math.ceil(n)
 }
 
-// NB: mutates parameters
-function convert(matrix, sources, fromUnit, result, toUnit) {
+function convert(
+  matrix: ConversionMatrix,
+  sources: DurationObject,
+  fromUnit: OrderedUnit,
+  result: DurationObject,
+  toUnit: OrderedUnit
+) {
   const conv = matrix[toUnit][fromUnit]
-  const raw = sources[fromUnit] / conv
-  const sameSign = Math.sign(raw) === Math.sign(result[toUnit])
-  // ok, so this is wild, but see the matrix in the tests
+  const raw = (sources[fromUnit] as number) / conv
+  const sameSign = Math.sign(raw) === Math.sign(result[toUnit] as number)
   const added =
     !sameSign && result[toUnit] !== 0 && Math.abs(raw) <= 1 ? antiTrunc(raw) : Math.trunc(raw)
-  result[toUnit] += added
-  sources[fromUnit] -= added * conv
+  result[toUnit] = (result[toUnit] as number) + added
+  sources[fromUnit] = (sources[fromUnit] as number) - added * conv
 }
 
-// NB: mutates parameters
-function normalizeValues(matrix, vals) {
-  reverseUnits.reduce((previous, current) => {
+function normalizeValues(matrix: ConversionMatrix, vals: DurationObject) {
+  reverseUnits.reduce<OrderedUnit | null>((previous, current) => {
     if (vals[current]) {
       if (previous) {
         convert(matrix, vals, previous, vals, current)
@@ -461,7 +543,11 @@ function normalizeValues(matrix, vals) {
   }, null)
 }
 
-// Remove all properties with a value of 0 from an object
-function removeZeroes(vals) {
-  return pick(vals, (value) => value !== 0)
+function removeZeroes(vals: DurationObject): DurationObject {
+  const out: DurationObject = {}
+  for (const k of orderedUnits) {
+    const v = vals[k]
+    if (v !== undefined && v !== 0) out[k] = v
+  }
+  return out
 }

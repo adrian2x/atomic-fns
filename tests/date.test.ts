@@ -5,7 +5,8 @@ import { protocol } from '../src/operators/protocol.js'
 import { ValueError } from '../src/globals/index.js'
 
 vi.useFakeTimers()
-vi.setSystemTime(new Date('2026-06-15T12:00:00Z'))
+// 08:00Z is June 15 in every zone in npm run test:tz (Kiritimati UTC+14 through LA UTC-7)
+vi.setSystemTime(new Date('2026-06-15T08:00:00Z'))
 
 const mockDate = (
   val?: ConstructorParameters<typeof IntlDate>[0],
@@ -21,7 +22,7 @@ describe('IntlDate', () => {
   })
 
   it('SPEC-R92 UTC view reads UTC fields of the current instant', () => {
-    const date = new Date('2026-06-15T12:00:00Z')
+    const date = new Date('2026-06-15T08:00:00Z')
     const testDate = IntlDate.UTC(undefined)
     expect(testDate.year).toBe(date.getUTCFullYear())
     expect(testDate.month).toBe(date.getUTCMonth() + 1)
