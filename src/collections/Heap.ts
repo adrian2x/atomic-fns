@@ -33,8 +33,9 @@ export class Heap<T> extends ValueCollection<T> {
   }
 
   /**
-   * Multiset equality: same size and equal contents after sorting both with this heap's
-   * comparator (iteration / heap order is not part of equality).
+   * Multiset equality: same size; after sorting both with the heap comparator, each maximal
+   * run of comparator-equal items is compared as a multiset (iteration / heap order is not
+   * part of equality).
    */
   override [protocol.equals](other: unknown): boolean {
     if (this === other) return true
@@ -43,10 +44,32 @@ export class Heap<T> extends ValueCollection<T> {
     if (this.size !== o.size) return false
     const a = [...this.values()].sort(this.#compare)
     const b = [...o.values()].sort(o.#compare)
-    for (let i = 0; i < a.length; i++) {
-      if (!deepEqual(a[i], b[i])) return false
+    let i = 0
+    let j = 0
+    while (i < a.length && j < b.length) {
+      if (this.#compare(a[i], b[j]) !== 0) return false
+      let endA = i + 1
+      while (endA < a.length && this.#compare(a[i], a[endA]) === 0) endA++
+      let endB = j + 1
+      while (endB < b.length && o.#compare(b[j], b[endB]) === 0) endB++
+      if (endA - i !== endB - j) return false
+      const used = new Array<boolean>(endB - j).fill(false)
+      for (let x = i; x < endA; x++) {
+        let found = false
+        for (let y = j; y < endB; y++) {
+          if (used[y - j]) continue
+          if (deepEqual(a[x], b[y])) {
+            used[y - j] = true
+            found = true
+            break
+          }
+        }
+        if (!found) return false
+      }
+      i = endA
+      j = endB
     }
-    return true
+    return i === a.length && j === b.length
   }
 
   override [protocol.clone](deep = false): this {

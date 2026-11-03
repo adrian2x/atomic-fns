@@ -1,6 +1,6 @@
 import type { Comparer } from '../operators/index.js'
-import { compare } from '../operators/index.js'
-import { MapCollection } from './abc.js'
+import { compare, protocol } from '../operators/index.js'
+import { MapCollection, sameSequenceItems } from './abc.js'
 
 class Node<K, V> {
   key: K
@@ -56,6 +56,11 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     const copy = new SplayTree<K, V>(this.#cmp, this.#p)
     for (const [k, v] of entries) copy.set(k, v)
     return copy as this
+  }
+
+  /** Sequence equality: key order is part of meaning (like SortedMap). */
+  override [protocol.equals](other: unknown): boolean {
+    return sameSequenceItems(this, other, (c) => c.entries())
   }
 
   readonly [Symbol.toStringTag] = 'SplayTree'

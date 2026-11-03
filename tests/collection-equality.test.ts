@@ -50,6 +50,12 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
     const a = new SplayTree<number, string>().set(1, 'a')
     expect(deepEqual(a, new SplayTree<number, string>().set(1, 'b'))).toBe(false)
     expect(deepEqual(a, new SplayTree<number, string>().set(1, 'a'))).toBe(true)
+    const ka = { n: 1 }
+    const kb = { n: 1 }
+    const cmp = (x: { n: number }, y: { n: number }) => x.n - y.n
+    const left = new SplayTree<{ n: number }, string>(cmp).set(ka, 'a')
+    const right = new SplayTree<{ n: number }, string>(cmp).set(kb, 'a')
+    expect(deepEqual(left, right)).toBe(true)
   })
 
   it('Deque', () => {
@@ -61,6 +67,47 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
   it('Heap', () => {
     expect(deepEqual(new Heap([1, 2]), new Heap([1, 3]))).toBe(false)
     expect(deepEqual(new Heap([1, 2]), new Heap([1, 2]))).toBe(true)
+    interface Item {
+      p: number
+      id: string
+    }
+    const byP = (x: Item, y: Item) => x.p - y.p
+    expect(
+      deepEqual(
+        new Heap(
+          [
+            { p: 1, id: 'a' },
+            { p: 1, id: 'b' }
+          ],
+          byP
+        ),
+        new Heap(
+          [
+            { p: 1, id: 'b' },
+            { p: 1, id: 'a' }
+          ],
+          byP
+        )
+      )
+    ).toBe(true)
+    expect(
+      deepEqual(
+        new Heap(
+          [
+            { p: 1, id: 'a' },
+            { p: 1, id: 'b' }
+          ],
+          byP
+        ),
+        new Heap(
+          [
+            { p: 1, id: 'a' },
+            { p: 1, id: 'c' }
+          ],
+          byP
+        )
+      )
+    ).toBe(false)
   })
 
   it('Trie', () => {
@@ -68,11 +115,19 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
     expect(deepEqual(new Trie(['ab']), new Trie(['ab']))).toBe(true)
   })
 
-  it('LRUCache compares entries in recency order', () => {
+  it('LRUCache compares entries by key and value', () => {
     const a = new LRUCache<string, number>(2).set('a', 1).set('b', 2)
     const b = new LRUCache<string, number>(2).set('a', 1).set('b', 3)
     expect(deepEqual(a, b)).toBe(false)
     expect(deepEqual(a, new LRUCache<string, number>(2).set('a', 1).set('b', 2))).toBe(true)
+  })
+
+  it('deep clone of map-like collections keeps keys by reference', () => {
+    const k = {}
+    const v = { n: 1 }
+    const copied = clone(new LRUCache<object, { n: number }>(2).set(k, v), true)
+    expect(copied.get(k)).toEqual({ n: 1 })
+    expect(copied.get(k)).not.toBe(v)
   })
 
   it('FrozenSet', () => {

@@ -335,7 +335,7 @@ const BOXED_TAGS = new Set([
  * keeps key identity and deep-clones values. RegExp match arrays keep `index` / `input` /
  * `groups`. Class instances stay by reference. Symbol `protocol.clone` is honored and
  * receives the `deep` flag; a string-named `clone` method is ignored. Collection classes
- * deep-clone their values when `deep` is true (comparator-ordered keys stay by reference).
+ * deep-clone their values when `deep` is true (map-like keys stay by reference).
  * Deep nesting deeper than 1000 levels throws `RangeError`.
  * @param value Value to clone.
  * @param deep Deep clone when true.

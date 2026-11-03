@@ -203,15 +203,13 @@ export abstract class MapCollection<K, V> extends BaseCollection implements Iter
 
   /**
    * New instance of the same class holding the same entries.
-   * When `deep` is true, keys and values are deep-cloned via {@link clone}; otherwise shallow.
-   * Comparator-ordered subclasses keep keys by reference and deep-clone values only.
+   * When `deep` is true, keys are kept by reference and values are deep-cloned via {@link clone}
+   * (matching native Map deep clone); otherwise the copy is shallow.
    * Subclasses whose constructor needs more than the entries override {@link cloneFrom}.
    */
   [protocol.clone](deep = false): this {
     if (!deep) return this.cloneFrom(this.entries())
-    return this.cloneFrom(
-      [...this.entries()].map(([k, v]): [K, V] => [clone(k, true), clone(v, true)])
-    )
+    return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
   }
 
   /**
