@@ -2,6 +2,7 @@
  * Structural equality helpers.
  */
 
+import { arrayOwnIndices, isHugeSparseArray } from '../internal/arrayKeys.js'
 import { enterNesting, exitNesting, guardNesting, withHookNesting } from '../internal/nesting.js'
 import { eq, sameValueZero } from './order.js'
 import { hasMethod, protocol } from './protocol.js'
@@ -143,6 +144,17 @@ function deepEqualChildren(a: object, b: object, pending: Pending, proven: Prove
   if (Array.isArray(a)) {
     const bb = b as unknown[]
     if (a.length !== bb.length) return false
+    if (isHugeSparseArray(a) || isHugeSparseArray(bb)) {
+      const keysA = arrayOwnIndices(a)
+      const keysB = arrayOwnIndices(bb)
+      if (keysA.length !== keysB.length) return false
+      for (let i = 0; i < keysA.length; i++) {
+        if (keysA[i] !== keysB[i]) return false
+        const idx = Number(keysA[i])
+        if (!deepEqualInner(a[idx], bb[idx], pending, proven)) return false
+      }
+      return true
+    }
     for (let i = 0; i < a.length; i++) {
       if (!deepEqualInner(a[i], bb[i], pending, proven)) return false
     }

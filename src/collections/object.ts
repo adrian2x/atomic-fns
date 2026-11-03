@@ -2,6 +2,7 @@
  * Object utilities: merge, pick, omit, clone.
  */
 
+import { arrayOwnIndices, isHugeSparseArray } from '../internal/arrayKeys.js'
 import {
   assertNestingDepth,
   enterNesting,
@@ -273,14 +274,19 @@ function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unk
     if (isPlainArray(value)) {
       const list = value
       const out: unknown[] = new Array(list.length)
-      for (let i = 0; i < list.length; i++) {
+      const visit = (i: number): void => {
         const child = trie.kids?.get(String(i))
-        if (child?.drop) continue
+        if (child?.drop) return
         if (!child?.kids) {
           out[i] = list[i]
         } else {
           out[i] = omitWithTrie(list[i], child, pathPrefix.concat(String(i)))
         }
+      }
+      if (isHugeSparseArray(list)) {
+        for (const key of arrayOwnIndices(list)) visit(Number(key))
+      } else {
+        for (let i = 0; i < list.length; i++) visit(i)
       }
       return out
     }
@@ -601,8 +607,15 @@ function cloneDeepBody(v: object, map: WeakMap<object, unknown>): unknown {
   if (Array.isArray(v)) {
     const out: unknown[] = new Array(v.length)
     map.set(v, out)
-    for (let i = 0; i < v.length; i++) {
-      if (i in v) out[i] = cloneInner(v[i], true, map)
+    if (isHugeSparseArray(v)) {
+      for (const key of arrayOwnIndices(v)) {
+        const i = Number(key)
+        out[i] = cloneInner(v[i], true, map)
+      }
+    } else {
+      for (let i = 0; i < v.length; i++) {
+        if (i in v) out[i] = cloneInner(v[i], true, map)
+      }
     }
     const arr = v as unknown[] & { index?: number; input?: string; groups?: unknown }
     if ('index' in arr) (out as { index?: number }).index = arr.index

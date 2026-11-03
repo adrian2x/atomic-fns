@@ -18,6 +18,7 @@
  * item.
  */
 
+import { arrayOwnIndices, isHugeSparseArray } from './arrayKeys.js'
 import { enterNesting, exitNesting, guardNesting } from './nesting.js'
 
 const KEY_SIZE_LIMIT = 64 * 1024
@@ -375,10 +376,18 @@ function canonicalKeyInner(value: unknown, state: CanonicalKeySession): NodeInfo
       enterNesting()
       try {
         const builder = new CompositeBuilder(pt)
-        for (const i of obj.keys()) {
-          const child = canonicalKeyInner(obj[i], state)
-          if (child === undefined) return accept(state, obj, undefined)
-          builder.add('', child)
+        if (isHugeSparseArray(obj)) {
+          for (const key of arrayOwnIndices(obj)) {
+            const child = canonicalKeyInner(obj[Number(key)], state)
+            if (child === undefined) return accept(state, obj, undefined)
+            builder.add(`${key}:`, child)
+          }
+        } else {
+          for (const i of obj.keys()) {
+            const child = canonicalKeyInner(obj[i], state)
+            if (child === undefined) return accept(state, obj, undefined)
+            builder.add('', child)
+          }
         }
         return accept(state, obj, builder.finish(`${pt}[`, ']'))
       } finally {

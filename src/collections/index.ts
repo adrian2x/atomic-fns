@@ -5,6 +5,7 @@
  */
 
 import { get, isIterable, isObject, keys, ValueError } from '../globals/index.js'
+import { arrayOwnIndices, isHugeSparseArray } from '../internal/arrayKeys.js'
 import { isCompactEmpty } from '../internal/compactEmpty.js'
 import { arrayFromIterable } from '../internal/iterable.js'
 import {
@@ -57,7 +58,17 @@ export function compact<T>(arr: T[]): T[]
 export function compact<T>(arr: T): Partial<T>
 export function compact<T>(arr: T | T[]): T[] | Partial<T> {
   if (!arr) return {}
-  if (Array.isArray(arr)) return arr.filter((x) => !isCompactEmpty(x))
+  if (Array.isArray(arr)) {
+    if (isHugeSparseArray(arr)) {
+      const out: T[] = []
+      for (const key of arrayOwnIndices(arr)) {
+        const x = arr[Number(key)]
+        if (!isCompactEmpty(x)) out.push(x)
+      }
+      return out
+    }
+    return arr.filter((x) => !isCompactEmpty(x))
+  }
   const result: Record<string, unknown> = {}
   for (const key of Object.keys(arr)) {
     const v = (arr as Record<string, unknown>)[key]
@@ -357,6 +368,14 @@ export function forEach<T>(
   fn: Iteratee<T>
 ): void {
   if (collection == null) return
+  if (Array.isArray(collection) && isHugeSparseArray(collection)) {
+    for (const key of arrayOwnIndices(collection)) {
+      const i = Number(key)
+      const res = fn(collection[i] as T, i, collection)
+      if (res === false) return
+    }
+    return
+  }
   if (isIterable(collection)) {
     for (const [index, value] of enumerate(collection)) {
       const res = fn(value as T, index, collection)
@@ -420,6 +439,15 @@ export function forEachRight<T>(
   fn: Iteratee<T>
 ): void {
   if (collection == null) return
+  if (Array.isArray(collection) && isHugeSparseArray(collection)) {
+    const idxs = arrayOwnIndices(collection)
+    for (let i = idxs.length - 1; i >= 0; i--) {
+      const idx = Number(idxs[i])
+      const res = fn(collection[idx] as T, idx, collection)
+      if (res === false) return
+    }
+    return
+  }
   if (Array.isArray(collection) || isIterable(collection)) {
     const items = Array.isArray(collection) ? (collection as T[]) : arrayFromIterable<T>(collection)
     for (let i = items.length - 1; i >= 0; i--) {
@@ -488,18 +516,32 @@ export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] 
 function flattenArray<T>(arr: T[], depth: number): T[] {
   assertNestingDepth(1)
   noteExpanded(arr)
-  const result: T[] = []
-  const stack: { items: T[]; depthLeft: number; nesting: number; index: number }[] = [
-    { items: arr, depthLeft: depth, nesting: 1, index: 0 }
+  interface Frame {
+    items: T[]
+    depthLeft: number
+    nesting: number
+    index: number
+    sparseKeys: string[] | null
+  }
+  const stack: Frame[] = [
+    {
+      items: arr,
+      depthLeft: depth,
+      nesting: 1,
+      index: 0,
+      sparseKeys: isHugeSparseArray(arr) ? arrayOwnIndices(arr) : null
+    }
   ]
+  const result: T[] = []
   while (stack.length > 0) {
     const frame = stack[stack.length - 1]
-    if (frame.index >= frame.items.length) {
+    const limit = frame.sparseKeys !== null ? frame.sparseKeys.length : frame.items.length
+    if (frame.index >= limit) {
       stack.pop()
       continue
     }
-    const i = frame.index++
-    if (!(i in frame.items)) {
+    const i = frame.sparseKeys !== null ? Number(frame.sparseKeys[frame.index++]) : frame.index++
+    if (frame.sparseKeys === null && !(i in frame.items)) {
       result.push(undefined as T)
       continue
     }
@@ -511,7 +553,8 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
         items: value as T[],
         depthLeft: frame.depthLeft - 1,
         nesting: frame.nesting + 1,
-        index: 0
+        index: 0,
+        sparseKeys: isHugeSparseArray(value) ? arrayOwnIndices(value) : null
       })
     } else {
       result.push(value)

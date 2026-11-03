@@ -16,6 +16,7 @@ export {
 } from './errors.js'
 export { hash, hashCode } from './hash.js'
 
+import { isCanonicalArrayIndex } from '../internal/arrayKeys.js'
 import type { AnyFunction } from '../types.js'
 import { NotImplementedError } from './errors.js'
 
@@ -549,6 +550,12 @@ export function set<T extends object>(
   const last = paths[paths.length - 1]
   if (DANGEROUS_SEGMENTS.has(last) && !isPlainObjectOrArray(cur)) {
     throw new TypeError(`refusing to write through "${String(last)}"`)
+  }
+  if (Array.isArray(cur) && typeof last === 'string' && isCanonicalArrayIndex(last)) {
+    const idx = Number(last)
+    if (idx > cur.length) {
+      throw new RangeError('array index beyond length')
+    }
   }
   Object.defineProperty(cur, last, {
     value,

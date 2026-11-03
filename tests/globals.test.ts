@@ -440,6 +440,19 @@ describe('globals', () => {
     assert.equal(has({ toString: 1 }, 'toString'), true)
   })
 
+  it('POL-24 set refuses sparse array growth beyond length', () => {
+    const d = { tags: ['a'] as unknown[] }
+    assert.throws(
+      () => set('tags.4294967294', d, 'x', true, true),
+      RangeError,
+      'array index beyond length'
+    )
+    assert.equal(d.tags.length, 1)
+    set('tags.1', d, 'b', true, true)
+    assert.equal(d.tags.length, 2)
+    assert.equal(d.tags[1], 'b')
+  })
+
   it('POL-20 residual: inherited natives are missing; set refuses inherited walks', () => {
     const doc = {
       ta: new Uint8Array(4),

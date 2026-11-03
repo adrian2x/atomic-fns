@@ -1,3 +1,5 @@
+import { arrayOwnIndices, isHugeSparseArray } from './arrayKeys.js'
+
 const MAX_ECHO = 40
 
 /** Append to `out` until `limit` UTF-16 units; returns whether the limit was hit. */
@@ -73,14 +75,29 @@ function writeEcho(
   if (Array.isArray(value)) {
     if (appendCapped(out, '[', limit)) return true
     stack.push(value)
-    for (let i = 0; i < value.length; i++) {
-      if (i > 0 && appendCapped(out, ',', limit)) {
-        stack.pop()
-        return true
+    if (isHugeSparseArray(value)) {
+      let first = true
+      for (const key of arrayOwnIndices(value)) {
+        if (!first && appendCapped(out, ',', limit)) {
+          stack.pop()
+          return true
+        }
+        first = false
+        if (writeEcho(value[Number(key)], out, limit, stack)) {
+          stack.pop()
+          return true
+        }
       }
-      if (writeEcho(value[i], out, limit, stack)) {
-        stack.pop()
-        return true
+    } else {
+      for (let i = 0; i < value.length; i++) {
+        if (i > 0 && appendCapped(out, ',', limit)) {
+          stack.pop()
+          return true
+        }
+        if (writeEcho(value[i], out, limit, stack)) {
+          stack.pop()
+          return true
+        }
       }
     }
     stack.pop()
