@@ -105,6 +105,16 @@ describe('collections', () => {
     expect(c).toHaveLength(3)
   })
 
+  it('flattenArray single-output stack: 900-deep with 2500 leaves under 20ms', () => {
+    const leaves = Array.from({ length: 2500 }, (_, i) => i)
+    let nested: unknown = leaves
+    for (let d = 0; d < 899; d++) nested = [nested]
+    const start = performance.now()
+    const out = flatten(nested as number[], true)
+    expect(performance.now() - start).toBeLessThan(20)
+    expect(out).toEqual(leaves)
+  })
+
   it('SPEC-R41 flatten depth holes and object leaves', () => {
     expect(flatten([[1, [2]]], -1)).toEqual([[1, [2]]])
     const d = new Date(0)

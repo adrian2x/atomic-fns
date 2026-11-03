@@ -424,21 +424,32 @@ export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] 
   return arr
 }
 
-function flattenArray<T>(arr: T[], depth: number, nesting = 1): T[] {
-  assertNestingDepth(nesting)
+function flattenArray<T>(arr: T[], depth: number): T[] {
+  assertNestingDepth(1)
   const result: T[] = []
-  for (let i = 0; i < arr.length; i++) {
-    if (!(i in arr)) {
+  const stack: { items: T[]; depthLeft: number; nesting: number; index: number }[] = [
+    { items: arr, depthLeft: depth, nesting: 1, index: 0 }
+  ]
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1]
+    if (frame.index >= frame.items.length) {
+      stack.pop()
+      continue
+    }
+    const i = frame.index++
+    if (!(i in frame.items)) {
       result.push(undefined as T)
       continue
     }
-    const value = arr[i]
-    if (depth > 0 && Array.isArray(value)) {
-      const nested = flattenArray(value as T[], depth - 1, nesting + 1)
-      for (let j = 0; j < nested.length; j++) {
-        if (j in nested) result.push(nested[j])
-        else result.push(undefined as T)
-      }
+    const value = frame.items[i]
+    if (frame.depthLeft > 0 && Array.isArray(value)) {
+      assertNestingDepth(frame.nesting + 1)
+      stack.push({
+        items: value as T[],
+        depthLeft: frame.depthLeft - 1,
+        nesting: frame.nesting + 1,
+        index: 0
+      })
     } else {
       result.push(value)
     }
