@@ -29,6 +29,19 @@ export function isPlainObject(x: unknown): x is Record<string, unknown> {
   return proto === Object.prototype || proto === null
 }
 
+/** Array with prototype exactly `Array.prototype` and no own `toJSON`. */
+function isPlainArray(x: unknown): x is unknown[] {
+  return (
+    Array.isArray(x) && Object.getPrototypeOf(x) === Array.prototype && !Object.hasOwn(x, 'toJSON')
+  )
+}
+
+/** Plain object or plain array with no own `toJSON` (omit may copy without losing redaction). */
+function isOmitContainer(x: unknown): boolean {
+  if (isPlainArray(x)) return true
+  return isPlainObject(x) && !Object.hasOwn(x, 'toJSON')
+}
+
 function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown } {
   return ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function'
 }
@@ -229,8 +242,8 @@ function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unk
   if (value === null || typeof value !== 'object') return value
   enterNesting()
   try {
-    if (Array.isArray(value)) {
-      const list = value as unknown[]
+    if (isPlainArray(value)) {
+      const list = value
       const out: unknown[] = new Array(list.length)
       for (let i = 0; i < list.length; i++) {
         const child = trie.kids?.get(String(i))
@@ -243,7 +256,7 @@ function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unk
       }
       return out
     }
-    if (isPlainObject(value)) {
+    if (isPlainObject(value) && !Object.hasOwn(value, 'toJSON')) {
       return omitFromObject(value, trie, pathPrefix)
     }
     throw new TypeError(
@@ -328,12 +341,12 @@ function hasPickedAncestor(parts: string[], pickedObjects: Set<string>): boolean
  * Never mutates `obj`. Builds a path trie once so cost is O(keys + total path length). Never
  * invokes getters of omitted keys (copies kept keys via property descriptors). String paths
  * split on `.`; an array of segments addresses literal keys. An omit path that ends at an array
- * index leaves a hole (`delete` semantics) on the copy. While walking a path, descends only into
- * plain objects (`Object.prototype` or `null` prototype) and arrays. A remaining path segment on
- * any other object (class instance, collection, Date, Map, ...) throws `TypeError` before any
- * output is produced. Primitives / null / undefined along a path are a no-op. Values not on any
- * path are kept by reference. Top-level input is unchanged: plain object, array, or class
- * instance copied via own enumerable string keys.
+ * index leaves a hole (`delete` semantics) on the copy. Top-level input and every descended
+ * container must be a plain object (`Object.prototype` or `null` prototype) or a plain array
+ * (`Array.prototype`, no own `toJSON`). An own `toJSON`, Array subclass, class instance, Map,
+ * Date, collection, or function throws `TypeError('omit requires a plain object or array')` at
+ * the top level, or `TypeError` naming the path when nested, before any output. Primitives /
+ * null / undefined along a path are a no-op. Values not on any path are kept by reference.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
@@ -343,14 +356,14 @@ export function omit<T extends object>(
 ): Partial<T> {
   return guardNesting((): Partial<T> => {
     if (obj == null) return {}
+    if (!isOmitContainer(obj)) {
+      throw new TypeError('omit requires a plain object or array')
+    }
     if (typeof paths === 'function') {
       return pick(obj, (v, k) => !paths(v, k))
     }
     const trie = buildOmitTrie(paths.map(normalizePath))
-    if (isPlainObject(obj) || Array.isArray(obj)) {
-      return omitWithTrie(obj, trie, []) as Partial<T>
-    }
-    return omitFromObject(obj, trie, []) as Partial<T>
+    return omitWithTrie(obj, trie, []) as Partial<T>
   })
 }
 

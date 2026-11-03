@@ -393,6 +393,11 @@ describe('collections', () => {
     expect(JSON.stringify(resp)).not.toContain('passwordHash')
     expect(entity.passwordHash).toBe('secret')
 
+    // POL-11 / POL-15: top-level class instance with hiding toJSON must fail closed
+    expect(JSON.stringify(entity)).toBe('{"name":"ada"}')
+    expect(() => omit(entity, ['name'])).toThrow(TypeError)
+    expect(() => omit(entity, ['name'])).toThrow(/omit requires a plain object or array/)
+
     const ta = new Uint8Array([1, 2, 3])
     expect(() => omit({ ta }, ['ta.0'])).toThrow(TypeError)
     expect(ta[0]).toBe(1)
@@ -415,7 +420,7 @@ describe('collections', () => {
         throw new Error('D')
       }
     }
-    expect(omit(new Inst(), ['d'])).toEqual({ a: 1 })
+    expect(() => omit(new Inst(), ['d'])).toThrow(/omit requires a plain object or array/)
 
     const n = 4000
     const big: Record<string, number> = {}
@@ -579,11 +584,8 @@ describe('collections', () => {
       b = 2
     }
     const p = new P()
-    const out = omit(p, ['a'])
+    expect(() => omit(p, ['a'])).toThrow(/omit requires a plain object or array/)
     expect(p.a).toBe(1)
-    expect(out).toEqual({ b: 2 })
-    expect(out).not.toBe(p)
-    expect(Object.getPrototypeOf(out)).toBe(Object.prototype)
 
     const nested = { x: new P() }
     expect(() => omit(nested, ['x.a'])).toThrow(TypeError)
@@ -611,6 +613,45 @@ describe('collections', () => {
     expect(kept.q).toBe(q)
     expect(kept.sm).toBe(sm)
     expect(kept.roles).toBe(roles)
+  })
+
+  it('POL-16 omit fails closed on Array subclass, own toJSON array, and own toJSON object', () => {
+    class RedactedList extends Array<string> {
+      toJSON(): string[] {
+        return this.map(() => '***')
+      }
+    }
+    const rl = RedactedList.from(['pw1', 'pw2'])
+    expect(() => omit({ list: rl }, ['list.9'])).toThrow(TypeError)
+    expect(() => omit(rl, ['0'])).toThrow(/omit requires a plain object or array/)
+
+    const arr: string[] & { toJSON(): string[] } = ['visible', 'hidden'] as string[] & {
+      toJSON(): string[]
+    }
+    arr.toJSON = function (this: string[]): string[] {
+      return [this[0]]
+    }
+    expect(() => omit({ list: arr }, ['list.1'])).toThrow(TypeError)
+    expect(() => omit(arr, ['1'])).toThrow(/omit requires a plain object or array/)
+
+    const withToJSON = {
+      name: 'n',
+      secret: 's',
+      toJSON(): { name: string } {
+        return { name: this.name }
+      }
+    }
+    expect(() => omit({ u: withToJSON }, ['u.other'])).toThrow(TypeError)
+    expect(() => omit(withToJSON, ['secret'])).toThrow(/omit requires a plain object or array/)
+
+    const nullProto: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+    nullProto.name = 'n'
+    nullProto.secret = 's'
+    nullProto.toJSON = function (this: Record<string, unknown>): { name: unknown } {
+      return { name: this.name }
+    }
+    expect(() => omit({ u: nullProto }, ['u.other'])).toThrow(TypeError)
+    expect(() => omit(nullProto, ['secret'])).toThrow(/omit requires a plain object or array/)
   })
 
   it('pick never defines on objects reachable from a frozen source', () => {
