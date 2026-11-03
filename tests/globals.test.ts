@@ -439,6 +439,68 @@ describe('globals', () => {
     assert.equal(has({ toString: 1 }, 'toString'), true)
   })
 
+  it('POL-20 path walks refuse prototype-reaching segments', () => {
+    const body = { list: [1, 2], name: 'eve' }
+    assert.equal(get('list.constructor.prototype', body, 'D'), 'D')
+    assert.equal(get('name.constructor.prototype', body, 'D'), 'D')
+    assert.equal(get('list.constructor.prototype.constructor.prototype', body, 'D'), 'D')
+    class C {
+      x = 1
+    }
+    assert.equal(get('constructor.prototype', new C(), 'D'), 'D')
+    assert.equal(
+      get(
+        'list.constructor',
+        {
+          list: async () => await Promise.resolve(1)
+        },
+        'D'
+      ),
+      'D'
+    )
+    assert.equal(
+      get(
+        'list.constructor',
+        {
+          list: function* () {
+            yield 1
+          }
+        },
+        'D'
+      ),
+      'D'
+    )
+    assert.equal(
+      get(
+        'list.constructor',
+        {
+          list: async function* () {
+            yield await Promise.resolve(1)
+          }
+        },
+        'D'
+      ),
+      'D'
+    )
+    assert.equal(get('toString', [], 'D'), 'D')
+    assert.equal(get('size', new Map([[1, 1]])), 1)
+    assert.equal(get('constructor', { constructor: 'own' }), 'own')
+    assert.equal(
+      get('constructor', Object.assign(Object.create(null), { constructor: 'own' })),
+      'own'
+    )
+
+    const obj = { tags: [] as unknown[] }
+    const includesBefore = Array.prototype.includes
+    assert.throws(
+      () => set('tags.constructor.prototype.includes', obj, () => false),
+      TypeError,
+      'refusing to write through "constructor"'
+    )
+    assert.equal(Array.prototype.includes, includesBefore)
+    assert.equal([1].includes(1), true)
+  })
+
   it('len', () => {
     assert.equal(len(null), undefined)
     assert.equal(len([1, 2]), 2)
