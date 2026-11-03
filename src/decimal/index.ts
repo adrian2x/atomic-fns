@@ -236,10 +236,19 @@ export class Decimal {
   /** Maximum fractional precision for {@link Decimal.div}, {@link Decimal.sqrt}, and {@link Decimal.round}. */
   static readonly MAX_PRECISION = 100_000
 
+  /** Maximum normalized coefficient decimal digit count; larger results throw {@link RangeError}. */
+  static readonly MAX_DIGITS = 1_000_000
+
   #i = 0n
   #e = 0
   /** Lazy cache of absolute coefficient decimal digit count (Decimals are immutable). */
   #digits: number | undefined
+
+  static #assertDigitsBound(bound: number): void {
+    if (bound > Decimal.MAX_DIGITS) {
+      throw new RangeError('result exceeds 1000000 digits')
+    }
+  }
 
   static #assertDivPrecision(precision: number): void {
     if (!Number.isInteger(precision) || precision < 0 || precision > Decimal.MAX_PRECISION) {
@@ -280,8 +289,11 @@ export class Decimal {
    */
   constructor(value: DecimalInput) {
     const parsed = Decimal.#parse(value)
+    const digs = Decimal.#digitLength(parsed.i)
+    Decimal.#assertDigitsBound(digs)
     this.#i = parsed.i
     this.#e = parsed.e
+    this.#digits = digs
   }
 
   static #parse(value: DecimalInput): { i: bigint; e: number } {
@@ -322,6 +334,7 @@ export class Decimal {
       const intDigits = leading[2] ?? '0'
       const frac = leading[3] ?? ''
       const exp = Decimal.#parseExponent(leading[4])
+      Decimal.#assertDigitsBound(intDigits.length + frac.length)
       const i = BigInt(sign + intDigits + frac)
       return Decimal.#checked(normalizeIE(i, -frac.length + exp))
     }
@@ -330,6 +343,7 @@ export class Decimal {
       const sign = dotted[1] === '-' ? '-' : ''
       const frac = dotted[2] ?? ''
       const exp = Decimal.#parseExponent(dotted[3])
+      Decimal.#assertDigitsBound(frac.length)
       const i = BigInt(sign + (frac || '0'))
       return Decimal.#checked(normalizeIE(i, -frac.length + exp))
     }
@@ -345,9 +359,12 @@ export class Decimal {
 
   static #fromIE(i: bigint, e: number): Decimal {
     const n = Decimal.#checked(normalizeIE(i, e))
+    const digs = Decimal.#digitLength(n.i)
+    Decimal.#assertDigitsBound(digs)
     const d = new Decimal(0)
     d.#i = n.i
     d.#e = n.e
+    d.#digits = digs
     return d
   }
 
@@ -383,7 +400,13 @@ export class Decimal {
    */
   add(x: DecimalInput): Decimal {
     const b = decimal(x)
+    if (this.#i === 0n) return Decimal.#fromIE(b.#i, b.#e)
+    if (b.#i === 0n) return Decimal.#fromIE(this.#i, this.#e)
+    const d1 = this.#digitCount()
+    const d2 = b.#digitCount()
     const e = Math.min(this.#e, b.#e)
+    // Upper bound on aligned sum digits: max(e1+d1, e2+d2) - min(e1,e2) + 1
+    Decimal.#assertDigitsBound(Math.max(this.#e + d1, b.#e + d2) - e + 1)
     const ai = this.#i * pow10(this.#e - e)
     const bi = b.#i * pow10(b.#e - e)
     return Decimal.#fromIE(ai + bi, e)
@@ -403,6 +426,7 @@ export class Decimal {
    */
   mul(x: DecimalInput): Decimal {
     const b = decimal(x)
+    Decimal.#assertDigitsBound(this.#digitCount() + b.#digitCount())
     return Decimal.#fromIE(this.#i * b.#i, this.#e + b.#e)
   }
 
@@ -418,6 +442,14 @@ export class Decimal {
     const b = decimal(x)
     if (b.#i === 0n) {
       throw new ZeroDivisionError('division by zero')
+    }
+    // Integer-digits + precision; skip when both operands are small enough that the
+    // normalized quotient cannot exceed MAX_DIGITS (covers 1e1000000/100 and similar).
+    const d1 = this.#digitCount()
+    const d2 = b.#digitCount()
+    const intDigits = Math.max(1, this.#e + d1 - (b.#e + d2) + 1)
+    if (intDigits + precision > Decimal.MAX_DIGITS && d1 + d2 + precision > Decimal.MAX_DIGITS) {
+      Decimal.#assertDigitsBound(intDigits + precision)
     }
     return this.#scaleRound(this.#i, b.#i, this.#e - b.#e, precision, rounding)
   }
@@ -435,8 +467,10 @@ export class Decimal {
     if (-this.#e <= precision) {
       return Decimal.#fromIE(this.#i, this.#e)
     }
-    const digs = Decimal.#digitLength(this.#i)
+    const digs = this.#digitCount()
     if (digs === 0) return Decimal.#fromIE(0n, 0)
+    // Coefficient cannot grow past digs + |precision| slack from rounding carry.
+    Decimal.#assertDigitsBound(digs + Math.max(0, precision) + 1)
     const msdExp = this.#e + digs - 1
     const unitExp = -precision
     if (msdExp < unitExp) {
@@ -502,6 +536,8 @@ export class Decimal {
     if (this.#i === 0n) {
       return decimal(0)
     }
+    const intDigits = Math.ceil((this.#e + this.#digitCount()) / 2) + 1
+    Decimal.#assertDigitsBound(intDigits + precision)
     const g = Math.max(0, Math.ceil(-(this.#e + 2 * (precision + 1)) / 2))
     const t = -(precision + 1 + g)
     const N = this.#i * pow10(this.#e - 2 * t)

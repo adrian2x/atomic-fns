@@ -371,6 +371,31 @@ describe('isqrt precision-doubling', () => {
   })
 })
 
+describe('Decimal.MAX_DIGITS', () => {
+  it('R13-F2: probe wide ops throw before bigint work', () => {
+    const t0 = performance.now()
+    expect(() => new Decimal('1e999999').add('1e-999999')).toThrow(RangeError)
+    expect(() => new Decimal('1e999999').add('1e-999999')).toThrow(/result exceeds 1000000 digits/)
+    expect(performance.now() - t0).toBeLessThan(5)
+    // Bound check must not build the wide value first.
+    expect(() => {
+      const a = new Decimal('1e999999').add('1e-999999')
+      a.round(2)
+    }).toThrow(RangeError)
+  })
+
+  it('R13-F2: 1000001-digit literal throws', () => {
+    expect(() => decimal('9'.repeat(1_000_001))).toThrow(RangeError)
+    expect(() => decimal('9'.repeat(1_000_001))).toThrow(/result exceeds 1000000 digits/)
+  })
+
+  it('R13-F2: MAX_EXPONENT sqrt still allowed', { timeout: 2000 }, () => {
+    expectFast(() => {
+      expect(decimal('2e999999').sqrt().toString().length).toBeGreaterThan(0)
+    }, 250)
+  })
+})
+
 describe('Decimal.MAX_PRECISION', () => {
   it('rejects huge precision before scaling within budget', () => {
     expectFast(() => {
@@ -524,9 +549,9 @@ describe('magnitude-first Decimal comparison', () => {
   })
 
   it('R13-F1: cached digit counts keep wide compares fast', { timeout: 30_000 }, () => {
-    // Probe form: 12 values with ~2e6-digit coeffs from 1eN + 1e-N (F2 bounds this construction).
-    const mk = (k: number) => new Decimal(`${String(k)}e999999`).add(`${String(k)}e-999999`)
-    const vals = Array.from({ length: 12 }, (_, k) => mk(k + 1))
+    // Wide coeffs under MAX_DIGITS (probe 1eN+1e-N is rejected by MAX_DIGITS).
+    const pad = '9'.repeat(80_000)
+    const vals = Array.from({ length: 12 }, (_, k) => decimal(`${String(k + 1)}${pad}`))
     expectFast(() => {
       expect(sorted(vals.slice().reverse()).length).toBe(12)
     }, 250)
