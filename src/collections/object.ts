@@ -92,6 +92,14 @@ export function merge<T extends object>(target: T, ...sources: (object | null | 
 
 const MISSING = Symbol('MISSING')
 
+/** A dotted string path, or an array of literal key segments (no dot splitting). */
+export type PropertyPath = string | readonly string[]
+
+function normalizePath(path: PropertyPath): string[] {
+  if (typeof path === 'string') return path.split('.')
+  return path.map(String)
+}
+
 function getAtPath(obj: unknown, parts: string[]): unknown {
   let cur: unknown = obj
   for (const p of parts) {
@@ -111,60 +119,102 @@ function copyOwnEnumerable(src: object): Record<string, unknown> {
   return out
 }
 
-/** Assign a picked leaf onto `root`, copying every intermediate container. */
-function setPickedPath(root: object, parts: string[], value: unknown): void {
+/** Copy one own property via its descriptor without invoking other getters. */
+function copyKeptProperty(src: object, dest: object, key: string): void {
+  const desc = Object.getOwnPropertyDescriptor(src, key)
+  if (!desc) return
+  if (desc.get !== undefined || desc.set !== undefined) {
+    Object.defineProperty(dest, key, {
+      get: desc.get,
+      set: desc.set,
+      enumerable: desc.enumerable,
+      configurable: desc.configurable
+    })
+  } else {
+    defineData(dest, key, desc.value)
+  }
+}
+
+/**
+ * Assign a picked leaf onto `root`, mirroring the source container kind (array vs plain object)
+ * at each intermediate step.
+ */
+function setPickedPath(root: object, parts: string[], value: unknown, source: object): void {
   let cur: object = root
+  let srcCur: unknown = source
   for (let i = 0; i < parts.length - 1; i++) {
     const p = parts[i]
     let next = Object.hasOwn(cur, p) ? (cur as Record<string, unknown>)[p] : undefined
-    if (Array.isArray(next)) {
+    const srcNext =
+      srcCur !== null &&
+      (typeof srcCur === 'object' || typeof srcCur === 'function') &&
+      Object.hasOwn(srcCur, p)
+        ? (srcCur as Record<string, unknown>)[p]
+        : undefined
+    if (next === undefined) {
+      next = Array.isArray(srcNext) ? [] : {}
+    } else if (Array.isArray(next)) {
       next = next.slice()
     } else if (isPlainObject(next)) {
       next = copyOwnEnumerable(next)
     } else {
-      next = {}
+      next = Array.isArray(srcNext) ? [] : {}
     }
     defineData(cur, p, next)
     cur = next as object
+    srcCur = srcNext
   }
   defineData(cur, parts[parts.length - 1], value)
 }
 
-function omitClone(value: unknown, omitPaths: string[][]): unknown {
+/** Trie of omit paths: O(keys + total path length) walks. */
+type OmitTrie = { drop?: boolean; kids?: Map<string, OmitTrie> }
+
+function buildOmitTrie(paths: string[][]): OmitTrie {
+  const root: OmitTrie = {}
+  for (const parts of paths) {
+    let node = root
+    for (const p of parts) {
+      if (!node.kids) node.kids = new Map()
+      let next = node.kids.get(p)
+      if (!next) {
+        next = {}
+        node.kids.set(p, next)
+      }
+      node = next
+    }
+    node.drop = true
+  }
+  return root
+}
+
+function omitWithTrie(value: unknown, trie: OmitTrie): unknown {
   if (value === null || typeof value !== 'object') return value
   if (Array.isArray(value)) {
     const list = value as unknown[]
     const out: unknown[] = []
     for (let i = 0; i < list.length; i++) {
-      const item = list[i]
-      const nested = omitPaths.filter((p) => p[0] === String(i)).map((p) => p.slice(1))
-      if (nested.some((p) => p.length === 0) || nested.length === 0) {
-        out.push(item)
+      const child = trie.kids?.get(String(i))
+      if (!child || child.drop || !child.kids) {
+        out.push(list[i])
       } else {
-        out.push(omitClone(item, nested))
+        out.push(omitWithTrie(list[i], child))
       }
     }
     return out
   }
-  if (!isPlainObject(value)) {
-    return omitFromPlain(copyOwnEnumerable(value), omitPaths)
-  }
-  return omitFromPlain(value, omitPaths)
+  return omitFromObject(value, trie)
 }
 
-function omitFromPlain(
-  src: Record<string, unknown>,
-  omitPaths: string[][]
-): Record<string, unknown> {
-  const dropTop = new Set(omitPaths.filter((p) => p.length === 1).map((p) => p[0]))
+function omitFromObject(src: object, trie: OmitTrie): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const key of Object.keys(src)) {
-    if (dropTop.has(key)) continue
-    const nested = omitPaths.filter((p) => p[0] === key && p.length > 1).map((p) => p.slice(1))
-    if (nested.length === 0) {
-      defineData(result, key, src[key])
+    const child = trie.kids?.get(key)
+    if (child?.drop) continue
+    if (!child?.kids) {
+      copyKeptProperty(src, result, key)
     } else {
-      defineData(result, key, omitClone(src[key], nested))
+      defineData(result, key, omitWithTrie((src as Record<string, unknown>)[key], child))
     }
   }
   return result
@@ -172,14 +222,15 @@ function omitFromPlain(
 
 /**
  * Create an object with only the selected paths or predicate matches from `obj`.
- * Dotted paths produce nested output. Keys are written with defineProperty.
- * Never mutates `obj` or any object reachable from it.
+ * String paths split on `.`; an array of segments addresses literal keys (including dots).
+ * Intermediate containers mirror the source (array stays array). Keys are written with
+ * defineProperty. Never mutates `obj` or any object reachable from it.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
 export function pick<T extends object>(
   obj: T | null | undefined,
-  paths: readonly string[] | ((v: unknown, k: string) => boolean)
+  paths: readonly PropertyPath[] | ((v: unknown, k: string) => boolean)
 ): Partial<T> {
   const result: object = {}
   if (obj == null) return result
@@ -191,33 +242,35 @@ export function pick<T extends object>(
     return result
   }
   for (const path of paths) {
-    const parts = path.split('.')
+    const parts = normalizePath(path)
     const value = getAtPath(obj, parts)
     if (value === MISSING) continue
-    setPickedPath(result, parts, value)
+    setPickedPath(result, parts, value, obj)
   }
   return result
 }
 
 /**
  * Create a deep copy of `obj` with the given paths omitted, or keep values where the predicate is falsy.
- * Never mutates `obj`. Non-plain inputs become fresh plain objects along modified paths.
+ * Never mutates `obj`. Builds a path trie once so cost is O(keys + total path length). Never
+ * invokes getters of omitted keys (copies kept keys via property descriptors). String paths
+ * split on `.`; an array of segments addresses literal keys.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
 export function omit<T extends object>(
   obj: T | null | undefined,
-  paths: readonly string[] | ((v: unknown, k: string) => boolean)
+  paths: readonly PropertyPath[] | ((v: unknown, k: string) => boolean)
 ): Partial<T> {
   if (obj == null) return {}
   if (typeof paths === 'function') {
     return pick(obj, (v, k) => !paths(v, k))
   }
-  const omitPaths = paths.map((path) => path.split('.'))
+  const trie = buildOmitTrie(paths.map(normalizePath))
   if (isPlainObject(obj) || Array.isArray(obj)) {
-    return omitClone(obj, omitPaths) as Partial<T>
+    return omitWithTrie(obj, trie) as Partial<T>
   }
-  return omitFromPlain(copyOwnEnumerable(obj), omitPaths) as Partial<T>
+  return omitFromObject(obj, trie) as Partial<T>
 }
 
 const BOXED_TAGS = new Set([

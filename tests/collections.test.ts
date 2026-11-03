@@ -147,6 +147,37 @@ describe('collections', () => {
     expect(pick({ a: { b: 1, c: 2 } }, ['a.b'])).toEqual({ a: { b: 1 } })
   })
 
+  it('pick/omit: literal segment paths, array containers, no omitted getters', () => {
+    expect(pick({ 'a.b': 1 }, [['a.b']])).toEqual({ 'a.b': 1 })
+    expect(pick({ 'a.b': 1, a: { b: 2 } }, [['a.b']])).toEqual({ 'a.b': 1 })
+    expect(omit({ 'a.b': 1, c: 2 }, [['a.b']])).toEqual({ c: 2 })
+
+    const pickedArr = pick({ a: [1, 2, 3] }, ['a.1']) as { a: unknown }
+    expect(Array.isArray(pickedArr.a)).toBe(true)
+    expect((pickedArr.a as unknown[])[1]).toBe(2)
+
+    expect(omit({ a: 1, b: 2, get c() { throw new Error('C') } }, ['c'])).toEqual({ a: 1, b: 2 })
+    class Inst {
+      a = 1
+      get d() {
+        throw new Error('D')
+      }
+    }
+    expect(omit(new Inst(), ['d'])).toEqual({ a: 1 })
+
+    const n = 4000
+    const big: Record<string, number> = {}
+    const paths: string[] = []
+    for (let i = 0; i < n; i++) {
+      big[`k${i}`] = i
+      paths.push(`k${i}`)
+    }
+    const t0 = performance.now()
+    const omitted = omit(big, paths)
+    expect(performance.now() - t0).toBeLessThan(50)
+    expect(Object.keys(omitted)).toHaveLength(0)
+  })
+
   it('legacy compact count smoke', () => {
     expect(compact([0, 1, false, 2, '', 3])).toEqual([1, 2, 3])
     expect(count(['one', 'two', 'three'], (x) => x.length)).toEqual({ '3': 2, '5': 1 })
