@@ -64,6 +64,41 @@ describe('Duration', () => {
     }
   })
 
+  it('error messages handle bigint, symbol, and emoji code-point cuts', () => {
+    expect(() => durationField(10n as never)).toThrow(ValueError)
+    try {
+      durationField(10n as never)
+    } catch (e) {
+      expect((e as Error).message).toContain('10')
+    }
+    expect(() => durationField(Symbol('u') as never)).toThrow(ValueError)
+    try {
+      durationField(Symbol('u') as never)
+    } catch (e) {
+      expect((e as Error).message).toMatch(/Symbol/)
+    }
+    const emojiUnit = `${'x'.repeat(38)}\u{1F600}yyyy`
+    expect(() => durationField(emojiUnit)).toThrow(ValueError)
+    try {
+      durationField(emojiUnit)
+    } catch (e) {
+      const msg = (e as Error).message
+      expect(msg.includes('...')).toBe(true)
+      // Truncation must not leave a lone UTF-16 surrogate.
+      for (let i = 0; i < msg.length; i++) {
+        const c = msg.charCodeAt(i)
+        if (c >= 0xd800 && c <= 0xdbff) {
+          expect(i + 1 < msg.length).toBe(true)
+          const low = msg.charCodeAt(i + 1)
+          expect(low >= 0xdc00 && low <= 0xdfff).toBe(true)
+          i++
+        } else {
+          expect(c < 0xdc00 || c > 0xdfff).toBe(true)
+        }
+      }
+    }
+  })
+
   it('SPEC-R94 constructor rejects unsupported input', () => {
     expect(() => new Duration(true as unknown as number)).toThrow(ValueError)
     expect(() => new Duration(null as unknown as number)).toThrow(ValueError)

@@ -93,6 +93,12 @@ describe('Deque', () => {
     const deque = new Deque([1, 2])
     expect(() => deque.set(2, 9)).toThrow(RangeError)
     expect(() => deque.set(-3, 9)).toThrow(RangeError)
+    expect(() => deque.set(Infinity, 9)).toThrow(RangeError)
+    try {
+      deque.set(Infinity, 9)
+    } catch (e) {
+      expect((e as Error).message).toContain('Infinity')
+    }
   })
 
   it('SPEC-R80 clear empties the deque', () => {
