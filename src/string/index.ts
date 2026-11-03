@@ -151,9 +151,11 @@ export function isAlpha(s: string): boolean {
 }
 
 /**
- * Checks if a string contains only numeric characters.
+ * Unicode numeric check (Python `str.isnumeric` / Unicode `Numeric_Type`): every character
+ * has a numeric type (`\p{N}`), so `'²'`, `'½'`, fullwidth and Arabic-Indic digits are
+ * numeric. This is not a guard for `Number()` / `parseFloat` parsing.
  * @param s The string
- * @returns `true` if the string contains only numeric.
+ * @returns `true` if the string contains only Unicode numeric characters.
  * @example
 ```js
 isNumeric('alpha1234')

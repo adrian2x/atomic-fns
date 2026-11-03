@@ -25,6 +25,11 @@ describe('string', () => {
     expect(string.isNumeric('1234')).toBe(true)
     expect(string.isNumeric('1234.0')).toBe(false)
     expect(string.isNumeric('not really!')).toBe(false)
+    // Unicode Numeric_Type (not a Number() parse guard)
+    expect(string.isNumeric('²')).toBe(true)
+    expect(string.isNumeric('½')).toBe(true)
+    expect(string.isNumeric('１２３')).toBe(true)
+    expect(string.isNumeric('١٢٣')).toBe(true)
   })
 
   it('asciify', () => {
