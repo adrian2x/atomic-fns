@@ -85,7 +85,8 @@ function mergeKey(
   sv: unknown,
   seen: WeakMap<object, object>,
   pairs: MergedPairs,
-  depth: number
+  depth: number,
+  prepaid: boolean
 ): void {
   assertArrayIndexInRange(t, key)
   const tv = Object.hasOwn(t, key) ? (t as Record<PropertyKey, unknown>)[key] : undefined
@@ -112,13 +113,13 @@ function mergeKey(
       seen.set(sv, base)
       try {
         // Fresh copy targets are unique - skip pair tracking (nothing can hit).
-        mergeInto(base, sv, seen, pairs, depth, false)
+        mergeInto(base, sv, seen, pairs, depth, false, prepaid)
       } finally {
         // Drop after this key so a sibling key with the same shared source gets its own copy.
         seen.delete(sv)
       }
     } else {
-      mergeInto(base, sv, seen, pairs, depth, true)
+      mergeInto(base, sv, seen, pairs, depth, true, prepaid)
     }
     defineData(t, key, base)
   } else {
@@ -132,7 +133,8 @@ function mergeInto(
   seen: WeakMap<object, object>,
   pairs: MergedPairs,
   depth: number,
-  trackPairs: boolean
+  trackPairs: boolean,
+  prepaid = false
 ): void {
   enterNesting()
   try {
@@ -147,7 +149,8 @@ function mergeInto(
       targets.add(t)
     }
 
-    noteExpanded(s)
+    const charged = noteExpanded(s, prepaid)
+    const childPrepaid = prepaid || charged
     assertNestingDepth(depth)
     if (t === Object.prototype || t === Function.prototype) return
     const rec = s as Record<string, unknown>
@@ -155,15 +158,17 @@ function mergeInto(
       // Extend first so source indices never trip the beyond-length rule; holes stay holes.
       if (t.length < s.length) t.length = s.length
       walkArray(s, (ev) => {
-        if (ev.kind === 'value') mergeKey(t, String(ev.index), ev.value, seen, pairs, depth + 1)
+        if (ev.kind === 'value') {
+          mergeKey(t, String(ev.index), ev.value, seen, pairs, depth + 1, childPrepaid)
+        }
       })
       for (const key of Object.keys(s)) {
         if (isCanonicalArrayIndex(key)) continue
-        mergeKey(t, key, rec[key], seen, pairs, depth + 1)
+        mergeKey(t, key, rec[key], seen, pairs, depth + 1, childPrepaid)
       }
     } else {
       for (const key of Object.keys(s)) {
-        mergeKey(t, key, rec[key], seen, pairs, depth + 1)
+        mergeKey(t, key, rec[key], seen, pairs, depth + 1, childPrepaid)
       }
     }
     const syms = Object.getOwnPropertySymbols(s)
@@ -171,7 +176,7 @@ function mergeInto(
     for (const sym of syms) {
       const desc = Object.getOwnPropertyDescriptor(s, sym)
       if (!desc?.enumerable) continue
-      mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, pairs, depth + 1)
+      mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, pairs, depth + 1, childPrepaid)
     }
   } finally {
     exitNesting()
@@ -191,8 +196,9 @@ function mergeInto(
  * shared source (the seen map is path-scoped for cycle protection only). Within one top-level
  * source argument, (source, target) pairs already merged are skipped (merging the same source
  * into the same target again changes nothing); each later source argument gets a fresh pair
- * cache so a source re-applied later is merged again. Re-expanding a shared source more than
- * 1000000 times throws `RangeError('input repeats shared objects more than 1000000 times')`.
+ * cache so a source re-applied later is merged again. Re-expanding shared sources beyond
+ * 500000 copied nodes throws
+ * `RangeError('input repeats shared objects beyond 500000 copied nodes')`.
  * On either throw, `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.

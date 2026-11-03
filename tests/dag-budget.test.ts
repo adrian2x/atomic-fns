@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { flatten, matches, merge } from '../src/collections/index.js'
 import { Duration, durationField } from '../src/i18n/duration.js'
 import { canonicalKey } from '../src/internal/canonicalKey.js'
+import {
+  getSharedWorkCharged,
+  MAX_SHARED_WORK,
+  subtreeContainerCount
+} from '../src/internal/nesting.js'
 import { truncateForError } from '../src/internal/truncate.js'
 import { deepEqual } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
@@ -15,22 +20,49 @@ function dag(depth: number): object {
   return x
 }
 
-const SHARED_REVISIT = 'input repeats shared objects more than 1000000 times'
-/** Pre-fix: exponential blow-up / hang. Hang-floor budget. */
+/** Fan-out DAG from r9.mjs: each level has `fan` keys pointing at the same child. */
+function fan(f: number, d: number): object {
+  let x: object = { v: 1 }
+  for (let i = 0; i < d; i++) {
+    const o: Record<string, object> = {}
+    for (let j = 0; j < f; j++) o['k' + String(j)] = x
+    x = o
+  }
+  return x
+}
+
+function nestIn(d: number, inner: object): object {
+  let x: object = inner
+  for (let i = 0; i < d; i++) x = { n: x }
+  return x
+}
+
+const SHARED_REVISIT = 'input repeats shared objects beyond 500000 copied nodes'
 const BUDGET = 250
+
+function expectBudgetTrip(run: () => void, src: object): void {
+  let err: unknown
+  try {
+    run()
+  } catch (e) {
+    err = e
+  }
+  expect(err).toBeInstanceOf(RangeError)
+  expect((err as Error).message).toBe(SHARED_REVISIT)
+  const largest = subtreeContainerCount(src)
+  expect(getSharedWorkCharged()).toBeLessThanOrEqual(MAX_SHARED_WORK + largest)
+}
 
 describe('shared-reference DAG budgets', () => {
   it('flatten depth-20 DAG throws the revisit error', () => {
     const src = dag(20)
-    expect(() => flatten(src)).toThrow(RangeError)
-    expect(() => flatten(src)).toThrow(SHARED_REVISIT)
+    expectBudgetTrip(() => flatten(src), src)
   })
 
   it('flatten of a nested-array depth-20 DAG throws the revisit error', () => {
     let x: unknown[] = [1]
     for (let i = 0; i < 20; i++) x = [x, x]
-    expect(() => flatten(x, true)).toThrow(RangeError)
-    expect(() => flatten(x, true)).toThrow(SHARED_REVISIT)
+    expectBudgetTrip(() => flatten(x, true), x)
   })
 
   it('flatten of 10001 shared row objects works', () => {
@@ -58,32 +90,33 @@ describe('shared-reference DAG budgets', () => {
     }, BUDGET)
   })
 
-  it('merge of depth-23 DAG throws the revisit error within budget', () => {
+  it('merge of depth-23 DAG throws the budget error deterministically', () => {
+    const src = dag(23)
+    expectBudgetTrip(() => merge({}, src), src)
+  })
+
+  it('merge of depth-23 DAG throws within expectFast smoke budget', () => {
     const src = dag(23)
     expectFast(() => {
-      let err: unknown
-      try {
-        merge({}, src)
-      } catch (e) {
-        err = e
-      }
-      expect(err).toBeInstanceOf(RangeError)
-      expect((err as Error).message).toBe(SHARED_REVISIT)
+      expect(() => merge({}, src)).toThrow(SHARED_REVISIT)
     }, BUDGET)
   })
 
-  it('merge of depth-40 DAG throws the revisit error within budget', () => {
+  it('merge of depth-40 DAG throws the budget error deterministically', () => {
     const src = dag(40)
-    expectFast(() => {
-      let err: unknown
-      try {
-        merge({}, src)
-      } catch (e) {
-        err = e
-      }
-      expect(err).toBeInstanceOf(RangeError)
-      expect((err as Error).message).toBe(SHARED_REVISIT)
-    }, BUDGET)
+    expectBudgetTrip(() => merge({}, src), src)
+  })
+
+  it('r9 fan-out shapes throw the budget error deterministically', () => {
+    for (const [f, d] of [
+      [4, 12],
+      [3, 14],
+      [8, 8]
+    ] as const) {
+      const src = fan(f, d)
+      expectBudgetTrip(() => merge({}, src), src)
+      expectBudgetTrip(() => flatten(src), src)
+    }
   })
 
   it('matches depth-40 DAG shape and value within budget', () => {
@@ -116,6 +149,22 @@ describe('shared-reference DAG budgets', () => {
       expect(flat['rows[0].x']).toBe(1)
       expect(flat[`rows[${String(n - 1)}].x`]).toBe(1)
     }
+  })
+
+  it('R14-B: 20-level wrap of 60k shared leaves merges and flattens', () => {
+    const row = { id: 1, a: { b: 1 } }
+    const src = nestIn(20, { rows: new Array(60_000).fill(row) })
+    const merged = merge({}, src) as { n: unknown }
+    expect(merged).toBeTruthy()
+    const flat = flatten(src) as Record<string, unknown>
+    expect(Object.keys(flat).length).toBeGreaterThan(0)
+  })
+
+  it('dos-33: 60k fill rows wrapped 20 levels deep succeed', () => {
+    const row = { id: 1, a: { b: 1 } }
+    const src = nestIn(20, { rows: new Array(60_000).fill(row) })
+    expect(() => merge({}, src)).not.toThrow()
+    expect(() => flatten(src)).not.toThrow()
   })
 
   it('R13-B / dos-30: 2e5 shared rows merge into an existing target', () => {

@@ -502,7 +502,8 @@ export function forEachRight<T>(
 
 /**
  * Flattens an array or object. Arrays will be flattened recursively up to `depth` times. Objects will be flattened recursively.
- * Structural nesting deeper than 1000 levels throws `RangeError`.
+ * Structural nesting deeper than 1000 levels throws `RangeError`. Re-expanding shared sources beyond
+ * 500000 copied nodes throws `RangeError('input repeats shared objects beyond 500000 copied nodes')`.
  * @example
 ```js
 flatten([1, [2, [3, [4]], 5]])
@@ -556,6 +557,7 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
     nesting: number
     index: number
     sparseKeys: string[] | null
+    prepaid: boolean
   }
   const stack: Frame[] = [
     {
@@ -563,7 +565,8 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
       depthLeft: depth,
       nesting: 1,
       index: 0,
-      sparseKeys: isHugeSparse(arr) ? arrayOwnIndices(arr) : null
+      sparseKeys: isHugeSparse(arr) ? arrayOwnIndices(arr) : null,
+      prepaid: false
     }
   ]
   const result: T[] = []
@@ -582,13 +585,14 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
     const value = frame.items[i]
     if (frame.depthLeft > 0 && Array.isArray(value)) {
       assertNestingDepth(frame.nesting + 1)
-      noteExpanded(value)
+      const charged = noteExpanded(value, frame.prepaid)
       stack.push({
         items: value as T[],
         depthLeft: frame.depthLeft - 1,
         nesting: frame.nesting + 1,
         index: 0,
-        sparseKeys: isHugeSparse(value) ? arrayOwnIndices(value) : null
+        sparseKeys: isHugeSparse(value) ? arrayOwnIndices(value) : null,
+        prepaid: frame.prepaid || charged
       })
     } else {
       result.push(value)
@@ -619,12 +623,13 @@ function flattenObj(root: unknown): Record<string, unknown> {
     nesting: number
     keys: string[]
     index: number
+    prepaid: boolean
   }
   const path: object[] = []
   const onPath = new Set<object>()
   const stack: Frame[] = []
 
-  const pushContainer = (obj: object, prefix: string, nesting: number): void => {
+  const pushContainer = (obj: object, prefix: string, nesting: number, prepaid: boolean): void => {
     assertNestingDepth(nesting)
     if (onPath.has(obj)) throw new ValueError('cyclic structure')
     if (!isPlainObject(obj) && !Array.isArray(obj)) {
@@ -632,14 +637,14 @@ function flattenObj(root: unknown): Record<string, unknown> {
       return
     }
     // Count before Object.keys so a budget throw skips key alloc.
-    noteExpanded(obj)
+    const charged = noteExpanded(obj, prepaid)
     const keys = Object.keys(obj)
     onPath.add(obj)
     path.push(obj)
-    stack.push({ obj, prefix, nesting, keys, index: 0 })
+    stack.push({ obj, prefix, nesting, keys, index: 0, prepaid: prepaid || charged })
   }
 
-  pushContainer(root, '', 1)
+  pushContainer(root, '', 1, false)
 
   while (stack.length > 0) {
     const frame = stack[stack.length - 1]
@@ -657,7 +662,7 @@ function flattenObj(root: unknown): Record<string, unknown> {
         ? `${frame.prefix}.${key}`
         : key
     if (child !== null && typeof child === 'object') {
-      pushContainer(child, pref, frame.nesting + 1)
+      pushContainer(child, pref, frame.nesting + 1, frame.prepaid)
     } else if (pref) {
       setFlatKey(result, pref, child)
     }
