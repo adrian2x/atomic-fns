@@ -1,6 +1,6 @@
 import { daysInMonthOf, localWallToTime, utcWallToTime, type WallFields } from './date/calendar.js'
 
-const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
+const ISO_8601_PATTERN = 'YYYY-MM-DDTHH:mm:ssZ'
 const FORMATTER_CACHE_CAPACITY = 64
 
 function isAsciiLetter(c: string): boolean {
@@ -465,48 +465,48 @@ export function asDate(date: string | number | Date | null | undefined, utc = fa
   return new Date(date)
 }
 
-const DATE_SHORT_DD: Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit'
-}
-const DATE_SHORT: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'numeric', day: 'numeric' }
-const DATE_MED: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' }
-const DATE_FULL: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' }
-const DATE_MED_TIME: Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: 'numeric',
-  hourCycle: 'h12'
-}
-const DATE_LONG_TIME: Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: 'numeric',
-  hourCycle: 'h12'
-}
-const DATE_MED_WITH_WEEKDAY: Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  weekday: 'short',
-  hour: 'numeric',
-  minute: 'numeric',
-  hourCycle: 'h12'
-}
-const DATE_HUGE: Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  weekday: 'long',
-  hour: 'numeric',
-  minute: 'numeric',
-  hourCycle: 'h12'
-}
+const LOCALIZED_TOKEN_OPTIONS: Readonly<
+  Record<'L' | 'LL' | 'LLL' | 'LLLL' | 'l' | 'll' | 'lll' | 'llll', Intl.DateTimeFormatOptions>
+> = Object.freeze({
+  L: { year: 'numeric', month: '2-digit', day: '2-digit' },
+  LL: { year: 'numeric', month: 'long', day: 'numeric' },
+  LLL: {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h12'
+  },
+  LLLL: {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h12'
+  },
+  l: { year: 'numeric', month: 'numeric', day: 'numeric' },
+  ll: { year: 'numeric', month: 'short', day: 'numeric' },
+  lll: {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h12'
+  },
+  llll: {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h12'
+  }
+})
 
 function buildValues(date: Date, opts: ResolvedFormatOptions): Map<string, () => string> {
   const { locale, utc } = opts
@@ -577,14 +577,14 @@ function buildValues(date: Date, opts: ResolvedFormatOptions): Map<string, () =>
     ['zzz', () => partValue(opts, { timeZoneName: 'long' }, date, 'timeZoneName')],
     ['LT', () => `${String(hour12(h))}:${pad2(min)} ${formatMeridiem(h, false)}`],
     ['LTS', () => `${String(hour12(h))}:${pad2(min)}:${pad2(sec)} ${formatMeridiem(h, false)}`],
-    ['L', () => intl(DATE_SHORT_DD)],
-    ['LL', () => intl(DATE_FULL)],
-    ['LLL', () => intl(DATE_LONG_TIME)],
-    ['LLLL', () => intl(DATE_HUGE)],
-    ['l', () => intl(DATE_SHORT)],
-    ['ll', () => intl(DATE_MED)],
-    ['lll', () => intl(DATE_MED_TIME)],
-    ['llll', () => intl(DATE_MED_WITH_WEEKDAY)]
+    ['L', () => intl(LOCALIZED_TOKEN_OPTIONS.L)],
+    ['LL', () => intl(LOCALIZED_TOKEN_OPTIONS.LL)],
+    ['LLL', () => intl(LOCALIZED_TOKEN_OPTIONS.LLL)],
+    ['LLLL', () => intl(LOCALIZED_TOKEN_OPTIONS.LLLL)],
+    ['l', () => intl(LOCALIZED_TOKEN_OPTIONS.l)],
+    ['ll', () => intl(LOCALIZED_TOKEN_OPTIONS.ll)],
+    ['lll', () => intl(LOCALIZED_TOKEN_OPTIONS.lll)],
+    ['llll', () => intl(LOCALIZED_TOKEN_OPTIONS.llll)]
   ])
 }
 
@@ -604,7 +604,7 @@ formatDate('Do MMMM', new Date(2022, 9, 1), 'en') // '1st October'
 ```
  */
 export function formatDate(
-  formatStr: string,
+  formatStr: string | undefined,
   date: Date,
   localeOrOptions?: string | FormatOptions
 ): string {
@@ -612,7 +612,7 @@ export function formatDate(
     return 'Invalid Date'
   }
 
-  const str = formatStr || FORMAT_DEFAULT
+  const str = formatStr === undefined || formatStr === '' ? ISO_8601_PATTERN : formatStr
   const values = buildValues(date, resolveOptions(localeOrOptions))
   return scanFormat(str, (token) => {
     const getter = values.get(token)

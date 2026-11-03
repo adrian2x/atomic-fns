@@ -1,6 +1,6 @@
 import { asDate } from '../format.js'
 import { lastDayOfMonth } from './arith.js'
-import { dayNumber, readWall, toWeekRule, weekDateOf, weeksInWeekYear } from './calendar.js'
+import { dayNumber, readWall, toWeekRule, weekCount, weekDateOf } from './calendar.js'
 
 /** Calendar fields for IntlDate object construction and `set`. */
 export interface DateObject {
@@ -110,7 +110,7 @@ export function weeksInYear(weekYear: number, firstDay = 1, minimalDays = 4): nu
   if (!Number.isInteger(weekYear)) {
     throw new RangeError('weekYear must be an integer')
   }
-  return weeksInWeekYear(weekYear, toWeekRule(firstDay, minimalDays))
+  return weekCount(weekYear, toWeekRule(firstDay, minimalDays))
 }
 
 /**

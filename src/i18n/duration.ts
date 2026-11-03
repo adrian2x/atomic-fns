@@ -53,33 +53,14 @@ function isDurationField(key: string): key is DurationField {
   return FIELD_SET.has(key)
 }
 
-const UNIT_ALIASES: ReadonlyMap<string, DurationField> = new Map([
-  ['years', 'years'],
-  ['year', 'years'],
-  ['quarters', 'quarters'],
-  ['quarter', 'quarters'],
-  ['months', 'months'],
-  ['month', 'months'],
-  ['weeks', 'weeks'],
-  ['week', 'weeks'],
-  ['days', 'days'],
-  ['day', 'days'],
-  ['hours', 'hours'],
-  ['hour', 'hours'],
-  ['minutes', 'minutes'],
-  ['minute', 'minutes'],
-  ['seconds', 'seconds'],
-  ['second', 'seconds'],
-  ['milliseconds', 'milliseconds'],
-  ['millisecond', 'milliseconds']
-])
-
 const NS_PER_SECOND = 1_000_000_000n
 const NS_PER_DAY = 86_400n * NS_PER_SECOND
-const YEAR_NS_CASUAL = 365n * NS_PER_DAY
-const YEAR_NS_EXACT = 31_556_952n * NS_PER_SECOND
+/** Nanoseconds in a 365-day year. */
+const YEAR_NS_365_DAYS = 365n * NS_PER_DAY
+/** Nanoseconds in a mean Gregorian year (365.2425 d). */
+const YEAR_NS_MEAN_GREGORIAN = 31_556_952n * NS_PER_SECOND
 
-const RESCALE_FIELDS: readonly DurationField[] = [
+const ROUND_LADDER: readonly DurationField[] = [
   'years',
   'months',
   'weeks',
@@ -119,7 +100,7 @@ function isDurationFormatCtor(v: unknown): v is DurationFormatCtor {
 }
 
 function unitNanos(field: DurationField | 'microseconds' | 'nanoseconds', exact: boolean): bigint {
-  const year = exact ? YEAR_NS_EXACT : YEAR_NS_CASUAL
+  const year = exact ? YEAR_NS_MEAN_GREGORIAN : YEAR_NS_365_DAYS
   switch (field) {
     case 'years':
       return year
@@ -244,7 +225,7 @@ function nz(v: number): number {
 }
 
 /**
- * Canonical plural field for a unit name (case-insensitive, singular or plural).
+ * Canonical plural field for a unit name (exact match, or singular via appending `s`).
  * @param unit Unit name
  * @throws ValueError when `unit` is not a known duration unit
  */
@@ -252,11 +233,35 @@ export function durationField(unit: string): DurationField {
   if (typeof unit !== 'string') {
     throw new ValueError(`unknown duration unit "${String(unit)}"`)
   }
-  const field = UNIT_ALIASES.get(unit.toLowerCase())
-  if (field === undefined) {
-    throw new ValueError(`unknown duration unit "${unit}"`)
+  if (isDurationField(unit)) return unit
+  const plural = `${unit}s`
+  if (isDurationField(plural)) return plural
+  throw new ValueError(`unknown duration unit "${unit}"`)
+}
+
+function roundingFields(largestUnit: DurationUnit, smallestUnit?: DurationUnit): DurationField[] {
+  const largest = durationField(largestUnit)
+  const smallest = durationField(smallestUnit ?? 'milliseconds')
+  if (largest === 'quarters' || smallest === 'quarters') {
+    throw new RangeError('quarters cannot be a rounding unit')
   }
-  return field
+  // Temporal: weeks on the ladder only when largestUnit is 'weeks' (no years/months
+  // above). For largestUnit 'years' the ladder still includes weeks so the result
+  // matches the previous full-ladder redistribution for that largest unit.
+  let ladder: readonly DurationField[]
+  if (largest === 'weeks') {
+    ladder = ['weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds']
+  } else if (largest === 'years') {
+    ladder = ROUND_LADDER
+  } else {
+    ladder = ROUND_LADDER.filter((f) => f !== 'weeks')
+  }
+  const li = ladder.indexOf(largest)
+  const si = ladder.indexOf(smallest)
+  if (li === -1 || si === -1 || li > si) {
+    throw new RangeError('largestUnit must not be smaller than smallestUnit')
+  }
+  return ladder.slice(li, si + 1)
 }
 
 function isoError(text: string): ValueError {
@@ -361,7 +366,7 @@ function carryChain(start: DurationField, forFormat: boolean): readonly AccKey[]
  * An immutable length of time with optional exact (mean Gregorian) calendar conversion.
  */
 export class Duration {
-  readonly values: Readonly<DurationObject>
+  readonly #fields: Readonly<DurationObject>
   readonly #exact: boolean
 
   /**
@@ -371,19 +376,19 @@ export class Duration {
   constructor(dur?: number | DurationObject | Duration, exact?: boolean)
   constructor(dur?: unknown, exact?: boolean) {
     if (dur === undefined) {
-      this.values = freezeValues({})
+      this.#fields = freezeValues({})
       this.#exact = exact === true
     } else if (typeof dur === 'number') {
       if (!Number.isFinite(dur)) {
         throw new ValueError('duration must be a finite number')
       }
-      this.values = freezeValues({ milliseconds: nz(dur) })
+      this.#fields = freezeValues({ milliseconds: nz(dur) })
       this.#exact = exact === true
     } else if (dur instanceof Duration) {
-      this.values = freezeValues(copyValues(dur.values))
+      this.#fields = freezeValues(copyValues(dur.#fields))
       this.#exact = exact ?? dur.#exact
     } else if (typeof dur === 'string') {
-      throw new ValueError('use Duration.fromISO to parse ISO 8601 strings')
+      throw new ValueError('use Duration.from to parse ISO 8601 strings')
     } else if (dur !== null && typeof dur === 'object' && !Array.isArray(dur)) {
       const out: DurationObject = {}
       for (const key of Object.keys(dur)) {
@@ -397,7 +402,7 @@ export class Duration {
         }
         out[key] = nz(v)
       }
-      this.values = freezeValues(out)
+      this.#fields = freezeValues(out)
       this.#exact = exact === true
     } else {
       throw new ValueError('expected a number, Duration, or DurationObject')
@@ -406,31 +411,31 @@ export class Duration {
   }
 
   get years(): number {
-    return this.values.years ?? 0
+    return this.#fields.years ?? 0
   }
   get quarters(): number {
-    return this.values.quarters ?? 0
+    return this.#fields.quarters ?? 0
   }
   get months(): number {
-    return this.values.months ?? 0
+    return this.#fields.months ?? 0
   }
   get weeks(): number {
-    return this.values.weeks ?? 0
+    return this.#fields.weeks ?? 0
   }
   get days(): number {
-    return this.values.days ?? 0
+    return this.#fields.days ?? 0
   }
   get hours(): number {
-    return this.values.hours ?? 0
+    return this.#fields.hours ?? 0
   }
   get minutes(): number {
-    return this.values.minutes ?? 0
+    return this.#fields.minutes ?? 0
   }
   get seconds(): number {
-    return this.values.seconds ?? 0
+    return this.#fields.seconds ?? 0
   }
   get milliseconds(): number {
-    return this.values.milliseconds ?? 0
+    return this.#fields.milliseconds ?? 0
   }
 
   /**
@@ -450,7 +455,7 @@ new Duration({ years: 2, days: 3 }).get('days') // 3
 ```
    */
   get(unit: string): number {
-    return this.values[durationField(unit)] ?? 0
+    return this.#fields[durationField(unit)] ?? 0
   }
 
   /**
@@ -461,8 +466,8 @@ new Duration({ years: 2, days: 3 }).get('days') // 3
     const other = new Duration(d)
     const out: DurationObject = {}
     for (const f of FIELD_ORDER) {
-      const a = this.values[f]
-      const b = other.values[f]
+      const a = this.#fields[f]
+      const b = other.#fields[f]
       if (a === undefined && b === undefined) continue
       out[f] = nz((a ?? 0) + (b ?? 0))
     }
@@ -488,7 +493,7 @@ new Duration({ hours: 1, seconds: 30 }).negated().toObject()
   negated(): Duration {
     const out: DurationObject = {}
     for (const f of FIELD_ORDER) {
-      const v = this.values[f]
+      const v = this.#fields[f]
       if (v === undefined) continue
       out[f] = v === 0 ? 0 : -v
     }
@@ -506,7 +511,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   abs(): Duration {
     const out: DurationObject = {}
     for (const f of FIELD_ORDER) {
-      const v = this.values[f]
+      const v = this.#fields[f]
       if (v === undefined) continue
       out[f] = Math.abs(v)
     }
@@ -518,7 +523,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
    * @param unit Target unit
    */
   total(unit: DurationUnit): number {
-    return ratio(totalNanos(this.values, this.#exact), unitNanos(durationField(unit), this.#exact))
+    return ratio(totalNanos(this.#fields, this.#exact), unitNanos(durationField(unit), this.#exact))
   }
 
   /** Same fields in exact mode. */
@@ -529,13 +534,13 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
    */
   exact(unit: DurationUnit): number
   exact(unit?: DurationUnit): Duration | number {
-    if (unit === undefined) return new Duration(this.values, true)
+    if (unit === undefined) return new Duration(this.#fields, true)
     return this.exact().total(unit)
   }
 
-  /** Fresh mutable copy of `values`. */
+  /** Fresh mutable copy of the stored fields. */
   toObject(): DurationObject {
-    return copyValues(this.values)
+    return copyValues(this.#fields)
   }
 
   /**
@@ -543,21 +548,24 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
    * Units not present are never introduced.
    */
   normalize(): Duration {
-    const fields = presentFields(this.values)
+    const fields = presentFields(this.#fields)
     if (fields.length === 0) return new Duration({}, this.#exact)
     return new Duration(
-      spread(totalNanos(this.values, this.#exact), fields, this.#exact),
+      spread(totalNanos(this.#fields, this.#exact), fields, this.#exact),
       this.#exact
     )
   }
 
   /**
-   * Redistributes across the full calendar/time ladder (no quarters); drops zeros.
+   * Redistributes the exact total across the unit slice from `largestUnit` down to
+   * `smallestUnit` (default milliseconds). Drops zero fields; keeps a fractional
+   * remainder on the smallest unit.
    */
-  rescale(): Duration {
-    const spreadOut = spread(totalNanos(this.values, this.#exact), RESCALE_FIELDS, this.#exact)
+  round(options: { largestUnit: DurationUnit; smallestUnit?: DurationUnit }): Duration {
+    const fields = roundingFields(options.largestUnit, options.smallestUnit)
+    const spreadOut = spread(totalNanos(this.#fields, this.#exact), fields, this.#exact)
     const out: DurationObject = {}
-    for (const f of RESCALE_FIELDS) {
+    for (const f of fields) {
       const v = spreadOut[f]
       if (v !== undefined && v !== 0) out[f] = v
     }
@@ -566,12 +574,13 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
 
   /** ISO 8601 duration string (Temporal-style grammar). */
   toISOString(): string {
-    const source = hasMixedSigns(this.values) ? this.normalize() : this
+    const source = hasMixedSigns(this.#fields) ? this.normalize() : this
     const exact = source.#exact
-    const negative = isNegativeDuration(source.values)
+    const negative = isNegativeDuration(source.#fields)
 
-    const monthsCombined = (source.values.months ?? 0) + 3 * (source.values.quarters ?? 0)
-    const monthsPresent = source.values.months !== undefined || source.values.quarters !== undefined
+    const monthsCombined = (source.#fields.months ?? 0) + 3 * (source.#fields.quarters ?? 0)
+    const monthsPresent =
+      source.#fields.months !== undefined || source.#fields.quarters !== undefined
 
     let Y = 0n
     let M = 0n
@@ -602,20 +611,20 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
       secNs += ns
     }
 
-    const years = source.values.years
+    const years = source.#fields.years
     if (years !== undefined && years !== 0) addCarry('years', Math.abs(years))
     if (monthsPresent && monthsCombined !== 0) addCarry('months', Math.abs(monthsCombined))
-    const weeks = source.values.weeks
+    const weeks = source.#fields.weeks
     if (weeks !== undefined && weeks !== 0) addCarry('weeks', Math.abs(weeks))
-    const days = source.values.days
+    const days = source.#fields.days
     if (days !== undefined && days !== 0) addCarry('days', Math.abs(days))
-    const hours = source.values.hours
+    const hours = source.#fields.hours
     if (hours !== undefined && hours !== 0) addCarry('hours', Math.abs(hours))
-    const minutes = source.values.minutes
+    const minutes = source.#fields.minutes
     if (minutes !== undefined && minutes !== 0) addCarry('minutes', Math.abs(minutes))
-    const seconds = source.values.seconds
+    const seconds = source.#fields.seconds
     if (seconds !== undefined && seconds !== 0) addCarry('seconds', Math.abs(seconds))
-    const milliseconds = source.values.milliseconds
+    const milliseconds = source.#fields.milliseconds
     if (milliseconds !== undefined && milliseconds !== 0) {
       addCarry('milliseconds', Math.abs(milliseconds))
     }
@@ -682,14 +691,14 @@ new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
     const Ctor = Reflect.get(Intl, 'DurationFormat')
     if (!isDurationFormatCtor(Ctor)) return this.toISOString()
 
-    if (hasMixedSigns(this.values)) {
+    if (hasMixedSigns(this.#fields)) {
       throw new RangeError('cannot format a duration with mixed signs')
     }
 
     const exact = this.#exact
-    const monthsCombined = (this.values.months ?? 0) + 3 * (this.values.quarters ?? 0)
-    const monthsPresent = this.values.months !== undefined || this.values.quarters !== undefined
-    const weeksPresent = this.values.weeks !== undefined
+    const monthsCombined = (this.#fields.months ?? 0) + 3 * (this.#fields.quarters ?? 0)
+    const monthsPresent = this.#fields.months !== undefined || this.#fields.quarters !== undefined
+    const weeksPresent = this.#fields.weeks !== undefined
 
     const acc: Record<AccKey, bigint> = {
       years: 0n,
@@ -715,22 +724,22 @@ new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
       }
     }
 
-    const sign = isNegativeDuration(this.values) ? -1 : 1
+    const sign = isNegativeDuration(this.#fields) ? -1 : 1
 
-    const years = this.values.years
+    const years = this.#fields.years
     if (years !== undefined && years !== 0) feed('years', Math.abs(years))
     if (monthsPresent && monthsCombined !== 0) feed('months', Math.abs(monthsCombined))
-    const weeks = this.values.weeks
+    const weeks = this.#fields.weeks
     if (weeks !== undefined && weeks !== 0) feed('weeks', Math.abs(weeks))
-    const days = this.values.days
+    const days = this.#fields.days
     if (days !== undefined && days !== 0) feed('days', Math.abs(days))
-    const hours = this.values.hours
+    const hours = this.#fields.hours
     if (hours !== undefined && hours !== 0) feed('hours', Math.abs(hours))
-    const minutes = this.values.minutes
+    const minutes = this.#fields.minutes
     if (minutes !== undefined && minutes !== 0) feed('minutes', Math.abs(minutes))
-    const seconds = this.values.seconds
+    const seconds = this.#fields.seconds
     if (seconds !== undefined && seconds !== 0) feed('seconds', Math.abs(seconds))
-    const milliseconds = this.values.milliseconds
+    const milliseconds = this.#fields.milliseconds
     if (milliseconds !== undefined && milliseconds !== 0) {
       feed('milliseconds', Math.abs(milliseconds))
     }
@@ -769,18 +778,20 @@ new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
   }
 
   /**
-   * Parse a Temporal-style ISO 8601 duration string.
-   * @param text Duration text
+   * Build a Duration from an ISO 8601 string, milliseconds, field object, or Duration
+   * (Temporal.Duration.from shape).
+   * @param input Source value
    * @example
 ```js
-Duration.fromISO('P3Y6M1W4DT12H30M5S').toObject()
+Duration.from('P3Y6M1W4DT12H30M5S').toObject()
 // { years: 3, months: 6, weeks: 1, days: 4, hours: 12, minutes: 30, seconds: 5 }
-Duration.fromISO('PT23H').toObject() // { hours: 23 }
-Duration.fromISO('P5Y3M').toObject() // { years: 5, months: 3 }
+Duration.from('PT23H').toObject() // { hours: 23 }
+Duration.from('P5Y3M').toObject() // { years: 5, months: 3 }
 ```
    */
-  static fromISO(text: string): Duration {
-    if (typeof text !== 'string') throw isoError(String(text))
+  static from(input: string | number | DurationObject | Duration): Duration {
+    if (typeof input !== 'string') return new Duration(input)
+    const text = input
 
     const fail = (): never => {
       throw isoError(text)

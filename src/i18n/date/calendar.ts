@@ -1,9 +1,6 @@
 /** Milliseconds in one civil day. */
 export const MS_PER_DAY = 86_400_000
 
-/** Length of one 400-year Gregorian cycle in milliseconds [ISO8601]. */
-const MS_PER_400_YEARS = 146_097 * MS_PER_DAY
-
 /** Wall-clock fields in a local or UTC view. */
 export interface WallFields {
   year: number
@@ -48,21 +45,47 @@ export const FIRST_DAY_FALLBACK: ReadonlyMap<string, number> = (() => {
 })()
 
 /**
+ * Proleptic Gregorian day number since 1970-01-01 (Howard Hinnant days_from_civil).
+ * Month may overflow (13 -> next January); day may overflow or be non-positive.
+ */
+function daysFromCivil(year: number, month: number, day: number): number {
+  let y = year + Math.floor((month - 1) / 12)
+  let m = ((((month - 1) % 12) + 12) % 12) + 1
+  if (m <= 2) {
+    y -= 1
+    m += 12
+  }
+  const era = Math.floor(y / 400)
+  const yoe = y - era * 400
+  const doy = Math.floor((153 * (m - 3) + 2) / 5) + day - 1
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy
+  return era * 146097 + doe - 719468
+}
+
+/** Inverse of {@link daysFromCivil} (Howard Hinnant civil_from_days). */
+function civilFromDays(z: number): { year: number; month: number; day: number } {
+  const zAdj = z + 719468
+  const era = Math.floor(zAdj / 146097)
+  const doe = zAdj - era * 146097
+  const yoe = Math.floor(
+    (doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365
+  )
+  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100))
+  const mp = Math.floor((5 * doy + 2) / 153)
+  const d = doy - Math.floor((153 * mp + 2) / 5) + 1
+  const m = mp < 10 ? mp + 3 : mp - 9
+  const y = yoe + era * 400 + (m <= 2 ? 1 : 0)
+  return { year: y, month: m, day: d }
+}
+
+/**
  * Epoch ms of wall fields read as UTC. Years 0..99 are literal.
  * Out-of-range fields roll like MakeDay/MakeTime.
  */
 export function utcWallToTime(f: WallFields): number {
-  const small = f.year >= 0 && f.year <= 99
-  const t = Date.UTC(
-    small ? f.year + 400 : f.year,
-    f.month - 1,
-    f.day,
-    f.hour,
-    f.minute,
-    f.second,
-    f.millisecond
-  )
-  return small ? t - MS_PER_400_YEARS : t
+  const days = dayNumber(f.year, f.month, f.day)
+  const tod = ((f.hour * 60 + f.minute) * 60 + f.second) * 1000 + f.millisecond
+  return days * MS_PER_DAY + tod
 }
 
 /**
@@ -70,17 +93,10 @@ export function utcWallToTime(f: WallFields): number {
  * (gap -> forward by the gap, overlap -> earlier offset).
  */
 export function localWallToTime(f: WallFields): number {
-  const small = f.year >= 0 && f.year <= 99
-  const t = new Date(
-    small ? f.year + 400 : f.year,
-    f.month - 1,
-    f.day,
-    f.hour,
-    f.minute,
-    f.second,
-    f.millisecond
-  ).getTime()
-  return small ? t - MS_PER_400_YEARS : t
+  const d = new Date(0)
+  d.setFullYear(f.year, f.month - 1, f.day)
+  d.setHours(f.hour, f.minute, f.second, f.millisecond)
+  return d.getTime()
 }
 
 /** UTC offset of an instant in milliseconds (local minus UTC). UTC view is 0. */
@@ -143,23 +159,12 @@ export function readWall(time: number, utc: boolean): WallFields {
 
 /** Civil day number since 1970-01-01. Month may overflow (13 -> next January). */
 export function dayNumber(year: number, month: number, day: number): number {
-  return Math.floor(
-    utcWallToTime({
-      year,
-      month,
-      day,
-      hour: 0,
-      minute: 0,
-      second: 0,
-      millisecond: 0
-    }) / MS_PER_DAY
-  )
+  return daysFromCivil(year, month, day)
 }
 
 /** Proleptic Gregorian civil date for a day number. */
 export function civilFromDayNumber(dn: number): { year: number; month: number; day: number } {
-  const t = new Date(dn * MS_PER_DAY)
-  return { year: t.getUTCFullYear(), month: t.getUTCMonth() + 1, day: t.getUTCDate() }
+  return civilFromDays(dn)
 }
 
 /** Weekday of a day number: 0 = Sunday .. 6 = Saturday. */
@@ -210,7 +215,7 @@ export function weekDateOf(dn: number, rule: WeekRule): { week: number; year: nu
 }
 
 /** Number of weeks in a week-numbering year (52 or 53). */
-export function weeksInWeekYear(year: number, rule: WeekRule): number {
+export function weekCount(year: number, rule: WeekRule): number {
   return (firstWeekStart(year + 1, rule) - firstWeekStart(year, rule)) / 7
 }
 

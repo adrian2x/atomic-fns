@@ -345,7 +345,7 @@ describe('SPEC-R107 JSDoc @example', () => {
   })
 
   it('src/i18n/duration.ts #11', () => {
-    expect(Duration.fromISO('P3Y6M1W4DT12H30M5S').toObject()).toEqual({
+    expect(Duration.from('P3Y6M1W4DT12H30M5S').toObject()).toEqual({
       years: 3,
       months: 6,
       weeks: 1,
@@ -354,8 +354,8 @@ describe('SPEC-R107 JSDoc @example', () => {
       minutes: 30,
       seconds: 5
     })
-    expect(Duration.fromISO('PT23H').toObject()).toEqual({ hours: 23 })
-    expect(Duration.fromISO('P5Y3M').toObject()).toEqual({ years: 5, months: 3 })
+    expect(Duration.from('PT23H').toObject()).toEqual({ hours: 23 })
+    expect(Duration.from('P5Y3M').toObject()).toEqual({ years: 5, months: 3 })
   })
 
   it('src/i18n/format.ts #1', () => {

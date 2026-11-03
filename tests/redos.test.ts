@@ -56,21 +56,21 @@ describe('NFR-4 ReDoS guards', () => {
     }
   })
 
-  it('SPEC-R94 Duration.fromISO finishes and rejects 1e5-digit P input', () => {
+  it('SPEC-R94 Duration.from finishes and rejects 1e5-digit P input', () => {
     const input = 'P' + '1'.repeat(1e5)
     const t0 = performance.now()
-    expect(() => Duration.fromISO(input)).toThrow(ValueError)
+    expect(() => Duration.from(input)).toThrow(ValueError)
     expect(performance.now() - t0).toBeLessThan(200)
   })
 
-  it('SPEC-R94 Duration.fromISO ReDoS vectors stay under 50ms', () => {
+  it('SPEC-R94 Duration.from ReDoS vectors stay under 50ms', () => {
     for (const input of [
       'P' + '1Y'.repeat(5e4),
       '-P' + '-1.1'.repeat(5e4),
       'P' + '9'.repeat(5e4) + 'X'
     ]) {
       const t0 = performance.now()
-      expect(() => Duration.fromISO(input)).toThrow(ValueError)
+      expect(() => Duration.from(input)).toThrow(ValueError)
       expect(performance.now() - t0).toBeLessThan(50)
     }
   })

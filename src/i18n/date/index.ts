@@ -22,7 +22,7 @@ import {
   wallToTimePreferOffset,
   weekdayOf,
   weekDateOf,
-  weeksInWeekYear,
+  weekCount,
   type WallFields
 } from './calendar.js'
 import {
@@ -85,19 +85,7 @@ function fieldsToDate(fields: DateObject, utc: boolean): Date {
 
 function toDurationObject(duration: number | Duration | DurationObject): DurationObject {
   if (typeof duration === 'number') return { milliseconds: duration }
-  if (duration instanceof Duration) {
-    return {
-      years: duration.values.years,
-      quarters: duration.values.quarters,
-      months: duration.values.months,
-      weeks: duration.values.weeks,
-      days: duration.values.days,
-      hours: duration.values.hours,
-      minutes: duration.values.minutes,
-      seconds: duration.values.seconds,
-      milliseconds: duration.values.milliseconds
-    }
-  }
+  if (duration instanceof Duration) return duration.toObject()
   return duration
 }
 
@@ -367,7 +355,7 @@ export class IntlDate implements Comparable, Equatable {
   /** Weeks in this date's locale week-numbering year. */
   weeksInYear(): number {
     if (!this.isValid()) return Number.NaN
-    return weeksInWeekYear(this.weekYear(), localeWeekRule(this.locale))
+    return weekCount(this.weekYear(), localeWeekRule(this.locale))
   }
 
   /** ISO week-numbering year for this date. */
@@ -380,7 +368,7 @@ export class IntlDate implements Comparable, Equatable {
   /** Weeks in this date's ISO week-numbering year. */
   isoWeeksInYear(): number {
     if (!this.isValid()) return Number.NaN
-    return weeksInWeekYear(this.isoWeekYear(), ISO_WEEK_RULE)
+    return weekCount(this.isoWeekYear(), ISO_WEEK_RULE)
   }
 
   /** Locale week of the year (rule from this instance's locale). */

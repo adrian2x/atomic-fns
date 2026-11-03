@@ -16,9 +16,9 @@ describe('Duration', () => {
 
   it('SPEC-R94 normalize leaves the receiver unchanged', () => {
     const d = new Duration({ hours: 1, minutes: 90 })
-    const before = { ...d.values }
+    const before = d.toObject()
     const n = d.normalize()
-    expect(d.values).toEqual(before)
+    expect(d.toObject()).toEqual(before)
     expect(n.toObject()).toEqual({ hours: 2, minutes: 30 })
   })
 
@@ -43,7 +43,7 @@ describe('Duration', () => {
 
   it('SPEC-R94 constructor rejects ISO strings with ValueError', () => {
     expect(() => new Duration('P1D' as unknown as number)).toThrow(ValueError)
-    expect(() => new Duration('P1D' as unknown as number)).toThrow(/use Duration\.fromISO/)
+    expect(() => new Duration('P1D' as unknown as number)).toThrow(/use Duration\.from/)
   })
 
   it('SPEC-R94 constructor rejects unsupported input', () => {
@@ -57,45 +57,40 @@ describe('Duration', () => {
     expect(new Duration(new Duration({ hours: 3 })).hours).toBe(3)
   })
 
-  it("SPEC-R94 fromISO('P') throws ValueError", () => {
-    expect(() => Duration.fromISO('P')).toThrow(ValueError)
-    expect(() => Duration.fromISO('-P')).toThrow(ValueError)
+  it("SPEC-R94 from('P') throws ValueError", () => {
+    expect(() => Duration.from('P')).toThrow(ValueError)
+    expect(() => Duration.from('-P')).toThrow(ValueError)
   })
 
-  it('SPEC-R94 fromISO parses a valid duration', () => {
-    expect(Duration.fromISO('P1DT2H').toObject()).toEqual({ days: 1, hours: 2 })
-    expect(Duration.fromISO('PT30M').minutes).toBe(30)
+  it('SPEC-R94 from parses a valid duration', () => {
+    expect(Duration.from('P1DT2H').toObject()).toEqual({ days: 1, hours: 2 })
+    expect(Duration.from('PT30M').minutes).toBe(30)
   })
 
   it("SPEC-R94 format('en') uses Intl.DurationFormat", () => {
     expect(new Duration({ hours: 1, minutes: 30 }).format('en')).toBe('1 hr, 30 min')
   })
 
-  it('SPEC-R94 values is frozen and the Duration is immutable', () => {
+  it('SPEC-R94 Duration is frozen and fields are read via getters', () => {
     const d = new Duration({ years: 2, hours: 3 })
-    expect(Object.isFrozen(d.values)).toBe(true)
-    expect(() => {
-      // @ts-expect-error values is readonly
-      d.values.years = 9
-    }).toThrow(TypeError)
-    expect(() => {
-      // @ts-expect-error values is readonly
-      d.values.days = 1
-    }).toThrow(TypeError)
+    expect(Object.isFrozen(d)).toBe(true)
     expect(d.years).toBe(2)
     expect(d.days).toBe(0)
     expect(d.toObject()).toEqual({ years: 2, hours: 3 })
+    const obj = d.toObject()
+    obj.years = 9
+    expect(d.years).toBe(2)
   })
 
-  it('SPEC-R94 values does not alias the constructor input or other Durations', () => {
+  it('SPEC-R94 fields do not alias the constructor input or other Durations', () => {
     const input = { hours: 1 }
     const d = new Duration(input)
     input.hours = 5
     expect(d.hours).toBe(1)
 
     const copy = new Duration(d)
-    expect(copy.values).not.toBe(d.values)
-    expect(Object.isFrozen(copy.values)).toBe(true)
+    expect(copy.toObject()).toEqual(d.toObject())
+    expect(copy).not.toBe(d)
 
     const obj = d.toObject()
     obj.hours = 7
@@ -200,16 +195,16 @@ describe('Duration', () => {
     })
   })
 
-  it('SPEC-R94 rescale and totals', () => {
+  it('SPEC-R94 round and totals', () => {
     expect(
       new Duration({ days: 14 })
-        .subtract(new Duration(7 * 86_400_000).rescale())
-        .rescale()
+        .subtract(new Duration(7 * 86_400_000).round({ largestUnit: 'years' }))
+        .round({ largestUnit: 'years' })
         .toISOString()
     ).toBe('P1W')
     const exactYear = new Duration({ years: 100 }, true)
-      .subtract(new Duration(7 * 86_400_000).rescale())
-      .rescale()
+      .subtract(new Duration(7 * 86_400_000).round({ largestUnit: 'years' }))
+      .round({ largestUnit: 'years' })
       .toObject()
     expect(exactYear).toEqual({
       years: 99,
@@ -223,9 +218,15 @@ describe('Duration', () => {
     for (const v of Object.values(exactYear)) {
       expect(Number.isInteger(v)).toBe(true)
     }
-    expect(new Duration({ hours: 2.3 }).rescale().toObject()).toEqual({ hours: 2, minutes: 18 })
-    expect(new Duration(-1500).rescale().toObject()).toEqual({ seconds: -1, milliseconds: -500 })
-    expect(new Duration({ minutes: -90 }).rescale().toObject()).toEqual({
+    expect(new Duration({ hours: 2.3 }).round({ largestUnit: 'years' }).toObject()).toEqual({
+      hours: 2,
+      minutes: 18
+    })
+    expect(new Duration(-1500).round({ largestUnit: 'years' }).toObject()).toEqual({
+      seconds: -1,
+      milliseconds: -500
+    })
+    expect(new Duration({ minutes: -90 }).round({ largestUnit: 'years' }).toObject()).toEqual({
       hours: -1,
       minutes: -30
     })
@@ -252,31 +253,31 @@ describe('Duration', () => {
     expect(new Duration({ hours: 1 }).add({ minutes: -30 }).toISOString()).toBe('PT30M')
   })
 
-  it('SPEC-R94 fromISO accept vectors', () => {
-    expect(Duration.fromISO('P0D').toISOString()).toBe('PT0S')
-    expect(Duration.fromISO('PT0S').toISOString()).toBe('PT0S')
-    expect(Duration.fromISO('-PT0S').toISOString()).toBe('PT0S')
-    expect(Duration.fromISO('+P1D').toObject()).toEqual({ days: 1 })
-    expect(Duration.fromISO('-P1DT2H').toObject()).toEqual({ days: -1, hours: -2 })
-    expect(Duration.fromISO('p1d').toObject()).toEqual({ days: 1 })
-    expect(Duration.fromISO('P1dT2h').toObject()).toEqual({ days: 1, hours: 2 })
-    expect(Duration.fromISO('pt1h').toObject()).toEqual({ hours: 1 })
-    expect(Duration.fromISO('PT1,5H').toObject()).toEqual({ hours: 1.5 })
-    expect(Duration.fromISO('PT1.5S').toObject()).toEqual({ seconds: 1.5 })
-    expect(Duration.fromISO('P1W2D').toObject()).toEqual({ weeks: 1, days: 2 })
-    expect(Duration.fromISO('PT0.123456789S').toISOString()).toBe('PT0.123456789S')
-    expect(Duration.fromISO('PT0.0001S').toISOString()).toBe('PT0.0001S')
-    expect(Duration.fromISO('PT0.000000001S').toISOString()).toBe('PT0.000000001S')
-    expect(Duration.fromISO('PT0.999999999S').toISOString()).toBe('PT0.999999999S')
-    expect(() => Duration.fromISO('PT59.999999999M')).not.toThrow()
-    expect(() => Duration.fromISO('PT0.999999999H')).not.toThrow()
-    expect(() => Duration.fromISO('PT9007199254740991S')).not.toThrow()
+  it('SPEC-R94 from accept vectors', () => {
+    expect(Duration.from('P0D').toISOString()).toBe('PT0S')
+    expect(Duration.from('PT0S').toISOString()).toBe('PT0S')
+    expect(Duration.from('-PT0S').toISOString()).toBe('PT0S')
+    expect(Duration.from('+P1D').toObject()).toEqual({ days: 1 })
+    expect(Duration.from('-P1DT2H').toObject()).toEqual({ days: -1, hours: -2 })
+    expect(Duration.from('p1d').toObject()).toEqual({ days: 1 })
+    expect(Duration.from('P1dT2h').toObject()).toEqual({ days: 1, hours: 2 })
+    expect(Duration.from('pt1h').toObject()).toEqual({ hours: 1 })
+    expect(Duration.from('PT1,5H').toObject()).toEqual({ hours: 1.5 })
+    expect(Duration.from('PT1.5S').toObject()).toEqual({ seconds: 1.5 })
+    expect(Duration.from('P1W2D').toObject()).toEqual({ weeks: 1, days: 2 })
+    expect(Duration.from('PT0.123456789S').toISOString()).toBe('PT0.123456789S')
+    expect(Duration.from('PT0.0001S').toISOString()).toBe('PT0.0001S')
+    expect(Duration.from('PT0.000000001S').toISOString()).toBe('PT0.000000001S')
+    expect(Duration.from('PT0.999999999S').toISOString()).toBe('PT0.999999999S')
+    expect(() => Duration.from('PT59.999999999M')).not.toThrow()
+    expect(() => Duration.from('PT0.999999999H')).not.toThrow()
+    expect(() => Duration.from('PT9007199254740991S')).not.toThrow()
     expect(new Duration({ milliseconds: 4e-7 }).toISOString()).toBe('PT0S')
     expect(new Duration({ milliseconds: -4e-7 }).toISOString()).toBe('PT0S')
     expect(new Duration({ seconds: 1e-9 }).toISOString()).toBe('PT0.000000001S')
   })
 
-  it('SPEC-R94 fromISO reject vectors', () => {
+  it('SPEC-R94 from reject vectors', () => {
     for (const s of [
       'P',
       '-P',
@@ -302,12 +303,12 @@ describe('Duration', () => {
       'P1M1Y',
       'PT1000000000000.123456789S'
     ]) {
-      expect(() => Duration.fromISO(s)).toThrow(ValueError)
+      expect(() => Duration.from(s)).toThrow(ValueError)
     }
     const long = 'x'.repeat(100)
     let message = ''
     try {
-      Duration.fromISO(long)
+      Duration.from(long)
     } catch (e) {
       message = e instanceof Error ? e.message : ''
     }
@@ -315,7 +316,7 @@ describe('Duration', () => {
     expect(message.endsWith('..."')).toBe(true)
   })
 
-  it('SPEC-R94 fromISO round trip', () => {
+  it('SPEC-R94 from round trip', () => {
     for (const s of [
       'P0D',
       'PT0S',
@@ -336,10 +337,10 @@ describe('Duration', () => {
       'PT0.999999999H',
       'PT9007199254740991S'
     ]) {
-      const once = Duration.fromISO(s).toISOString()
-      expect(Duration.fromISO(once).toISOString()).toBe(once)
+      const once = Duration.from(s).toISOString()
+      expect(Duration.from(once).toISOString()).toBe(once)
     }
-    expect(() => Duration.fromISO(new Duration({ milliseconds: 1e21 }).toISOString())).toThrow(
+    expect(() => Duration.from(new Duration({ milliseconds: 1e21 }).toISOString())).toThrow(
       ValueError
     )
   })
