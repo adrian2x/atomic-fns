@@ -127,8 +127,9 @@ function deepEqualChildren(a: object, b: object, pending: Pending, depth: number
 /**
  * Deep structural equality with cycle handling.
  * Dispatches to `protocol.equals` when either side defines it. Boxed primitives compare by
- * `Object.is` on their primitive value. Nesting deeper than 1000 levels throws `RangeError`; a
- * pair already under comparison on the current path is treated as equal.
+ * `Object.is` on their primitive value. Nesting past 1000 levels throws `RangeError` (the cap
+ * is a security bound, not an implementation limit). A pair already under comparison on the
+ * current path is treated as equal.
  */
 export function deepEqual(a: unknown, b: unknown): boolean {
   return deepEqualInner(a, b, new WeakMap(), 1)
