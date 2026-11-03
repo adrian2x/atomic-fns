@@ -312,6 +312,18 @@ describe('F-055 linear-time parse and normalize', () => {
     expect(decimal('1e80000').sqrt().toString().length).toBeGreaterThan(0)
     expect(performance.now() - start).toBeLessThan(250)
   })
+
+  it('sqrt of 1e1000000 under 250ms', { timeout: 2000 }, () => {
+    const start = performance.now()
+    expect(decimal('1e1000000').sqrt().toString().length).toBeGreaterThan(0)
+    expect(performance.now() - start).toBeLessThan(250)
+  })
+
+  it('sqrt of 2e999999 under 250ms', { timeout: 2000 }, () => {
+    const start = performance.now()
+    expect(decimal('2e999999').sqrt().toString().length).toBeGreaterThan(0)
+    expect(performance.now() - start).toBeLessThan(250)
+  })
 })
 
 describe('isqrt precision-doubling', () => {
