@@ -1,29 +1,24 @@
-import { Collection } from './abc.js'
+import { SetCollection } from './abc.js'
 
 type TrieNode = {
-  isWord?: boolean
-} & { [key: string]: TrieNode }
+  children: Map<string, TrieNode>
+  isWord: boolean
+}
 
-function* traverse(node: TrieNode, path: string, total = 20, count = 0): Generator<string> {
-  if (node.isWord) {
-    count++
-    yield path
-  }
-  for (const key of Object.keys(node)) {
-    yield* traverse(node[key], path + key, total, count)
-  }
+function newNode(): TrieNode {
+  return { children: new Map(), isWord: false }
 }
 
 /**
- * A Trie is a tree for efficient storing and retrieval of strings such as words in a dictionary. They are useful for checking all the strings that have a common prefix.
- * Insertions, lookups and removals in `O(s)` where `s` is the search term.
+ * Prefix tree for strings. Insertions, lookups and removals in O(s) for string length s.
+ *
  * @see {@link https://en.wikipedia.org/wiki/Trie Trie}
  */
-export class Trie extends Collection {
-  private root: TrieNode = {}
-  private count = 0
+export class Trie extends SetCollection<string> {
+  #root: TrieNode = newNode()
+  #count = 0
 
-  constructor(words?: string[]) {
+  constructor(words?: Iterable<string>) {
     super()
     if (words) {
       for (const word of words) {
@@ -33,85 +28,111 @@ export class Trie extends Collection {
   }
 
   /**
-   * Adds the given string to the tree.
-   * @param word A string
+   * Add `word`. Non-strings throw. A duplicate is a no-op for size.
+   * @throws {TypeError} when `word` is not a string.
    */
   add(word: string): this {
-    let current = this.root
+    if (typeof word !== 'string') throw new TypeError('Trie stores strings')
+    let node = this.#root
     for (let i = 0; i < word.length; i++) {
       const c = word[i]
-      if (!current[c]) current[c] = {}
-      current = current[c]
+      let next = node.children.get(c)
+      if (!next) {
+        next = newNode()
+        node.children.set(c, next)
+      }
+      node = next
     }
-    // Set as end of the word
-    Object.defineProperty(current, 'isWord', {
-      value: true,
-      enumerable: false,
-      writable: true
-    })
-    this.count++
+    if (!node.isWord) {
+      node.isWord = true
+      this.#count++
+    }
     return this
   }
 
   /**
-   * Removes the given string from the tree.
-   * @param word The string to remove
-   * @returns {boolean} Returns `true` if the string was found and removed.
+   * Remove `word` if present (including `''`) and prune empty branches.
+   * @returns `true` iff the word was present.
    */
-  remove(word: string): boolean {
-    for (let i = 0, node = this.root; i < word.length && node; i++) {
-      node = node[word[i]]
-      if (i === word.length - 1 && node.isWord) {
-        node.isWord = false
-        this.count--
-        return true
-      }
+  delete(word: string): boolean {
+    if (typeof word !== 'string') return false
+    const path: { node: TrieNode; char: string }[] = []
+    let node = this.#root
+    for (let i = 0; i < word.length; i++) {
+      const c = word[i]
+      const next = node.children.get(c)
+      if (!next) return false
+      path.push({ node, char: c })
+      node = next
     }
-    return false
+    if (!node.isWord) return false
+    node.isWord = false
+    this.#count--
+    for (let i = path.length - 1; i >= 0; i--) {
+      const { node: parent, char } = path[i]
+      const child = parent.children.get(char)
+      if (!child || child.isWord || child.children.size > 0) break
+      parent.children.delete(char)
+    }
+    return true
   }
 
-  private findNode(word: string): TrieNode | undefined {
-    let node = this.root
-    for (let i = 0; i < word.length && node; i++) {
-      const letter = word[i]
-      node = node[letter]
+  has(word: string): boolean {
+    if (typeof word !== 'string') return false
+    const node = this.#findNode(word)
+    return node !== undefined && node.isWord
+  }
+
+  /**
+   * Yield words that start with `prefix`, in child insertion order, at most `limit`.
+   */
+  matches(prefix: string, limit = Infinity): IteratorObject<string> {
+    return Iterator.from(this.#matchGen(prefix, limit))
+  }
+
+  *#matchGen(prefix: string, limit: number): Generator<string> {
+    if (typeof prefix !== 'string' || limit <= 0) return
+    const start = this.#findNode(prefix)
+    if (!start) return
+    let yielded = 0
+    const stack: { node: TrieNode; path: string }[] = [{ node: start, path: prefix }]
+    while (stack.length > 0 && yielded < limit) {
+      const { node, path } = stack.pop()!
+      if (node.isWord) {
+        yield path
+        yielded++
+        if (yielded >= limit) return
+      }
+      const children = [...node.children.entries()].reverse()
+      for (const [c, child] of children) {
+        stack.push({ node: child, path: path + c })
+      }
+    }
+  }
+
+  #findNode(word: string): TrieNode | undefined {
+    let node: TrieNode | undefined = this.#root
+    for (let i = 0; i < word.length; i++) {
+      node = node.children.get(word[i])
+      if (!node) return undefined
     }
     return node
   }
 
-  /**
-   * Generates all results that start with the given string.
-   * @param word A prefix string
-   * @param {number} [limit=20] The number of results to return.
-   */
-  matches = function* (word: string, limit = 20): Generator<string> {
-    const node = this.findNode(word)
-    if (node) {
-      yield* traverse(node, word, limit)
-    }
+  clear(): void {
+    this.#root = newNode()
+    this.#count = 0
   }
 
-  /**
-   * Returns `true` if the given string is found in the tree.
-   * @param {string} word
-   */
-  contains(word: string): boolean {
-    const node = this.findNode(word)
-    return node?.isWord
-  }
-
-  /**
-   * Removes all strings from the tree.
-   */
-  clear() {
-    this.root = {}
-    this.count = 0
-  }
-
-  /**
-   * Returns the total number of strings in the tree.
-   */
   get size(): number {
-    return this.count
+    return this.#count
+  }
+
+  get [Symbol.toStringTag](): string {
+    return 'Trie'
+  }
+
+  values(): IteratorObject<string> {
+    return this.matches('', Infinity)
   }
 }

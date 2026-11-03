@@ -1,34 +1,50 @@
 /**
- * Returns a new immutable Set object with elements from `iterable`. Its contents cannot be altered after it's created.
- *
+ * An immutable Set. Contents cannot change after construction.
+ * `Set.prototype.add.call(fs, x)` still mutates (inherent Set subclass limit).
  *
  * @class FrozenSet
  * @extends {Set<T>}
  * @template T
  */
-export class FrozenSet<T = any> extends Set<T> {
-  constructor(iterable: Iterable<T>) {
-    super(iterable)
-    return this.freeze()
+export class FrozenSet<T = unknown> extends Set<T> {
+  #frozen = false
+
+  constructor(iterable?: Iterable<T> | null) {
+    super()
+    for (const x of iterable ?? []) {
+      super.add(x)
+    }
+    this.#frozen = true
   }
 
-  /** @private */
-  add(): this {
-    return this
+  /**
+   * Rejected: FrozenSet is immutable.
+   * @throws {TypeError}
+   */
+  override add(_v: T): this {
+    if (this.#frozen) throw new TypeError('FrozenSet is immutable')
+    return super.add(_v)
   }
 
-  /** @private */
-  delete(): boolean {
-    return false
+  /**
+   * Rejected: FrozenSet is immutable.
+   * @throws {TypeError}
+   */
+  override delete(_v: T): boolean {
+    if (this.#frozen) throw new TypeError('FrozenSet is immutable')
+    return super.delete(_v)
   }
 
-  /** @private */
-  clear(): this {
-    return this
+  /**
+   * Rejected: FrozenSet is immutable.
+   * @throws {TypeError}
+   */
+  override clear(): void {
+    if (this.#frozen) throw new TypeError('FrozenSet is immutable')
+    super.clear()
   }
 
-  /** @private */
-  freeze(): Readonly<this> {
-    return Object.freeze(this)
+  get [Symbol.toStringTag](): string {
+    return 'FrozenSet'
   }
 }

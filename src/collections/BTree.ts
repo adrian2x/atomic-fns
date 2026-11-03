@@ -1,6 +1,6 @@
 import { KeyError } from '../globals/index.js'
 import { compare, type Comparer } from '../operators/index.js'
-import { Mapping } from './abc.js'
+import { LegacyMapping } from './abc.js'
 import type { Iteratee } from '../types.js'
 
 const Delete = { delete: true }
@@ -339,7 +339,7 @@ function assert(exp: boolean, ...args: any[]) {
   }
 }
 
-export class BTree<K = any, V = any> extends Mapping<K, V> {
+export class BTree<K = any, V = any> extends LegacyMapping<K, V> {
   private root: BNode<K, V> = EmptyLeaf as BNode<K, V>
   count: number = 0
   _maxNodeSize: number

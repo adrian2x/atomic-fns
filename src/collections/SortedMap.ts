@@ -1,4 +1,4 @@
-import { Mapping } from './abc.js'
+import { LegacyMapping } from './abc.js'
 import { SplayTree } from './SplayTree.js'
 
 /**
@@ -7,7 +7,7 @@ import { SplayTree } from './SplayTree.js'
  * @see {@link operators.lt}
  * @template K, V
  */
-export class SortedMap<K, V> extends Mapping<K, V> {
+export class SortedMap<K, V> extends LegacyMapping<K, V> {
   private readonly store: SplayTree<K, V>
 
   /**

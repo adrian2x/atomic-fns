@@ -2,13 +2,13 @@ import { KeyError, ValueError } from '../globals/index.js'
 import { IterableIterator } from '../itertools/iterator.js'
 import { eq } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
-import { Sequence } from './abc.js'
+import { LegacySequence } from './abc.js'
 
 /**
  * Fixed capacity double-ended queue implemented as ring deque.
  * @template T
  */
-export class Deque<T = any> extends Sequence<T> {
+export class Deque<T = any> extends LegacySequence<T> {
   items: T[]
   start: number = 0
   count: number = 0

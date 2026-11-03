@@ -1,4 +1,4 @@
-import { Collection } from './abc.js'
+import { LegacyCollection } from './abc.js'
 import { SplayTree } from './SplayTree.js'
 
 /**
@@ -7,7 +7,7 @@ import { SplayTree } from './SplayTree.js'
  * @see {@link Ordered}
  * @template K, V
  */
-export class SortedSet<T> extends Collection {
+export class SortedSet<T> extends LegacyCollection {
   private readonly store: SplayTree<T>
   /**
    * Creates a new `SortedSet` object.

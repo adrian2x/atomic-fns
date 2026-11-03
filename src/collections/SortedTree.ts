@@ -1,5 +1,5 @@
 import type { Comparer } from '../operators/index.js'
-import { Mapping } from './abc.js'
+import { LegacyMapping } from './abc.js'
 import { BTree } from './BTree.js'
 
 /**
@@ -8,7 +8,7 @@ import { BTree } from './BTree.js'
  * @see {@link Ordered}
  * @template K, V
  */
-export class SortedTree<K, V> extends Mapping<K, V> {
+export class SortedTree<K, V> extends LegacyMapping<K, V> {
   private readonly store: BTree<K, V>
 
   /**

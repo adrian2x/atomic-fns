@@ -1,5 +1,5 @@
 import { compare, eq, type Comparer } from '../operators/index.js'
-import { Mapping } from './abc.js'
+import { LegacyMapping } from './abc.js'
 
 /**
  * Base SplayTree node class.
@@ -41,7 +41,7 @@ function* traverse(node?: Node) {
  * @see {@link https://web.archive.org/web/20220930173835/http://www14.in.tum.de/personen/albers/papers/ipl02.pdf Randomized Splay Trees}
  * @template K, V
  */
-export class SplayTree<K, V = any> extends Mapping<K, V> {
+export class SplayTree<K, V = any> extends LegacyMapping<K, V> {
   protected root?: Node<K, V>
   protected cmp: Comparer
   protected randSplay: number
