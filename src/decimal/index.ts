@@ -4,15 +4,29 @@
  * @module decimal
  */
 
+import { ValueError, ZeroDivisionError } from '../globals/errors.js'
 import { protocol } from '../operators/protocol.js'
 
-const NUMBER_REGEX = /^(-?)([0-9]+)(\.([0-9]+))?$/
+/** Rounding mode for {@link Decimal.div}, {@link Decimal.round} and {@link Decimal.sqrt}. */
+export type RoundingMode = 'halfEven' | 'halfUp' | 'halfDown' | 'down' | 'up' | 'floor' | 'ceil'
+
+/** Options for division and square-root precision. */
+export interface DivOptions {
+  precision?: number
+  rounding?: RoundingMode
+}
+
+/** Values accepted by the {@link Decimal} constructor and arithmetic methods. */
+export type DecimalInput = Decimal | number | bigint | string
+
+const PARSE = /^\s*([+-]?)(\d+\.?\d*|\.\d+)(?:e([+-]?\d+))?\s*$/i
 
 /**
  * Casts the given value as a {@link Decimal}.
+ * @param x Value to convert.
  */
-export function decimal(x): Decimal {
-  return new Decimal(x)
+export function decimal(x: DecimalInput): Decimal {
+  return x instanceof Decimal ? x : new Decimal(x)
 }
 
 function normalizeIE(i: bigint, e: number): { i: bigint; e: number } {
@@ -22,6 +36,14 @@ function normalizeIE(i: bigint, e: number): { i: bigint; e: number } {
     e++
   }
   return { i, e }
+}
+
+function pow10(k: number): bigint {
+  return 10n ** BigInt(k)
+}
+
+function absBig(n: bigint): bigint {
+  return n < 0n ? -n : n
 }
 
 /** Exact binary value of a finite number as decimal `(i, e)`. */
@@ -43,316 +65,349 @@ function toExact(n: number): { i: bigint; e: number } {
 function compareIE(ai: bigint, ae: number, bi: bigint, be: number): -1 | 0 | 1 {
   if (ae === be) return ai < bi ? -1 : ai > bi ? 1 : 0
   if (ae > be) {
-    const scaled = ai * 10n ** BigInt(ae - be)
+    const scaled = ai * pow10(ae - be)
     return scaled < bi ? -1 : scaled > bi ? 1 : 0
   }
-  const scaled = bi * 10n ** BigInt(be - ae)
+  const scaled = bi * pow10(be - ae)
   return ai < scaled ? -1 : ai > scaled ? 1 : 0
 }
 
+function roundQuotient(q: bigint, r: bigint, d: bigint, mode: RoundingMode): bigint {
+  if (r === 0n) return q
+  const s = r < 0n !== d < 0n ? -1n : 1n
+  const twice = 2n * absBig(r)
+  const ad = absBig(d)
+  const cmpHalf = twice < ad ? -1 : twice > ad ? 1 : 0
+  let up = false
+  switch (mode) {
+    case 'halfEven':
+      up = cmpHalf > 0 || (cmpHalf === 0 && q % 2n !== 0n)
+      break
+    case 'halfUp':
+      up = cmpHalf >= 0
+      break
+    case 'halfDown':
+      up = cmpHalf > 0
+      break
+    case 'up':
+      up = true
+      break
+    case 'down':
+      up = false
+      break
+    case 'ceil':
+      up = s > 0n
+      break
+    case 'floor':
+      up = s < 0n
+      break
+  }
+  return up ? q + s : q
+}
+
+function isqrt(N: bigint): bigint {
+  if (N <= 1n) return N
+  let x = 1n << BigInt((N.toString(2).length >> 1) + 1)
+  for (;;) {
+    const y = (x + N / x) >> 1n
+    if (y >= x) break
+    x = y
+  }
+  return x
+}
+
+function toDecimalInput(o: unknown): DecimalInput {
+  if (
+    o instanceof Decimal ||
+    typeof o === 'number' ||
+    typeof o === 'bigint' ||
+    typeof o === 'string'
+  ) {
+    return o
+  }
+  throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
+}
+
 /**
- * `Decimal` provides support for correct rounded floating point arithmetic, unlike the standard
- * `Number` type. It also supports user-defined precision (default is 20 decimal places), which
- * can be as large as needed.
+ * Exact decimal arithmetic with per-operation precision and rounding.
+ * Protocol symbol methods are installed on the prototype below.
  */
 export class Decimal {
-  static PRECISION = 20
-  private i = 0n
-  private e = 0
+  /** Default fractional digit count for {@link Decimal.div} and {@link Decimal.sqrt}. */
+  static readonly defaultPrecision = 20
+
+  /** Maximum absolute stored exponent; larger values throw {@link ValueError}. */
+  static readonly MAX_EXPONENT = 1_000_000
+
+  #i: bigint = 0n
+  #e: number = 0
 
   /**
-   * Returns a new `Decimal` instance from the value or `0`.
-   * @param {*} value
-   * @returns {Decimal}
+   * Creates a Decimal from a number, bigint, string, or another Decimal.
+   * @param value Finite number, bigint, decimal string, or Decimal.
    */
-  constructor(value?: any) {
-    if (value == null) {
-      return this
+  constructor(value: DecimalInput) {
+    const parsed = Decimal.#parse(value)
+    this.#i = parsed.i
+    this.#e = parsed.e
+  }
+
+  static #parse(value: DecimalInput): { i: bigint; e: number } {
+    if (value instanceof Decimal) {
+      return { i: value.#i, e: value.#e }
     }
-
-    // Check if value is a Decimal like
-    if (typeof value?.i === 'bigint' && typeof value.e === 'number') {
-      this.i = value.i
-      this.e = value.e
-      this._normalize()
-      return this
+    if (typeof value === 'bigint') {
+      return Decimal.#checked(normalizeIE(value, 0))
     }
-
-    const result = NUMBER_REGEX.exec(value.toString())
-
-    if (result) {
-      // console.log(result);
-      // Construct from string if possible
-      // this.i = parseInt(result[1] + result[2] + result[4]);
-      if (typeof result[2] === 'undefined') result[2] = ''
-      if (typeof result[4] === 'undefined') result[4] = ''
-      this.i = BigInt(result[1] + result[2] + result[4])
-      this.e = result[4] ? -result[4].length : 0
-      this._normalize()
-    } else {
-      // Conversion to string failed, so construct from number
-      let m = 1n
-      if (value < 0) {
-        value = -value
-        m = -1n
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) {
+        throw new ValueError('Decimal value must be a finite number')
       }
-
-      if (value === 0) {
-        this.i = 0n
-        this.e = 0
-      } else {
-        // Multiply the number by 10 until it is an integer
-        let e = -Math.floor(Math.log10(value))
-        if (e > 0) {
-          value *= Math.pow(10, e)
-        } else {
-          e = 0
-        }
-        while (value !== Math.round(value)) {
-          e++
-          value *= 10
-        }
-        // Divide the number by 10 until the one's digit is non-zero
-        while (value % 10 === 0 && value > 0) {
-          e--
-          value /= 10
-        }
-        value = BigInt(value)
-        this.i = value * m
-        this.e = -e
-      }
+      return Decimal.#parseString(String(value))
     }
+    if (typeof value === 'string') {
+      return Decimal.#parseString(value)
+    }
+    throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
+  }
+
+  static #parseString(value: string): { i: bigint; e: number } {
+    const m = PARSE.exec(value)
+    if (!m) {
+      throw new ValueError(`invalid Decimal string: ${value}`)
+    }
+    const sign = m[1] === '-' ? '-' : ''
+    const digits = m[2]
+    const expRaw = m[3]
+    const dot = digits.indexOf('.')
+    const frac = dot === -1 ? '' : digits.slice(dot + 1)
+    const intDigits = digits.replace('.', '')
+    const i = BigInt(sign + (intDigits || '0'))
+    let exp = 0
+    if (expRaw !== undefined) {
+      const n = Number(expRaw)
+      if (!Number.isFinite(n) || !Number.isSafeInteger(n)) {
+        throw new ValueError('exponent out of range')
+      }
+      if (Math.abs(n) > Decimal.MAX_EXPONENT) {
+        throw new ValueError('exponent out of range')
+      }
+      exp = n
+    }
+    return Decimal.#checked(normalizeIE(i, -frac.length + exp))
+  }
+
+  static #checked(ie: { i: bigint; e: number }): { i: bigint; e: number } {
+    if (Math.abs(ie.e) > Decimal.MAX_EXPONENT) {
+      throw new ValueError('exponent out of range')
+    }
+    return ie
+  }
+
+  static #fromIE(i: bigint, e: number): Decimal {
+    const n = Decimal.#checked(normalizeIE(i, e))
+    const d = new Decimal(0)
+    d.#i = n.i
+    d.#e = n.e
+    return d
+  }
+
+  #scaleRound(n0: bigint, d0: bigint, e0: number, precision: number, mode: RoundingMode): Decimal {
+    const k = e0 + precision
+    const n = k >= 0 ? n0 * pow10(k) : n0
+    const d = k >= 0 ? d0 : d0 * pow10(-k)
+    const q = roundQuotient(n / d, n % d, d, mode)
+    return Decimal.#fromIE(q, -precision)
   }
 
   /**
-   * Returns a new `Decimal` that has the opposite sign of this `Decimal`.
+   * Returns a new Decimal with the opposite sign.
    * @example
-```js
-let a = decimal('5')
-a.negated()  // -5
-```
-   * @returns {Decimal}
+   * decimal('5').negated() // -5
    */
   negated(): Decimal {
-    const negated = new Decimal()
-    negated.i = -this.i
-    negated.e = this.e
-    return negated
+    return Decimal.#fromIE(-this.#i, this.#e)
   }
 
   /**
-   * Returns a new `Decimal` that is the sum of this and `x`.
-   * @param x
-   * @example
-```js
-let a = decimal('50000000000')
-let b = decimal('0.000000005')
-a.add(b)  // 50000000000.000000005
-```
-   * @returns {Decimal}
+   * Absolute value.
    */
-  add(x): Decimal {
-    let a = new Decimal(this)
-    let b = new Decimal(x)
-    // a+b = a.i * 10^a.e + b.i * 10^b.e
-
-    // a+b = ( a.i * 10^(a.e-b.e) + b.i ) * 10^b.e
-
-    const result = new Decimal()
-
-    // Order arguments so that a.e >= b.e
-    if (a.e < b.e) {
-      const c = a
-      a = b
-      b = c
-    }
-
-    const intPart = exp(a.i, a.e - b.e)
-    result.i = intPart + b.i
-    result.e = b.e
-
-    result._normalize()
-    return result
+  abs(): Decimal {
+    return this.#i < 0n ? this.negated() : Decimal.#fromIE(this.#i, this.#e)
   }
 
   /**
-   * Returns a new `Decimal` that is the difference between this and `x`.
-   * @param x
+   * Exact sum of this and `x`.
+   * @param x Addend.
    * @example
-```js
-let a = decimal('1')
-let b = decimal('0.0000000000000000001')
-a.sub(b)  // 0.9999999999999999999
-```
-   * @returns {Decimal}
+   * decimal('0.1').add('0.2') // 0.3
    */
-  sub(x): Decimal {
+  add(x: DecimalInput): Decimal {
+    const b = decimal(x)
+    const e = Math.min(this.#e, b.#e)
+    const ai = this.#i * pow10(this.#e - e)
+    const bi = b.#i * pow10(b.#e - e)
+    return Decimal.#fromIE(ai + bi, e)
+  }
+
+  /**
+   * Exact difference of this and `x`.
+   * @param x Subtrahend.
+   */
+  sub(x: DecimalInput): Decimal {
     return this.add(decimal(x).negated())
   }
 
   /**
-   * Returns a new `Decimal` that is the product of this and `x`.
-   * @param x
-   * @example
-```js
-let a = decimal('0.0000000000000000000025')
-let b = decimal('400000000000000000000')
-a.mul(b)  // 1
-```
-   * @returns {Decimal}
+   * Exact product of this and `x`.
+   * @param x Multiplier.
    */
-  mul(x): Decimal {
-    const a = new Decimal(this)
-    const b = new Decimal(x)
-    // a * b = (a.i * b.i) * 10^(a.e + b.e)
-
-    const result = new Decimal()
-    result.i = a.i * b.i
-    result.e = a.e + b.e
-
-    result._normalize()
-    return result
+  mul(x: DecimalInput): Decimal {
+    const b = decimal(x)
+    return Decimal.#fromIE(this.#i * b.#i, this.#e + b.#e)
   }
 
   /**
-   * Returns a new `Decimal` that is the quotient of this and `x`
-   * @param x
-   * @example
-```js
-let a = decimal('1')
-let b = decimal('3')
-a.div(b)  // 0.333333333333333333333333333333
-```
-   * @returns {Decimal}
+   * Quotient rounded to `precision` fractional digits.
+   * @param x Divisor.
+   * @param opts Precision and rounding mode.
    */
-  div(x: Decimal | string | number): Decimal {
-    const a = new Decimal(this)
-    const b = new Decimal(x)
-    // We need to increase the number of digits of a and b so that a / b will have the desired precision.
-
-    // In order for the integer quotient to have the correct precision, a.e - b.e must be greater than that precision.
-    // So we need only to increase a.e.
-    // TODO: Revisit the value of increaseA. Is it correct in every circumstance?
-    const increaseA = Math.max(Decimal.precision - (a.e + b.e), 0)
-
-    const intIncrease = new Decimal()
-    intIncrease.i = exp(a.i, increaseA)
-
-    const quotient = new Decimal()
-
-    quotient.i = intIncrease.i / b.i
-    quotient.e = a.e - b.e - increaseA
-
-    // No need to truncate since we already increased the number of digits before dividing
-    quotient._normalize()
-    return quotient
-  }
-
-  /**
-   * Returns the square root of this `Decimal`.
-   * @returns {TDecimal}
-   */
-  sqrt(): Decimal {
-    Decimal.PRECISION++
-
-    // Let the guess value be 10^(e/2), where e is this.e
-    let x = new Decimal()
-    x.i = 1n
-    x.e = Math.floor(this.e / 2)
-    const onehalf = new Decimal('0.5')
-
-    let xt = x.clone()
-    xt._truncate()
-    xt._normalize()
-    let lastxt
-
-    let i
-    for (i = 0; i < 100; i++) {
-      lastxt = xt
-
-      x = this.div(x).add(x).mul(onehalf)
-      xt = x.clone()
-      xt._truncate()
-      xt._normalize()
-      if (xt.i === lastxt.i && xt.e === lastxt.e) break
+  div(x: DecimalInput, opts?: DivOptions): Decimal {
+    const precision = opts?.precision ?? Decimal.defaultPrecision
+    const rounding = opts?.rounding ?? 'halfEven'
+    if (!Number.isInteger(precision) || precision < 0) {
+      throw new RangeError('precision must be a non-negative integer')
     }
-    if (i >= 100) {
-      console.log('Warning: sqrt exceeded maximum iterations. (Did it enter a cycle?)')
+    const b = decimal(x)
+    if (b.#i === 0n) {
+      throw new ZeroDivisionError('division by zero')
     }
-    Decimal.PRECISION--
-    xt._truncate()
-    xt._normalize()
-
-    return xt
-  }
-
-  /** Returns a new copy of this Decimal value. */
-  clone(): Decimal {
-    const a = new Decimal()
-    a.i = this.i
-    a.e = this.e
-    return a
+    return this.#scaleRound(this.#i, b.#i, this.#e - b.#e, precision, rounding)
   }
 
   /**
-   * Remove zeroes in the least-significant digit of this `Decimal`
+   * Rounds to `precision` fractional digits (negative precision rounds to tens, hundreds, ...).
+   * @param precision Fractional digits (may be negative).
+   * @param rounding Rounding mode (default halfEven).
    */
-  private _normalize(): this {
-    while (this.i % 10n === 0n && this.i !== 0n) {
-      this.i /= 10n
-      this.e++
+  round(precision: number, rounding: RoundingMode = 'halfEven'): Decimal {
+    if (!Number.isInteger(precision)) {
+      throw new RangeError('precision must be an integer')
     }
-    return this
+    if (-this.#e <= precision) {
+      return Decimal.#fromIE(this.#i, this.#e)
+    }
+    return this.#scaleRound(this.#i, 1n, this.#e, precision, rounding)
   }
 
   /**
-   * Truncate this `Decimal` to the configured precision
+   * Square root rounded to `precision` fractional digits.
+   * @param opts Precision and rounding mode.
    */
-  private _truncate(): this {
-    // TODO: Make this better
-    // TODO: Rounding
-    const trunc = -this.e - Decimal.PRECISION
-    if (trunc > 0) {
-      this.i /= 10n ** BigInt(trunc - 1)
-      this.e += trunc
-
-      const nextDigit = this.i % 10n
-      if (nextDigit >= 5) {
-        this.i += 10n
+  sqrt(opts?: DivOptions): Decimal {
+    const precision = opts?.precision ?? Decimal.defaultPrecision
+    const rounding = opts?.rounding ?? 'halfEven'
+    if (!Number.isInteger(precision) || precision < 0) {
+      throw new RangeError('precision must be a non-negative integer')
+    }
+    if (this.#i < 0n) {
+      throw new ValueError('square root of a negative number')
+    }
+    if (this.#i === 0n) {
+      return decimal(0)
+    }
+    const g = Math.max(0, Math.ceil(-(this.#e + 2 * (precision + 1)) / 2))
+    const t = -(precision + 1 + g)
+    const N = this.#i * pow10(this.#e - 2 * t)
+    const s = isqrt(N)
+    const d = pow10(1 + g)
+    const q = s / d
+    const r = s % d
+    const inexact = s * s !== N
+    const nonzero = r !== 0n || inexact
+    const cmpHalf = 2n * r > d || (2n * r === d && inexact) ? 1 : 2n * r === d ? 0 : -1
+    let up = false
+    if (nonzero) {
+      switch (rounding) {
+        case 'halfEven':
+          up = cmpHalf > 0 || (cmpHalf === 0 && q % 2n !== 0n)
+          break
+        case 'halfUp':
+          up = cmpHalf >= 0
+          break
+        case 'halfDown':
+          up = cmpHalf > 0
+          break
+        case 'up':
+        case 'ceil':
+          up = true
+          break
+        case 'down':
+        case 'floor':
+          up = false
+          break
       }
-
-      this.i /= 10n
     }
-
-    // while(-this.e > Decimal.PRECISION) {
-    //   this.i /= 10n;
-    //   this.e++;
-    // }
-
-    return this
+    return Decimal.#fromIE(up ? q + 1n : q, -precision)
   }
 
   /**
-   * Returns a string representation of this decimal.
+   * Returns a copy of this Decimal.
+   */
+  clone(): Decimal {
+    return Decimal.#fromIE(this.#i, this.#e)
+  }
+
+  /**
+   * Canonical decimal string.
    */
   toString(): string {
-    let s = this.i.toString()
+    let s = this.#i.toString()
     let m = ''
     if (s[0] === '-') {
-      s = s.substring(1, s.length)
+      s = s.slice(1)
       m = '-'
     }
-
-    if (this.e > 0) {
-      return m + s + '0'.repeat(this.e)
-    } else if (this.e < 0) {
-      if (-this.e >= s.length) {
-        return m + '0.' + '0'.repeat(-this.e - s.length) + s
-      }
-      return m + s.slice(0, s.length + this.e) + '.' + s.slice(s.length + this.e, s.length)
-    } else {
-      return m + s
+    if (this.#e > 0) {
+      return m + s + '0'.repeat(this.#e)
     }
+    if (this.#e < 0) {
+      if (-this.#e >= s.length) {
+        return m + '0.' + '0'.repeat(-this.#e - s.length) + s
+      }
+      return m + s.slice(0, s.length + this.#e) + '.' + s.slice(s.length + this.#e)
+    }
+    return m + s
+  }
+
+  /**
+   * Number nearest to this Decimal (`Number(toString())`).
+   */
+  toNumber(): number {
+    return Number(this.toString())
+  }
+
+  /**
+   * JSON serialization uses the canonical decimal string.
+   */
+  toJSON(): string {
+    return this.toString()
+  }
+
+  /**
+   * Implicit numeric conversion is not allowed.
+   */
+  valueOf(): never {
+    throw new TypeError('Decimal cannot be converted implicitly; use toNumber()')
+  }
+
+  /**
+   * String hint returns the canonical form; number/default throw.
+   * @param hint Type coercion hint.
+   */
+  [Symbol.toPrimitive](hint: string): string {
+    if (hint === 'string') return this.toString()
+    throw new TypeError('Decimal cannot be converted implicitly; use toNumber()')
   }
 
   [Symbol.for('nodejs.util.inspect.custom')](): string {
@@ -360,135 +415,84 @@ a.div(b)  // 0.333333333333333333333333333333
   }
 
   /**
-   * Converts this decimal to the `Number` value
-   * @returns {number}
+   * Exact comparison with a Decimal, bigint, or number (exact binary for numbers).
+   * @param x Other value.
    */
-  toNumber(): number {
-    return Number(Decimal.prototype.toString.call(this))
+  compare(x: DecimalInput): -1 | 0 | 1 {
+    if (typeof x === 'number') {
+      const r = this.protocolCompare(x)
+      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
+      return r < 0 ? -1 : r > 0 ? 1 : 0
+    }
+    const o = decimal(x)
+    return compareIE(this.#i, this.#e, o.#i, o.#e)
   }
 
-  static get precision(): number {
-    return Decimal.PRECISION
+  /**
+   * Value equality (exact binary when `x` is a number).
+   * @param x Other value.
+   */
+  eq(x: DecimalInput): boolean {
+    if (typeof x === 'number') return this.protocolEquals(x)
+    const o = decimal(x)
+    return this.#i === o.#i && this.#e === o.#e
   }
 
-  static set precision(value) {
-    Decimal.PRECISION = value
+  /**
+   * True when this is strictly less than `x`.
+   * @param x Other value.
+   */
+  lt(x: DecimalInput): boolean {
+    return this.compare(x) < 0
   }
 
-  /** Exact-binary / Decimal / bigint compare used by the symbol protocol (F9b). */
+  /**
+   * True when this is less than or equal to `x`.
+   * @param x Other value.
+   */
+  lte(x: DecimalInput): boolean {
+    return this.compare(x) <= 0
+  }
+
+  /**
+   * True when this is strictly greater than `x`.
+   * @param x Other value.
+   */
+  gt(x: DecimalInput): boolean {
+    return this.compare(x) > 0
+  }
+
+  /**
+   * True when this is greater than or equal to `x`.
+   * @param x Other value.
+   */
+  gte(x: DecimalInput): boolean {
+    return this.compare(x) >= 0
+  }
+
+  /** Protocol compare: Decimal/bigint exact; finite number exact-binary; +/-Infinity; else undefined. */
   protocolCompare(o: unknown): number | undefined {
-    if (o instanceof Decimal) return compareIE(this.i, this.e, o.i, o.e)
-    if (typeof o === 'bigint') return compareIE(this.i, this.e, o, 0)
+    if (o instanceof Decimal) return compareIE(this.#i, this.#e, o.#i, o.#e)
+    if (typeof o === 'bigint') return compareIE(this.#i, this.#e, o, 0)
     if (typeof o === 'number') {
       if (Number.isNaN(o)) return undefined
       if (o === Infinity) return -1
       if (o === -Infinity) return 1
       if (!Number.isFinite(o)) return undefined
       const exact = toExact(o)
-      return compareIE(this.i, this.e, exact.i, exact.e)
+      return compareIE(this.#i, this.#e, exact.i, exact.e)
     }
     return undefined
   }
 
+  /** Protocol equality over the same domain as protocol compare. */
   protocolEquals(o: unknown): boolean {
     return this.protocolCompare(o) === 0
-  }
-
-  /**
-   * Returns `true` if this value is equal to the value of `x`, otherwise `false`.
-   * @param {*} x other
-   * @returns {boolean}
-   */
-  eq(x: any): boolean {
-    if (typeof x === 'number') return this.protocolEquals(x)
-    const other = decimal(x)
-    return this.i === other.i && this.e === other.e
-  }
-
-  /**
-   * Returns `true` if this value is less than the value of `x`, otherwise `false`.
-   * @param {*} x
-   * @returns {boolean}
-   */
-  lt(x): boolean {
-    if (typeof x === 'number') {
-      const r = this.protocolCompare(x)
-      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
-      return r < 0
-    }
-    const other = decimal(x)
-    if (this.e === other.e) return this.i < other.i
-    const e = this.e - other.e
-    if (e > 0) {
-      return exp(this.i, e) < other.i
-    }
-    return this.i < exp(other.i, -e)
-  }
-
-  /**
-   * Returns a comparison value representing the ordering of this value in respect to `x`.
-   *   * `-1` if this < x
-   *   * `1` if this > x
-   *   * `0` if this == x
-   * @param {*} x
-   * @returns {number}
-   */
-  compare(x): 0 | 1 | -1 {
-    if (typeof x === 'number') {
-      const r = this.protocolCompare(x)
-      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
-      return r < 0 ? -1 : r > 0 ? 1 : 0
-    }
-    if (this.eq(x)) return 0
-    if (this.lt(x)) return -1
-    return 1
-  }
-
-  /**
-   * Returns `true` if this value is greater than the value of `x`, otherwise `false`.
-   * @param {*} x
-   * @returns {boolean}
-   */
-  gt(x): boolean {
-    if (typeof x === 'number') {
-      const r = this.protocolCompare(x)
-      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
-      return r > 0
-    }
-    return this.compare(x) > 0
-  }
-
-  /**
-   * Returns `true` if this value is less than or equal to the value of `x`, otherwise `false`.
-   * @param {*} x
-   * @returns {boolean}
-   */
-  lte(x): boolean {
-    if (typeof x === 'number') {
-      const r = this.protocolCompare(x)
-      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
-      return r <= 0
-    }
-    return this.compare(x) <= 0
-  }
-
-  /**
-   * Returns `true` if this value is greater than or equal to the value of `x`, otherwise `false`.
-   * @param {*} x
-   * @returns {boolean}
-   */
-  gte(x): boolean {
-    if (typeof x === 'number') {
-      const r = this.protocolCompare(x)
-      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
-      return r >= 0
-    }
-    return this.compare(x) >= 0
   }
 }
 
 Object.defineProperty(Decimal.prototype, protocol.rank, {
-  get: () => 1,
+  get: () => 1 as const,
   enumerable: false,
   configurable: true
 })
@@ -506,14 +510,38 @@ Object.defineProperty(Decimal.prototype, protocol.equals, {
   enumerable: false,
   configurable: true
 })
-
-/** Returns a BigInt that is equal to `i` times `10^e` */
-function exp(i: bigint, e: number): bigint {
-  // TODO: Make this better
-  // The implementation is faster than 10n ** BigInt(e). But could we make it faster still?
-  let ii = i
-  for (let j = 0; j < e; j++) {
-    ii *= 10n
-  }
-  return ii
-}
+Object.defineProperty(Decimal.prototype, protocol.add, {
+  value: function (this: Decimal, o: unknown) {
+    return this.add(toDecimalInput(o))
+  },
+  enumerable: false,
+  configurable: true
+})
+Object.defineProperty(Decimal.prototype, protocol.sub, {
+  value: function (this: Decimal, o: unknown) {
+    return this.sub(toDecimalInput(o))
+  },
+  enumerable: false,
+  configurable: true
+})
+Object.defineProperty(Decimal.prototype, protocol.mul, {
+  value: function (this: Decimal, o: unknown) {
+    return this.mul(toDecimalInput(o))
+  },
+  enumerable: false,
+  configurable: true
+})
+Object.defineProperty(Decimal.prototype, protocol.div, {
+  value: function (this: Decimal, o: unknown) {
+    return this.div(toDecimalInput(o))
+  },
+  enumerable: false,
+  configurable: true
+})
+Object.defineProperty(Decimal.prototype, protocol.abs, {
+  value: function (this: Decimal) {
+    return this.abs()
+  },
+  enumerable: false,
+  configurable: true
+})
