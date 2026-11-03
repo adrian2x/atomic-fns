@@ -208,12 +208,37 @@ const BOXED_TAGS = new Set([
 
 /**
  * Clone `value`. When `deep` is true, recurse into plain objects, arrays, Map and Set entries.
- * Symbol `protocol.clone` is honored; a string-named `clone` method is ignored.
+ * Own enumerable symbol keys are copied. Node `Buffer` is copied (not a shared view). `DataView`
+ * keeps `byteOffset` / `byteLength` over a copy of the whole backing buffer. Deep `Map` clone
+ * keeps key identity and deep-clones values. RegExp match arrays keep `index` / `input` /
+ * `groups`. Class instances stay by reference. Symbol `protocol.clone` is honored; a
+ * string-named `clone` method is ignored.
  * @param value Value to clone.
  * @param deep Deep clone when true.
  */
 export function clone<T>(value: T, deep = false): T {
   return cloneInner(value, deep, new WeakMap()) as T
+}
+
+function copyEnumerableSymbols(
+  src: object,
+  dest: object,
+  deep: boolean,
+  map: WeakMap<object, unknown>
+): void {
+  for (const sym of Object.getOwnPropertySymbols(src)) {
+    const desc = Object.getOwnPropertyDescriptor(src, sym)
+    if (!desc?.enumerable) continue
+    defineData(dest, sym, deep ? cloneInner((src as Record<symbol, unknown>)[sym], true, map) : (src as Record<symbol, unknown>)[sym])
+  }
+}
+
+function isNodeBuffer(v: unknown): v is Uint8Array {
+  return (
+    typeof Buffer !== 'undefined' &&
+    typeof (Buffer as { isBuffer?: (x: unknown) => boolean }).isBuffer === 'function' &&
+    (Buffer as { isBuffer: (x: unknown) => boolean }).isBuffer(v)
+  )
 }
 
 function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): unknown {
@@ -234,7 +259,8 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     const out = new Map()
     map.set(v, out)
     for (const [k, x] of v as Map<unknown, unknown>) {
-      out.set(deep ? cloneInner(k, true, map) : k, deep ? cloneInner(x, true, map) : x)
+      // Deep clone keeps Map key identity (Lodash); values are deep-cloned.
+      out.set(k, deep ? cloneInner(x, true, map) : x)
     }
     return out
   } else if (tag === '[object Set]') {
@@ -248,7 +274,10 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     r = (v as ArrayBuffer).slice(0)
   } else if (tag === '[object DataView]') {
     const dv = v as DataView
-    r = new DataView(dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength))
+    const buf = dv.buffer.slice(0)
+    r = new DataView(buf, dv.byteOffset, dv.byteLength)
+  } else if (isNodeBuffer(v)) {
+    r = Buffer.from(v)
   } else if (isSliceableView(v)) {
     r = v.slice()
   } else if (BOXED_TAGS.has(tag)) {
@@ -266,6 +295,15 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     for (let i = 0; i < v.length; i++) {
       if (i in v) out[i] = deep ? cloneInner(v[i], true, map) : v[i]
     }
+    const arr = v as unknown[] & { index?: number; input?: string; groups?: unknown }
+    if ('index' in arr) (out as { index?: number }).index = arr.index
+    if ('input' in arr) (out as { input?: string }).input = arr.input
+    if ('groups' in arr) {
+      ;(out as { groups?: unknown }).groups = deep
+        ? cloneInner(arr.groups, true, map)
+        : arr.groups
+    }
+    copyEnumerableSymbols(v, out, deep, map)
     return out
   }
 
@@ -275,6 +313,7 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     for (const k of Object.keys(v)) {
       defineData(out, k, deep ? cloneInner(v[k], true, map) : v[k])
     }
+    copyEnumerableSymbols(v, out, deep, map)
     return out
   }
 

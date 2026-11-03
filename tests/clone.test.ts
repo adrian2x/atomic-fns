@@ -101,12 +101,13 @@ describe('clone', () => {
     expect(obj.x).toBe(1)
     expect(obj).not.toBe([...s].find((x) => typeof x === 'object'))
 
-    const m = new Map([[{ k: 1 }, { v: 2 }]])
+    const key = { k: 1 }
+    const m = new Map([[key, { v: 2 }]])
     const mc = clone(m, true)
     const [[k, v]] = mc
-    expect(k).not.toBe([...m.keys()][0])
+    expect(k).toBe(key)
+    expect(mc.get(key)).toEqual({ v: 2 })
     expect(v).not.toBe([...m.values()][0])
-    expect(k).toEqual({ k: 1 })
     expect(v).toEqual({ v: 2 })
   })
 
@@ -117,5 +118,40 @@ describe('clone', () => {
     expect(clone(Symbol.iterator)).toBe(Symbol.iterator)
     const fn = () => 1
     expect(clone(fn)).toBe(fn)
+  })
+
+  it('clone Buffer copies memory; DataView keeps offset; symbols; match arrays', () => {
+    const b = Buffer.from('abc')
+    const c = clone(b)
+    c[0] = 0x7a
+    expect(b.toString()).toBe('abc')
+    expect(clone(b, true)[0]).toBe(0x61)
+
+    const inner = Buffer.from('xy')
+    const nested = clone({ buf: inner }, true)
+    nested.buf[0] = 0x7a
+    expect(inner.toString()).toBe('xy')
+
+    const dv = new DataView(new ArrayBuffer(16), 4, 8)
+    dv.setUint8(0, 9)
+    const dvc = clone(dv)
+    expect(dvc.byteOffset).toBe(4)
+    expect(dvc.byteLength).toBe(8)
+    expect(dvc.buffer.byteLength).toBe(16)
+    expect(dvc.getUint8(0)).toBe(9)
+    dvc.setUint8(0, 1)
+    expect(dv.getUint8(0)).toBe(9)
+
+    const s = Symbol('s')
+    expect(clone({ [s]: 1, a: 1 })[s]).toBe(1)
+    const srcSym = { [s]: { x: 1 } }
+    const deep = clone(srcSym, true)
+    expect(deep[s].x).toBe(1)
+    expect(deep[s]).not.toBe(srcSym[s])
+
+    const m = 'abc'.match(/b/)
+    const mc = clone(m!)
+    expect(mc.index).toBe(1)
+    expect(mc.input).toBe('abc')
   })
 })

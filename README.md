@@ -157,6 +157,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 - `IntlDate.set` accepts only `DateObject` field names (singular or plural). Unknown units throw `ValueError`. Keys that 1.x silently ignored via `UNITS_SINGULAR` (`weeknumber`, `weekyear`, `ordinal`, `quarter`, and their plurals) now throw.
 - `IntlDate.min` / `IntlDate.max` take one `readonly DateLike[]` (no varargs); empty or all-invalid still returns `undefined`.
 - `matches` follows Lodash `isMatch`: empty `{}` / `[]` match any value; arrays in the shape are subsets; `{ a: undefined }` requires own key `a`; Date/RegExp/Map/Set/typed-array shape values use deep equality (not reference).
+- `clone` copies Node `Buffer`s and own enumerable symbol keys; `DataView` keeps offset/length over a full buffer copy; deep `Map` keeps key identity and deep-clones values; RegExp match arrays keep `index`/`input`/`groups`; class instances stay by reference.
 
 ### Platform
 
