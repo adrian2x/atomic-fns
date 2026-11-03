@@ -4,64 +4,65 @@
  * @module random
  */
 
+import { ValueError } from '../globals/errors.js'
 import { isObject } from '../globals/index.js'
 
 /**
- * Returns a random float between a [min, max) value (max exclusive).
- * @param {number} min
- * @param {number} max
- * @returns {number}
+ * Returns a random float in `[min, max)` (max exclusive).
+ * @param min Lower bound (inclusive).
+ * @param max Upper bound (exclusive).
  */
-export function random(min = 0, max = 1) {
+export function random(min = 0, max = 1): number {
   return Math.random() * (max - min) + min
 }
 
 /**
- * Returns a random integer between a [min, max] value (inclusive).
- * @param {number} min
- * @param {number} max
- * @returns {number}
+ * Returns a random integer in `[min, max]` (inclusive).
+ * @param min Lower bound (inclusive).
+ * @param max Upper bound (inclusive).
  */
-export function randomInt(min = 0, max = 1) {
-  return Math.round(random(min, max))
+export function randomInt(min: number, max: number): number {
+  if (max < min) {
+    throw new RangeError('max must be >= min')
+  }
+  return Math.floor(Math.random() * (max - min + 1)) + min
 }
 
 /**
- * Returns the item at some random index in a sequence.
- * @returns {T}
- * @template T
+ * Returns the item at a uniform random index, or `undefined` if empty.
+ * @param arr The sequence to pick from.
  */
-export function choice<T>(arr: T[]): T {
-  if (!arr?.length) return
+export function choice<T>(arr: readonly T[]): T | undefined {
+  if (!arr.length) return undefined
   return arr[randomInt(0, arr.length - 1)]
 }
 
 /**
- * Returns a random sample of size k from a list of items.
- * @param {Array} arr
- * @param {number} size
- * @returns A new array with `size` random elements from `arr`.
- * @template T
+ * Returns a random sample of `k` items (without replacement).
+ * @param arr Source array.
+ * @param k Sample size.
  */
-export function sample<T>(arr: T[], size: number): T[] {
-  if (!arr?.length || arr.length < size) return []
-  return shuffle(arr.slice()).slice(-size)
+export function sample<T>(arr: readonly T[], k: number): T[] {
+  if (k <= 0) return []
+  if (k > arr.length) {
+    throw new ValueError('sample size larger than population')
+  }
+  return shuffle(arr.slice()).slice(0, k)
 }
 
 /**
- * Shuffles a collection elements in-place. Uses the Fisher-Yates algorithm for uniform shuffling. If collection is an Object it returns shuffled `Object.values()`.
- *
- * @param {Array} arr
- * @param {number} size
- * @returns The shuffled array.
- * @template T
+ * Fisher-Yates shuffle. Arrays are shuffled in place. Plain objects yield a
+ * new shuffled array of their values.
+ * @param coll Array or plain object.
  */
-export function shuffle<T>(arr: T[], size?: number): T[] {
-  if (!arr?.length) return arr
-  if (isObject(arr)) arr = Object.values(arr) as T[]
-  if (size == null) size = arr.length - 1
-  for (let i = 0; i <= size; i++) {
-    const j = randomInt(i, size)
+export function shuffle<T>(arr: T[]): T[]
+export function shuffle<T>(obj: Record<string, T>): T[]
+export function shuffle<T>(coll: T[] | Record<string, T>): T[] {
+  const arr = isObject(coll) ? (Object.values(coll) as T[]) : coll
+  if (!arr.length) return arr
+  const n = arr.length
+  for (let i = 0; i < n - 1; i++) {
+    const j = randomInt(i, n - 1)
     const temp = arr[j]
     arr[j] = arr[i]
     arr[i] = temp

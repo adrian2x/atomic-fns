@@ -4,47 +4,57 @@
  * @module math
  */
 
-import { call } from '../globals/index.js'
-import { reduce } from '../itertools/index.js'
-import { gt, identity, lt } from '../operators/index.js'
+import { decimal } from '../decimal/index.js'
+import { gt, hasMethod, identity, lt, protocol } from '../operators/index.js'
 import type { Predicate } from '../types.js'
 
 /**
- * Returns the absolute value of a number. The argument may be a number or an object implementing the `abs()`.
+ * Returns the absolute value. Dispatches on `protocol.abs`, else `Math.abs`.
  * @param x The value.
  * @returns The absolute value.
  */
-export function abs(x: any): number {
-  const op = call<number>(x, 'abs')
-  if (op != null) return op
-  return Math.abs(x)
+export function abs(x: unknown): unknown {
+  if (hasMethod(x, protocol.abs)) return x[protocol.abs]()
+  return Math.abs(x as number)
 }
 
 /**
- * Round `x` to the number of digits after the decimal point. If `digits` is
- * omitted, it returns the nearest integer to x.
+ * Round `x` to `digits` places after the decimal point (ties toward +Infinity).
+ * Uses the shortest round-trip decimal string of `x`. Negative `digits` round
+ * to tens, hundreds, etc. Non-finite values are returned unchanged.
  *
- * @param {number} x
- * @param {number} [digits=0]
- *
+ * @param x The number to round.
+ * @param digits Fractional digits (default 0); may be negative.
+ * @returns The rounded number (`0` instead of `-0`).
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round Math.round()}
  */
 export function round(x: number, digits = 0): number {
-  const base = 10 ** digits
-  return Math.round(x * base) / base
+  if (!Number.isFinite(x)) return x
+  if (!Number.isInteger(digits)) {
+    throw new RangeError('digits must be an integer')
+  }
+  const rounded = decimal(String(x)).round(digits, x < 0 ? 'halfDown' : 'halfUp')
+  const n = Number(rounded.toString())
+  return Object.is(n, -0) ? 0 : n
 }
 
 /**
- * Returns a tuple like `[x / y, x % y]`.
+ * Returns `[Math.floor(x / y), x - q * y]`.
  *
- * @param x
- * @param y
- * @returns
+ * @param x Dividend.
+ * @param y Divisor.
+ * @returns Quotient and remainder with floor division.
  */
 export function divmod(x: number, y: number): [number, number] {
-  return [Math.floor(x / y), x % y]
+  const q = Math.floor(x / y)
+  return [q, x - q * y]
 }
 
+/**
+ * Logarithm of `y` in base `x`.
+ * @param x Base.
+ * @param y Argument.
+ */
 export function logBase(x: number, y: number): number {
   if (x > 0 && y > 0) {
     return Math.log(y) / Math.log(x)
@@ -53,35 +63,50 @@ export function logBase(x: number, y: number): number {
 }
 
 /**
- * Returns the smallest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `lt` method, this will be called to compare.
+ * Returns the smallest element in an iterable. Among ties, returns the first.
+ * The optional `key` transforms elements before comparing. Empty -> `undefined`.
  * @param iterable The iterable to inspect.
- * @param key Optional key function to transform the elements (default `identity`).
- * @returns The smallest element in the iterable.
+ * @param key Optional key function (default `identity`).
+ * @returns The smallest element, or `undefined` if empty.
  */
-export function min(iterable: number[]): number
-export function min<T>(iterable: Iterable<T>, key?: Predicate<T>): T
-export function min<T>(iterable: Iterable<T>, key = identity): T {
-  return reduce(iterable, (x, y) => (lt(key(x), key(y)) ? x : y))
+export function min(iterable: number[]): number | undefined
+export function min<T>(iterable: Iterable<T>, key?: (x: T) => unknown): T | undefined
+export function min<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity): T | undefined {
+  const it = Iterator.from(iterable)
+  const head = it.next()
+  if (head.done) return undefined
+  let best = head.value
+  for (const value of it) {
+    if (lt(key(value), key(best))) best = value
+  }
+  return best
 }
 
 /**
- * Returns the largest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `gt` method, this will be called to compare.
+ * Returns the largest element in an iterable. Among ties, returns the first.
+ * The optional `key` transforms elements before comparing. Empty -> `undefined`.
  * @param iterable The iterable to inspect.
- * @param key Optional key function to transform the elements (default `identity`).
- * @returns The largest element in the iterable.
+ * @param key Optional key function (default `identity`).
+ * @returns The largest element, or `undefined` if empty.
  */
-export function max(iterable: number[]): number
-export function max<T>(iterable: Iterable<T>, key?: Predicate<T>): T
-export function max<T>(iterable: Iterable<T>, key = identity): T {
-  return reduce(iterable, (x, y) => (gt(key(x), key(y)) ? x : y))
+export function max(iterable: number[]): number | undefined
+export function max<T>(iterable: Iterable<T>, key?: (x: T) => unknown): T | undefined
+export function max<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity): T | undefined {
+  const it = Iterator.from(iterable)
+  const head = it.next()
+  if (head.done) return undefined
+  let best = head.value
+  for (const value of it) {
+    if (gt(key(value), key(best))) best = value
+  }
+  return best
 }
 
 /**
  * Computes the mean of the values in `iterable` and accepts an optional `key` function which is invoked for each element to generate the values to be averaged.
- * @param {Array<number>|Iterable<T>} iterable
- * @param {Function} [key] Optional iteratee invoked per element.
- * @returns Returns the mean value or `NaN` if no elements.
- * @template T
+ * @param iterable Values to average.
+ * @param key Optional iteratee invoked per element.
+ * @returns The mean value or `NaN` if no elements.
  * @example
 ```js
 let objects = [{ 'n': 4 }, { 'n': 2 }, { 'n': 8 }, { 'n': 6 }]
@@ -96,7 +121,7 @@ export function mean<T>(iterable: Iterable<T>, key = identity): number {
   let total = 0
   let count = 0
   for (const value of iterable) {
-    total += key(value) as unknown as number
+    total += Number(key(value))
     count++
   }
   if (count !== 0) return total / count
@@ -104,17 +129,17 @@ export function mean<T>(iterable: Iterable<T>, key = identity): number {
 }
 
 /**
- * Sums `initial` and the items of an iterable and returns the total.
- * @param args The elements to add to `initial`.
- * @param initial The initial value to add to (default `0`).
- * @returns The total sum of initial and iterable elements.
+ * Sums the items of an iterable and returns the total.
+ * @param args The elements to sum.
+ * @param key Optional key function.
+ * @returns The total sum.
  * @example
 ```js
 sum([1, 2, 3, 4])
 // 10
 
-sum([1, 2, 3, 4], 5)
-// 15
+sum([{n: 1}, {n: 2}], o => o.n)
+// 3
 ```
  */
 export function sum(args: number[]): number

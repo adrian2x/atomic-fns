@@ -1,26 +1,69 @@
-import { describe, it } from 'vitest'
-import assert from 'assert'
-import { max, min, round, sum } from '../src/math/index.js'
+import { describe, expect, it } from 'vitest'
+import { abs, divmod, max, min, round, sum } from '../src/math/index.js'
+import { decimal } from '../src/decimal/index.js'
 
 describe('math', () => {
-  it('min', () => {
-    assert(min([5, 4, 3, 1, 2]) === 1)
+  it('SPEC-R61 min max return first among ties', () => {
+    expect(min([5, 4, 3, 1, 2])).toBe(1)
+    expect(max([7, 9, 3, 11])).toBe(11)
+    expect(
+      min(
+        [
+          { v: 1, id: 'a' },
+          { v: 1, id: 'b' }
+        ],
+        (o) => o.v
+      )?.id
+    ).toBe('a')
+    expect(
+      max(
+        [
+          { v: 1, id: 'a' },
+          { v: 1, id: 'b' }
+        ],
+        (o) => o.v
+      )?.id
+    ).toBe('a')
+    expect(min([])).toBeUndefined()
+    expect(max([])).toBeUndefined()
   })
 
-  it('max', () => {
-    assert(max([7, 9, 3, 11]) === 11)
+  it('SPEC-R61 round table ties toward +Infinity', () => {
+    expect(round(0.5)).toBe(1)
+    expect(round(-0.5)).toBe(0)
+    expect(round(1.5)).toBe(2)
+    expect(round(1.54, 2)).toBe(1.54)
+    expect(round(1.545, 3)).toBe(1.545)
+    expect(round(1.005, 2)).toBe(1.01)
+    expect(round(-1.005, 2)).toBe(-1)
+    expect(round(1e-7, 2)).toBe(0)
+    expect(round(1e21, 2)).toBe(1e21)
+    expect(round(15, -1)).toBe(20)
+    expect(round(-15, -1)).toBe(-10)
   })
 
-  it('round', () => {
-    assert(round(0.5) === 1)
-    assert(round(-0.5) === 0)
-    assert(round(1.5) === 2)
-    assert(round(1.54, 2) === 1.54)
-    assert(round(1.545, 3) === 1.545)
+  it('SPEC-R61 round non-integer digits throws; non-finite passthrough', () => {
+    expect(() => round(1, 1.5)).toThrow(RangeError)
+    expect(() => round(1, 1.5)).toThrow(/digits must be an integer/)
+    expect(Number.isNaN(round(Number.NaN))).toBe(true)
+    expect(round(Infinity)).toBe(Infinity)
+    expect(round(-Infinity)).toBe(-Infinity)
+  })
+
+  it('SPEC-R60 divmod floor quotient and matching remainder', () => {
+    expect(divmod(-7, 2)).toEqual([-4, 1])
+    expect(divmod(7, -2)).toEqual([-4, -1])
+    expect(divmod(7, 2)).toEqual([3, 1])
+    expect(divmod(-7, -2)).toEqual([3, -1])
+  })
+
+  it('abs dispatches protocol.abs', () => {
+    expect(abs(-3)).toBe(3)
+    expect(abs(decimal(-4)).toString()).toBe('4')
   })
 
   it('sum', () => {
-    assert(sum([]) === 0)
-    assert(sum([1, 2, 3, 4]) === 10)
+    expect(sum([])).toBe(0)
+    expect(sum([1, 2, 3, 4])).toBe(10)
   })
 })
