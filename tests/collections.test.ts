@@ -160,7 +160,18 @@ describe('collections', () => {
     expect(Array.isArray(pickedArr.a)).toBe(true)
     expect((pickedArr.a as unknown[])[1]).toBe(2)
 
-    expect(omit({ a: 1, b: 2, get c() { throw new Error('C') } }, ['c'])).toEqual({ a: 1, b: 2 })
+    expect(
+      omit(
+        {
+          a: 1,
+          b: 2,
+          get c() {
+            throw new Error('C')
+          }
+        },
+        ['c']
+      )
+    ).toEqual({ a: 1, b: 2 })
     class Inst {
       a = 1
       get d() {
@@ -173,8 +184,9 @@ describe('collections', () => {
     const big: Record<string, number> = {}
     const paths: string[] = []
     for (let i = 0; i < n; i++) {
-      big[`k${i}`] = i
-      paths.push(`k${i}`)
+      const key = `k${String(i)}`
+      big[key] = i
+      paths.push(key)
     }
     const t0 = performance.now()
     const omitted = omit(big, paths)

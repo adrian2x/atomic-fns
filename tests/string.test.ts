@@ -43,7 +43,7 @@ describe('string', () => {
     expect(string.removeAccents('Crème Brûlée Ångström')).toBe('Creme Brulee Angstrom')
     expect(string.removeAccents('й')).toBe('й')
     expect(string.removeAccents('が')).toBe('が')
-    expect([...string.removeAccents('が')].length).toBe(1)
+    expect(string.removeAccents('が').length).toBe(1)
     expect(string.removeAccents('a⃝ b︠')).toBe('a b')
   })
 

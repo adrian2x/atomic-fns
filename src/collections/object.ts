@@ -25,12 +25,7 @@ function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown 
   return ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function'
 }
 
-function mergeKey(
-  t: object,
-  key: PropertyKey,
-  sv: unknown,
-  seen: WeakMap<object, object>
-): void {
+function mergeKey(t: object, key: PropertyKey, sv: unknown, seen: WeakMap<object, object>): void {
   const tv = Object.hasOwn(t, key) ? (t as Record<PropertyKey, unknown>)[key] : undefined
   if (key === 'constructor' && typeof tv === 'function') return
   if (sv === undefined && tv !== undefined) return
@@ -42,9 +37,9 @@ function mergeKey(
     // Same container kind: merge into target. Differing array vs plain object: source replaces.
     let base: object
     if (Array.isArray(sv)) {
-      base = Array.isArray(tv) ? (tv as unknown[]) : []
+      base = Array.isArray(tv) ? tv : []
     } else if (isPlainObject(tv)) {
-      base = tv as object
+      base = tv
     } else {
       base = {}
     }
@@ -124,12 +119,7 @@ function copyKeptProperty(src: object, dest: object, key: string): void {
   const desc = Object.getOwnPropertyDescriptor(src, key)
   if (!desc) return
   if (desc.get !== undefined || desc.set !== undefined) {
-    Object.defineProperty(dest, key, {
-      get: desc.get,
-      set: desc.set,
-      enumerable: desc.enumerable,
-      configurable: desc.configurable
-    })
+    Object.defineProperty(dest, key, desc)
   } else {
     defineData(dest, key, desc.value)
   }
@@ -168,14 +158,17 @@ function setPickedPath(root: object, parts: string[], value: unknown, source: ob
 }
 
 /** Trie of omit paths: O(keys + total path length) walks. */
-type OmitTrie = { drop?: boolean; kids?: Map<string, OmitTrie> }
+interface OmitTrie {
+  drop?: boolean
+  kids?: Map<string, OmitTrie>
+}
 
 function buildOmitTrie(paths: string[][]): OmitTrie {
   const root: OmitTrie = {}
   for (const parts of paths) {
     let node = root
     for (const p of parts) {
-      if (!node.kids) node.kids = new Map()
+      node.kids ??= new Map()
       let next = node.kids.get(p)
       if (!next) {
         next = {}
@@ -304,7 +297,13 @@ function copyEnumerableSymbols(
   for (const sym of Object.getOwnPropertySymbols(src)) {
     const desc = Object.getOwnPropertyDescriptor(src, sym)
     if (!desc?.enumerable) continue
-    defineData(dest, sym, deep ? cloneInner((src as Record<symbol, unknown>)[sym], true, map) : (src as Record<symbol, unknown>)[sym])
+    defineData(
+      dest,
+      sym,
+      deep
+        ? cloneInner((src as Record<symbol, unknown>)[sym], true, map)
+        : (src as Record<symbol, unknown>)[sym]
+    )
   }
 }
 
@@ -374,9 +373,7 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     if ('index' in arr) (out as { index?: number }).index = arr.index
     if ('input' in arr) (out as { input?: string }).input = arr.input
     if ('groups' in arr) {
-      ;(out as { groups?: unknown }).groups = deep
-        ? cloneInner(arr.groups, true, map)
-        : arr.groups
+      ;(out as { groups?: unknown }).groups = deep ? cloneInner(arr.groups, true, map) : arr.groups
     }
     copyEnumerableSymbols(v, out, deep, map)
     return out

@@ -149,8 +149,10 @@ describe('clone', () => {
     expect(deep[s].x).toBe(1)
     expect(deep[s]).not.toBe(srcSym[s])
 
-    const m = 'abc'.match(/b/)
-    const mc = clone(m!)
+    const m = /b/.exec('abc')
+    expect(m).not.toBeNull()
+    if (m === null) return
+    const mc = clone(m)
     expect(mc.index).toBe(1)
     expect(mc.input).toBe('abc')
   })

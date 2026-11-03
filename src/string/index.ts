@@ -61,7 +61,7 @@ const TITLECASE_FIRST: Record<string, string> = {
 }
 
 function titleCaseFirstChar(ch: string): string {
-  if (TITLECASE_FIRST[ch] !== undefined) return TITLECASE_FIRST[ch]
+  if (Object.hasOwn(TITLECASE_FIRST, ch)) return TITLECASE_FIRST[ch]
   const upper = ch.toLocaleUpperCase()
   // Multi-char uppercase (e.g. ß -> SS): titlecase is first upper + rest lower.
   if (upper.length > 1) return upper[0] + upper.slice(1).toLocaleLowerCase()

@@ -228,7 +228,7 @@ describe('SPEC-R107 JSDoc @example', () => {
     const withProto = defaults({}, { toString: 'ts', a: 1 }) as { toString: string; a: number }
     expect(withProto.toString).toBe('ts')
     expect(withProto.a).toBe(1)
-    expect(defaults({ a: null } as { a: number | null }, { a: 1 })).toEqual({ a: null })
+    expect(defaults({ a: null }, { a: 1 })).toEqual({ a: null })
   })
 
   it('src/collections/index.ts #18', () => {

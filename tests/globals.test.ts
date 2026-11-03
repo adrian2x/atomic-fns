@@ -426,9 +426,13 @@ describe('globals', () => {
     assert(isEmpty(0))
     assert(isEmpty(false))
     assert(!isEmpty(1))
-    assert(isEmpty(() => {}))
-    assert(isEmpty(function (a: number) { return a }))
-    assert(!isEmpty(Object.assign(() => {}, { a: 1 })))
+    assert(isEmpty(() => undefined))
+    assert(
+      isEmpty(function (a: number) {
+        return a
+      })
+    )
+    assert(!isEmpty(Object.assign(() => undefined, { a: 1 })))
     assert(!isEmpty(new Date()))
     assert(!isEmpty(2))
     assert(isEmpty(new Map()))
