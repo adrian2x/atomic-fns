@@ -338,17 +338,41 @@ export function keys<T extends object>(object: T): (keyof T & string)[] {
 }
 
 /**
+ * True when `key` is missing as an own property and the next prototype that owns it is
+ * `Object.prototype` or `Function.prototype` (built-in members treated as absent).
+ */
+function resolvesToBuiltinProto(base: object, key: PropertyKey): boolean {
+  if (Object.hasOwn(base, key)) return false
+  let proto: object | null = Object.getPrototypeOf(base) as object | null
+  while (proto) {
+    if (Object.hasOwn(proto, key)) {
+      return proto === Object.prototype || proto === Function.prototype
+    }
+    proto = Object.getPrototypeOf(proto) as object | null
+  }
+  return false
+}
+
+/**
  * Check if a given property is present in a given object.
+ * Own properties and user-class prototype members count; `Object.prototype` /
+ * `Function.prototype` members do not.
  * @param obj The object to check.
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
  */
 export function has(obj: unknown, attr: PropertyKey): boolean {
-  return obj != null && Reflect.has(Object(obj) as object, attr)
+  if (obj == null) return false
+  const base = Object(obj) as object
+  if (resolvesToBuiltinProto(base, attr)) return false
+  return Reflect.has(base, attr)
 }
 
 /**
  * Check if the attribute is present in the object or return a default value instead.
+ * Path segments that resolve only to `Object.prototype` or `Function.prototype` members
+ * are treated as missing (return `value`). Own properties and user-class prototype members
+ * (getters, methods) still resolve. Array / string `length` remain readable.
  * @param key
  * @param obj
  * @param value
@@ -362,6 +386,11 @@ export function get<V = unknown>(key: PropertyKey | PropertyKey[], obj: unknown,
   try {
     let result: unknown = obj
     for (const k of paths) {
+      if (result == null) return value as V
+      const t = typeof result
+      if (t !== 'object' && t !== 'function' && t !== 'string') return value as V
+      const base = Object(result) as object
+      if (resolvesToBuiltinProto(base, k)) return value as V
       result = (result as Record<PropertyKey, unknown>)[k]
     }
     return (result === undefined ? value : result) as V

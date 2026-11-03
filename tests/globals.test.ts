@@ -418,6 +418,27 @@ describe('globals', () => {
     assert(get(['foo', 'bar'], obj))
   })
 
+  it('C4-3 get ignores Object.prototype and Function.prototype members', () => {
+    assert.equal(get('toString', {}, false), false)
+    assert.equal(get('constructor', {}, null), null)
+    assert.equal(get('constructor.constructor', {}, null), null)
+    assert.equal(get('__proto__', {}, null), null)
+    assert.equal(get('hasOwnProperty', {}, null), null)
+    assert.equal(get('valueOf', {}, null), null)
+    class Box {
+      get secret(): number {
+        return this.#n
+      }
+      #n = 42
+    }
+    assert.equal(get('secret', new Box()), 42)
+    assert.equal(get('toString', { toString: 'own' }), 'own')
+    assert.equal(get('length', [1, 2, 3]), 3)
+    assert.equal(get('length', 'hi'), 2)
+    assert.equal(has({}, 'toString'), false)
+    assert.equal(has({ toString: 1 }, 'toString'), true)
+  })
+
   it('len', () => {
     assert.equal(len(null), undefined)
     assert.equal(len([1, 2]), 2)
