@@ -28,8 +28,9 @@ describe('shared-reference DAG budgets', () => {
     const t0 = performance.now()
     const key = canonicalKey(a)
     expect(performance.now() - t0).toBeLessThan(50)
-    // Tree expansion exceeds 64 KB -> no exact key (pairwise fallback).
-    expect(key).toBeUndefined()
+    // Tree expansion exceeds 64 KB -> fixed-size hashed key.
+    expect(key).toMatch(/^H:[0-9a-f]{16}$/)
+    expect(canonicalKey(dag(40))).toBe(key)
   })
 
   const REVISIT_MESSAGE = 'input repeats shared objects more than 10000 times'

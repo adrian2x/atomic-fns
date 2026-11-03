@@ -318,6 +318,95 @@ describe('SPEC-R37 collection clone', () => {
   })
 })
 
+/**
+ * Shared-reference DAG: 13 levels of `{ l: x, r: x }` (exact key > 64 KB), wrapped `chain` times.
+ * Each call builds an independent structure, so two calls are equal but never `===`.
+ */
+function dagChain(chain: number, levels = 13): object {
+  let x: object = { v: 1 }
+  for (let i = 0; i < levels; i++) x = { l: x, r: x }
+  for (let i = 0; i < chain; i++) x = { n: x }
+  return x
+}
+
+describe('Heap equality with oversized (hashed) keys', () => {
+  const count = 3000
+
+  describe.each([0, 100, 300, 500])('dos-20 chain length %i', (chain) => {
+    it('[S, id] items sharing one S per side: true / false, < 200 ms', () => {
+      const xA = dagChain(chain)
+      const xB = dagChain(chain)
+      const left = new Heap(Array.from({ length: count }, (_, i) => [xA, i]))
+      const reversed = new Heap(Array.from({ length: count }, (_, i) => [xB, count - 1 - i]))
+      const t0 = performance.now()
+      expect(deepEqual(left, reversed)).toBe(true)
+      expect(performance.now() - t0).toBeLessThan(200)
+
+      const different = new Heap(
+        Array.from({ length: count }, (_, i) => [xB, i === 7 ? count + 1 : i])
+      )
+      const t1 = performance.now()
+      expect(deepEqual(left, different)).toBe(false)
+      expect(performance.now() - t1).toBeLessThan(200)
+    })
+
+    it('{ s, id } items sharing one S per side: true / false, < 200 ms', () => {
+      const sA = dagChain(chain)
+      const sB = dagChain(chain)
+      const left = new Heap(Array.from({ length: count }, (_, i) => ({ s: sA, id: i })))
+      const reversed = new Heap(
+        Array.from({ length: count }, (_, i) => ({ s: sB, id: count - 1 - i }))
+      )
+      const t0 = performance.now()
+      expect(deepEqual(left, reversed)).toBe(true)
+      expect(performance.now() - t0).toBeLessThan(200)
+
+      const different = new Heap(
+        Array.from({ length: count }, (_, i) => ({ s: sB, id: i === 11 ? -1 : i }))
+      )
+      const t1 = performance.now()
+      expect(deepEqual(left, different)).toBe(false)
+      expect(performance.now() - t1).toBeLessThan(200)
+    })
+  })
+
+  it('false when the oversized subtree differs deep inside', () => {
+    const a = new Heap([{ s: dagChain(10), id: 1 }])
+    const bSub = dagChain(10)
+    let leaf: { l?: unknown; r?: unknown; v?: number; n?: unknown } = bSub
+    while (leaf.n !== undefined) leaf = leaf.n as typeof leaf
+    while (leaf.l !== undefined) leaf = leaf.l as typeof leaf
+    leaf.v = 2
+    expect(deepEqual(a, new Heap([{ s: bSub, id: 1 }]))).toBe(false)
+  })
+
+  it('dos-21 wide shape: 12,000 refs to a ~45 KB-key subtree compares in < 100 ms', () => {
+    const wide = (): unknown[] => {
+      const sub = dagChain(0, 11)
+      return Array.from({ length: 12_000 }, () => sub)
+    }
+    const left = new Heap([wide()])
+    const right = new Heap([wide()])
+    const t0 = performance.now()
+    expect(deepEqual(left, right)).toBe(true)
+    expect(performance.now() - t0).toBeLessThan(100)
+  })
+
+  it('hashed items still match cross-kind unkeyed items (Decimal vs number)', () => {
+    const withDecimal = (): object => ({ s: dagChain(0), d: decimal(1) })
+    const withNumber = (): object => ({ s: dagChain(0), d: 1 })
+    expect(deepEqual(new Heap([withDecimal()]), new Heap([withNumber()]))).toBe(true)
+    expect(deepEqual(new Heap([withNumber()]), new Heap([withDecimal()]))).toBe(true)
+    expect(deepEqual(new Heap([withDecimal()]), new Heap([{ s: dagChain(0), d: 2 }]))).toBe(false)
+  })
+
+  it('duplicate hashed items match as a multiset', () => {
+    const items = (ids: number[]): object[] => ids.map((id) => ({ s: dagChain(0), id }))
+    expect(deepEqual(new Heap(items([1, 1, 2])), new Heap(items([2, 1, 1])))).toBe(true)
+    expect(deepEqual(new Heap(items([1, 1, 2])), new Heap(items([1, 2, 2])))).toBe(false)
+  })
+})
+
 function cmpA(x: { a: number }, y: { a: number }): number {
   return x.a - y.a
 }

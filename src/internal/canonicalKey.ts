@@ -2,15 +2,20 @@
  * Stable structural key agreeing with `deepEqual`: equal keys iff deepEqual is true,
  * for every value that has a key. Returns `undefined` for class instances, functions,
  * symbols, protocol-equality types (Decimal, collections), Invalid Dates, Map/Set with
- * non-primitive keys/elements, cyclic objects, values whose expanded key exceeds 64 KB
- * (shared-reference DAGs fall back to pairwise matching), Date/RegExp/typed-array subclasses
+ * non-primitive keys/elements, cyclic objects, Date/RegExp/typed-array subclasses
  * (deepEqual requires the exact built-in prototype), and other values that cannot be keyed
- * exactly. Within one top-level call, each object node's key is memoized.
+ * exactly. Within one session (one call by default), each object node's key is memoized.
+ *
+ * When the expanded key would exceed 64 KB (shared-reference DAGs), the key is replaced by a
+ * fixed-size structural hash and marked `hashed`. Each node's hash is computed once from its
+ * children's hashes, so shared subtrees are hashed once. deepEqual-equal values hash equal, but
+ * equal hashes do not imply equality: a hashed key only groups candidates for pairwise matching.
  *
  * A key is "pure" when built only from JSON-shaped data (primitives including numbers and
  * bigints, arrays, plain objects) plus exact built-in Date/RegExp. Boxed primitives, typed
- * arrays, ArrayBuffer, Map, and Set yield impure keys: two pure items are deepEqual iff their
- * keys are equal, so cross-kind deepEqual matches always involve an impure item.
+ * arrays, ArrayBuffer, Map, Set, and every hashed key yield impure keys: two pure items are
+ * deepEqual iff their keys are equal, so cross-kind deepEqual matches always involve an impure
+ * item.
  */
 
 import { enterNesting, exitNesting, guardNesting } from './nesting.js'
@@ -34,16 +39,81 @@ const TYPED_ARRAY_PROTOS: object[] = [
   BigUint64Array.prototype
 ]
 
-/** Result of a successful key: the key string and whether it is pure (JSON + Date/RegExp). */
+/**
+ * Result of a successful key. `hashed` keys replace an exact key that would exceed 64 KB with a
+ * fixed-size structural hash; they are never pure and may collide, so equal hashed keys only
+ * mean "candidates for deepEqual".
+ */
 export interface CanonicalKeyInfo {
   key: string
+  /** True when built only from JSON-shaped data plus exact built-in Date/RegExp. */
   pure: boolean
+  /** True when `key` is a structural hash instead of the exact expansion. */
+  hashed: boolean
 }
 
-interface KeyState {
-  memo: WeakMap<object, CanonicalKeyInfo>
-  failed: WeakSet<object>
-  inProgress: WeakSet<object>
+/** Key info plus the fixed-size token a parent mixes into its own hash. */
+interface NodeInfo extends CanonicalKeyInfo {
+  /** Leaf: the exact key. Composite or buffer: its structural hash. */
+  token: string
+}
+
+/**
+ * Memo shared by every `canonicalKeyInfo` call that receives it, so shared subtrees are keyed
+ * and hashed once per session. Valid only while the keyed values are not mutated.
+ */
+export interface CanonicalKeySession {
+  readonly memo: WeakMap<object, NodeInfo>
+  readonly failed: WeakSet<object>
+  readonly inProgress: WeakSet<object>
+}
+
+/** Create an empty key session. */
+export function createCanonicalKeySession(): CanonicalKeySession {
+  return {
+    memo: new WeakMap(),
+    failed: new WeakSet(),
+    inProgress: new WeakSet()
+  }
+}
+
+/** Per-process random seed so structural hashes cannot be precomputed against. */
+const HASH_SEED = crypto.getRandomValues(new Uint32Array(2))
+
+/** Streaming 64-bit structural hash (two 32-bit multiply-xor lanes). Collisions only cost time. */
+class StructuralHasher {
+  #h1 = (0xdeadbeef ^ HASH_SEED[0]) | 0
+  #h2 = (0x41c6ce57 ^ HASH_SEED[1]) | 0
+
+  constructor(label: string) {
+    this.text(label)
+  }
+
+  #mix(code: number): void {
+    this.#h1 = Math.imul(this.#h1 ^ code, 2654435761)
+    this.#h2 = Math.imul(this.#h2 ^ code, 1597334677)
+  }
+
+  /** Mix a length-prefixed string, so adjacent fields cannot run together. */
+  text(value: string): void {
+    this.#mix(value.length)
+    for (let i = 0; i < value.length; i++) this.#mix(value.charCodeAt(i))
+  }
+
+  /** Mix length-prefixed raw bytes. */
+  bytes(value: Uint8Array): void {
+    this.#mix(value.length)
+    for (const byte of value) this.#mix(byte)
+  }
+
+  /** Fixed-size (16 hex chars) digest of everything mixed so far. */
+  digest(): string {
+    let h1 = this.#h1
+    let h2 = this.#h2
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+    return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0')
+  }
 }
 
 function unboxed(v: object): unknown {
@@ -69,8 +139,8 @@ function bytes(v: ArrayBuffer | ArrayBufferView): Uint8Array {
     : new Uint8Array(v.buffer, v.byteOffset, v.byteLength)
 }
 
-function bytesKey(v: ArrayBuffer | ArrayBufferView): string {
-  return Array.from(bytes(v), (b) => b.toString(16).padStart(2, '0')).join('')
+function bytesKey(v: Uint8Array): string {
+  return Array.from(v, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 /** SameValueZero for bare numbers (match deepEqual / eq on primitives). */
@@ -114,12 +184,81 @@ function protoTag(obj: object): string | undefined {
   return undefined
 }
 
+function hashedInfo(token: string): NodeInfo {
+  return { key: `H:${token}`, pure: false, hashed: true, token }
+}
+
+/** Exact leaf key, or a hashed key when the leaf alone exceeds the size limit. */
+function leafInfo(label: string, key: string, pure: boolean): NodeInfo {
+  if (key.length <= KEY_SIZE_LIMIT) return { key, pure, hashed: false, token: key }
+  const hasher = new StructuralHasher(label)
+  hasher.text(key)
+  return hashedInfo(hasher.digest())
+}
+
+/**
+ * Builds a composite key from child nodes while mixing their tokens into a structural hash.
+ * Output length is tracked as parts are appended; once it passes the size limit no more parts
+ * are kept (no huge string is ever built) and the result is a hashed key. The hash is a pure
+ * function of the structure, so it is the same whether or not the exact key was kept.
+ */
+class CompositeBuilder {
+  readonly #hasher: StructuralHasher
+  readonly #parts: string[] = []
+  #length = 0
+  #overflow = false
+  #pure = true
+
+  constructor(label: string) {
+    this.#hasher = new StructuralHasher(label)
+  }
+
+  /** Append `prefix + child.key` (prefix is also part of the hash). */
+  add(prefix: string, child: NodeInfo): void {
+    this.#hasher.text(prefix)
+    this.#hasher.text(child.token)
+    if (!child.pure) this.#pure = false
+    if (this.#overflow) return
+    if (child.hashed) {
+      this.#overflow = true
+      return
+    }
+    const part = prefix + child.key
+    this.#length += part.length + 1
+    if (this.#length > KEY_SIZE_LIMIT) {
+      this.#overflow = true
+      return
+    }
+    this.#parts.push(part)
+  }
+
+  finish(open: string, close: string): NodeInfo {
+    const token = this.#hasher.digest()
+    if (!this.#overflow) {
+      const key = open + this.#parts.join(',') + close
+      if (key.length <= KEY_SIZE_LIMIT) {
+        return { key, pure: this.#pure, hashed: false, token }
+      }
+    }
+    return hashedInfo(token)
+  }
+}
+
+/** Key for a byte buffer: exact hex when small, hashed (streamed over the bytes) when large. */
+function bufferInfo(label: string, prefix: string, data: Uint8Array): NodeInfo {
+  const hasher = new StructuralHasher(label)
+  hasher.bytes(data)
+  const token = hasher.digest()
+  if (prefix.length + data.length * 2 > KEY_SIZE_LIMIT) return hashedInfo(token)
+  return { key: prefix + bytesKey(data), pure: false, hashed: false, token }
+}
+
 function accept(
-  state: KeyState,
+  state: CanonicalKeySession,
   obj: object,
-  info: CanonicalKeyInfo | undefined
-): CanonicalKeyInfo | undefined {
-  if (info === undefined || info.key.length > KEY_SIZE_LIMIT) {
+  info: NodeInfo | undefined
+): NodeInfo | undefined {
+  if (info === undefined) {
     state.failed.add(obj)
     return undefined
   }
@@ -131,9 +270,13 @@ function isBuiltinTypedArrayProto(proto: object): boolean {
   return TYPED_ARRAY_PROTOS.includes(proto)
 }
 
-function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | undefined {
+function sortedByKey<T extends { kk: string }>(entries: T[]): T[] {
+  return entries.sort((x, y) => (x.kk < y.kk ? -1 : x.kk > y.kk ? 1 : 0))
+}
+
+function canonicalKeyInner(value: unknown, state: CanonicalKeySession): NodeInfo | undefined {
   const prim = primitiveKey(value)
-  if (prim !== undefined) return { key: prim, pure: true }
+  if (prim !== undefined) return { key: prim, pure: true, hashed: false, token: prim }
   const t = typeof value
   if (t === 'symbol' || t === 'function') return undefined
   if (t !== 'object' || value === null) return undefined
@@ -151,14 +294,11 @@ function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | 
     if (Object.getPrototypeOf(obj) !== Date.prototype) return undefined
     const time = obj.getTime()
     if (Number.isNaN(time)) return undefined
-    return accept(state, obj, { key: `Date:${String(time)}`, pure: true })
+    return accept(state, obj, leafInfo('Date', `Date:${String(time)}`, true))
   }
   if (obj instanceof RegExp) {
     if (Object.getPrototypeOf(obj) !== RegExp.prototype) return undefined
-    return accept(state, obj, {
-      key: `Re:${JSON.stringify(obj.source)}:${obj.flags}`,
-      pure: true
-    })
+    return accept(state, obj, leafInfo('Re', `Re:${JSON.stringify(obj.source)}:${obj.flags}`, true))
   }
 
   const boxed = unboxed(obj)
@@ -168,12 +308,12 @@ function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | 
     if (typeof boxed === 'number') bk = boxedNumberKey(boxed)
     else bk = primitiveKey(boxed)
     if (bk === undefined) return undefined
-    return accept(state, obj, { key: `box:${tag}:${bk}`, pure: false })
+    return accept(state, obj, leafInfo('box', `box:${tag}:${bk}`, false))
   }
 
   if (obj instanceof ArrayBuffer) {
     if (Object.getPrototypeOf(obj) !== ArrayBuffer.prototype) return undefined
-    return accept(state, obj, { key: `AB:${bytesKey(obj)}`, pure: false })
+    return accept(state, obj, bufferInfo('AB', 'AB:', bytes(obj)))
   }
   if (ArrayBuffer.isView(obj)) {
     const proto: unknown = Object.getPrototypeOf(obj)
@@ -182,7 +322,7 @@ function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | 
     } else if (typeof proto !== 'object' || proto === null || !isBuiltinTypedArrayProto(proto)) {
       return undefined
     }
-    return accept(state, obj, { key: `view:${tag}:${bytesKey(obj)}`, pure: false })
+    return accept(state, obj, bufferInfo(`view:${tag}`, `view:${tag}:`, bytes(obj)))
   }
 
   state.inProgress.add(obj)
@@ -191,16 +331,18 @@ function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | 
       if (Object.getPrototypeOf(obj) !== Map.prototype) return undefined
       enterNesting()
       try {
-        const parts: string[] = []
+        const entries: { kk: string; child: NodeInfo }[] = []
         for (const [k, v] of obj) {
           const kk = mapKeyPrimitive(k)
           if (kk === undefined) return accept(state, obj, undefined)
-          const vk = canonicalKeyInner(v, state)
-          if (vk === undefined) return accept(state, obj, undefined)
-          parts.push(`${kk}=>${vk.key}`)
+          const child = canonicalKeyInner(v, state)
+          if (child === undefined) return accept(state, obj, undefined)
+          entries.push({ kk, child })
         }
-        parts.sort()
-        return accept(state, obj, { key: `Map:{${parts.join(',')}}`, pure: false })
+        const builder = new CompositeBuilder('Map')
+        for (const { kk, child } of sortedByKey(entries)) builder.add(`${kk}=>`, child)
+        const info = builder.finish('Map:{', '}')
+        return accept(state, obj, { ...info, pure: false })
       } finally {
         exitNesting()
       }
@@ -210,14 +352,18 @@ function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | 
       if (Object.getPrototypeOf(obj) !== Set.prototype) return undefined
       enterNesting()
       try {
-        const parts: string[] = []
+        const keys: string[] = []
         for (const v of obj) {
           const vk = mapKeyPrimitive(v)
           if (vk === undefined) return accept(state, obj, undefined)
-          parts.push(vk)
+          keys.push(vk)
         }
-        parts.sort()
-        return accept(state, obj, { key: `Set:{${parts.join(',')}}`, pure: false })
+        const builder = new CompositeBuilder('Set')
+        for (const vk of keys.toSorted()) {
+          builder.add('', { key: vk, pure: true, hashed: false, token: vk })
+        }
+        const info = builder.finish('Set:{', '}')
+        return accept(state, obj, { ...info, pure: false })
       } finally {
         exitNesting()
       }
@@ -228,15 +374,13 @@ function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | 
       if (pt === undefined) return undefined
       enterNesting()
       try {
-        const parts: string[] = []
-        let pure = true
+        const builder = new CompositeBuilder(pt)
         for (const i of obj.keys()) {
-          const k = canonicalKeyInner(obj[i], state)
-          if (k === undefined) return accept(state, obj, undefined)
-          parts.push(k.key)
-          if (!k.pure) pure = false
+          const child = canonicalKeyInner(obj[i], state)
+          if (child === undefined) return accept(state, obj, undefined)
+          builder.add('', child)
         }
-        return accept(state, obj, { key: `${pt}[${parts.join(',')}]`, pure })
+        return accept(state, obj, builder.finish(`${pt}[`, ']'))
       } finally {
         exitNesting()
       }
@@ -249,15 +393,13 @@ function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | 
     enterNesting()
     try {
       const keys = Object.keys(obj).toSorted()
-      const parts: string[] = []
-      let pure = true
+      const builder = new CompositeBuilder(pt)
       for (const key of keys) {
-        const k = canonicalKeyInner((obj as Record<string, unknown>)[key], state)
-        if (k === undefined) return accept(state, obj, undefined)
-        parts.push(`${JSON.stringify(key)}:${k.key}`)
-        if (!k.pure) pure = false
+        const child = canonicalKeyInner((obj as Record<string, unknown>)[key], state)
+        if (child === undefined) return accept(state, obj, undefined)
+        builder.add(`${JSON.stringify(key)}:`, child)
       }
-      return accept(state, obj, { key: `${pt}{${parts.join(',')}}`, pure })
+      return accept(state, obj, builder.finish(`${pt}{`, '}'))
     } finally {
       exitNesting()
     }
@@ -266,26 +408,25 @@ function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | 
   }
 }
 
-function freshState(): KeyState {
-  return {
-    memo: new WeakMap(),
-    failed: new WeakSet(),
-    inProgress: new WeakSet()
-  }
-}
-
 /**
- * Canonical structural key plus purity, or `undefined` when the value cannot be keyed to match
- * deepEqual. Deviation for shared-reference DAGs: when the tree-expanded key would exceed 64 KB,
- * returns `undefined` (no key) so Heap equality falls back to pairwise `deepEqual`, preserving
- * the key/deepEqual agreement property for every value that does receive a key.
+ * Canonical structural key plus purity and hashed flag, or `undefined` when the value cannot be
+ * keyed to match deepEqual. Shared-reference DAGs whose tree-expanded key would exceed 64 KB get
+ * a hashed key instead (see {@link CanonicalKeyInfo.hashed}): deepEqual-equal values hash equal,
+ * unequal values may too, so a hashed key only groups candidates for pairwise `deepEqual`.
+ * Pass one `session` across calls to key shared subtrees once.
  */
-export function canonicalKeyInfo(value: unknown): CanonicalKeyInfo | undefined {
-  return guardNesting(() => canonicalKeyInner(value, freshState()))
+export function canonicalKeyInfo(
+  value: unknown,
+  session: CanonicalKeySession = createCanonicalKeySession()
+): CanonicalKeyInfo | undefined {
+  const info = guardNesting(() => canonicalKeyInner(value, session))
+  if (info === undefined) return undefined
+  return { key: info.key, pure: info.pure, hashed: info.hashed }
 }
 
 /**
- * Canonical structural key, or `undefined` when the value cannot be keyed to match deepEqual.
+ * Canonical structural key (a hashed key for oversized values), or `undefined` when the value
+ * cannot be keyed to match deepEqual.
  */
 export function canonicalKey(value: unknown): string | undefined {
   return canonicalKeyInfo(value)?.key

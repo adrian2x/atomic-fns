@@ -9,8 +9,24 @@ import { hasMethod, protocol } from './protocol.js'
 /** Pairs `(a, b)` currently being compared on the active path, keyed by `a`. */
 type Pending = WeakMap<object, Set<object>>
 
-/** Pairs already proven equal within one top-level `deepEqual` call. */
+/** Pairs already proven equal within one deepEqual session. */
 type Proven = WeakMap<object, WeakSet<object>>
+
+/**
+ * Internal state shared by every comparison of one deepEqual session: the pairs proven equal
+ * and the pairs on the active path. Public `deepEqual` creates a fresh session per call; Heap
+ * equality shares one across all of its pairwise comparisons so shared-reference subtrees are
+ * compared once. Not exported from any barrel.
+ */
+export interface DeepEqualSession {
+  readonly pending: Pending
+  readonly proven: Proven
+}
+
+/** Create an empty session (no pairs pending or proven). */
+export function createDeepEqualSession(): DeepEqualSession {
+  return { pending: new WeakMap(), proven: new WeakMap() }
+}
 
 const BOXED_PRIMITIVES = [Number, String, Boolean, BigInt, Symbol] as const
 const NOT_BOXED = Symbol('not boxed')
@@ -163,7 +179,16 @@ function deepEqualChildren(a: object, b: object, pending: Pending, proven: Prove
  * primitive checks), so a 1000-deep structure ending in a primitive is accepted.
  */
 export function deepEqual(a: unknown, b: unknown): boolean {
-  return guardNesting(() => deepEqualInner(a, b, new WeakMap(), new WeakMap()))
+  return deepEqualInSession(a, b, createDeepEqualSession())
+}
+
+/**
+ * `deepEqual` over a caller-owned session. Pairs proven equal by earlier calls on the same
+ * session are reused, and nesting is counted through the shared nesting guard exactly as in
+ * `deepEqual`. Internal: not exported from the public barrels.
+ */
+export function deepEqualInSession(a: unknown, b: unknown, session: DeepEqualSession): boolean {
+  return guardNesting(() => deepEqualInner(a, b, session.pending, session.proven))
 }
 
 /**

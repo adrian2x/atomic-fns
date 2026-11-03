@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { canonicalKey } from '../src/internal/canonicalKey.js'
+import {
+  canonicalKey,
+  canonicalKeyInfo,
+  createCanonicalKeySession
+} from '../src/internal/canonicalKey.js'
 import { deepEqual } from '../src/operators/index.js'
 
 /** Deterministic PRNG (mulberry32). */
@@ -183,5 +187,105 @@ describe('canonicalKey', () => {
         expect(deepEqual(a, b)).toBe(ka === kb)
       }
     }
+  })
+})
+
+/** Shared-reference DAG `levels` deep: each level is `{ l: x, r: x }`, so the key expands 2^levels. */
+function sharedDag(levels: number): object {
+  let x: object = { v: 1 }
+  for (let i = 0; i < levels; i++) x = { l: x, r: x }
+  return x
+}
+
+describe('hashed oversized keys', () => {
+  it('keeps exact keys for small values and marks them not hashed', () => {
+    const info = canonicalKeyInfo({ a: [1, 2] })
+    expect(info?.hashed).toBe(false)
+    expect(info?.pure).toBe(true)
+    expect(info?.key).toBe('O{"a":A[n:1,n:2]}')
+  })
+
+  it('hashes values whose exact key exceeds 64 KB, as impure fixed-size keys', () => {
+    const info = canonicalKeyInfo(sharedDag(13))
+    expect(info?.hashed).toBe(true)
+    expect(info?.pure).toBe(false)
+    expect(info?.key).toMatch(/^H:[0-9a-f]{16}$/)
+  })
+
+  it('deepEqual-equal oversized values hash equal, unequal ones differ', () => {
+    const a = sharedDag(13)
+    const b = sharedDag(13)
+    expect(deepEqual(a, b)).toBe(true)
+    expect(canonicalKey(a)).toBe(canonicalKey(b))
+    expect(canonicalKey({ s: a, id: 1 })).toBe(canonicalKey({ s: b, id: 1 }))
+    expect(canonicalKey({ s: a, id: 1 })).not.toBe(canonicalKey({ s: b, id: 2 }))
+    expect(canonicalKey(sharedDag(14))).not.toBe(canonicalKey(a))
+  })
+
+  it('hashes a parent of a hashed child and of many exact children', () => {
+    const sub = sharedDag(11)
+    const wide = Array.from({ length: 12_000 }, () => sub)
+    expect(canonicalKeyInfo(sub)?.hashed).toBe(false)
+    expect(canonicalKeyInfo({ k: sharedDag(13) })?.hashed).toBe(true)
+    expect(canonicalKeyInfo(wide)?.hashed).toBe(true)
+  })
+
+  it('hashes Map and Set containers consistently with their element order', () => {
+    const big = sharedDag(13)
+    const m1 = new Map<unknown, unknown>([
+      ['a', big],
+      ['b', 1]
+    ])
+    const m2 = new Map<unknown, unknown>([
+      ['b', 1],
+      ['a', sharedDag(13)]
+    ])
+    expect(deepEqual(m1, m2)).toBe(true)
+    expect(canonicalKeyInfo(m1)?.hashed).toBe(true)
+    expect(canonicalKey(m1)).toBe(canonicalKey(m2))
+  })
+
+  it('hashes large byte buffers without building the hex key', () => {
+    const a = new Uint8Array(100_000).fill(7)
+    const b = new Uint8Array(100_000).fill(7)
+    const c = new Uint8Array(100_000).fill(7)
+    c[99_999] = 8
+    const info = canonicalKeyInfo(a)
+    expect(info?.hashed).toBe(true)
+    expect(info?.pure).toBe(false)
+    expect(canonicalKey(a)).toBe(canonicalKey(b))
+    expect(canonicalKey(a)).not.toBe(canonicalKey(c))
+    expect(canonicalKeyInfo(new Uint8Array(10))?.hashed).toBe(false)
+  })
+
+  it('wide shape (12,000 refs to a ~45 KB subtree) hashes without RangeError', () => {
+    const sub = sharedDag(11)
+    const exact = canonicalKey(sub)
+    expect(exact?.length).toBeGreaterThan(40_000)
+    expect(exact?.length).toBeLessThan(64 * 1024)
+    const wide = Array.from({ length: 12_000 }, () => sub)
+    const t0 = performance.now()
+    let info: ReturnType<typeof canonicalKeyInfo>
+    expect(() => {
+      info = canonicalKeyInfo(wide)
+    }).not.toThrow()
+    expect(performance.now() - t0).toBeLessThan(100)
+    expect(info?.hashed).toBe(true)
+    expect(info?.key).toMatch(/^H:[0-9a-f]{16}$/)
+  })
+
+  it('a shared session keys shared subtrees once and gives the same keys', () => {
+    const session = createCanonicalKeySession()
+    const shared = sharedDag(13)
+    const first = canonicalKeyInfo({ s: shared, id: 1 }, session)
+    const second = canonicalKeyInfo({ s: shared, id: 1 }, session)
+    expect(second).toEqual(first)
+    expect(second).toEqual(canonicalKeyInfo({ s: sharedDag(13), id: 1 }))
+  })
+
+  it('cyclic values still have no key', () => {
+    const cyc: { self?: unknown } = {}
+    cyc.self = cyc
+    expect(canonicalKeyInfo({ s: sharedDag(13), cyc })).toBeUndefined()
   })
 })

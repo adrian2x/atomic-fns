@@ -1,65 +1,88 @@
-import { canonicalKeyInfo } from '../internal/canonicalKey.js'
+import {
+  canonicalKeyInfo,
+  createCanonicalKeySession,
+  type CanonicalKeySession
+} from '../internal/canonicalKey.js'
 import { arrayFromIterable } from '../internal/iterable.js'
 import { withHookNesting } from '../internal/nesting.js'
+import { createDeepEqualSession, deepEqualInSession } from '../operators/equality.js'
+import type { DeepEqualSession } from '../operators/equality.js'
 import type { Comparer } from '../operators/index.js'
-import { compare, deepEqual, protocol, sameValueZero } from '../operators/index.js'
+import { compare, protocol, sameValueZero } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
 import { clone } from './object.js'
 
 interface HeapEqItem<T> {
   item: T
   key: string | undefined
+  /** Key is a structural hash: equal keys only mean "candidates for deepEqual". */
+  hashed: boolean
   pure: boolean
 }
 
-function classifyHeapItem<T>(item: T): HeapEqItem<T> {
-  const info = canonicalKeyInfo(item)
-  if (info === undefined) return { item, key: undefined, pure: false }
-  return { item, key: info.key, pure: info.pure }
+function classifyHeapItem<T>(item: T, keys: CanonicalKeySession): HeapEqItem<T> {
+  const info = canonicalKeyInfo(item, keys)
+  if (info === undefined) return { item, key: undefined, hashed: false, pure: false }
+  return { item, key: info.key, hashed: info.hashed, pure: info.pure }
 }
 
-/**
- * Cancel keyed items by key counts. Leftovers are items with no key, or keyed items whose
- * key count did not cancel against the other side.
- */
-function keyedLeftovers<T>(side: HeapEqItem<T>[]): {
-  byKey: Map<string, HeapEqItem<T>[]>
+interface Buckets<T> {
+  /** Exact keys: equal key iff deepEqual. */
+  exact: Map<string, HeapEqItem<T>[]>
+  /** Hashed keys: equal hash is only a candidate match. */
+  hashed: Map<string, HeapEqItem<T>[]>
   unkeyed: HeapEqItem<T>[]
-} {
-  const byKey = new Map<string, HeapEqItem<T>[]>()
+}
+
+function bucketize<T>(side: HeapEqItem<T>[]): Buckets<T> {
+  const exact = new Map<string, HeapEqItem<T>[]>()
+  const hashed = new Map<string, HeapEqItem<T>[]>()
   const unkeyed: HeapEqItem<T>[] = []
   for (const entry of side) {
     if (entry.key === undefined) {
       unkeyed.push(entry)
       continue
     }
-    const list = byKey.get(entry.key)
-    if (list === undefined) byKey.set(entry.key, [entry])
+    const target = entry.hashed ? hashed : exact
+    const list = target.get(entry.key)
+    if (list === undefined) target.set(entry.key, [entry])
     else list.push(entry)
   }
-  return { byKey, unkeyed }
+  return { exact, hashed, unkeyed }
 }
 
 /**
- * Multiset equality leftovers after key cancellation, then pairwise matching for every leftover
- * impure item (O(leftover_impure × leftovers)). Pure leftovers may only be consumed by those
- * matches. JSON-only heaps cancel entirely by key and never take the pairwise path.
+ * Multiset equality leftovers after exact-key cancellation and hashed-group matching, then
+ * pairwise matching for every leftover impure item (O(leftover_impure × leftovers)). Pure
+ * leftovers may only be consumed by those matches. JSON-only heaps cancel entirely by key and
+ * never take the pairwise path. Every pairwise comparison shares one deepEqual session, so
+ * subtrees already proven equal are not compared again.
  */
 function heapMultisetEqual<T>(aItems: Iterable<T>, bItems: Iterable<T>): boolean {
-  const sideA = [...aItems].map(classifyHeapItem)
-  const sideB = [...bItems].map(classifyHeapItem)
-  const { byKey: keysA, unkeyed: unkeyedA } = keyedLeftovers(sideA)
-  const { byKey: keysB, unkeyed: unkeyedB } = keyedLeftovers(sideB)
+  const keys = createCanonicalKeySession()
+  const session = createDeepEqualSession()
+  const sideA = bucketize([...aItems].map((item) => classifyHeapItem(item, keys)))
+  const sideB = bucketize([...bItems].map((item) => classifyHeapItem(item, keys)))
 
-  const leftoverA: HeapEqItem<T>[] = [...unkeyedA]
-  const leftoverB: HeapEqItem<T>[] = [...unkeyedB]
-  const allKeys = new Set([...keysA.keys(), ...keysB.keys()])
-  for (const key of allKeys) {
-    const listA = keysA.get(key) ?? []
-    const listB = keysB.get(key) ?? []
+  const leftoverA: HeapEqItem<T>[] = [...sideA.unkeyed]
+  const leftoverB: HeapEqItem<T>[] = [...sideB.unkeyed]
+
+  for (const key of new Set([...sideA.exact.keys(), ...sideB.exact.keys()])) {
+    const listA = sideA.exact.get(key) ?? []
+    const listB = sideB.exact.get(key) ?? []
     const matched = Math.min(listA.length, listB.length)
     for (let i = matched; i < listA.length; i++) leftoverA.push(listA[i])
     for (let i = matched; i < listB.length; i++) leftoverB.push(listB[i])
+  }
+
+  for (const key of new Set([...sideA.hashed.keys(), ...sideB.hashed.keys()])) {
+    matchHashedGroup(
+      sideA.hashed.get(key) ?? [],
+      sideB.hashed.get(key) ?? [],
+      session,
+      leftoverA,
+      leftoverB
+    )
   }
 
   if (leftoverA.length === 0 && leftoverB.length === 0) return true
@@ -69,26 +92,17 @@ function heapMultisetEqual<T>(aItems: Iterable<T>, bItems: Iterable<T>): boolean
   const usedB = new Array<boolean>(leftoverB.length).fill(false)
 
   const matchImpure = (fromA: boolean, index: number): boolean => {
-    if (fromA) {
-      if (usedA[index]) return true
-      const entry = leftoverA[index]
-      for (let j = 0; j < leftoverB.length; j++) {
-        if (usedB[j]) continue
-        if (deepEqual(entry.item, leftoverB[j].item)) {
-          usedA[index] = true
-          usedB[j] = true
-          return true
-        }
-      }
-      return false
-    }
-    if (usedB[index]) return true
-    const entry = leftoverB[index]
-    for (let j = 0; j < leftoverA.length; j++) {
-      if (usedA[j]) continue
-      if (deepEqual(entry.item, leftoverA[j].item)) {
-        usedB[index] = true
-        usedA[j] = true
+    const mine = fromA ? leftoverA : leftoverB
+    const theirs = fromA ? leftoverB : leftoverA
+    const usedMine = fromA ? usedA : usedB
+    const usedTheirs = fromA ? usedB : usedA
+    if (usedMine[index]) return true
+    const entry = mine[index]
+    for (let j = 0; j < theirs.length; j++) {
+      if (usedTheirs[j]) continue
+      if (deepEqualInSession(entry.item, theirs[j].item, session)) {
+        usedMine[index] = true
+        usedTheirs[j] = true
         return true
       }
     }
@@ -111,6 +125,34 @@ function heapMultisetEqual<T>(aItems: Iterable<T>, bItems: Iterable<T>): boolean
     if (!usedB[i]) return false
   }
   return true
+}
+
+/**
+ * Match items of one hash group pairwise in the shared session. A hash collision only costs
+ * extra comparisons. Items left unmatched go to the leftover lists: a hashed item may still be
+ * deepEqual to an unkeyed or impure item of the other side (cross-kind equality).
+ */
+function matchHashedGroup<T>(
+  listA: HeapEqItem<T>[],
+  listB: HeapEqItem<T>[],
+  session: DeepEqualSession,
+  leftoverA: HeapEqItem<T>[],
+  leftoverB: HeapEqItem<T>[]
+): void {
+  const remainingB = [...listB]
+  for (const entry of listA) {
+    let matched = false
+    for (let j = 0; j < remainingB.length; j++) {
+      if (!deepEqualInSession(entry.item, remainingB[j].item, session)) continue
+      // Swap-remove keeps equal-item groups O(1) per match.
+      const last = remainingB.pop()
+      if (last !== undefined && j < remainingB.length) remainingB[j] = last
+      matched = true
+      break
+    }
+    if (!matched) leftoverA.push(entry)
+  }
+  for (const entry of remainingB) leftoverB.push(entry)
 }
 
 /**
@@ -144,14 +186,17 @@ export class Heap<T> extends ValueCollection<T> {
 
   /**
    * Multiset equality under `deepEqual`, independent of the heap comparator. Same size.
-   * Keyed items cancel by canonical-key counts. Items are pure when their key is built only
-   * from JSON-shaped data plus exact built-in Date/RegExp; otherwise impure (unkeyed, or keyed
-   * with boxed primitives / typed arrays / Map / Set). Two pure items are deepEqual iff their
-   * keys are equal, so cross-kind matches always involve an impure leftover. After key
-   * cancellation, every leftover impure item is matched pairwise by `deepEqual` against an
-   * unmatched leftover of the other side (leftover pures may only be consumed by those matches);
-   * any unmatched leftover yields false. Cost O(leftover_impure × leftovers); JSON-only heaps
-   * never take the pairwise path. Iteration / heap order is not part of equality.
+   * Items with an exact canonical key cancel by key counts. Items are pure when their key is
+   * built only from JSON-shaped data plus exact built-in Date/RegExp; otherwise impure (unkeyed,
+   * hashed, or keyed with boxed primitives / typed arrays / Map / Set). Two pure items are
+   * deepEqual iff their keys are equal, so cross-kind matches always involve an impure leftover.
+   * Items whose exact key would exceed 64 KB carry a structural hash instead; they group by hash
+   * and match pairwise within the group (a collision only costs time). After that, every
+   * leftover impure item is matched pairwise by `deepEqual` against an unmatched leftover of the
+   * other side (leftover pures may only be consumed by those matches); any unmatched leftover
+   * yields false. All pairwise comparisons share one deepEqual session (proven pairs and nesting
+   * counters), so shared-reference DAGs stay linear. JSON-only heaps never take the pairwise
+   * path. Iteration / heap order is not part of equality.
    */
   override [protocol.equals](other: unknown): boolean {
     return withHookNesting(() => {
