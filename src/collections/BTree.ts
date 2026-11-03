@@ -1,12 +1,25 @@
 import { compare, protocol, type Comparer } from '../operators/index.js'
 import { MapCollection } from './abc.js'
 
-/** Result of an {@link BTree.editRange} / {@link BTree.forRange} callback. */
-export interface EditResult<V, R = unknown> {
-  value?: V
-  delete?: true
-  done?: R
+/** Construction options for {@link BTree}. */
+export interface BTreeOptions {
+  /** Branching factor; integer in 8..1024. Default 64. */
+  nodeCapacity?: number
 }
+
+/** Bounds for range methods. The start key is always inclusive. */
+export interface RangeOptions {
+  /** When true, the end key is included. Default false. */
+  inclusiveEnd?: boolean
+}
+
+/**
+ * Instruction returned from an {@link BTree.updateRange} callback.
+ * Exactly one of `replace`, `remove`, or a bare `stop` may describe the action;
+ * `stop` may also accompany `replace` or `remove` to end the walk after that entry.
+ */
+export type RangeUpdate<V> =
+  { replace: V; stop?: true } | { remove: true; stop?: true } | { stop: true }
 
 interface LeafNode<K, V> {
   readonly kind: 'leaf'
@@ -51,11 +64,20 @@ function emptyLeaf<K, V>(owner: object): LeafNode<K, V> {
   return { kind: 'leaf', owner, keys: [], values: [] }
 }
 
-function clampMaxNodeSize(arg: number | undefined): number {
-  const n = Math.trunc(Number(arg))
-  if (!(n >= 4)) return 64
-  if (n > 256) return 256
-  return n
+function resolveNodeCapacity(arg: number | undefined): number {
+  if (arg === undefined) return 64
+  if (!Number.isInteger(arg) || arg < 8 || arg > 1024) {
+    throw new RangeError('nodeCapacity must be an integer from 8 to 1024')
+  }
+  return arg
+}
+
+function resolveLimit(limit: number | undefined): number {
+  if (limit === undefined || limit === Infinity) return Infinity
+  if (!Number.isInteger(limit) || limit < 0) {
+    throw new RangeError('limit must be a non-negative integer or Infinity')
+  }
+  return limit
 }
 
 /**
@@ -76,7 +98,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   #root: TreeNode<K, V>
   #size = 0
   readonly #compareFn: Comparer<K>
-  readonly #maxNodeSize: number
+  readonly #nodeCapacity: number
   readonly #minFill: number
   #token: object = {}
   #version = 0
@@ -85,13 +107,17 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   /**
    * @param entries Initial key-value pairs. Sorted unique input is bulk-loaded in linear time.
    * @param compareFn Key comparator. Defaults to {@link compare}.
-   * @param maxNodeSize Branching factor in 4..256 (clamped). Default 64.
+   * @param options Construction options; see {@link BTreeOptions}.
    */
-  constructor(entries?: Iterable<readonly [K, V]>, compareFn?: Comparer<K>, maxNodeSize?: number) {
+  constructor(
+    entries?: Iterable<readonly [K, V]>,
+    compareFn?: Comparer<K>,
+    options?: BTreeOptions
+  ) {
     super()
     this.#compareFn = compareFn ?? compare
-    this.#maxNodeSize = clampMaxNodeSize(maxNodeSize)
-    this.#minFill = Math.floor(this.#maxNodeSize / 2)
+    this.#nodeCapacity = resolveNodeCapacity(options?.nodeCapacity)
+    this.#minFill = Math.floor(this.#nodeCapacity / 2)
     this.#root = emptyLeaf(this.#token)
     if (entries !== undefined) this.#bulkLoad(entries)
   }
@@ -100,8 +126,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return this.#size
   }
 
-  get maxNodeSize(): number {
-    return this.#maxNodeSize
+  /** Branching factor chosen at construction. */
+  get nodeCapacity(): number {
+    return this.#nodeCapacity
   }
 
   /** Leaf depth of the tree; 0 when the root is a leaf. */
@@ -125,7 +152,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return Reflect.construct(this.constructor, [
       entries,
       this.#compareFn,
-      this.#maxNodeSize
+      { nodeCapacity: this.#nodeCapacity }
     ]) as this
   }
 
@@ -230,7 +257,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
    * @param from Optional highest key to start at. Pass nothing to start at the maximum;
    * an explicit `undefined` is a real key and starts at `undefined`.
    */
-  entriesReversed(...from: [highestKey?: K]): IteratorObject<[K, V]> {
+  entriesDescending(...from: [from?: K]): IteratorObject<[K, V]> {
     const start = from.length > 0 ? { key: from[0] as K } : undefined
     return Iterator.from(this.#walk(false, start))
   }
@@ -243,7 +270,8 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return this.entries().map(([, v]) => v)
   }
 
-  minKey(): K | undefined {
+  /** Smallest key, or `undefined` when empty. */
+  firstKey(): K | undefined {
     let n = this.#root
     while (n.kind === 'branch') {
       n = n.children[0]
@@ -251,7 +279,8 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return n.keys[0]
   }
 
-  maxKey(): K | undefined {
+  /** Largest key, or `undefined` when empty. */
+  lastKey(): K | undefined {
     let n = this.#root
     while (n.kind === 'branch') {
       const last = n.children.at(-1)
@@ -282,16 +311,19 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   }
 
   /**
-   * @param maxLength Stop after this many pairs. `maxLength <= 0` returns `[]`.
+   * Entries whose keys lie in `[from, to)` (or `[from, to]` when `inclusiveEnd` is true).
+   * @param options.limit Cap on how many pairs to collect; default Infinity. Must be a
+   * non-negative integer or Infinity.
    */
-  getRange(low: K, high: K, includeHigh = false, maxLength = Infinity): [K, V][] {
-    const limit = Math.floor(maxLength)
-    if (!(limit > 0)) return []
-    if (this.#cmp(low, high) > 0) return []
+  entriesBetween(from: K, to: K, options?: RangeOptions & { limit?: number }): [K, V][] {
+    const limit = resolveLimit(options?.limit)
+    const inclusiveEnd = options?.inclusiveEnd === true
+    if (limit === 0) return []
+    if (this.#cmp(from, to) > 0) return []
     const out: [K, V][] = []
-    for (const [k, v] of this.#walk(true, { key: low })) {
-      const c = this.#cmp(k, high)
-      if (includeHigh ? c > 0 : c >= 0) break
+    for (const [k, v] of this.#walk(true, { key: from })) {
+      const c = this.#cmp(k, to)
+      if (inclusiveEnd ? c > 0 : c >= 0) break
       out.push([k, v])
       if (out.length >= limit) break
     }
@@ -299,9 +331,10 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   }
 
   /**
-   * @returns Number of keys that were not already present.
+   * Insert or overwrite every pair from `entries`.
+   * @returns Count of keys that were not already present.
    */
-  setPairs(entries: Iterable<readonly [K, V]>): number {
+  setAll(entries: Iterable<readonly [K, V]>): number {
     return this.#atomic(() => {
       if (this.#size === 0) {
         this.#bulkLoad(entries)
@@ -318,51 +351,68 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     })
   }
 
-  forRange<R = number>(
-    low: K,
-    high: K,
-    includeHigh: boolean,
-    onFound?: (k: K, v: V, counter: number) => { done?: R } | undefined,
-    initialCounter = 0
-  ): R | number {
-    let counter = initialCounter
-    for (const [k, v] of this.#walk(true, { key: low })) {
-      const c = this.#cmp(k, high)
-      if (includeHigh ? c > 0 : c >= 0) break
-      const r = onFound?.(k, v, counter)
-      counter++
-      if (r !== undefined && 'done' in r) return r.done as R
+  /**
+   * Walk entries in `[from, to)` (or `[from, to]` when `inclusiveEnd` is true), invoking
+   * `visit` for each. Returning `false` from `visit` stops the walk.
+   * @returns Number of entries visited (including a final entry that returned false).
+   */
+  visitRange(
+    from: K,
+    to: K,
+    visit: (key: K, value: V, index: number) => unknown,
+    options?: RangeOptions
+  ): number {
+    const inclusiveEnd = options?.inclusiveEnd === true
+    let index = 0
+    for (const [k, v] of this.#walk(true, { key: from })) {
+      const c = this.#cmp(k, to)
+      if (inclusiveEnd ? c > 0 : c >= 0) break
+      const stop = visit(k, v, index)
+      index++
+      if (stop === false) break
     }
-    return counter
+    return index
   }
 
-  editRange<R = number>(
-    low: K,
-    high: K,
-    includeHigh: boolean,
-    onFound: (k: K, v: V, counter: number) => EditResult<V, R> | undefined,
-    initialCounter = 0
-  ): R | number {
+  /**
+   * Atomically update entries in `[from, to)` (or `[from, to]` when `inclusiveEnd` is true).
+   * The callback returns a {@link RangeUpdate}, or `undefined` to leave the entry alone.
+   * @returns Number of entries visited.
+   */
+  updateRange(
+    from: K,
+    to: K,
+    update: (key: K, value: V, index: number) => RangeUpdate<V> | undefined,
+    options?: RangeOptions
+  ): number {
     return this.#atomic(() => {
-      let counter = initialCounter
-      for (const [k, v] of this.#walk(true, { key: low })) {
-        const c = this.#cmp(k, high)
-        if (includeHigh ? c > 0 : c >= 0) break
-        const r = onFound(k, v, counter)
-        counter++
-        if (r !== undefined) {
-          if (r.delete === true) this.delete(k)
-          else if ('value' in r) this.set(k, r.value as V)
-          if ('done' in r) return r.done as R
+      const inclusiveEnd = options?.inclusiveEnd === true
+      let index = 0
+      for (const [k, v] of this.#walk(true, { key: from })) {
+        const c = this.#cmp(k, to)
+        if (inclusiveEnd ? c > 0 : c >= 0) break
+        const r = update(k, v, index)
+        index++
+        if (r === undefined) continue
+        if ('replace' in r && 'remove' in r) {
+          throw new TypeError('RangeUpdate cannot both replace and remove')
         }
+        if ('remove' in r) this.delete(k)
+        else if ('replace' in r) this.set(k, r.replace)
+        if ('stop' in r && r.stop) break
       }
-      return counter
+      return index
     })
   }
 
-  deleteRange(low: K, high: K, includeHigh: boolean): number {
+  /**
+   * Delete every entry whose key lies in `[from, to)` (or `[from, to]` when `inclusiveEnd`
+   * is true). Atomic: a failure leaves the tree unchanged.
+   * @returns Number of entries removed.
+   */
+  removeRange(from: K, to: K, options?: RangeOptions): number {
     return this.#atomic(() => {
-      const keys = this.getRange(low, high, includeHigh).map(([k]) => k)
+      const keys = this.entriesBetween(from, to, options).map(([k]) => k)
       let n = 0
       for (const k of keys) {
         if (this.delete(k)) n++
@@ -371,7 +421,11 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     })
   }
 
-  deleteKeys(keys: Iterable<K>): number {
+  /**
+   * Delete every listed key. Atomic: comparator failures leave the tree unchanged.
+   * @returns Number of keys that were present and removed.
+   */
+  removeAll(keys: Iterable<K>): number {
     return this.#atomic(() => {
       const list = [...keys]
       for (const k of list) this.has(k)
@@ -385,7 +439,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   /** O(1) copy-on-write clone sharing structure until the first write on either side. */
   clone(): BTree<K, V> {
-    const copy = new BTree<K, V>(undefined, this.#compareFn, this.#maxNodeSize)
+    const copy = new BTree<K, V>(undefined, this.#compareFn, {
+      nodeCapacity: this.#nodeCapacity
+    })
     copy.#root = this.#root
     copy.#size = this.#size
     this.#token = {}
@@ -396,23 +452,21 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return [...this.entries()]
   }
 
-  /** Prevent mutators until {@link unfreeze}. */
+  /**
+   * Reject further mutators permanently (like `Object.freeze`).
+   * @returns `this`
+   */
   freeze(): this {
     this.#frozen = true
     return this
   }
 
-  /** Clear the frozen flag set by {@link freeze}. */
-  unfreeze(): this {
-    this.#frozen = false
-    return this
-  }
-
   /**
-   * Structural integrity check for tests. Not part of the public collections export.
+   * Structural integrity check for tests.
+   * @internal
    * @throws {Error} when an invariant fails
    */
-  __checkValid(): void {
+  assertInvariants(): void {
     const fail = (name: string): never => {
       throw new Error(`BTree invariant violated: ${name}`)
     }
@@ -421,10 +475,13 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
       if (node.kind === 'leaf') {
         if (node.keys.length !== node.values.length) fail('leaf-arrays')
         depths.add(depth)
-        if (!isRoot && (node.keys.length < this.#minFill || node.keys.length > this.#maxNodeSize)) {
+        if (
+          !isRoot &&
+          (node.keys.length < this.#minFill || node.keys.length > this.#nodeCapacity)
+        ) {
           fail('fill')
         }
-        if (isRoot && node.keys.length > this.#maxNodeSize) fail('fill')
+        if (isRoot && node.keys.length > this.#nodeCapacity) fail('fill')
         for (let i = 1; i < node.keys.length; i++) {
           if (!(this.#cmp(node.keys[i - 1], node.keys[i]) < 0)) fail('order')
         }
@@ -433,12 +490,12 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
       if (node.maxKeys.length !== node.children.length) fail('separators')
       if (
         !isRoot &&
-        (node.children.length < this.#minFill || node.children.length > this.#maxNodeSize)
+        (node.children.length < this.#minFill || node.children.length > this.#nodeCapacity)
       ) {
         fail('fill')
       }
       if (isRoot) {
-        if (node.children.length > this.#maxNodeSize) fail('fill')
+        if (node.children.length > this.#nodeCapacity) fail('fill')
         if (node.children.length < 2) fail('fill')
       }
       let sum = 0
@@ -579,8 +636,8 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   #bubbleInsert(path: PathFrame<K, V>[], leaf: LeafNode<K, V>): void {
     let node: TreeNode<K, V> = leaf
     let pathIndex = path.length - 1
-    while (itemCount(node) === this.#maxNodeSize + 1) {
-      const mid = Math.ceil((this.#maxNodeSize + 1) / 2)
+    while (itemCount(node) === this.#nodeCapacity + 1) {
+      const mid = Math.ceil((this.#nodeCapacity + 1) / 2)
       let left: TreeNode<K, V>
       let right: TreeNode<K, V>
       if (node.kind === 'leaf') {
@@ -994,7 +1051,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
       }
       unique = collapsed
     }
-    const M = this.#maxNodeSize
+    const M = this.#nodeCapacity
     const n = unique.length
     const leafCount = Math.ceil(n / M)
     const leaves: LeafNode<K, V>[] = []

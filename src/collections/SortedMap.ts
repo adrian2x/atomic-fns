@@ -61,36 +61,28 @@ export class SortedMap<K, V> extends MapCollection<K, V> {
    * Smallest key, or `undefined` when empty.
    */
   min(): K | undefined {
-    return this.#tree.minKey()
+    return this.#tree.firstKey()
   }
 
   /**
    * Largest key, or `undefined` when empty.
    */
   max(): K | undefined {
-    return this.#tree.maxKey()
+    return this.#tree.lastKey()
   }
 
   /**
-   * Entries in reverse key order.
+   * Entries in descending key order.
    */
-  entriesReversed(): IteratorObject<[K, V]> {
-    return this.#tree.entriesReversed()
+  entriesDescending(): IteratorObject<[K, V]> {
+    return this.#tree.entriesDescending()
   }
 
   /**
-   * Reject mutators until {@link unfreeze}.
+   * Reject further mutators permanently (like `Object.freeze`).
    */
   freeze(): this {
     this.#tree.freeze()
-    return this
-  }
-
-  /**
-   * Clear the frozen flag set by {@link freeze}.
-   */
-  unfreeze(): this {
-    this.#tree.unfreeze()
     return this
   }
 

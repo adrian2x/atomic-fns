@@ -135,7 +135,7 @@ describe('SPEC-R37 collection clone', () => {
         [3, 'c']
       ],
       (x: number, y: number) => y - x,
-      4
+      { nodeCapacity: 8 }
     )
     const c = clone(t)
     expect(c).not.toBe(t)

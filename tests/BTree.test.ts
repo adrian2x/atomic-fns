@@ -41,29 +41,29 @@ describe('BTree', () => {
       a.set(i, undefined)
       b.set(i, undefined)
     }
-    a.editRange(0, 199, true, () => ({ value: 'LEAK' }))
+    a.updateRange(0, 199, () => ({ replace: 'LEAK' }), { inclusiveEnd: true })
     for (let i = 0; i < 200; i++) {
       expect(b.get(i)).toBeUndefined()
       expect(a.get(i)).toBe('LEAK')
     }
   })
 
-  it('SPEC-R79 editRange applies {value:0}', () => {
+  it('SPEC-R79 updateRange applies {replace:0}', () => {
     const tree = new BTree<number, number>()
     tree.set(1, 5)
-    tree.editRange(1, 1, true, () => ({ value: 0 }))
+    tree.updateRange(1, 1, () => ({ replace: 0 }), { inclusiveEnd: true })
     expect(tree.get(1)).toBe(0)
   })
 
-  it('SPEC-R79 multi-level get default with maxNodeSize 4', () => {
-    const tree = new BTree<number, string>(undefined, undefined, 4)
+  it('SPEC-R79 multi-level get default with nodeCapacity 8', () => {
+    const tree = new BTree<number, string>(undefined, undefined, { nodeCapacity: 8 })
     for (let i = 0; i < 20; i++) tree.set(i, String(i))
     expect(tree.height).toBeGreaterThan(0)
     expect(tree.get(100, 'd')).toBe('d')
     expect(tree.get(5, 'd')).toBe('5')
   })
 
-  it('SPEC-R79 frozen mutators throw and unfreeze restores', () => {
+  it('SPEC-R79 frozen mutators throw and freeze is one-way', () => {
     const tree = new BTree<number, number>()
     for (let i = 10; i > 0; i--) tree.set(i, i)
     tree.freeze()
@@ -74,41 +74,41 @@ describe('BTree', () => {
     expect(() => {
       tree.clear()
     }).toThrow('BTree is frozen')
-    expect(() => tree.deleteRange(1, 3, true)).toThrow('BTree is frozen')
-    expect(() => tree.deleteKeys([1])).toThrow('BTree is frozen')
-    expect(() => tree.editRange(1, 1, true, () => ({ value: 9 }))).toThrow('BTree is frozen')
-    expect(() => tree.setPairs([[12, 12]])).toThrow('BTree is frozen')
+    expect(() => tree.removeRange(1, 3, { inclusiveEnd: true })).toThrow('BTree is frozen')
+    expect(() => tree.removeAll([1])).toThrow('BTree is frozen')
+    expect(() => tree.updateRange(1, 1, () => ({ replace: 9 }), { inclusiveEnd: true })).toThrow(
+      'BTree is frozen'
+    )
+    expect(() => tree.setAll([[12, 12]])).toThrow('BTree is frozen')
     expect(tree.has(1)).toBe(true)
-    tree.unfreeze()
-    expect(tree.isFrozen).toBe(false)
-    tree.set(11, 11)
-    expect(tree.get(11)).toBe(11)
+    expect(tree.isFrozen).toBe(true)
+    expect(() => tree.set(11, 11)).toThrow('BTree is frozen')
   })
 
-  it('SPEC-R79 getRange respects maxLength', () => {
+  it('SPEC-R79 entriesBetween respects limit', () => {
     const tree = new BTree<number, number>()
     for (let i = 0; i < 10; i++) tree.set(i, i)
-    expect(tree.getRange(0, 9, true, 2)).toEqual([
+    expect(tree.entriesBetween(0, 9, { inclusiveEnd: true, limit: 2 })).toEqual([
       [0, 0],
       [1, 1]
     ])
-    expect(tree.getRange(0, 9, true, 0)).toEqual([])
-    expect(tree.getRange(0, 9, true, -1)).toEqual([])
+    expect(tree.entriesBetween(0, 9, { inclusiveEnd: true, limit: 0 })).toEqual([])
+    expect(() => tree.entriesBetween(0, 9, { inclusiveEnd: true, limit: -1 })).toThrow(RangeError)
   })
 
-  it('SPEC-R79 setPairs counts only new keys', () => {
+  it('SPEC-R79 setAll counts only new keys', () => {
     const tree = new BTree<number, number>()
-    expect(tree.setPairs([[0, 1]])).toBe(1)
-    expect(tree.setPairs([[0, 7]])).toBe(0)
+    expect(tree.setAll([[0, 1]])).toBe(1)
+    expect(tree.setAll([[0, 7]])).toBe(0)
     expect(
-      tree.setPairs([
+      tree.setAll([
         [0, 1],
         [0, 7]
       ])
     ).toBe(0)
     expect(tree.get(0)).toBe(7)
     expect(
-      tree.setPairs([
+      tree.setAll([
         [0, 1],
         [1, 2]
       ])
@@ -138,29 +138,44 @@ describe('BTree', () => {
     }
     entries.sort((x, y) => x[0] - y[0])
     expect([...tree]).toEqual(entries)
-    expect([...tree.entriesReversed()]).toEqual([...entries].reverse())
+    expect([...tree.entriesDescending()]).toEqual([...entries].reverse())
     expect([...tree.keys()]).toEqual(entries.map((e) => e[0]))
     expect([...tree.values()]).toEqual(entries.map((e) => e[1]))
   })
 
-  it('SPEC-R79 minKey maxKey clone', () => {
+  it('SPEC-R79 firstKey lastKey clone', () => {
     const tree = new BTree<number, number>()
     for (let i = 10; i >= 0; i--) tree.set(i, i * 2)
-    expect(tree.minKey()).toBe(0)
-    expect(tree.maxKey()).toBe(10)
+    expect(tree.firstKey()).toBe(0)
+    expect(tree.lastKey()).toBe(10)
     const t2 = tree.clone()
-    expect([...t2.entriesReversed()]).toEqual([...tree.entriesReversed()])
+    expect([...t2.entriesDescending()]).toEqual([...tree.entriesDescending()])
     t2.set(100, 100)
     expect(tree.has(100)).toBe(false)
   })
 
-  it('SPEC-R79 maxNodeSize clamped to 4..256', () => {
-    const small = new BTree<number, number>(undefined, undefined, 2)
-    expect(small.maxNodeSize).toBe(64)
-    const big = new BTree<number, number>(undefined, undefined, 1000)
-    expect(big.maxNodeSize).toBe(256)
-    const exact = new BTree<number, number>(undefined, undefined, 4)
-    expect(exact.maxNodeSize).toBe(4)
+  it('SPEC-R79 nodeCapacity must be an integer from 8 to 1024', () => {
+    expect(() => new BTree<number, number>(undefined, undefined, { nodeCapacity: 2 })).toThrow(
+      RangeError
+    )
+    expect(() => new BTree<number, number>(undefined, undefined, { nodeCapacity: 2 })).toThrow(
+      'nodeCapacity must be an integer from 8 to 1024'
+    )
+    expect(() => new BTree<number, number>(undefined, undefined, { nodeCapacity: 2048 })).toThrow(
+      RangeError
+    )
+    expect(() => new BTree<number, number>(undefined, undefined, { nodeCapacity: 8.5 })).toThrow(
+      RangeError
+    )
+    expect(
+      () => new BTree<number, number>(undefined, undefined, { nodeCapacity: Number.NaN })
+    ).toThrow(RangeError)
+    const exact = new BTree<number, number>(undefined, undefined, { nodeCapacity: 8 })
+    expect(exact.nodeCapacity).toBe(8)
+    const big = new BTree<number, number>(undefined, undefined, { nodeCapacity: 1024 })
+    expect(big.nodeCapacity).toBe(1024)
+    const def = new BTree<number, number>()
+    expect(def.nodeCapacity).toBe(64)
   })
 
   it('SPEC-R79 comparator NaN result throws TypeError and leaves the tree unchanged', () => {
@@ -170,15 +185,15 @@ describe('BTree', () => {
     expect(() => tree.set(Number.NaN, 2)).toThrow('comparator must return a finite number')
     expect(tree.size).toBe(1)
     expect(tree.toArray()).toEqual([[1, 1]])
-    tree.__checkValid()
+    tree.assertInvariants()
   })
 
   it('SPEC-R79 differential fuzz vs Map', () => {
-    const sizes = [4, 5, 8, 32]
-    for (const maxNodeSize of sizes) {
-      const tree = new BTree<number, number>(undefined, undefined, maxNodeSize)
+    const sizes = [8, 9, 16, 32]
+    for (const nodeCapacity of sizes) {
+      const tree = new BTree<number, number>(undefined, undefined, { nodeCapacity: nodeCapacity })
       const map = new Map<number, number>()
-      let seed = maxNodeSize * 1000 + 7
+      let seed = nodeCapacity * 1000 + 7
       const rnd = () => {
         seed = (seed * 1664525 + 1013904223) >>> 0
         return seed
@@ -200,17 +215,17 @@ describe('BTree', () => {
         } else {
           const lo = rnd() % 500
           const hi = lo + (rnd() % 50)
-          const fromTree = tree.getRange(lo, hi, true)
+          const fromTree = tree.entriesBetween(lo, hi, { inclusiveEnd: true })
           const fromMap = [...map.entries()]
             .filter(([key]) => key >= lo && key <= hi)
             .sort((a, b) => a[0] - b[0])
           expect(fromTree).toEqual(fromMap)
         }
-        if (op % 500 === 0) tree.__checkValid()
+        if (op % 500 === 0) tree.assertInvariants()
       }
       expect(tree.size).toBe(map.size)
       expect([...tree.entries()]).toEqual([...map.entries()].sort((a, b) => a[0] - b[0]))
-      tree.__checkValid()
+      tree.assertInvariants()
     }
   })
 
@@ -222,14 +237,14 @@ describe('BTree', () => {
     const internals = t as unknown as Record<string, unknown>
     internals.count = 99
     internals._compare = () => 1
-    internals._maxNodeSize = 1
+    internals._nodeCapacity = 1
     expect(t.size).toBe(2)
-    expect(t.maxNodeSize).toBe(64)
+    expect(t.nodeCapacity).toBe(64)
     expect(t.get(2)).toBe(2)
     expect(t.has(1)).toBe(true)
     t.set(3, 3)
     expect(t.size).toBe(3)
-    t.__checkValid()
+    t.assertInvariants()
   })
 
   it('SPEC-R79 undefined is a valid key in iteration, ranges and lookups', () => {
@@ -238,12 +253,12 @@ describe('BTree', () => {
     const forward = [...t.entries()]
     expect(forward).toHaveLength(3)
     expect(t.toArray()).toEqual(forward)
-    expect([...t.entriesReversed()]).toEqual([...forward].reverse())
+    expect([...t.entriesDescending()]).toEqual([...forward].reverse())
     expect([...t.keys()]).toContain(undefined)
     expect(t.has(undefined)).toBe(true)
     expect(t.get(undefined)).toBe('u')
     expect([...t.entries(undefined)]).toEqual([[undefined, 'u']])
-    expect([...t.entriesReversed(undefined)]).toEqual([...forward].reverse().slice(0))
+    expect([...t.entriesDescending(undefined)]).toEqual([...forward].reverse().slice(0))
     expect(t.delete(undefined)).toBe(true)
     expect(t.size).toBe(2)
     expect(t.has(undefined)).toBe(false)
@@ -253,13 +268,13 @@ describe('BTree', () => {
     const t = new BTree<undefined, number>()
     t.set(undefined, 1)
     expect(t.toArray()).toEqual([[undefined, 1]])
-    expect([...t.entriesReversed()]).toEqual([[undefined, 1]])
+    expect([...t.entriesDescending()]).toEqual([[undefined, 1]])
     expect(t.higher(undefined)).toBeUndefined()
     expect(t.lower(undefined)).toBeUndefined()
   })
 
   it('SPEC-R79 iteration terminates when mutated during iteration', () => {
-    const t = new BTree<number, number>(undefined, undefined, 4)
+    const t = new BTree<number, number>(undefined, undefined, { nodeCapacity: 8 })
     for (let i = 0; i < 200; i++) t.set(i, i)
     let visited = 0
     for (const [k] of t.entries()) {
@@ -269,15 +284,15 @@ describe('BTree', () => {
       t.set(k, k)
       expect(visited).toBeLessThan(10_000)
     }
-    t.__checkValid()
+    t.assertInvariants()
     let reversed = 0
-    for (const [k] of t.entriesReversed()) {
+    for (const [k] of t.entriesDescending()) {
       reversed++
       t.delete(k - 1)
       if (k > 0 && k % 5 === 0) t.set(k - 1000, 0)
       expect(reversed).toBeLessThan(10_000)
     }
-    t.__checkValid()
+    t.assertInvariants()
     for (const k of t.keys()) t.delete(k)
     expect(t.size).toBe(0)
     expect([...t.entries()]).toEqual([])
@@ -297,7 +312,7 @@ describe('BTree', () => {
     expect(seen).toEqual([1])
     const back: number[] = []
     t.set(1, 1).set(2, 2)
-    for (const [k] of t.entriesReversed()) {
+    for (const [k] of t.entriesDescending()) {
       back.push(k)
       t.clear()
     }
@@ -305,11 +320,11 @@ describe('BTree', () => {
   })
 
   it('F-080 borrow and merge keep keys aligned with undefined values', () => {
-    const t = new BTree<number, string | undefined>(undefined, undefined, 4)
+    const t = new BTree<number, string | undefined>(undefined, undefined, { nodeCapacity: 8 })
     const model = new Map<number, string | undefined>()
     const sync = () => {
       expect(t.toArray()).toEqual([...model.entries()].sort((a, b) => a[0] - b[0]))
-      t.__checkValid()
+      t.assertInvariants()
     }
     for (const k of [1, 2, 3, 4]) {
       t.set(k, undefined)
@@ -354,42 +369,41 @@ describe('BTree', () => {
   it('A2 reverse start above max', () => {
     const t = new BTree<number, number>(undefined, (a, b) => a - b)
     t.set(10, 10).set(20, 20).set(30, 30)
-    expect([...t.entriesReversed(40)].map(([k]) => k)).toEqual([30, 20, 10])
-    expect([...t.entriesReversed(25)].map(([k]) => k)).toEqual([20, 10])
-    expect([...t.entriesReversed(5)].map(([k]) => k)).toEqual([])
+    expect([...t.entriesDescending(40)].map(([k]) => k)).toEqual([30, 20, 10])
+    expect([...t.entriesDescending(25)].map(([k]) => k)).toEqual([20, 10])
+    expect([...t.entriesDescending(5)].map(([k]) => k)).toEqual([])
     expect([...t.entries(25)].map(([k]) => k)).toEqual([30])
     expect([...t.entries(40)].map(([k]) => k)).toEqual([])
-    const big = new BTree<number, number>(undefined, (a, b) => a - b, 4)
+    const big = new BTree<number, number>(undefined, (a, b) => a - b, { nodeCapacity: 8 })
     for (let k = 0; k <= 498; k += 2) big.set(k, k)
-    expect([...big.entriesReversed(1001)].map(([k]) => k).slice(0, 3)).toEqual([498, 496, 494])
-    const mid = [...big.entriesReversed(251)].map(([k]) => k)
+    expect([...big.entriesDescending(1001)].map(([k]) => k).slice(0, 3)).toEqual([498, 496, 494])
+    const mid = [...big.entriesDescending(251)].map(([k]) => k)
     expect(mid).toHaveLength(126)
     expect(mid[0]).toBe(250)
-    expect([...big.entriesReversed(-1)]).toEqual([])
+    expect([...big.entriesDescending(-1)]).toEqual([])
   })
 
   it('A3 clone after the original loses two levels', () => {
-    // Bulk-load packs to height 2; ascending per-key inserts with left-heavy
-    // splits grow a right spine to height 3 for the same 64 keys.
+    // Bulk-load packs to height 2 at nodeCapacity 8 with 512 keys.
     const t = new BTree<number, number>(
-      Array.from({ length: 64 }, (_, i) => [i, 0] as [number, number]),
+      Array.from({ length: 512 }, (_, i) => [i, 0] as [number, number]),
       undefined,
-      4
+      { nodeCapacity: 8 }
     )
     expect(t.height).toBe(2)
-    t.deleteRange(1, 16, false)
+    t.removeRange(1, 16)
     const c = t.clone()
-    t.deleteRange(4, Infinity, false)
+    t.removeRange(4, Infinity)
     expect(t.height).toBe(0)
     t.set(0, 1)
     expect(c.get(0)).toBe(0)
-    expect(c.size).toBe(49)
-    t.__checkValid()
-    c.__checkValid()
+    expect(c.size).toBe(497)
+    t.assertInvariants()
+    c.assertInvariants()
   })
 
   it('A4 clone isolation', () => {
-    const t = new BTree<number, number>(undefined, undefined, 4)
+    const t = new BTree<number, number>(undefined, undefined, { nodeCapacity: 8 })
     for (let i = 0; i < 64; i++) t.set(i, i)
     for (let i = 0; i < 64; i++) if (i % 4 !== 0) t.delete(i)
     const snapA = t.toArray()
@@ -416,22 +430,22 @@ describe('BTree', () => {
   })
 
   it('A5 interleaved deletes', () => {
-    for (const fanout of [4, 5, 8, 32]) {
-      const t = new BTree<number, number>(undefined, undefined, fanout)
+    for (const fanout of [8, 9, 16, 32]) {
+      const t = new BTree<number, number>(undefined, undefined, { nodeCapacity: fanout })
       for (let i = 0; i < 4000; i++) {
         t.set(i, i)
         if (t.size > 100 && i % 2 === 0) {
           t.delete(i / 2)
           expect(t.size).toBe(i / 2 + 50)
         }
-        if (i % 500 === 0) t.__checkValid()
+        if (i % 500 === 0) t.assertInvariants()
       }
-      t.__checkValid()
+      t.assertInvariants()
     }
   })
 
   it('A6 total order', () => {
-    const t = new BTree<string, number>(undefined, undefined, 4)
+    const t = new BTree<string, number>(undefined, undefined, { nodeCapacity: 8 })
     const keys = [
       '24e26f0b-3c1a-47f8-a7a1-e8461ddb69ce6',
       '0',
@@ -489,17 +503,17 @@ describe('BTree', () => {
     for (const v of values) expect(mixed.has(v)).toBe(true)
     expect(mixed.has(0)).toBe(true)
     expect(mixed.has(-0)).toBe(true)
-    mixed.__checkValid()
+    mixed.assertInvariants()
   })
 
   it('A7 model fuzz with clones', () => {
-    for (const fanout of [4, 6, 16]) {
+    for (const fanout of [8, 16, 32]) {
       interface Snap {
         tree: BTree<number, number>
         map: Map<number, number>
       }
       const snaps: Snap[] = []
-      let cur = new BTree<number, number>(undefined, undefined, fanout)
+      let cur = new BTree<number, number>(undefined, undefined, { nodeCapacity: fanout })
       let model = new Map<number, number>()
       let seed = fanout * 999 + 13
       const rnd = () => {
@@ -519,7 +533,7 @@ describe('BTree', () => {
           const lo = rnd() % 600
           const hi = lo + (rnd() % 40)
           const incl = rnd() % 2 === 0
-          cur.deleteRange(lo, hi, incl)
+          cur.removeRange(lo, hi, { inclusiveEnd: incl })
           for (const key of [...model.keys()]) {
             const inRange = incl ? key >= lo && key <= hi : key >= lo && key < hi
             if (inRange) model.delete(key)
@@ -528,7 +542,7 @@ describe('BTree', () => {
           const lo = rnd() % 600
           const hi = lo + (rnd() % 40)
           const incl = rnd() % 2 === 0
-          const fromTree = cur.getRange(lo, hi, incl)
+          const fromTree = cur.entriesBetween(lo, hi, { inclusiveEnd: incl })
           const fromMap = [...model.entries()]
             .filter(([key]) => (incl ? key >= lo && key <= hi : key >= lo && key < hi))
             .sort((a, b) => a[0] - b[0])
@@ -541,17 +555,17 @@ describe('BTree', () => {
         } else {
           expect(cur.get(k)).toBe(model.get(k))
         }
-        if (op % 500 === 0) cur.__checkValid()
+        if (op % 500 === 0) cur.assertInvariants()
       }
       for (const s of snaps) {
         expect(s.tree.toArray()).toEqual([...s.map.entries()].sort((a, b) => a[0] - b[0]))
-        s.tree.__checkValid()
+        s.tree.assertInvariants()
       }
     }
   })
 
   it('A10 at index', () => {
-    const t = new BTree<number, number>(undefined, undefined, 4)
+    const t = new BTree<number, number>(undefined, undefined, { nodeCapacity: 8 })
     for (let k = 0; k <= 998; k += 2) t.set(k, k)
     expect(t.at(0)?.[0]).toBe(0)
     expect(t.at(499)?.[0]).toBe(998)
@@ -592,7 +606,7 @@ describe('BTree', () => {
       seed = (seed * 1664525 + 1013904223) >>> 0
       return seed
     }
-    const fuzz = new BTree<number, number>(undefined, undefined, 4)
+    const fuzz = new BTree<number, number>(undefined, undefined, { nodeCapacity: 8 })
     for (let op = 0; op < 2000; op++) {
       const k = rnd() % 200
       if (rnd() % 2 === 0) {
@@ -613,22 +627,27 @@ describe('BTree', () => {
     const t = new BTree<number, number>([[1, 1]], cmp)
     const before = t.toArray()
     expect(() =>
-      t.setPairs([
+      t.setAll([
         [1, 1],
         [13, 13]
       ])
     ).toThrow(TypeError)
     expect(t.size).toBe(1)
     expect(t.toArray()).toEqual(before)
-    expect(() => t.deleteKeys([1, 13])).toThrow(TypeError)
+    expect(() => t.removeAll([1, 13])).toThrow(TypeError)
     expect(t.toArray()).toEqual(before)
     for (let i = 0; i < 10; i++) t.set(i, i)
     const snap = t.toArray()
     expect(() =>
-      t.editRange(0, 100, true, (k) => {
-        if (k === 5) throw new Error('x')
-        return { value: 0 }
-      })
+      t.updateRange(
+        0,
+        100,
+        (k) => {
+          if (k === 5) throw new Error('x')
+          return { replace: 0 }
+        },
+        { inclusiveEnd: true }
+      )
     ).toThrow('x')
     expect(t.toArray()).toEqual(snap)
     expect(() => new SortedSet([1, Number.NaN], (a, b) => a - b)).toThrow(TypeError)
@@ -644,7 +663,7 @@ describe('BTree', () => {
     calls = 0
     const t = new BTree(sorted, cmp)
     expect(calls).toBe(9_999)
-    t.__checkValid()
+    t.assertInvariants()
     expect(t.height).toBe(2)
     const u = new BTree([
       [2, 'a'],
@@ -657,7 +676,7 @@ describe('BTree', () => {
     ])
     const empty = new BTree<number, string>()
     expect(
-      empty.setPairs([
+      empty.setAll([
         [2, 'a'],
         [1, 'x'],
         [2, 'b']
@@ -684,11 +703,11 @@ describe('BTree', () => {
       return seed
     }
     for (const reverse of [false, true]) {
-      const t = new BTree<number, number>(undefined, undefined, 4)
+      const t = new BTree<number, number>(undefined, undefined, { nodeCapacity: 8 })
       for (let i = 0; i < 100; i++) t.set(i, i)
       const seen = new Set<number>()
       let last: number | undefined
-      const iter = reverse ? t.entriesReversed() : t.entries()
+      const iter = reverse ? t.entriesDescending() : t.entries()
       for (const [k] of iter) {
         expect(seen.has(k)).toBe(false)
         seen.add(k)
@@ -702,7 +721,7 @@ describe('BTree', () => {
         else if (op === 1) t.delete(rnd() % 200)
         else if (op === 2) t.clear()
       }
-      t.__checkValid()
+      t.assertInvariants()
     }
   })
 
@@ -713,10 +732,10 @@ describe('BTree', () => {
       [3, 3]
     ])
     t.freeze()
-    expect(t.forRange(1, 3, true)).toBe(3)
+    expect(t.visitRange(1, 3, () => undefined, { inclusiveEnd: true })).toBe(3)
     expect([...t.entries()].map(([k]) => k)).toEqual([1, 2, 3])
     expect(t.at(1)).toEqual([2, 2])
-    expect(t.getRange(1, 3, true)).toEqual([
+    expect(t.entriesBetween(1, 3, { inclusiveEnd: true })).toEqual([
       [1, 1],
       [2, 2],
       [3, 3]
@@ -728,10 +747,10 @@ describe('BTree', () => {
       id: number
       tag?: string
     }
-    const t = new BTree<K, string>(undefined, (a, b) => a.id - b.id, 4)
+    const t = new BTree<K, string>(undefined, (a, b) => a.id - b.id, { nodeCapacity: 8 })
     for (let id = 0; id < 20; id++) t.set({ id }, 'v')
     t.set({ id: 3, tag: 'new' }, 'x')
-    t.__checkValid()
+    t.assertInvariants()
     expect([...t.keys()][3]?.tag).toBe('new')
   })
 })

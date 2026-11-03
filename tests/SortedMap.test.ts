@@ -93,17 +93,17 @@ describe('SortedMap', () => {
     expect(m.has(1)).toBe(false)
   })
 
-  it('SPEC-R78 entriesReversed yields descending keys', () => {
+  it('SPEC-R78 entriesDescending yields descending keys', () => {
     const m = new SortedMap<number, number>()
     const expected: [number, number][] = []
     for (let i = 100; i > 0; i--) {
       m.set(i, i)
       expected.push([i, i])
     }
-    expect([...m.entriesReversed()]).toEqual(expected)
+    expect([...m.entriesDescending()]).toEqual(expected)
   })
 
-  it('SPEC-R78 freeze blocks mutators and unfreeze restores', () => {
+  it('SPEC-R78 freeze blocks mutators permanently', () => {
     const m = new SortedMap<number, number>()
     for (let i = 10; i > 0; i--) m.set(i, i)
     m.freeze()
@@ -115,19 +115,13 @@ describe('SortedMap', () => {
     }).toThrow('BTree is frozen')
     expect(m.has(1)).toBe(true)
     expect(m.get(1)).toBe(1)
-    m.unfreeze()
-    m.set(11, 11)
-    expect(m.get(11)).toBe(11)
-    expect(m.size).toBe(11)
+    expect(() => m.set(11, 11)).toThrow('BTree is frozen')
   })
 
   it('SPEC-R78 freeze without prior sets still blocks set', () => {
     const m = new SortedMap<number, string>()
     m.freeze()
     expect(() => m.set(1, 'a')).toThrow('BTree is frozen')
-    m.unfreeze()
-    m.set(1, 'a')
-    expect(m.get(1)).toBe('a')
   })
 
   it('SPEC-R78 differential vs Map + sort over 20000 ops', () => {
@@ -169,13 +163,13 @@ describe('SortedMap', () => {
     expect(sorted.size).toBe(ref.size)
   })
 
-  it('SPEC-R78 undefined key appears in entriesReversed and toArray-style iteration', () => {
+  it('SPEC-R78 undefined key appears in entriesDescending and toArray-style iteration', () => {
     const m = new SortedMap<number | undefined, string>()
     m.set(1, 'a').set(undefined, 'u').set(0, 'z')
     const forward = [...m.entries()]
     expect(forward).toHaveLength(3)
-    expect([...m.entriesReversed()]).toEqual([...forward].reverse())
-    expect([...m.entriesReversed()].some(([k, v]) => k === undefined && v === 'u')).toBe(true)
+    expect([...m.entriesDescending()]).toEqual([...forward].reverse())
+    expect([...m.entriesDescending()].some(([k, v]) => k === undefined && v === 'u')).toBe(true)
     expect(m.has(undefined)).toBe(true)
     expect(m.get(undefined)).toBe('u')
     expect(m.max()).toBeUndefined()

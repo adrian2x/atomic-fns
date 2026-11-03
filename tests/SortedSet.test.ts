@@ -88,23 +88,23 @@ describe('SortedSet', () => {
     expect([...s.values()]).toEqual([2, 4, 6, 8, 10])
   })
 
-  it('SPEC-R78 entriesReversed yields descending [value, value] pairs', () => {
+  it('SPEC-R78 entriesDescending yields descending [value, value] pairs', () => {
     const s = new SortedSet([3, 1, 2])
-    expect([...s.entriesReversed()]).toEqual([
+    expect([...s.entriesDescending()]).toEqual([
       [3, 3],
       [2, 2],
       [1, 1]
     ])
-    expect([...new SortedSet<number>().entriesReversed()]).toEqual([])
+    expect([...new SortedSet<number>().entriesDescending()]).toEqual([])
   })
 
-  it('SPEC-R78 entriesReversed includes an undefined value', () => {
+  it('SPEC-R78 entriesDescending includes an undefined value', () => {
     const s = new SortedSet<number | undefined>([1, undefined, 0])
-    expect([...s.entriesReversed()]).toEqual([...s.entries()].reverse())
-    expect([...s.entriesReversed()].some(([v]) => v === undefined)).toBe(true)
+    expect([...s.entriesDescending()]).toEqual([...s.entries()].reverse())
+    expect([...s.entriesDescending()].some(([v]) => v === undefined)).toBe(true)
   })
 
-  it('SPEC-R78 freeze rejects mutators and unfreeze restores them', () => {
+  it('SPEC-R78 freeze rejects mutators permanently', () => {
     const s = new SortedSet([1, 2])
     expect(s.freeze()).toBe(s)
     expect(() => s.add(3)).toThrow(TypeError)
@@ -115,9 +115,6 @@ describe('SortedSet', () => {
     expect([...s]).toEqual([1, 2])
     expect(s.has(1)).toBe(true)
     expect(s.add(2)).toBe(s)
-    expect(s.unfreeze()).toBe(s)
-    s.add(3)
-    expect(s.delete(1)).toBe(true)
-    expect([...s]).toEqual([2, 3])
+    expect(() => s.add(3)).toThrow(TypeError)
   })
 })

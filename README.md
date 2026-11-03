@@ -133,20 +133,24 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 
 ### Renamed
 
-| Before                                                                                                                                  | After                                                                                                                      |
-| --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `contains` (method)                                                                                                                     | `has`                                                                                                                      |
-| method `remove`                                                                                                                         | `delete` (returns boolean)                                                                                                 |
-| Deque `append` / `appendleft` / `popleft` / `get` / `first` / `reversed`                                                                | `push` / `unshift` / `shift` / `at` / `at(0)` / `toReversed`                                                               |
-| Heap `add` / `top`                                                                                                                      | `push` / `peek`                                                                                                            |
-| BTree `removeRange` / `removeKeys` / `rangeUpdate` / `rangeForEach` / `keysRange` / `extend` / `reversed` / `lowerBound` / `upperBound` | `deleteRange` / `deleteKeys` / `editRange` / `forRange` / `getRange` / `setPairs` / `entriesReversed` / `higher` / `lower` |
-| SplayTree `lowerBound`                                                                                                                  | `lower`                                                                                                                    |
-| SortedMap `reversed`                                                                                                                    | `entriesReversed`                                                                                                          |
-| type `Function`                                                                                                                         | `AnyFunction`                                                                                                              |
+| Before                                                                                                                                          | After                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contains` (method)                                                                                                                             | `has`                                                                                                                                                                     |
+| method `remove`                                                                                                                                 | `delete` (returns boolean)                                                                                                                                                |
+| Deque `append` / `appendleft` / `popleft` / `get` / `first` / `reversed`                                                                        | `push` / `unshift` / `shift` / `at` / `at(0)` / `toReversed`                                                                                                              |
+| Heap `add` / `top`                                                                                                                              | `push` / `peek`                                                                                                                                                           |
+| BTree `removeRange` / `removeKeys` / `rangeUpdate` / `rangeForEach` / `keysRange` / `extend` / `reversed` / `minKey` / `maxKey` / `maxNodeSize` | `removeRange` (options object) / `removeAll` / `updateRange` / `visitRange` / `entriesBetween` / `setAll` / `entriesDescending` / `firstKey` / `lastKey` / `nodeCapacity` |
+| SplayTree `lowerBound`                                                                                                                          | `lower`                                                                                                                                                                   |
+| SortedMap `reversed`                                                                                                                            | `entriesDescending`                                                                                                                                                       |
+| type `Function`                                                                                                                                 | `AnyFunction`                                                                                                                                                             |
 
 ### Added
 
-`protocol`, `adaptProtocol`, `reject`, `without`, `symmetricDifference`, Decimal rounding options, `Duration.format`, `durationField`, Deque `maxlen`, BTree/SortedMap `unfreeze`, `BTree.at` / `SortedMap.at` / `SortedSet.at`, `next(it, dflt)`, debounce `cancel` / `flush`.
+`protocol`, `adaptProtocol`, `reject`, `without`, `symmetricDifference`, Decimal rounding options, `Duration.format`, `durationField`, Deque `maxlen`, `BTree.at` / `SortedMap.at` / `SortedSet.at`, `next(it, dflt)`, debounce `cancel` / `flush`.
+
+### Removed
+
+`unfreeze` on BTree / SortedMap / SortedSet - `freeze` is one-way.
 
 ### Signature and behavior notes
 
@@ -174,7 +178,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 - `words` uses `Intl.Segmenter` word granularity plus Unicode letter/digit, ordinal (`11th`), plural-acronym (`IDs`), and RGI emoji rules; an optional `pattern` is a separator. `camelCase` / `pascalCase` / `snakeCase` / `kebabCase` strip apostrophes and uppercase with `toUpperCase` (so `pascalCase('ǆemal')` is `Ǆemal`). `titleCase` only title-cases the first letter of each word (rest unchanged). `capitalize` uses Unicode titlecase for digraphs (`ǆ` -> `ǅ`). `removeAccents` / `slugify` fold Latin ligatures, strip marks only from Latin letters, return NFC; non-Latin text is unchanged.
 - `throttle` uses Lodash leading+trailing defaults (latest args at window end). `throttle(fn, 0)` is leading plus one trailing per macrotask. `memoize` exposes `.cache` and `.clear()`.
 - `compare` fast-paths same-type non-NaN numbers and strings; total order unchanged.
-- `BTree` is a copy-on-write order-statistic B+ tree: `clone()` is O(1) until either side writes; a non-finite comparator result throws `TypeError('comparator must return a finite number')` and leaves the tree unchanged; `setPairs` / `deleteKeys` / `deleteRange` / `editRange` are atomic; iteration under mutation never repeats a key and always terminates; `at(index)` is O(log n) with Array.prototype.at index rules. Numeric subtraction comparators reject `Infinity` / `NaN` keys (those differences are not finite) - use the default `compare` when those keys matter.
+- `BTree` is a copy-on-write order-statistic B+ tree: `clone()` is O(1) until either side writes; a non-finite comparator result throws `TypeError('comparator must return a finite number')` and leaves the tree unchanged; `setAll` / `removeAll` / `removeRange` / `updateRange` are atomic; iteration under mutation never repeats a key and always terminates; `at(index)` is O(log n) with Array.prototype.at index rules; `nodeCapacity` is an integer in 8..1024 (default 64, else `RangeError`); `freeze()` is one-way. Numeric subtraction comparators reject `Infinity` / `NaN` keys (those differences are not finite) - use the default `compare` when those keys matter.
 
 ### Platform
 

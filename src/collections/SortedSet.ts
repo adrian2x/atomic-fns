@@ -60,14 +60,14 @@ export class SortedSet<T> extends ValueCollection<T> {
    * Smallest value, or `undefined` when empty.
    */
   min(): T | undefined {
-    return this.#tree.minKey()
+    return this.#tree.firstKey()
   }
 
   /**
    * Largest value, or `undefined` when empty.
    */
   max(): T | undefined {
-    return this.#tree.maxKey()
+    return this.#tree.lastKey()
   }
 
   values(): IteratorObject<T> {
@@ -75,25 +75,17 @@ export class SortedSet<T> extends ValueCollection<T> {
   }
 
   /**
-   * Values in descending order.
+   * Values in descending order as `[value, value]` pairs.
    */
-  entriesReversed(): IteratorObject<[T, T]> {
-    return this.#tree.entriesReversed().map(([k]): [T, T] => [k, k])
+  entriesDescending(): IteratorObject<[T, T]> {
+    return this.#tree.entriesDescending().map(([k]): [T, T] => [k, k])
   }
 
   /**
-   * Reject mutators until {@link unfreeze}.
+   * Reject further mutators permanently (like `Object.freeze`).
    */
   freeze(): this {
     this.#tree.freeze()
-    return this
-  }
-
-  /**
-   * Clear the frozen flag set by {@link freeze}.
-   */
-  unfreeze(): this {
-    this.#tree.unfreeze()
     return this
   }
 

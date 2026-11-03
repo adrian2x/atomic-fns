@@ -58,7 +58,7 @@ export function createBenchCases(): BenchCase[] {
     {
       name: '1e5 sequential set with counts',
       run: () => {
-        const t = new BTree<number, number>(undefined, numeric, 64)
+        const t = new BTree<number, number>(undefined, numeric, { nodeCapacity: 64 })
         for (let i = 0; i < N; i++) t.set(i, i)
       }
     }
