@@ -7,7 +7,14 @@
 import { get, isIterable, isObject, keys, ValueError } from '../globals/index.js'
 import { isCompactEmpty } from '../internal/compactEmpty.js'
 import { arrayFromIterable } from '../internal/iterable.js'
-import { assertNestingDepth, enterNesting, exitNesting, guardNesting } from '../internal/nesting.js'
+import {
+  assertNestingDepth,
+  enterNesting,
+  exitNesting,
+  guardNesting,
+  guardVisitBudget,
+  visitNode
+} from '../internal/nesting.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, deepEqual, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
@@ -216,7 +223,7 @@ export function matches(shape: unknown): (obj: unknown) => boolean {
     return () => false
   }
   return function (obj) {
-    return guardNesting(() => matchDeep(shape, obj, true, 1))
+    return guardVisitBudget(() => guardNesting(() => matchDeep(shape, obj, true, 1)))
   }
 }
 
@@ -224,6 +231,7 @@ function matchDeep(shape: unknown, obj: unknown, top: boolean, depth: number): b
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
   enterNesting()
   try {
+    visitNode()
     assertNestingDepth(depth)
     if (Array.isArray(shape)) {
       if (shape.length === 0) return top || Array.isArray(obj)
@@ -402,16 +410,18 @@ flatten({
 export function flatten<T>(arr: T[], depth?: boolean | number): T[]
 export function flatten(arr: object, depth?: boolean | number): object
 export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] | object {
-  return guardNesting(() => {
-    if (Array.isArray(arr)) {
-      const items = arr as T[]
-      const d = depth === true ? Infinity : Number(depth)
-      if (!(d > 0)) return items.slice()
-      return flattenArray(items, d)
-    }
-    if (isObject(arr)) return flattenObj(arr)
-    return arr
-  })
+  return guardVisitBudget(() =>
+    guardNesting(() => {
+      if (Array.isArray(arr)) {
+        const items = arr as T[]
+        const d = depth === true ? Infinity : Number(depth)
+        if (!(d > 0)) return items.slice()
+        return flattenArray(items, d)
+      }
+      if (isObject(arr)) return flattenObj(arr)
+      return arr
+    })
+  )
 }
 
 function flattenArray<T>(arr: T[], depth: number): T[] {
@@ -457,6 +467,7 @@ function flattenObj(
   if (typeof obj === 'object' && obj !== null) {
     enterNesting()
     try {
+      visitNode()
       assertNestingDepth(nesting)
       if (seen.has(obj)) throw new ValueError('cyclic structure')
       if (!isPlainObject(obj) && !Array.isArray(obj)) {

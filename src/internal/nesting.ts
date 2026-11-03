@@ -1,6 +1,9 @@
 /** Max structural nesting for deepEqual, clone, merge, matches, flatten, omit, and related walks. */
 export const MAX_NESTING_DEPTH = 1000
 
+/** Max nodes visited per top-level merge / matches / flatten call (shared-reference DAG bound). */
+export const MAX_VISITED_NODES = 1_000_000
+
 /**
  * Levels charged per nested collection hop (dispatch + hook body together).
  * Chosen so a 1500-deep collection walk hits this cap while >= 40% of the native stack remains
@@ -13,9 +16,13 @@ export const HOOK_NESTING_COST = 8
 const HOOK_NESTING_HALF = HOOK_NESTING_COST / 2
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
+const VISIT_ERROR = 'input exceeds 1000000 nodes'
 
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
 let currentDepth = 0
+
+let visitCount = 0
+let visitGuardDepth = 0
 
 /**
  * Enter `cost` nesting levels (default 1). Throws `RangeError` past {@link MAX_NESTING_DEPTH}.
@@ -86,4 +93,29 @@ export function assertNestingDepth(depth: number): void {
 /** Current shared nesting depth (0 when no walk is active). */
 export function getNestingDepth(): number {
   return currentDepth
+}
+
+/**
+ * Run `fn` under a fresh visited-node budget of {@link MAX_VISITED_NODES}.
+ * Re-entrant calls share the outer budget. Exceeding it throws
+ * `RangeError('input exceeds 1000000 nodes')`.
+ */
+export function guardVisitBudget<T>(fn: () => T): T {
+  if (visitGuardDepth === 0) visitCount = 0
+  visitGuardDepth++
+  try {
+    return fn()
+  } finally {
+    visitGuardDepth--
+    if (visitGuardDepth === 0) visitCount = 0
+  }
+}
+
+/** Count one visited node against the active {@link guardVisitBudget} (no-op outside a guard). */
+export function visitNode(): void {
+  if (visitGuardDepth === 0) return
+  visitCount++
+  if (visitCount > MAX_VISITED_NODES) {
+    throw new RangeError(VISIT_ERROR)
+  }
 }

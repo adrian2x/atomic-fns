@@ -9,6 +9,9 @@ import { hasMethod, protocol } from './protocol.js'
 /** Pairs `(a, b)` currently being compared on the active path, keyed by `a`. */
 type Pending = WeakMap<object, Set<object>>
 
+/** Pairs already proven equal within one top-level `deepEqual` call. */
+type Proven = WeakMap<object, WeakSet<object>>
+
 const BOXED_PRIMITIVES = [Number, String, Boolean, BigInt, Symbol] as const
 const NOT_BOXED = Symbol('not boxed')
 
@@ -42,7 +45,20 @@ function bytesEqual(a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBuff
   return ua.length === ub.length && ua.every((byte, i) => byte === ub[i])
 }
 
-function deepEqualInner(a: unknown, b: unknown, pending: Pending): boolean {
+function rememberProven(proven: Proven, a: object, b: object): void {
+  let set = proven.get(a)
+  if (set === undefined) {
+    set = new WeakSet()
+    proven.set(a, set)
+  }
+  set.add(b)
+}
+
+function isProven(proven: Proven, a: object, b: object): boolean {
+  return proven.get(a)?.has(b) === true || proven.get(b)?.has(a) === true
+}
+
+function deepEqualInner(a: unknown, b: unknown, pending: Pending, proven: Proven): boolean {
   if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) {
     // Half of HOOK_NESTING_COST at dispatch; collection hooks charge the other half in-method.
     return withHookNesting(() => eq(a, b))
@@ -58,6 +74,8 @@ function deepEqualInner(a: unknown, b: unknown, pending: Pending): boolean {
     const boxed = unboxed(a)
     if (boxed !== NOT_BOXED) return Object.is(boxed, unboxed(b))
 
+    if (isProven(proven, a, b)) return true
+
     // A pair on the current path is treated as equal. The pair is removed again after its
     // children are compared, so a shared sub-object may be paired with different partners.
     let partners = pending.get(a)
@@ -68,7 +86,9 @@ function deepEqualInner(a: unknown, b: unknown, pending: Pending): boolean {
     }
     partners.add(b)
     try {
-      return deepEqualChildren(a, b, pending)
+      const equal = deepEqualChildren(a, b, pending, proven)
+      if (equal) rememberProven(proven, a, b)
+      return equal
     } finally {
       partners.delete(b)
     }
@@ -77,7 +97,7 @@ function deepEqualInner(a: unknown, b: unknown, pending: Pending): boolean {
   }
 }
 
-function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
+function deepEqualChildren(a: object, b: object, pending: Pending, proven: Proven): boolean {
   if (a instanceof Date) {
     return a.getTime() === (b as Date).getTime()
   }
@@ -92,7 +112,7 @@ function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
     if (a.size !== mb.size) return false
     for (const [k, v] of a) {
       if (!mb.has(k)) return false
-      if (!deepEqualInner(v, mb.get(k), pending)) return false
+      if (!deepEqualInner(v, mb.get(k), pending, proven)) return false
     }
     return true
   }
@@ -108,7 +128,7 @@ function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
     const bb = b as unknown[]
     if (a.length !== bb.length) return false
     for (let i = 0; i < a.length; i++) {
-      if (!deepEqualInner(a[i], bb[i], pending)) return false
+      if (!deepEqualInner(a[i], bb[i], pending, proven)) return false
     }
     return true
   }
@@ -119,7 +139,12 @@ function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
   for (const k of keysA) {
     if (!Object.hasOwn(b, k)) return false
     if (
-      !deepEqualInner((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], pending)
+      !deepEqualInner(
+        (a as Record<string, unknown>)[k],
+        (b as Record<string, unknown>)[k],
+        pending,
+        proven
+      )
     ) {
       return false
     }
@@ -132,12 +157,13 @@ function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
  * Dispatches to `protocol.equals` when either side defines it. Boxed primitives compare by
  * `Object.is` on their primitive value. Nesting past 1000 levels throws `RangeError` (the cap
  * is a security bound, not an implementation limit). A pair already under comparison on the
- * current path is treated as equal. Collection equality hooks re-enter this function and
- * continue the same nesting count. Nesting is counted only for object pairs (after primitive
- * checks), so a 1000-deep structure ending in a primitive is accepted.
+ * current path is treated as equal. Pairs proven equal are memoized for the rest of the
+ * top-level call so shared-reference DAGs stay linear. Collection equality hooks re-enter this
+ * function and continue the same nesting count. Nesting is counted only for object pairs (after
+ * primitive checks), so a 1000-deep structure ending in a primitive is accepted.
  */
 export function deepEqual(a: unknown, b: unknown): boolean {
-  return guardNesting(() => deepEqualInner(a, b, new WeakMap()))
+  return guardNesting(() => deepEqualInner(a, b, new WeakMap(), new WeakMap()))
 }
 
 /**

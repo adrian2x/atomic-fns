@@ -7,6 +7,8 @@ import {
   enterNesting,
   exitNesting,
   guardNesting,
+  guardVisitBudget,
+  visitNode,
   withHookNesting
 } from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
@@ -82,6 +84,7 @@ function mergeKey(
 function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: number): void {
   enterNesting()
   try {
+    visitNode()
     assertNestingDepth(depth)
     if (t === Object.prototype || t === Function.prototype) return
     for (const key of Object.keys(s)) {
@@ -102,24 +105,27 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: n
  * Writes via defineProperty. Skips undefined source values when the target already has a defined value.
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
- * Nesting deeper than 1000 levels throws `RangeError`; on throw, `target` may already hold a
- * partial merge of earlier keys at shallower levels.
+ * Nesting deeper than 1000 levels throws `RangeError`. Visiting more than 1000000 nodes
+ * (shared-reference DAGs) throws `RangeError('input exceeds 1000000 nodes')`. On either throw,
+ * `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.
  * @returns `target`
  */
 export function merge<T extends object>(target: T, ...sources: (object | null | undefined)[]): T {
-  return guardNesting(() => {
-    const dest: unknown = target
-    if (dest === null || typeof dest !== 'object') {
-      throw new TypeError('merge target must be an object')
-    }
-    const seen = new WeakMap<object, object>()
-    for (const s of sources) {
-      if (s != null) mergeInto(target, s, seen, 1)
-    }
-    return target
-  })
+  return guardVisitBudget(() =>
+    guardNesting(() => {
+      const dest: unknown = target
+      if (dest === null || typeof dest !== 'object') {
+        throw new TypeError('merge target must be an object')
+      }
+      const seen = new WeakMap<object, object>()
+      for (const s of sources) {
+        if (s != null) mergeInto(target, s, seen, 1)
+      }
+      return target
+    })
+  )
 }
 
 const MISSING = Symbol('MISSING')
