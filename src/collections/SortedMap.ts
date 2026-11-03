@@ -1,147 +1,104 @@
-import { LegacyMapping } from './abc.js'
-import { SplayTree } from './SplayTree.js'
+import type { Comparer } from '../operators/index.js'
+import { MapCollection } from './abc.js'
+import { BTree } from './BTree.js'
 
 /**
- * A `SortedMap` is a map that holds key value pairs ordered by keys. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as keys or values.
- * @see {@link operators.compare}
- * @see {@link operators.lt}
+ * Map whose keys stay ordered by {@link compare} (or a supplied comparator).
+ * Backed by {@link BTree}. `set` on an existing key replaces the value and the stored key object.
+ *
  * @template K, V
  */
-export class SortedMap<K, V> extends LegacyMapping<K, V> {
-  private readonly store: SplayTree<K, V>
+export class SortedMap<K, V> extends MapCollection<K, V> {
+  readonly #tree: BTree<K, V>
 
   /**
-   * Creates a new `SortedMap` object.
-   * @param {Iterable<[K, V]>} [iterable] Initialize the map with entries.
-   * @param {Comparer} [compareFn] The `compare` function to sort keys.
+   * @param entries Initial key-value pairs.
+   * @param compareFn Key comparator. Defaults to {@link compare}.
    */
-  constructor(iterable?: Iterable<[K, V]>, compareFn?) {
+  constructor(entries?: Iterable<[K, V]>, compareFn?: Comparer<K>) {
     super()
-    this.store = new SplayTree(compareFn)
-    if (iterable) {
-      for (const pair of iterable) {
-        this.store.set(pair[0], pair[1] ?? (null as V))
-      }
-    }
+    this.#tree = new BTree(entries, compareFn)
   }
 
-  /**
-   * Adds a new `key` with a `null` value, if the `key` doesn't exist.
-   * @param {K} key
-   * @returns {this} Returns the Map object.
-   */
-  add(key: K): this {
-    this.store.set(key, null as V)
-    return this
+  get size(): number {
+    return this.#tree.size
   }
 
-  /**
-   * Returns the value associated with the `key` or `undefined`.
-   * @param {K} key
-   * @returns {?V} The key value or `undefined`.
-   */
+  get [Symbol.toStringTag](): string {
+    return 'SortedMap'
+  }
+
   get(key: K): V | undefined {
-    return this.store.get(key)
+    return this.#tree.get(key)
   }
 
   /**
-   * Sets the value for the given `key`.
-   * @param {K} key
-   * @param {V} value
-   * @returns {this} Returns the Map object.
+   * Insert or overwrite `key`. Replaces the stored key object as well as the value.
+   * @returns `this`
    */
   set(key: K, value: V): this {
-    this.store.set(key, value)
+    this.#tree.set(key, value)
+    return this
+  }
+
+  has(key: K): boolean {
+    return this.#tree.has(key)
+  }
+
+  delete(key: K): boolean {
+    return this.#tree.delete(key)
+  }
+
+  clear(): void {
+    this.#tree.clear()
+  }
+
+  /**
+   * Smallest key, or `undefined` when empty.
+   */
+  min(): K | undefined {
+    return this.#tree.minKey()
+  }
+
+  /**
+   * Largest key, or `undefined` when empty.
+   */
+  max(): K | undefined {
+    return this.#tree.maxKey()
+  }
+
+  /**
+   * Entries in reverse key order.
+   */
+  entriesReversed(): IteratorObject<[K, V]> {
+    return this.#tree.entriesReversed()
+  }
+
+  /**
+   * Reject mutators until {@link unfreeze}.
+   */
+  freeze(): this {
+    this.#tree.freeze()
     return this
   }
 
   /**
-   * Returns the smallest key in the tree.
-   * @returns {?K}
+   * Clear the frozen flag set by {@link freeze}.
    */
-  min(): K | undefined {
-    return this.store.min()
+  unfreeze(): this {
+    this.#tree.unfreeze()
+    return this
   }
 
-  /**
-   * Returns the largest key in the tree.
-   * @returns {?K}
-   */
-  max(): K | undefined {
-    return this.store.max()
+  keys(): IteratorObject<K> {
+    return this.#tree.keys()
   }
 
-  /**
-   * Returns `true` if the `key` existed in the map and was removed.
-   * @param {K} key
-   * @returns {boolean} `true` if key was removed, otherwise `false`.
-   */
-  delete(item: K): boolean {
-    return this.store.delete(item)
+  values(): IteratorObject<V> {
+    return this.#tree.values()
   }
 
-  /**
-   * Removes all key/value pairs in the tree.
-   */
-  clear(): void {
-    return this.store.clear()
-  }
-
-  /**
-   * Returns the total key/value pairs in the tree.
-   * @returns {number}
-   */
-  get size(): number {
-    return this.store.size
-  }
-
-  /**
-   * Check if there are no key/value pairs in the tree.
-   * @returns {boolean} `true` if is empty.
-   */
-  empty(): boolean {
-    return this.store.size === 0
-  }
-
-  /**
-   * Returns `true` if the `key` exists in the map.
-   * @param {K} key
-   * @returns {boolean} `true` if key is found, otherwise `false`.
-   */
-  contains(key: K): boolean {
-    return this.store.has(key)
-  }
-
-  /**
-   * Returns `true` if the `key` exists in the map.
-   * @param {K} key
-   * @returns {boolean} `true` if key is found, otherwise `false`.
-   */
-  has(key: K): boolean {
-    return this.store.has(key)
-  }
-
-  /**
-   * Returns a new iterator of all **ordered** keys in the map.
-   * @returns {Iterable<K>}
-   */
-  keys(): Iterable<K> {
-    return this.store.keys()
-  }
-
-  /**
-   * Returns a new iterator of all values **ordered** by their keys.
-   * @returns {Iterable<V>}
-   */
-  values(): Iterable<V> {
-    return this.store.values()
-  }
-
-  /**
-   * Returns a new iterator of all key value pairs **ordered** by their keys.
-   * @returns {Iterable<[K, V]>}
-   */
-  entries(): Iterable<[K, V]> {
-    return this.store.entries()
+  entries(): IteratorObject<[K, V]> {
+    return this.#tree.entries()
   }
 }

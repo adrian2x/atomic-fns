@@ -31,8 +31,8 @@ export * from './Heap.js'
 export * from './LRUCache.js'
 export * from './SortedMap.js'
 export * from './SortedSet.js'
-export * from './SortedTree.js'
 export * from './SplayTree.js'
+
 export * from './Trie.js'
 export {
   defineData,

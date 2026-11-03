@@ -1,110 +1,72 @@
-import { LegacyCollection } from './abc.js'
-import { SplayTree } from './SplayTree.js'
+import type { Comparer } from '../operators/index.js'
+import { SetCollection } from './abc.js'
+import { BTree } from './BTree.js'
 
 /**
- * A `SortedSet` is a set that holds values in order. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as values.
- * @see {@link Comparable}
- * @see {@link Ordered}
- * @template K, V
+ * Set whose values stay ordered by {@link compare} (or a supplied comparator).
+ * Backed by {@link BTree}. `add` of an existing value is a no-op.
+ *
+ * @template T
  */
-export class SortedSet<T> extends LegacyCollection {
-  private readonly store: SplayTree<T, true>
+export class SortedSet<T> extends SetCollection<T> {
+  readonly #tree: BTree<T, true>
+
   /**
-   * Creates a new `SortedSet` object.
-   * @param {Iterable<T>} [iterable] Initialize the set with entries.
-   * @param {Comparer} [compareFn] The `compare` function to sort keys.
+   * @param values Initial values.
+   * @param compareFn Value comparator. Defaults to {@link compare}.
    */
-  constructor(iterable?: Iterable<T>, compareFn?) {
+  constructor(values?: Iterable<T>, compareFn?: Comparer<T>) {
     super()
-    this.store = new SplayTree(compareFn)
-    if (iterable) {
-      for (const key of iterable) {
-        this.store.set(key, true)
-      }
+    this.#tree = new BTree<T, true>(undefined, compareFn)
+    if (values) {
+      for (const x of values) this.add(x)
     }
   }
 
+  get size(): number {
+    return this.#tree.size
+  }
+
+  get [Symbol.toStringTag](): string {
+    return 'SortedSet'
+  }
+
   /**
-   * Inserts a new value in order in the `Set`, if the value doesn't exist.
-   * @param {T} value
-   * @returns {this} Returns the Set object.
+   * Insert `value` if absent. Existing values are left unchanged.
+   * @returns `this`
    */
   add(value: T): this {
-    this.store.set(value, true)
+    if (!this.#tree.has(value)) this.#tree.set(value, true)
     return this
   }
 
+  has(value: T): boolean {
+    return this.#tree.has(value)
+  }
+
+  delete(value: T): boolean {
+    return this.#tree.delete(value)
+  }
+
+  clear(): void {
+    this.#tree.clear()
+  }
+
   /**
-   * Returns the smallest value in the set.
-   * @returns {?T}
+   * Smallest value, or `undefined` when empty.
    */
   min(): T | undefined {
-    return this.store.min()
+    return this.#tree.minKey()
   }
 
   /**
-   * Returns the largest value in the set.
-   * @returns {?T}
+   * Largest value, or `undefined` when empty.
    */
   max(): T | undefined {
-    return this.store.max()
+    return this.#tree.maxKey()
   }
 
-  /**
-   * Removes the value from the set and returns `true` if the value was found and removed.
-   * @param {T} value
-   * @returns {boolean} `true` if the value was found and removed.
-   */
-  delete(value: T): boolean {
-    return this.store.delete(value)
-  }
-
-  /**
-   * Removes all values in the set.
-   */
-  clear(): void {
-    return this.store.clear()
-  }
-
-  /**
-   * Returns the total number of elements in the set.
-   * @returns {number}
-   */
-  get size(): number {
-    return this.store.size
-  }
-
-  /**
-   * Check if there are no values in the set.
-   * @returns {boolean} `true` if is empty.
-   */
-  empty(): boolean {
-    return this.store.size === 0
-  }
-
-  /**
-   * Returns `true` if the `value` exists.
-   * @param {T} value
-   * @returns {boolean} `true` if value is found, otherwise `false`.
-   */
-  contains(value: T): boolean {
-    return this.store.has(value)
-  }
-
-  /**
-   * Returns `true` if the `value` exists.
-   * @param {T} value
-   * @returns {boolean} `true` if value is found, otherwise `false`.
-   */
-  has(value: T): boolean {
-    return this.store.has(value)
-  }
-
-  /**
-   * Returns a new iterator of all values **in-order**.
-   * @returns {Iterable<T>}
-   */
-  values(): Iterable<T> {
-    return this.store.keys()
+  values(): IteratorObject<T> {
+    return this.#tree.keys()
   }
 }

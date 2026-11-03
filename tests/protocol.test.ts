@@ -3,6 +3,8 @@ import { BTree } from '../src/collections/BTree.js'
 import { FrozenSet } from '../src/collections/frozenset.js'
 import { Heap } from '../src/collections/Heap.js'
 import { LRUCache } from '../src/collections/LRUCache.js'
+import { SortedMap } from '../src/collections/SortedMap.js'
+import { SortedSet } from '../src/collections/SortedSet.js'
 import { SplayTree } from '../src/collections/SplayTree.js'
 import { Trie } from '../src/collections/Trie.js'
 
@@ -65,6 +67,17 @@ const migrated: Migrated[] = [
     name: 'BTree',
     create: () => new BTree<number, string>().set(1, 'a').set(2, 'b'),
     sample: 1
+  },
+  {
+    name: 'SortedMap',
+    create: () => new SortedMap<number, string>().set(1, 'a').set(2, 'b'),
+    sample: 1
+  },
+  {
+    name: 'SortedSet',
+    create: () => new SortedSet([1, 2]),
+    sample: 1,
+    skipOld: ['add']
   }
 ]
 
@@ -121,13 +134,21 @@ describe('SPEC-R75 collection protocol (M8 classes)', () => {
     expect([...out].sort()).toEqual([1, 2])
   })
 
+  it('SPEC-R75 SortedSet.union with Set interoperates', () => {
+    const out = new Set([1]).union(new SortedSet([2]))
+    expect([...out].sort()).toEqual([1, 2])
+  })
+
   it('SPEC-R75 Collection Mapping Sequence not exported from collections', async () => {
     const mod = await import('../src/collections/index.js')
     expect('Collection' in mod).toBe(false)
     expect('Sequence' in mod).toBe(false)
     expect('Mapping' in mod).toBe(false)
     expect('LegacyCollection' in mod).toBe(false)
+    expect('SortedTree' in mod).toBe(false)
     expect('SetCollection' in mod).toBe(true)
     expect('MapCollection' in mod).toBe(true)
+    expect('SortedMap' in mod).toBe(true)
+    expect('SortedSet' in mod).toBe(true)
   })
 })
