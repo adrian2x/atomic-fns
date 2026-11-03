@@ -101,6 +101,34 @@ describe('R12-E sparse-safe array walker', () => {
     }
   })
 
+  it('R13-C: moderate sparse arrays are not rejected by absolute length', () => {
+    const user = { id: 1 }
+    const byId: unknown[] = []
+    byId[2000] = user
+    const mapped = map(byId, (x) => x)
+    expect(mapped).toHaveLength(2001)
+    expect(mapped[2000]).toBe(user)
+    expect(0 in mapped).toBe(false)
+    const listed = list(new Array(1025))
+    expect(listed).toHaveLength(1025)
+    expect(Object.keys(listed)).toEqual([])
+    const ordered = sorted(byId as { id: number }[])
+    expect(ordered).toContain(user)
+    expect(ordered.filter((x) => x === user)).toHaveLength(1)
+  })
+
+  it('R13-C: length 2**24+1 with 1 element is huge-sparse; 2**20 dense is not', () => {
+    const sparse: unknown[] = []
+    sparse.length = 2 ** 24 + 1
+    sparse[0] = 'x'
+    expect(isHugeSparse(sparse)).toBe(true)
+    expect(() => map(sparse, (x) => x)).toThrow('sparse array too large')
+
+    const dense = Array.from({ length: 2 ** 20 }, (_, i) => i)
+    expect(isHugeSparse(dense)).toBe(false)
+    expect(() => map(dense, (x) => x)).not.toThrow()
+  })
+
   it('small sparse preserves hole vs undefined for indexOf/filter/uniq', () => {
     const holes: unknown[] = [1]
     holes.length = 3

@@ -85,14 +85,18 @@ export function arrayOwnIndices(arr: unknown[]): string[] {
   return out
 }
 
+/** Absolute length below which per-index consumers never treat an array as huge-sparse. */
+export const HUGE_SPARSE_MIN_LENGTH = 2 ** 24
+
 /**
- * True when `arr.length` exceeds `2 * ownIndexCount + 1024`, so a dense `0..length` walk would
- * spend most of its time on holes. Dense arrays exit early once own indices prove they cannot
- * qualify (pay only `in` checks, never `Object.keys`).
+ * True when `arr.length` is above {@link HUGE_SPARSE_MIN_LENGTH} and also exceeds
+ * `2 * ownIndexCount + 1024`, so a dense `0..length` walk would spend most of its time on holes.
+ * Below {@link HUGE_SPARSE_MIN_LENGTH}, consumers walk with their existing hole semantics.
+ * Dense arrays exit early once own indices prove they cannot qualify (pay only `in` checks).
  */
 export function isHugeSparse(arr: unknown[]): boolean {
   const len = arr.length
-  if (len <= 1024) return false
+  if (len <= HUGE_SPARSE_MIN_LENGTH) return false
   // own > (len - 1024) / 2  =>  not huge sparse. Exit as soon as that holds.
   const denseOwn = (len - 1024) / 2
   let own = 0
