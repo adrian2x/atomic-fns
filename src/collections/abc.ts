@@ -1,3 +1,4 @@
+import { withHookNesting } from '../internal/nesting.js'
 import { deepEqual, protocol } from '../operators/index.js'
 import { clone } from './object.js'
 
@@ -135,7 +136,7 @@ export abstract class SetCollection<T, K = T> extends BaseCollection implements 
    * Constructor arguments such as comparators are not compared.
    */
   [protocol.equals](other: unknown): boolean {
-    return sameItems(this, other, (c) => c.values())
+    return withHookNesting(() => sameItems(this, other, (c) => c.values()))
   }
 
   /**
@@ -144,8 +145,10 @@ export abstract class SetCollection<T, K = T> extends BaseCollection implements 
    * Subclasses whose constructor needs more than the values override {@link cloneFrom}.
    */
   [protocol.clone](deep = false): this {
-    if (!deep) return this.cloneFrom(this.values())
-    return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
+    return withHookNesting(() => {
+      if (!deep) return this.cloneFrom(this.values())
+      return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
+    })
   }
 
   /**
@@ -198,7 +201,7 @@ export abstract class MapCollection<K, V> extends BaseCollection implements Iter
    * Constructor arguments such as comparators are not compared.
    */
   [protocol.equals](other: unknown): boolean {
-    return sameMapEntries(this, other, (c) => c.entries())
+    return withHookNesting(() => sameMapEntries(this, other, (c) => c.entries()))
   }
 
   /**
@@ -208,8 +211,10 @@ export abstract class MapCollection<K, V> extends BaseCollection implements Iter
    * Subclasses whose constructor needs more than the entries override {@link cloneFrom}.
    */
   [protocol.clone](deep = false): this {
-    if (!deep) return this.cloneFrom(this.entries())
-    return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
+    return withHookNesting(() => {
+      if (!deep) return this.cloneFrom(this.entries())
+      return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
+    })
   }
 
   /**

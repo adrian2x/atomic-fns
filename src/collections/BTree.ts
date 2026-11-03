@@ -1,4 +1,5 @@
 import { arrayFromIterableMap } from '../internal/iterable.js'
+import { withHookNesting } from '../internal/nesting.js'
 import { compare, protocol, type Comparer } from '../operators/index.js'
 import { MapCollection, sameSequenceItems } from './abc.js'
 import { checkInvariants } from './internal.js'
@@ -161,15 +162,17 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   /** Sequence equality: key order is part of meaning. */
   override [protocol.equals](other: unknown): boolean {
-    return sameSequenceItems(this, other, (c) => c.entries())
+    return withHookNesting(() => sameSequenceItems(this, other, (c) => c.entries()))
   }
 
   /**
    * Shallow: O(1) copy-on-write. Deep: new tree with keys by reference and deep-cloned values.
    */
   override [protocol.clone](deep = false): this {
-    if (!deep) return this.clone() as this
-    return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
+    return withHookNesting(() => {
+      if (!deep) return this.clone() as this
+      return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
+    })
   }
 
   clear(): void {

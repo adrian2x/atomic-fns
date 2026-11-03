@@ -1,3 +1,4 @@
+import { withHookNesting } from '../internal/nesting.js'
 import type { Comparer } from '../operators/index.js'
 import { compare, protocol } from '../operators/index.js'
 import { MapCollection, sameSequenceItems } from './abc.js'
@@ -60,7 +61,7 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
 
   /** Sequence equality: key order is part of meaning (like SortedMap). */
   override [protocol.equals](other: unknown): boolean {
-    return sameSequenceItems(this, other, (c) => c.entries())
+    return withHookNesting(() => sameSequenceItems(this, other, (c) => c.entries()))
   }
 
   readonly [Symbol.toStringTag] = 'SplayTree'

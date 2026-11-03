@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BTree,
   clone,
   Deque,
   flatten,
   FrozenSet,
+  Heap,
+  LRUCache,
   matches,
   merge,
   omit,
-  SortedSet
+  SortedMap,
+  SortedSet,
+  SplayTree,
+  Trie
 } from '../src/collections/index.js'
-import { getNestingDepth } from '../src/internal/nesting.js'
+import { getNestingDepth, HOOK_NESTING_COST } from '../src/internal/nesting.js'
 import { deepEqual } from '../src/operators/index.js'
 
 function nestArray(depth: number): unknown {
@@ -21,6 +27,74 @@ function nestObject(depth: number): unknown {
 }
 
 const NESTING_MSG = 'nesting deeper than 1000 levels'
+const DEEP = 1500
+
+function nestDeque(depth: number): Deque<unknown> {
+  let d = new Deque<unknown>([0])
+  for (let i = 1; i < depth; i++) d = new Deque<unknown>([d])
+  return d
+}
+
+function nestSortedSet(depth: number): SortedSet<unknown> {
+  let s = new SortedSet<unknown>([0])
+  for (let i = 1; i < depth; i++) s = new SortedSet<unknown>([s])
+  return s
+}
+
+function nestSortedMap(depth: number): SortedMap<number, unknown> {
+  let m = new SortedMap<number, unknown>([[0, 0]])
+  for (let i = 1; i < depth; i++) m = new SortedMap<number, unknown>([[0, m]])
+  return m
+}
+
+function nestFrozen(depth: number): FrozenSet {
+  let s: FrozenSet = new FrozenSet([0])
+  for (let i = 1; i < depth; i++) s = new FrozenSet([s])
+  return s
+}
+
+/** Comparator ties every item so Heap.equals reaches deepEqual on nested heaps. */
+function nestHeap(depth: number): Heap<unknown> {
+  const cmp = (): number => 0
+  let h = new Heap<unknown>([0], cmp)
+  for (let i = 1; i < depth; i++) h = new Heap<unknown>([h], cmp)
+  return h
+}
+
+function nestLRU(depth: number): LRUCache<number> {
+  let c = new LRUCache<number, unknown>(8)
+  c.set(0, 0)
+  for (let i = 1; i < depth; i++) {
+    const n = new LRUCache<number, unknown>(8)
+    n.set(0, c)
+    c = n
+  }
+  return c
+}
+
+/** Trie cannot hold Tries; nest a Trie at every Deque level so Trie.equals re-enters each hop. */
+function nestTrie(depth: number): Deque<unknown> {
+  let d = new Deque<unknown>([new Trie(['0'])])
+  for (let i = 1; i < depth; i++) d = new Deque([new Trie([String(i)]), d])
+  return d
+}
+
+function nestBTree(depth: number): BTree<number> {
+  let t = new BTree<number, unknown>([[0, 0]])
+  for (let i = 1; i < depth; i++) t = new BTree([[0, t]])
+  return t
+}
+
+function nestSplay(depth: number): SplayTree<number> {
+  let t = new SplayTree<number, unknown>()
+  t.set(0, 0)
+  for (let i = 1; i < depth; i++) {
+    const n = new SplayTree<number, unknown>()
+    n.set(0, t)
+    t = n
+  }
+  return t
+}
 
 describe('MAX_NESTING_DEPTH = 1000', () => {
   it('deepEqual: depth 1000 works, 1001 throws', () => {
@@ -80,29 +154,49 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
     }
   })
 
-  it('nesting depth survives collection hook re-entry', () => {
-    function nestDeque(depth: number): Deque<unknown> {
-      let d = new Deque<unknown>([0])
-      for (let i = 1; i < depth; i++) d = new Deque<unknown>([d])
+  it('collection hook re-entry: every type hits the cap under deepEqual and clone(deep)', () => {
+    expect(HOOK_NESTING_COST).toBe(8)
+
+    // FrozenSet/Trie membership is not structural, so equality nests them inside Deque so the
+    // equals hook still re-enters every level; clone can self-nest FrozenSet values.
+    function nestFrozenEq(depth: number): Deque<unknown> {
+      let d = new Deque<unknown>([new FrozenSet([0])])
+      for (let i = 1; i < depth; i++) d = new Deque([new FrozenSet([i]), d])
       return d
     }
-    function nestFrozen(depth: number): FrozenSet {
-      let s: FrozenSet = new FrozenSet([0])
-      for (let i = 1; i < depth; i++) s = new FrozenSet([s])
-      return s
+
+    const eqNests: [string, (d: number) => unknown][] = [
+      ['Deque', nestDeque],
+      ['SortedSet', nestSortedSet],
+      ['SortedMap', nestSortedMap],
+      ['FrozenSet', nestFrozenEq],
+      ['Heap', nestHeap],
+      ['LRUCache', nestLRU],
+      ['Trie', nestTrie],
+      ['BTree', nestBTree],
+      ['SplayTree', nestSplay]
+    ]
+    const cloneNests: [string, (d: number) => unknown][] = [
+      ['Deque', nestDeque],
+      ['SortedSet', nestSortedSet],
+      ['SortedMap', nestSortedMap],
+      ['FrozenSet', nestFrozen],
+      ['Heap', nestHeap],
+      ['LRUCache', nestLRU],
+      ['Trie', nestTrie],
+      ['BTree', nestBTree],
+      ['SplayTree', nestSplay]
+    ]
+
+    for (const [name, nest] of eqNests) {
+      expect(() => deepEqual(nest(DEEP), nest(DEEP)), `${name} deepEqual`).toThrow(NESTING_MSG)
+      expect(getNestingDepth(), `${name} deepEqual counter`).toBe(0)
     }
-    function nestSortedSet(depth: number): SortedSet<unknown> {
-      let s = new SortedSet<unknown>([0])
-      for (let i = 1; i < depth; i++) s = new SortedSet<unknown>([s])
-      return s
+    for (const [name, nest] of cloneNests) {
+      expect(() => clone(nest(DEEP), true), `${name} clone`).toThrow(NESTING_MSG)
+      expect(getNestingDepth(), `${name} clone counter`).toBe(0)
     }
-    expect(() => deepEqual(nestDeque(1500), nestDeque(1500))).toThrow(NESTING_MSG)
-    expect(getNestingDepth()).toBe(0)
     expect(deepEqual(1, 1)).toBe(true)
-    expect(() => deepEqual(nestSortedSet(1500), nestSortedSet(1500))).toThrow(NESTING_MSG)
-    expect(getNestingDepth()).toBe(0)
-    expect(() => clone(nestFrozen(1500), true)).toThrow(NESTING_MSG)
-    expect(getNestingDepth()).toBe(0)
     expect(deepEqual([1], [1])).toBe(true)
   })
 

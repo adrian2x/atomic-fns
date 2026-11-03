@@ -1,8 +1,10 @@
 import { arrayFromIterableMap } from '../internal/iterable.js'
+import { withHookNesting } from '../internal/nesting.js'
 import type { Comparer } from '../operators/index.js'
 import { protocol } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
 import { BTree } from './BTree.js'
+import { clone } from './object.js'
 
 /**
  * Set whose values stay ordered by {@link compare} (or a supplied comparator).
@@ -39,11 +41,14 @@ export class SortedSet<T> extends ValueCollection<T> {
   }
 
   /**
-   * Deep clone keeps values by reference (they are the comparator keys).
-   * Shallow and deep are therefore the same for element identity.
+   * Deep clone deep-clones values (nested collections must hit the nesting cap). Comparator key
+   * identity for object values follows the cloned value.
    */
-  override [protocol.clone](_deep = false): this {
-    return this.cloneFrom(this.values())
+  override [protocol.clone](deep = false): this {
+    return withHookNesting(() => {
+      if (!deep) return this.cloneFrom(this.values())
+      return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
+    })
   }
 
   readonly [Symbol.toStringTag] = 'SortedSet'

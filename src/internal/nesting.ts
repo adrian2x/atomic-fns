@@ -1,26 +1,50 @@
 /** Max structural nesting for deepEqual, clone, merge, matches, flatten, omit, and related walks. */
 export const MAX_NESTING_DEPTH = 1000
 
+/**
+ * Levels charged per nested collection hop (dispatch + hook body together).
+ * Chosen so a 1500-deep collection walk hits this cap while >= 40% of the native stack remains
+ * free under Node 24.22.2 with and without coverage instrumentation.
+ * Effective self-nested collection limit: {@link MAX_NESTING_DEPTH} / {@link HOOK_NESTING_COST}.
+ */
+export const HOOK_NESTING_COST = 8
+
+/** Half of {@link HOOK_NESTING_COST}: charged at protocol dispatch and again inside the hook. */
+const HOOK_NESTING_HALF = HOOK_NESTING_COST / 2
+
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
 
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
 let currentDepth = 0
 
 /**
- * Enter one nesting level. Throws `RangeError` past {@link MAX_NESTING_DEPTH}.
- * Pair with {@link exitNesting} in a `try`/`finally` at the recursion site (no per-level closure).
+ * Enter `cost` nesting levels (default 1). Throws `RangeError` past {@link MAX_NESTING_DEPTH}.
+ * Pair with {@link exitNesting} using the same `cost` in a `try`/`finally` at the recursion site.
  */
-export function enterNesting(): void {
-  currentDepth++
+export function enterNesting(cost = 1): void {
+  currentDepth += cost
   if (currentDepth > MAX_NESTING_DEPTH) {
-    currentDepth--
+    currentDepth -= cost
     throw new RangeError(NESTING_ERROR)
   }
 }
 
-/** Leave one nesting level. */
-export function exitNesting(): void {
-  currentDepth--
+/** Leave `cost` nesting levels (default 1). Must match the paired {@link enterNesting}. */
+export function exitNesting(cost = 1): void {
+  currentDepth -= cost
+}
+
+/**
+ * Run `fn` under half of {@link HOOK_NESTING_COST} (one of the two charges per collection hop).
+ * Used at protocol dispatch and inside collection equals/clone hooks.
+ */
+export function withHookNesting<T>(fn: () => T): T {
+  enterNesting(HOOK_NESTING_HALF)
+  try {
+    return fn()
+  } finally {
+    exitNesting(HOOK_NESTING_HALF)
+  }
 }
 
 function isNativeStackOverflow(e: unknown): boolean {

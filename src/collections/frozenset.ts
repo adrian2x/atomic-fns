@@ -1,3 +1,4 @@
+import { withHookNesting } from '../internal/nesting.js'
 import { protocol } from '../operators/index.js'
 import { sameSetMembers } from './abc.js'
 import { clone } from './object.js'
@@ -44,13 +45,15 @@ export class FrozenSet<T = unknown> extends Set<T> {
 
   /** Set membership: same members regardless of insertion order. */
   [protocol.equals](other: unknown): boolean {
-    return sameSetMembers(this, other, (c) => c.values())
+    return withHookNesting(() => sameSetMembers(this, other, (c) => c.values()))
   }
 
   /** A distinct `FrozenSet` with the same members (deep-clones values when `deep`). */
   [protocol.clone](deep = false): this {
-    if (!deep) return new FrozenSet(this) as this
-    return new FrozenSet([...this].map((v) => clone(v, true))) as this
+    return withHookNesting(() => {
+      if (!deep) return new FrozenSet(this) as this
+      return new FrozenSet([...this].map((v) => clone(v, true))) as this
+    })
   }
 
   readonly [Symbol.toStringTag] = 'FrozenSet'

@@ -1,3 +1,4 @@
+import { withHookNesting } from '../internal/nesting.js'
 import { protocol } from '../operators/index.js'
 import { sameSetMembers, ValueCollection } from './abc.js'
 
@@ -136,7 +137,7 @@ export class Trie extends ValueCollection<string> {
 
   /** Set membership: same words regardless of insertion order. */
   override [protocol.equals](other: unknown): boolean {
-    return sameSetMembers(this, other, (c) => c.values())
+    return withHookNesting(() => sameSetMembers(this, other, (c) => c.values()))
   }
 
   values(): IteratorObject<string> {

@@ -1,5 +1,6 @@
 import { canonicalKey } from '../internal/canonicalKey.js'
 import { arrayFromIterable } from '../internal/iterable.js'
+import { withHookNesting } from '../internal/nesting.js'
 import type { Comparer } from '../operators/index.js'
 import { compare, deepEqual, protocol, sameValueZero } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
@@ -41,31 +42,35 @@ export class Heap<T> extends ValueCollection<T> {
    * instances, functions, symbols, collections). Iteration / heap order is not part of equality.
    */
   override [protocol.equals](other: unknown): boolean {
-    if (this === other) return true
-    if (typeof other !== 'object' || other?.constructor !== this.constructor) return false
-    const o = other as Heap<T>
-    if (this.size !== o.size) return false
-    const a = sortHeapItems([...this.values()], this.#compare)
-    const b = sortHeapItems([...o.values()], o.#compare)
-    let i = 0
-    let j = 0
-    while (i < a.length && j < b.length) {
-      if (this.#compare(a[i], b[j]) !== 0) return false
-      let endA = i + 1
-      while (endA < a.length && this.#compare(a[i], a[endA]) === 0) endA++
-      let endB = j + 1
-      while (endB < b.length && o.#compare(b[j], b[endB]) === 0) endB++
-      if (endA - i !== endB - j) return false
-      if (!tieRunEqual(a, i, endA, b, j, endB)) return false
-      i = endA
-      j = endB
-    }
-    return i === a.length && j === b.length
+    return withHookNesting(() => {
+      if (this === other) return true
+      if (typeof other !== 'object' || other?.constructor !== this.constructor) return false
+      const o = other as Heap<T>
+      if (this.size !== o.size) return false
+      const a = sortHeapItems([...this.values()], this.#compare)
+      const b = sortHeapItems([...o.values()], o.#compare)
+      let i = 0
+      let j = 0
+      while (i < a.length && j < b.length) {
+        if (this.#compare(a[i], b[j]) !== 0) return false
+        let endA = i + 1
+        while (endA < a.length && this.#compare(a[i], a[endA]) === 0) endA++
+        let endB = j + 1
+        while (endB < b.length && o.#compare(b[j], b[endB]) === 0) endB++
+        if (endA - i !== endB - j) return false
+        if (!tieRunEqual(a, i, endA, b, j, endB)) return false
+        i = endA
+        j = endB
+      }
+      return i === a.length && j === b.length
+    })
   }
 
   override [protocol.clone](deep = false): this {
-    if (!deep) return this.cloneFrom(this.values())
-    return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
+    return withHookNesting(() => {
+      if (!deep) return this.cloneFrom(this.values())
+      return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
+    })
   }
 
   readonly [Symbol.toStringTag] = 'Heap'

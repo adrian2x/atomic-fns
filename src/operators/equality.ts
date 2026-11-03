@@ -2,7 +2,7 @@
  * Structural equality helpers.
  */
 
-import { enterNesting, exitNesting, guardNesting } from '../internal/nesting.js'
+import { enterNesting, exitNesting, guardNesting, withHookNesting } from '../internal/nesting.js'
 import { eq, sameValueZero } from './order.js'
 import { hasMethod, protocol } from './protocol.js'
 
@@ -43,7 +43,10 @@ function bytesEqual(a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBuff
 }
 
 function deepEqualInner(a: unknown, b: unknown, pending: Pending): boolean {
-  if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) return eq(a, b)
+  if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) {
+    // Half of HOOK_NESTING_COST at dispatch; collection hooks charge the other half in-method.
+    return withHookNesting(() => eq(a, b))
+  }
   if (eq(a, b)) return true
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
 

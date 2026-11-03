@@ -2,7 +2,13 @@
  * Object utilities: merge, pick, omit, clone.
  */
 
-import { assertNestingDepth, enterNesting, exitNesting, guardNesting } from '../internal/nesting.js'
+import {
+  assertNestingDepth,
+  enterNesting,
+  exitNesting,
+  guardNesting,
+  withHookNesting
+} from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
 import { hasMethod, protocol } from '../operators/index.js'
 
@@ -406,9 +412,12 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     if (hasMethod(v, protocol.clone)) return v[protocol.clone](false)
     return cloneShallow(v, map)
   }
+  if (hasMethod(v, protocol.clone)) {
+    // Half of HOOK_NESTING_COST at dispatch; collection clone hooks charge the other half.
+    return withHookNesting(() => v[protocol.clone](true))
+  }
   enterNesting()
   try {
-    if (hasMethod(v, protocol.clone)) return v[protocol.clone](true)
     return cloneDeepBody(v, map)
   } finally {
     exitNesting()
