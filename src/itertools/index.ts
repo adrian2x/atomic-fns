@@ -251,22 +251,13 @@ export function islice<T>(
   stop?: number,
   step = 1
 ): IteratorObject<T> {
-  return (function* () {
-    if (start < 0) throw new ValueError(`start parameter can't be negative`)
-    if (stop != null && stop < 0) throw new ValueError(`stop parameter can't be negative`)
-    if (step <= 0) throw new ValueError(`step parameter must be positive`)
-    if (stop != null && start > stop) throw new ValueError(`start parameter can't be after stop`)
-    let i = 0
-    let next = start
-    for (const value of iterable) {
-      if (stop != null && i >= stop) return
-      if (i === next) {
-        yield value
-        next += step
-      }
-      i++
-    }
-  })()
+  if (start < 0) throw new ValueError(`start parameter can't be negative`)
+  if (stop != null && stop < 0) throw new ValueError(`stop parameter can't be negative`)
+  if (step <= 0) throw new ValueError(`step parameter must be positive`)
+  if (stop != null && start > stop) throw new ValueError(`start parameter can't be after stop`)
+  let it = Iterator.from(iterable).drop(start)
+  if (stop != null) it = it.take(stop - start)
+  return it.filter((_, i) => i % step === 0)
 }
 
 export function itake<T>(n: number, iterable: Iterable<T>): IteratorObject<T> {
@@ -338,7 +329,12 @@ export function range(...args: number[]): IteratorObject<number> {
     if (step === 0) throw new RangeError('range step must not be zero')
     if (Number.isFinite(start) && Number.isFinite(stop) && Number.isFinite(step)) {
       const n = Math.ceil((stop - start) / step)
-      for (let i = 0; i < n; i++) yield start + i * step
+      for (let i = 0; i < n; i++) {
+        const value = start + i * step
+        // Fractional steps can accumulate error and land on or past `stop`.
+        if (step > 0 ? !(value < stop) : !(value > stop)) return
+        yield value
+      }
       return
     }
     for (; step > 0 ? start < stop : start > stop; start += step) {

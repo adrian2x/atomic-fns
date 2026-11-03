@@ -209,6 +209,19 @@ describe('itertools', () => {
     assert.throws(() => [...islice([1], 2, 1)], ValueError)
   })
 
+  it('islice validates arguments eagerly at call time', () => {
+    assert.throws(() => islice([1], -1), ValueError)
+    assert.throws(() => islice([1], 0, -1), ValueError)
+    assert.throws(() => islice([1], 0, 1, 0), ValueError)
+    assert.throws(() => islice([1], 2, 1), ValueError)
+  })
+
+  it('islice does not read past stop', () => {
+    const it = [0, 1, 2, 3, 4, 5].values()
+    assert.deepEqual([...islice(it, 0, 3)], [0, 1, 2])
+    assert.equal(it.next().value, 3)
+  })
+
   it('itake', () => {
     const it = itake(3, [false, 0, '', true, '', []])
     assert.deepEqual([...it], [false, 0, ''])
@@ -248,6 +261,15 @@ describe('itertools', () => {
     assert.throws(() => [...range(0, NaN)], /range bounds must be numbers/)
     const lazy = range(0, Infinity)
     assert.deepEqual([...itake(3, lazy)], [0, 1, 2])
+  })
+
+  it('range with fractional step never includes stop', () => {
+    const up = [...range(1, 1.3, 0.1)]
+    assert.equal(up.length, 3)
+    assert.ok(up.every((v) => v < 1.3))
+    assert.equal([...range(0, 1, 0.1)].length, 10)
+    const down = [...range(1.3, 1, -0.1)]
+    assert.ok(down.every((v) => v > 1))
   })
 
   it('reduce', () => {
@@ -317,6 +339,27 @@ describe('itertools', () => {
         { user: 'barney', age: 36 },
         { user: 'fred', age: 40 }
       ]
+    )
+  })
+
+  it('sorted compare receives keys, not items', () => {
+    const users = [
+      { user: 'fred', age: 40 },
+      { user: 'barney', age: 36 }
+    ]
+    const byAge = [
+      { user: 'barney', age: 36 },
+      { user: 'fred', age: 40 }
+    ]
+    assert.deepEqual(sorted(users, { key: (u) => u.age, compare: (a, b) => a - b }), byAge)
+    assert.deepEqual(
+      sorted<(typeof users)[number], number>(
+        users,
+        (u) => u.age,
+        false,
+        (a, b) => a - b
+      ),
+      byAge
     )
   })
 
