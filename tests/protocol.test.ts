@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BTree } from '../src/collections/BTree.js'
+import { Deque } from '../src/collections/deque.js'
 import { FrozenSet } from '../src/collections/frozenset.js'
 import { Heap } from '../src/collections/Heap.js'
 import { LRUCache } from '../src/collections/LRUCache.js'
@@ -78,6 +79,12 @@ const migrated: Migrated[] = [
     create: () => new SortedSet([1, 2]),
     sample: 1,
     skipOld: ['add']
+  },
+  {
+    name: 'Deque',
+    create: () => new Deque([1, 2]),
+    sample: 1,
+    skipOld: ['at']
   }
 ]
 
@@ -145,10 +152,17 @@ describe('SPEC-R75 collection protocol (M8 classes)', () => {
     expect('Sequence' in mod).toBe(false)
     expect('Mapping' in mod).toBe(false)
     expect('LegacyCollection' in mod).toBe(false)
+    expect('LegacySequence' in mod).toBe(false)
+    expect('LegacyMapping' in mod).toBe(false)
+    expect('Container' in mod).toBe(false)
+    expect('Equals' in mod).toBe(false)
+    expect('Ordered' in mod).toBe(false)
+    expect('Reversible' in mod).toBe(false)
     expect('SortedTree' in mod).toBe(false)
     expect('SetCollection' in mod).toBe(true)
     expect('MapCollection' in mod).toBe(true)
     expect('SortedMap' in mod).toBe(true)
     expect('SortedSet' in mod).toBe(true)
+    expect('Deque' in mod).toBe(true)
   })
 })

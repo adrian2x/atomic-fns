@@ -1,5 +1,5 @@
 /**
- * This module includes classes and functions to work with Container types.
+ * Collection classes and helpers (arrays, objects, sets, maps, trees).
  *
  * @module collections
  */
@@ -23,7 +23,6 @@ import type { Iteratee } from '../types.js'
 import { isPlainObject } from './object.js'
 
 export { SetCollection, MapCollection } from './abc.js'
-export type { Container, Equals, Ordered, Reversible } from './abc.js'
 export * from './BTree.js'
 export * from './deque.js'
 export * from './frozenset.js'

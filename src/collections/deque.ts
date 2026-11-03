@@ -1,337 +1,256 @@
-import { KeyError, ValueError } from '../globals/index.js'
-import { IterableIterator } from '../itertools/iterator.js'
-import { eq } from '../operators/index.js'
-import type { Iteratee } from '../types.js'
-import { LegacySequence } from './abc.js'
+import { sameValueZero } from '../operators/index.js'
+import { SetCollection } from './abc.js'
+
+type ArrayLikeConstructor = new (n: number) => { [i: number]: unknown; length: number }
+
+function nextPow2(n: number): number {
+  if (n <= 1) return 1
+  return 1 << (32 - Math.clz32(n - 1))
+}
 
 /**
- * Fixed capacity double-ended queue implemented as ring deque.
+ * Double-ended queue backed by a power-of-two ring buffer.
+ * Grows by doubling when unbounded; with `maxlen`, evicts from the opposite end (Python deque).
+ *
  * @template T
  */
-export class Deque<T = any> extends LegacySequence<T> {
-  items: T[]
-  start: number = 0
-  count: number = 0
-  capacity: number
-  ArrayConstructor: any
+export class Deque<T> extends SetCollection<T> {
+  #buf: { [i: number]: T; length: number }
+  #cap: number
+  #head = 0
+  #size = 0
+  readonly #maxlen: number | undefined
+  readonly #arrType: ArrayLikeConstructor | undefined
+  readonly #empty: T
 
   /**
-   * Creates a new `Deque` instance of a fixed size.
-   * @param {Array} [arrType = []] The initial elements or array type to use (accepts any kind of typed array).
-   * @param {number} [capacity=1024] The fixed size of the deque. Defaults to `1024`.
+   * @param items Initial elements. When longer than `maxlen`, only the last `maxlen` remain.
+   * @param options.maxlen Maximum size; overflow evicts from the opposite end. `0` makes push/unshift no-ops.
+   * @param options.arrType Typed-array (or similar) constructor used for storage.
+   * @throws {RangeError} when `maxlen` is negative or not an integer.
    */
-  constructor(arrType = [] as T[], capacity = 1024) {
+  constructor(
+    items?: Iterable<T> | null,
+    options?: { maxlen?: number; arrType?: ArrayLikeConstructor }
+  ) {
     super()
-    if (typeof capacity !== 'number' || capacity <= 0)
-      throw new ValueError(`Deque capacity should be a positive integer.`)
+    const maxlen = options?.maxlen
+    if (maxlen !== undefined && (!Number.isInteger(maxlen) || maxlen < 0)) {
+      throw new RangeError('maxlen must be a non-negative integer')
+    }
+    this.#maxlen = maxlen
+    this.#arrType = options?.arrType
+    this.#empty = (this.#arrType ? 0 : undefined) as T
 
-    this.ArrayConstructor = arrType.constructor
-    this.capacity = capacity
-    this.items = new this.ArrayConstructor(arrType.length || this.capacity)
-    this.clear()
+    const list = items == null ? [] : Array.from(items)
+    const bound = maxlen === undefined ? list.length : Math.min(list.length, maxlen)
+    this.#cap = Math.max(8, nextPow2(bound))
+    this.#buf = this.#alloc(this.#cap)
 
-    if (arrType.length) {
-      for (const item of arrType) {
-        this.append(item)
-      }
+    for (const x of list) {
+      this.#pushOne(x)
     }
   }
 
-  /** Returns the total number of elements in the deque. */
   get size(): number {
-    return this.count
+    return this.#size
   }
 
   /**
-   * Method used to clear the structure.
+   * Maximum size when constructed with `maxlen`, otherwise `undefined`.
    */
-  clear() {
-    // Properties
-    this.start = 0
-    this.count = 0
+  get maxlen(): number | undefined {
+    return this.#maxlen
+  }
+
+  get [Symbol.toStringTag](): string {
+    return 'Deque'
+  }
+
+  clear(): void {
+    for (let i = 0; i < this.#size; i++) {
+      this.#buf[this.#phys(i)] = this.#empty
+    }
+    this.#head = 0
+    this.#size = 0
   }
 
   /**
-   * Alias of {@link Deque.append}
-   * @param {T} item Item to append.
-   * @returns {number} Returns the new size of the deque.
+   * Append one or more elements at the end.
+   * @returns The new size.
    */
-  add(item): number {
-    return this.append(item)
+  push(...xs: T[]): number {
+    for (const x of xs) this.#pushOne(x)
+    return this.#size
   }
 
   /**
-   * Appends a new element to the end of the deque.
-   * @param {T} item Item to append.
-   * @returns {number} Returns the new size of the deque.
+   * Insert one or more elements at the front, preserving argument order.
+   * @returns The new size.
    */
-  append(item): number {
-    if (this.count === this.capacity) this.popleft()
-
-    const index = (this.start + this.count) % this.capacity
-
-    this.items[index] = item
-
-    return ++this.count
+  unshift(...xs: T[]): number {
+    for (let i = xs.length - 1; i >= 0; i--) this.#unshiftOne(xs[i])
+    return this.#size
   }
 
   /**
-   * Appends a new element to the beginning of the deque.
-   * @param {T} item Item to prepend.
-   * @returns {number} Returns the new size of the deque.
-   */
-  appendleft(item): number {
-    if (this.count === this.capacity) this.pop()
-
-    let index = this.start - 1
-
-    if (this.start === 0) index = this.capacity - 1
-
-    this.items[index] = item
-    this.start = index
-
-    return ++this.count
-  }
-
-  /**
-   * Removes and returns the element at the end of the deque.
-   * @returns {?T} Returns the popped item.
+   * Remove and return the last element, or `undefined` when empty.
    */
   pop(): T | undefined {
-    if (this.count === 0) return
-
-    const index = (this.start + this.count - 1) % this.capacity
-
-    this.count--
-
-    return this.items[index]
+    if (this.#size === 0) return undefined
+    const j = this.#phys(this.#size - 1)
+    const x = this.#buf[j]
+    this.#buf[j] = this.#empty
+    this.#size--
+    return x
   }
 
   /**
-   * Alias of {@link Deque.pop}
-   * @returns {?T} Returns the popped item.
+   * Remove and return the first element, or `undefined` when empty.
    */
-  remove(): T | undefined {
-    return this.pop()
+  shift(): T | undefined {
+    if (this.#size === 0) return undefined
+    const x = this.#buf[this.#head]
+    this.#buf[this.#head] = this.#empty
+    this.#head = (this.#head + 1) & (this.#cap - 1)
+    this.#size--
+    return x
   }
 
   /**
-   * Removes and returns the element at the beginning of the deque.
-   * @returns {?T} Returns the removed deque element.
+   * Element at index `i` (negative from the end). Out of range or empty -> `undefined`.
+   * `NaN` is treated as `0`.
    */
-  popleft(): T | undefined {
-    if (this.count === 0) return
-
-    const index = this.start
-
-    this.count--
-    this.start++
-
-    if (this.start === this.capacity) this.start = 0
-
-    return this.items[index]
+  at(i: number): T | undefined {
+    let idx = Number.isNaN(i) ? 0 : Math.trunc(i)
+    if (idx < 0) idx += this.#size
+    if (idx < 0 || idx >= this.#size) return undefined
+    return this.#buf[this.#phys(idx)]
   }
 
   /**
-   * Returns the element at the beginning of the deque.
-   * @returns {?T} The element if exists
+   * Replace the element at index `i` (negative from the end).
+   * @returns `this`
+   * @throws {RangeError} when the index is out of range.
    */
-  first(): T | undefined {
-    if (this.count === 0) return
+  set(i: number, v: T): this {
+    let idx = Number.isNaN(i) ? 0 : Math.trunc(i)
+    if (idx < 0) idx += this.#size
+    if (idx < 0 || idx >= this.#size) throw new RangeError(`index ${idx} out of range`)
+    this.#buf[this.#phys(idx)] = v
+    return this
+  }
 
-    return this.items[this.start]
+  has(value: T): boolean {
+    return this.includes(value)
   }
 
   /**
-   * Returns the element at a specified index position in the deque.
-   * @param {number} index The given index
-   * @returns {?T} The element if exists
+   * `true` when `x` is present (SameValueZero).
    */
-  get(index): T | undefined {
-    if (this.count === 0) return
-
-    index = this.start + index
-    if (index < 0) index += this.count
-
-    if (index > this.capacity) index -= this.capacity
-
-    return this.items[index]
-  }
-
-  /**
-   * Update the element at a given `index`.
-   * @param {number} index The given index
-   */
-  set(index: number, value: T): void {
-    if (index < 0) index += this.count
-    if (index > this.count) throw new KeyError(`Invalid index: ${index} not in Deque.`)
-    this.items[index] = value
-  }
-
-  /**
-   * Check if a given element is in the deque.
-   * @param {T} x The value to find
-   * @returns {boolean} `true` if the value is found
-   */
-  contains(x): boolean {
-    for (const value of this.values()) {
-      if (eq(x, value)) return true
+  includes(x: T): boolean {
+    for (let i = 0; i < this.#size; i++) {
+      if (sameValueZero(this.#buf[this.#phys(i)], x)) return true
     }
     return false
   }
 
   /**
-   * Returns the first element that matches the `iteratee` function.
-   * @param {Iteratee<T>} iteratee A function that will be invoked per element
-   * @returns {?T} The element if exists
+   * First element for which `fn` is truthy, or `undefined`.
    */
-  find(iteratee: Iteratee<T>): T | undefined {
-    for (const [key, value] of this.entries()) {
-      if (iteratee(value, key, this)) return value
+  find(fn: (v: T, i: number) => unknown): T | undefined {
+    for (let i = 0; i < this.#size; i++) {
+      const v = this.#buf[this.#phys(i)]
+      if (fn(v, i)) return v
+    }
+    return undefined
+  }
+
+  override forEach(cb: (value: T, key: unknown, coll: this) => void, thisArg?: unknown): void {
+    for (let i = 0; i < this.#size; i++) {
+      cb.call(thisArg, this.#buf[this.#phys(i)], i, this)
     }
   }
 
   /**
-   * Calls `iteratee` function for every element in the deque.
-   * @param {Iteratee<T>} iteratee A function that will be invoked per element
-   */
-  forEach(iteratee) {
-    const c = this.capacity
-    const l = this.count
-    let i = this.start
-    let j = 0
-
-    while (j < l) {
-      iteratee(this.items[i], j, this)
-      i++
-      j++
-
-      if (i === c) i = 0
-    }
-  }
-
-  /**
-   * Returns a new array with all the elements in reverse order.
-   * @returns {Array<T>} The elements reversed
-   */
-  reversed(): T[] {
-    return this.toArray().reverse()
-  }
-
-  /**
-   * Returns a new array with all the elements in the order they were added to the deque.
-   * @returns {Array<T>} The elements array
+   * Copy of the elements in order.
    */
   toArray(): T[] {
-    // Optimization
-    const offset = this.start + this.count
+    const out = new Array<T>(this.#size)
+    for (let i = 0; i < this.#size; i++) out[i] = this.#buf[this.#phys(i)]
+    return out
+  }
 
-    if (offset < this.capacity) return this.items.slice(this.start, offset)
+  /**
+   * Copy of the elements in reverse order.
+   */
+  toReversed(): T[] {
+    const out = new Array<T>(this.#size)
+    for (let i = 0; i < this.#size; i++) out[i] = this.#buf[this.#phys(this.#size - 1 - i)]
+    return out
+  }
 
-    const array = new this.ArrayConstructor(this.count)
-    const c = this.capacity
-    const l = this.count
-    let i = this.start
-    let j = 0
+  override keys(): IteratorObject<number> {
+    return Iterator.from(this.#keys())
+  }
 
-    while (j < l) {
-      array[j] = this.items[i]
-      i++
-      j++
+  values(): IteratorObject<T> {
+    return Iterator.from(this.#values())
+  }
 
-      if (i === c) i = 0
+  override entries(): IteratorObject<[number, T]> {
+    return Iterator.from(this.#entries())
+  }
+
+  *#keys(): Generator<number> {
+    for (let i = 0; i < this.#size; i++) yield i
+  }
+
+  *#values(): Generator<T> {
+    for (let i = 0; i < this.#size; i++) yield this.#buf[this.#phys(i)]
+  }
+
+  *#entries(): Generator<[number, T]> {
+    for (let i = 0; i < this.#size; i++) yield [i, this.#buf[this.#phys(i)]]
+  }
+
+  #phys(i: number): number {
+    return (this.#head + i) & (this.#cap - 1)
+  }
+
+  #alloc(n: number): { [i: number]: T; length: number } {
+    if (this.#arrType) return new this.#arrType(n) as { [i: number]: T; length: number }
+    return new Array<T>(n)
+  }
+
+  #grow(): void {
+    if (this.#maxlen !== undefined && this.#cap >= nextPow2(this.#maxlen)) return
+    const newCap = this.#cap * 2
+    const nb = this.#alloc(newCap)
+    for (let i = 0; i < this.#size; i++) nb[i] = this.#buf[this.#phys(i)]
+    this.#buf = nb
+    this.#cap = newCap
+    this.#head = 0
+  }
+
+  #pushOne(x: T): void {
+    if (this.#maxlen !== undefined && this.#size === this.#maxlen) {
+      if (this.#maxlen === 0) return
+      this.shift()
     }
-
-    return array
+    if (this.#size === this.#cap) this.#grow()
+    this.#buf[this.#phys(this.#size)] = x
+    this.#size++
   }
 
-  /**
-   * Returns an iterator over the deque's values.
-   * @returns {Iterator}
-   */
-  values(): Iterable<T> {
-    const items = this.items
-    const c = this.capacity
-    const l = this.count
-    let i = this.start
-    let j = 0
-
-    return IterableIterator(() => {
-      if (j >= l)
-        return {
-          done: true,
-          value: undefined
-        }
-
-      const value = items[i]
-
-      i++
-      j++
-
-      if (i === c) i = 0
-
-      return { value }
-    })
-  }
-
-  /**
-   * Alias of {@link Deque.values}. Returns iterator of values.
-   */
-  keys(): Iterable<T> {
-    return this.values()
-  }
-
-  /**
-   * Creates an iterator of `[index, value]` pairs for all elements in the deque.
-   * @returns {Iterator}
-   */
-  entries(): Iterable<[number, T]> {
-    const items = this.items
-    const c = this.capacity
-    const l = this.count
-    let i = this.start
-    let j = 0
-
-    return IterableIterator<[number, T]>(() => {
-      if (j >= l)
-        return {
-          done: true,
-          value: undefined
-        }
-
-      const value = items[i]
-
-      i++
-
-      if (i === c) i = 0
-
-      return {
-        value: [j++, value]
-      }
-    })
-  }
-
-  [Symbol.iterator](): Iterable<T> {
-    return this.values()
-  }
-
-  [Symbol.for('nodejs.util.inspect.custom')](): T[] {
-    return this.inspect()
-  }
-
-  // This is just for debugging in nodejs
-  inspect(): T[] {
-    const array = this.toArray() as any
-
-    array.type = this.ArrayConstructor.name
-    array.capacity = this.capacity
-
-    // Trick so that node displays the name of the constructor
-    Object.defineProperty(array, 'constructor', {
-      value: Deque,
-      enumerable: false
-    })
-
-    return array
+  #unshiftOne(x: T): void {
+    if (this.#maxlen !== undefined && this.#size === this.#maxlen) {
+      if (this.#maxlen === 0) return
+      this.pop()
+    }
+    if (this.#size === this.#cap) this.#grow()
+    this.#head = (this.#head - 1) & (this.#cap - 1)
+    this.#buf[this.#head] = x
+    this.#size++
   }
 }
