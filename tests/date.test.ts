@@ -639,3 +639,397 @@ describe('SPEC-R85 IntlDate UTC view America/New_York', () => {
     expect(dayOfYear('2022-03-01', true)).toBe(60)
   })
 })
+
+function withTz(tz: string, run: () => void) {
+  const prev = process.env.TZ
+  process.env.TZ = tz
+  try {
+    run()
+  } finally {
+    if (prev === undefined) delete process.env.TZ
+    else process.env.TZ = prev
+  }
+}
+
+describe('SPEC-R89/R90/R91 Temporal-consistent arithmetic', () => {
+  it('B4 mixed months+days resolves wall time once (NY)', () => {
+    withTz('America/New_York', () => {
+      const d = new IntlDate(new Date(2021, 1, 14, 2, 30))
+      expect(d.add({ months: 1, days: 1 }).toISOString()).toBe('2021-03-15T06:30:00.000Z')
+    })
+  })
+
+  it('B2/B3 +1 day / -1 day gap and overlap vectors', () => {
+    withTz('America/New_York', () => {
+      expect(
+        new IntlDate(new Date(2021, 2, 13, 2, 30)).add({ days: 1 }).format('YYYY-MM-DDTHH:mmZ')
+      ).toBe('2021-03-14T03:30-04:00')
+      expect(
+        new IntlDate(new Date(2021, 10, 6, 1, 30)).add({ days: 1 }).format('YYYY-MM-DDTHH:mmZ')
+      ).toBe('2021-11-07T01:30-04:00')
+      expect(
+        new IntlDate(new Date(2021, 10, 8, 1, 30)).subtract({ days: 1 }).format('YYYY-MM-DDTHH:mmZ')
+      ).toBe('2021-11-07T01:30-04:00')
+    })
+    withTz('Australia/Lord_Howe', () => {
+      expect(
+        new IntlDate(new Date(2021, 9, 2, 2, 15)).add({ days: 1 }).format('YYYY-MM-DDTHH:mmZ')
+      ).toBe('2021-10-03T02:45+11:00')
+    })
+    withTz('Europe/London', () => {
+      expect(
+        new IntlDate(new Date(2021, 2, 27, 1, 30)).add({ days: 1 }).format('YYYY-MM-DDTHH:mmZ')
+      ).toBe('2021-03-28T02:30+01:00')
+    })
+    withTz('Pacific/Kiritimati', () => {
+      expect(
+        new IntlDate(new Date(1994, 11, 30, 12, 0)).add({ days: 1 }).format('YYYY-MM-DDTHH:mmZ')
+      ).toBe('1995-01-01T12:00+14:00')
+    })
+  })
+
+  it('B5 startOf/endOf/set keep offset inside repeated hour', () => {
+    withTz('America/New_York', () => {
+      expect(new IntlDate('2021-11-07T06:30:00Z').startOf('hour').toISOString()).toBe(
+        '2021-11-07T06:00:00.000Z'
+      )
+      expect(new IntlDate('2021-11-07T06:30:20Z').startOf('minute').toISOString()).toBe(
+        '2021-11-07T06:30:00.000Z'
+      )
+      expect(new IntlDate('2021-11-07T06:30:20.500Z').startOf('second').toISOString()).toBe(
+        '2021-11-07T06:30:20.000Z'
+      )
+      expect(new IntlDate('2021-11-07T06:30:20.500Z').set({ millisecond: 0 }).toISOString()).toBe(
+        '2021-11-07T06:30:20.000Z'
+      )
+      expect(new IntlDate('2021-11-07T06:30:00Z').endOf('hour').toISOString()).toBe(
+        '2021-11-07T06:59:59.999Z'
+      )
+      expect(new IntlDate('2021-11-07T05:30:00Z').endOf('hour').toISOString()).toBe(
+        '2021-11-07T05:59:59.999Z'
+      )
+    })
+    withTz('Australia/Lord_Howe', () => {
+      expect(new IntlDate('2021-04-03T15:15:30Z').startOf('minute').toISOString()).toBe(
+        '2021-04-03T15:15:00.000Z'
+      )
+      expect(new IntlDate('2021-04-03T15:15:30Z').startOf('hour').toISOString()).toBe(
+        '2021-04-03T14:00:00.000Z'
+      )
+    })
+    withTz('Europe/London', () => {
+      expect(new IntlDate('2021-10-31T01:30:00Z').startOf('hour').toISOString()).toBe(
+        '2021-10-31T01:00:00.000Z'
+      )
+    })
+  })
+
+  it('B6 startOf/endOf day across skipped midnight', () => {
+    withTz('America/Santiago', () => {
+      expect(new IntlDate(new Date(2022, 8, 11, 12, 0)).startOf('day').toISOString()).toBe(
+        '2022-09-11T04:00:00.000Z'
+      )
+      expect(new IntlDate(new Date(2022, 8, 10, 12, 0)).endOf('day').toISOString()).toBe(
+        '2022-09-11T03:59:59.999Z'
+      )
+    })
+    withTz('America/Sao_Paulo', () => {
+      expect(new IntlDate(new Date(2018, 10, 4, 12, 0)).startOf('day').toISOString()).toBe(
+        '2018-11-04T03:00:00.000Z'
+      )
+    })
+    withTz('America/New_York', () => {
+      expect(new IntlDate(new Date(2021, 2, 14, 12, 0)).endOf('day').toISOString()).toBe(
+        '2021-03-15T03:59:59.999Z'
+      )
+      expect(new IntlDate(new Date(2021, 10, 7, 12, 0)).endOf('day').toISOString()).toBe(
+        '2021-11-08T04:59:59.999Z'
+      )
+    })
+  })
+
+  it('B7 calendar diff across DST and relative day', () => {
+    withTz('America/New_York', () => {
+      const a = mockDate(new Date(2021, 2, 13))
+      const b = mockDate(new Date(2021, 2, 15))
+      expect(b.diff(a, 'days')).toBe(2)
+      expect(mockDate(new Date(2021, 2, 15)).diff(mockDate(new Date(2021, 2, 14)), 'days')).toBe(1)
+      expect(
+        mockDate(new Date(2021, 2, 15)).diff(mockDate(new Date(2021, 2, 14)), 'days', true)
+      ).toBe(1)
+      expect(mockDate(new Date(2021, 2, 15)).diff(mockDate(new Date(2021, 2, 8)), 'weeks')).toBe(1)
+      expect(mockDate(new Date(2021, 2, 15)).diff(mockDate(new Date(2021, 1, 15)), 'months')).toBe(
+        1
+      )
+      expect(mockDate(new Date(2021, 2, 15)).from(mockDate(new Date(2021, 2, 14)), 'days')).toBe(
+        'in 1 day'
+      )
+      expect(mockDate(new Date(2021, 10, 8)).diff(mockDate(new Date(2021, 10, 7)), 'days')).toBe(1)
+    })
+    withTz('Australia/Lord_Howe', () => {
+      expect(mockDate(new Date(2021, 9, 4)).diff(mockDate(new Date(2021, 9, 2)), 'days')).toBe(2)
+    })
+    withTz('Europe/London', () => {
+      expect(mockDate(new Date(2021, 2, 29)).diff(mockDate(new Date(2021, 2, 27)), 'days')).toBe(2)
+    })
+    withTz('Pacific/Kiritimati', () => {
+      expect(mockDate(new Date(1995, 0, 1)).diff(mockDate(new Date(1994, 11, 30)), 'days')).toBe(2)
+    })
+  })
+
+  it('B8 exact hours over 30-minute DST day (Lord_Howe)', () => {
+    withTz('Australia/Lord_Howe', () => {
+      expect(
+        mockDate(new Date(2021, 9, 4)).diff(mockDate(new Date(2021, 9, 3)), 'hours', true)
+      ).toBe(23.5)
+    })
+  })
+
+  it('C4 Temporal calendar-correct months/quarters/years (UTC view)', () => {
+    const u = (s: string) => IntlDate.UTC(s)
+    expect(u('2021-03-01').diff(u('2021-02-01'), 'months')).toBe(1)
+    expect(u('2021-03-01').diff(u('2021-01-01'), 'months')).toBe(2)
+    expect(u('2021-03-01').diff(u('2021-02-01'), 'months', true)).toBe(1)
+    expect(u('2021-02-01').diff(u('2021-01-01'), 'months', true)).toBe(1)
+    expect(u('2023-05-01').diff(u('2023-02-01'), 'quarters')).toBe(1)
+    expect(u('2023-01-01').diff(u('2022-01-01'), 'quarters')).toBe(4)
+    expect(u('2023-05-01').diff(u('2022-02-01'), 'quarters')).toBe(5)
+    expect(u('2020-02-29').diff(u('2019-03-01'), 'years')).toBe(0)
+    expect(u('2399-12-01').diff(u('2000-01-01'), 'years')).toBe(399)
+    expect(u('2000-01-01').diff(u('0001-01-01'), 'years')).toBe(1999)
+    expect(u('2024-02-29').diff(u('2020-02-29'), 'years')).toBe(4)
+    expect(u('2024-01-01').diff(u('2000-01-01'), 'years')).toBe(24)
+    expect(u('2021-02-28').diff(u('2021-01-31'), 'months')).toBe(0)
+    expect(u('2021-02-28').diff(u('2020-02-29'), 'years')).toBe(0)
+    for (const [a, b, unit] of [
+      [u('2021-03-01'), u('2021-02-01'), 'months'],
+      [u('2021-02-28'), u('2021-01-31'), 'months'],
+      [u('2020-02-29'), u('2019-03-01'), 'years']
+    ] as const) {
+      expect(a.diff(b, unit)).toBe(zeroNegZero(-b.diff(a, unit)))
+    }
+  })
+
+  it('C1 month-end clamp chain and mixed units (10:00 wall)', () => {
+    withTz('America/New_York', () => {
+      const jan31 = mockDate(new Date(2021, 0, 31, 10, 0))
+      expect(jan31.add({ months: 1 }).format('YYYY-MM-DD')).toBe('2021-02-28')
+      expect(jan31.add({ months: 1 }).add({ months: 1 }).format('YYYY-MM-DD')).toBe('2021-03-28')
+      expect(jan31.add({ months: 2 }).format('YYYY-MM-DD')).toBe('2021-03-31')
+      const lep = mockDate(new Date(2020, 1, 29, 10, 0))
+      expect(lep.add({ years: 1 }).format('YYYY-MM-DD')).toBe('2021-02-28')
+      expect(lep.add({ years: 4 }).format('YYYY-MM-DD')).toBe('2024-02-29')
+      expect(
+        mockDate(new Date(2020, 0, 31, 10, 0))
+          .add({ years: 1, months: 1 })
+          .format('YYYY-MM-DD')
+      ).toBe('2021-02-28')
+      expect(jan31.add({ months: 1, days: 1 }).format('YYYY-MM-DD')).toBe('2021-03-01')
+      expect(
+        mockDate(new Date(2021, 2, 31, 10, 0))
+          .subtract({ months: 1 })
+          .format('YYYY-MM-DD')
+      ).toBe('2021-02-28')
+      expect(
+        mockDate(new Date(2021, 2, 31, 10, 0))
+          .add({ months: -1, days: 1 })
+          .format('YYYY-MM-DD')
+      ).toBe('2021-03-01')
+      expect(
+        mockDate(new Date(2021, 10, 30, 10, 0))
+          .add({ quarters: 1 })
+          .format('YYYY-MM-DD')
+      ).toBe('2022-02-28')
+      expect(
+        mockDate(new Date(2021, 0, 31, 10, 0))
+          .set({ month: 2 })
+          .format('YYYY-MM-DD')
+      ).toBe('2021-02-28')
+      const endFeb = mockDate(new Date(2024, 1, 15, 10, 0)).endOf('month')
+      expect(endFeb.format('YYYY-MM-DDTHH:mm:ss.SSS')).toBe('2024-02-29T23:59:59.999')
+    })
+  })
+
+  it('C3 rejects non-finite and prototype-named duration/set/diff keys', () => {
+    const d = mockDate(new Date(2021, 0, 1))
+    expect(() => d.add({ hours: Number.NaN })).toThrow(ValueError)
+    expect(() => d.add({ hours: Number.POSITIVE_INFINITY })).toThrow(ValueError)
+    expect(() => d.add({ days: '1' as unknown as number })).toThrow(ValueError)
+    expect(() => d.add({ constructor: 1 } as never)).toThrow(ValueError)
+    expect(() => d.add({ days: 1e9 })).toThrow(RangeError)
+    expect(() => d.set({ constructor: 1 } as never)).toThrow(ValueError)
+    expect(() => d.diff(d, 'constructor' as 'days')).toThrow(ValueError)
+    expect(() => d.diff(d, '__proto__' as 'days')).toThrow(ValueError)
+  })
+
+  it('C5 year 99 to 100 rollover (UTC)', () => {
+    const start = IntlDate.UTC({ year: 99, month: 12, day: 31 })
+    expect(start.add({ days: 61 }).format('YYYY-MM-DD')).toBe('0100-03-02')
+    expect(
+      IntlDate.UTC({ year: 96, month: 2, day: 29 }).add({ years: 4 }).format('YYYY-MM-DD')
+    ).toBe('0100-02-28')
+    expect(IntlDate.UTC({ year: 100, month: 3, day: 2 }).diff(start, 'days')).toBe(61)
+  })
+
+  it('relative time auto unit, trunc, numeric auto for zero', () => {
+    const base = IntlDate.UTC('2024-06-15T12:00:00Z', 'en')
+    expect(base.add({ seconds: 44 }).from(base)).toBe('in 44 seconds')
+    expect(base.add({ days: 1 }).from(base)).toBe('in 1 day')
+    expect(base.add({ days: 29 }).from(base)).toBe('in 29 days')
+    expect(base.add({ days: 1, hours: 21, minutes: 36 }).from(base)).toBe('in 1 day')
+    expect(base.add({ milliseconds: 500 }).from(base)).toBe('now')
+    expect(base.from(base, 'days')).toBe('today')
+    expect(base.subtract({ days: 1 }).from(base)).toBe('1 day ago')
+    expect(
+      IntlDate.UTC('2023-03-01T00:00:00Z', 'en').from(
+        IntlDate.UTC('2023-02-01T00:00:00Z', 'en'),
+        'months'
+      )
+    ).toBe('in 1 month')
+    expect(base.add({ days: 400 }).from(base)).toBe('in 1 year')
+  })
+
+  it('critic regressions: Havana, Lord_Howe endOf, NY integer/exact months', () => {
+    withTz('America/Havana', () => {
+      const r = new IntlDate('2020-11-01T00:30:00-05:00')
+      expect(r.startOf('day').toISOString()).toBe('2020-11-01T04:00:00.000Z')
+      expect(r.startOf('day').startOf('month').toISOString()).toBe('2020-11-01T04:00:00.000Z')
+    })
+    withTz('Australia/Lord_Howe', () => {
+      const r = new IntlDate('2021-04-03T15:15:30Z')
+      expect(r.endOf('hour').getTime()).toBeGreaterThanOrEqual(r.getTime())
+      expect(r.endOf('minute').toISOString()).toBe('2021-04-03T15:15:59.999Z')
+    })
+    withTz('America/New_York', () => {
+      expect(
+        mockDate(new Date(2021, 4, 1, 0, 0)).diff(mockDate(new Date(2021, 2, 31, 0, 30)), 'months')
+      ).toBe(0)
+      expect(
+        mockDate(new Date(2022, 4, 1, 2, 15)).diff(mockDate(new Date(2020, 0, 31, 3, 15)), 'months')
+      ).toBe(26)
+      expect(
+        mockDate(new Date(2021, 1, 28, 3, 30)).diff(
+          mockDate(new Date(2022, 6, 31, 0, 30)),
+          'months'
+        )
+      ).toBe(-16)
+      expect(
+        mockDate(new Date(2023, 0, 15, 0, 30)).diff(
+          mockDate(new Date(2023, 6, 28, 2, 15)),
+          'months',
+          true
+        )
+      ).toBeCloseTo(-6.422, 3)
+      expect(
+        mockDate(new Date(2023, 0, 15, 0, 30)).diff(
+          mockDate(new Date(2023, 6, 28, 2, 15)),
+          'years',
+          true
+        )
+      ).toBeCloseTo(-0.532, 3)
+    })
+  })
+
+  it.skipIf(typeof globalThis.Temporal === 'undefined')(
+    'Temporal oracle fuzz for diff/startOfDay/add',
+    () => {
+      const zones = [
+        'America/New_York',
+        'Europe/London',
+        'America/Santiago',
+        'Australia/Lord_Howe',
+        'America/Havana',
+        'Pacific/Kiritimati'
+      ] as const
+      const units = ['days', 'weeks', 'months', 'years'] as const
+
+      function mulberry32(seed: number) {
+        let a = seed >>> 0
+        return () => {
+          a = (a + 0x6d2b79f5) >>> 0
+          let t = a
+          t = Math.imul(t ^ (t >>> 15), t | 1)
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+        }
+      }
+
+      const TemporalApi = globalThis.Temporal
+      let skipped = 0
+      let total = 0
+
+      for (const zone of zones) {
+        withTz(zone, () => {
+          const rand = mulberry32(zone.length * 997 + 42)
+          for (let i = 0; i < 2000; i++) {
+            const t0 =
+              Date.UTC(1999 + Math.floor(rand() * 42), Math.floor(rand() * 12), 1) +
+              Math.floor(rand() * 28) * 86_400_000 +
+              Math.floor(rand() * 86_400_000)
+            const t1 =
+              Date.UTC(1999 + Math.floor(rand() * 42), Math.floor(rand() * 12), 1) +
+              Math.floor(rand() * 28) * 86_400_000 +
+              Math.floor(rand() * 86_400_000)
+            const s = Math.min(t0, t1)
+            const e = Math.max(t0, t1)
+            const a = new IntlDate(new Date(s))
+            const b = new IntlDate(new Date(e))
+
+            let zdtS: Temporal.ZonedDateTime
+            let zdtE: Temporal.ZonedDateTime
+            try {
+              zdtS = TemporalApi.Instant.fromEpochMilliseconds(s).toZonedDateTimeISO(zone)
+              zdtE = TemporalApi.Instant.fromEpochMilliseconds(e).toZonedDateTimeISO(zone)
+            } catch {
+              skipped += 1
+              total += 1
+              continue
+            }
+
+            for (const unit of units) {
+              total += 1
+              try {
+                const until = zdtS.until(zdtE, { largestUnit: unit })
+                expect(b.diff(a, unit)).toBe(until[unit])
+                if (unit === 'months' || unit === 'years') {
+                  const exact = until.total({ unit, relativeTo: zdtS })
+                  expect(b.diff(a, unit, true)).toBeCloseTo(exact, 3)
+                }
+              } catch {
+                skipped += 1
+              }
+            }
+
+            total += 1
+            try {
+              expect(a.startOf('day').getTime()).toBe(zdtS.startOfDay().epochMilliseconds)
+            } catch {
+              skipped += 1
+            }
+
+            const sign = rand() < 0.5 ? -1 : 1
+            const dur = {
+              years: sign * Math.floor(rand() * 3),
+              months: sign * Math.floor(rand() * 11),
+              days: sign * Math.floor(rand() * 28),
+              hours: sign * Math.floor(rand() * 48)
+            }
+            total += 1
+            try {
+              const added = zdtS.add(dur)
+              expect(a.add(dur).getTime()).toBe(added.epochMilliseconds)
+            } catch {
+              skipped += 1
+            }
+          }
+        })
+      }
+
+      expect(skipped / total).toBeLessThanOrEqual(0.01)
+    }
+  )
+})
+
+function zeroNegZero(n: number): number {
+  return Object.is(n, -0) ? 0 : n
+}

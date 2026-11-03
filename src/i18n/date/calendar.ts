@@ -83,6 +83,39 @@ export function localWallToTime(f: WallFields): number {
   return small ? t - MS_PER_400_YEARS : t
 }
 
+/** UTC offset of an instant in milliseconds (local minus UTC). UTC view is 0. */
+export function offsetMsAt(time: number, utc: boolean): number {
+  return utc ? 0 : Math.round(-new Date(time).getTimezoneOffset() * 60_000)
+}
+
+/**
+ * Epoch ms for wall fields, preferring `preferredOffsetMs` when that offset is valid
+ * for the fields (Temporal `offset: "prefer"`); otherwise "compatible".
+ */
+export function wallToTimePreferOffset(
+  f: WallFields,
+  utc: boolean,
+  preferredOffsetMs: number
+): number {
+  if (utc) return utcWallToTime(f)
+  const candidate = utcWallToTime(f) - preferredOffsetMs
+  if (offsetMsAt(candidate, false) === preferredOffsetMs) {
+    const w = readWall(candidate, false)
+    if (
+      w.year === f.year &&
+      w.month === f.month &&
+      w.day === f.day &&
+      w.hour === f.hour &&
+      w.minute === f.minute &&
+      w.second === f.second &&
+      w.millisecond === f.millisecond
+    ) {
+      return candidate
+    }
+  }
+  return localWallToTime(f)
+}
+
 /** Wall fields of an instant in the local or UTC view. */
 export function readWall(time: number, utc: boolean): WallFields {
   const d = new Date(time)

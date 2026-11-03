@@ -16,15 +16,16 @@ import {
   ISO_WEEK_RULE,
   localeWeekRule,
   localWallToTime,
+  offsetMsAt,
   readWall,
   utcWallToTime,
+  wallToTimePreferOffset,
   weekdayOf,
   weekDateOf,
   weeksInWeekYear,
   type WallFields
 } from './calendar.js'
 import {
-  asNumber,
   dayOfYear,
   daysInMonth,
   daysInYear,
@@ -84,18 +85,20 @@ function fieldsToDate(fields: DateObject, utc: boolean): Date {
 
 function toDurationObject(duration: number | Duration | DurationObject): DurationObject {
   if (typeof duration === 'number') return { milliseconds: duration }
-  const src = duration instanceof Duration ? duration.values : duration
-  return {
-    years: src.years,
-    quarters: src.quarters,
-    months: src.months,
-    weeks: src.weeks,
-    days: src.days,
-    hours: src.hours,
-    minutes: src.minutes,
-    seconds: src.seconds,
-    milliseconds: src.milliseconds
+  if (duration instanceof Duration) {
+    return {
+      years: duration.values.years,
+      quarters: duration.values.quarters,
+      months: duration.values.months,
+      weeks: duration.values.weeks,
+      days: duration.values.days,
+      hours: duration.values.hours,
+      minutes: duration.values.minutes,
+      seconds: duration.values.seconds,
+      milliseconds: duration.values.milliseconds
+    }
   }
+  return duration
 }
 
 function compare3(
@@ -110,6 +113,42 @@ function compare3(
 
 function msOfDay(w: WallFields): number {
   return w.hour * 3_600_000 + w.minute * 60_000 + w.second * 1000 + w.millisecond
+}
+
+function wallAfterCalendar(
+  a: WallFields,
+  utc: boolean,
+  kind: 'months' | 'days',
+  size: number,
+  j: number
+): number {
+  if (kind === 'months') {
+    const idx = a.year * 12 + (a.month - 1) + j * size
+    const y = Math.floor(idx / 12)
+    const m = idx - y * 12 + 1
+    const d = Math.min(a.day, daysInMonthOf(y, m))
+    const wall: WallFields = {
+      year: y,
+      month: m,
+      day: d,
+      hour: a.hour,
+      minute: a.minute,
+      second: a.second,
+      millisecond: a.millisecond
+    }
+    return utc ? utcWallToTime(wall) : localWallToTime(wall)
+  }
+  const civil = civilFromDayNumber(dayNumber(a.year, a.month, a.day) + j * size)
+  const wall: WallFields = {
+    year: civil.year,
+    month: civil.month,
+    day: civil.day,
+    hour: a.hour,
+    minute: a.minute,
+    second: a.second,
+    millisecond: a.millisecond
+  }
+  return utc ? utcWallToTime(wall) : localWallToTime(wall)
 }
 
 function calendarDiff(
@@ -134,8 +173,8 @@ function calendarDiff(
     k = Math.trunc((dnB - dnA) / size)
   } else {
     k = Math.trunc(((bd.year - a.year) * 12 + (bd.month - a.month)) / size)
-    const surpasses = (kk: number): boolean => {
-      const idx = a.year * 12 + a.month - 1 + kk * size
+    const surpasses = (step: number): boolean => {
+      const idx = a.year * 12 + a.month - 1 + step * size
       const y = Math.floor(idx / 12)
       const m = idx - 12 * y + 1
       return sign * compare3([y, m, a.day], [bd.year, bd.month, bd.day]) > 0
@@ -145,36 +184,7 @@ function calendarDiff(
 
   if (!exact) return k
 
-  const instantAfter = (j: number): number => {
-    if (kind === 'days') {
-      const civil = civilFromDayNumber(dayNumber(a.year, a.month, a.day) + j * size)
-      const fields: WallFields = {
-        year: civil.year,
-        month: civil.month,
-        day: civil.day,
-        hour: a.hour,
-        minute: a.minute,
-        second: a.second,
-        millisecond: a.millisecond
-      }
-      return utc ? utcWallToTime(fields) : localWallToTime(fields)
-    }
-    const idx = a.year * 12 + (a.month - 1) + j * size
-    const ty = Math.floor(idx / 12)
-    const tm = idx - ty * 12 + 1
-    const td = Math.min(a.day, daysInMonthOf(ty, tm))
-    const fields: WallFields = {
-      year: ty,
-      month: tm,
-      day: td,
-      hour: a.hour,
-      minute: a.minute,
-      second: a.second,
-      millisecond: a.millisecond
-    }
-    return utc ? utcWallToTime(fields) : localWallToTime(fields)
-  }
-
+  const instantAfter = (j: number): number => wallAfterCalendar(a, utc, kind, size, j)
   let t0 = instantAfter(k)
   let t1 = instantAfter(k + sign)
   if (Math.abs(e - t0) >= Math.abs(t1 - t0)) {
@@ -187,6 +197,31 @@ function calendarDiff(
   return k + (e - t0) / denom
 }
 
+const TIME_UNIT_MS: ReadonlyMap<DurationField, number> = new Map([
+  ['hours', 3_600_000],
+  ['minutes', 60_000],
+  ['seconds', 1000],
+  ['milliseconds', 1]
+])
+
+function zeroNegZero(n: number): number {
+  return Object.is(n, -0) ? 0 : n
+}
+
+function resolveStartUnit(unit: string): DurationField | 'isoWeek' {
+  const lower = unit.toLowerCase()
+  if (lower === 'isoweek' || lower === 'isoweeks') return 'isoWeek'
+  const field = (() => {
+    try {
+      return durationField(unit)
+    } catch {
+      return undefined
+    }
+  })()
+  if (field === undefined) throw new ValueError(`Invalid unit ${unit}`)
+  return field
+}
+
 /**
  * A date tied to a locale (default system locale) with calendar-correct arithmetic
  * and an optional UTC view of the same instant.
@@ -196,6 +231,7 @@ export class IntlDate implements Comparable, Equatable {
   readonly locale?: string
   readonly utc: boolean
   #relativeFormat?: Intl.RelativeTimeFormat
+  #relativeAutoFormat?: Intl.RelativeTimeFormat
 
   get [protocol.rank]() {
     return 5 as const
@@ -570,32 +606,49 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
 
   /**
    * Returns a new date with the given fields overlaid. Absent `day` clamps to the target month.
+   * Setting a field inside a repeated local hour keeps this instant's offset when that offset remains valid.
    * @param values Fields to set
    */
   set(values: DateObject): IntlDate {
     if (!this.isValid()) return this
 
-    const normalized = normalizeObject(values, normalizeUnit)
-    const mixed: DateObject = { ...this.toObject(), ...normalized }
-
-    if (normalized.day === undefined && mixed.year !== undefined && mixed.month !== undefined) {
-      const last = lastDayOfMonth(mixed.year, mixed.month - 1, this.utc)
-      mixed.day = Math.min(mixed.day ?? last, last)
+    const patch: Partial<Record<keyof DateObject, number>> = {}
+    for (const [key, raw] of Object.entries(values)) {
+      const field = normalizeUnit(key) as keyof DateObject
+      if (raw === undefined || raw === null) continue
+      if (typeof raw !== 'number' || !Number.isFinite(raw) || !Number.isInteger(raw)) {
+        throw new ValueError(`Invalid unit value ${String(raw)}`)
+      }
+      patch[field] = raw
     }
 
-    let result = this.clone(fieldsToDate(mixed, this.utc))
+    const wall = readWall(this.getTime(), this.utc)
+    const year = patch.year ?? wall.year
+    const month = patch.month ?? wall.month
+    const day = patch.day ?? Math.min(wall.day, daysInMonthOf(year, month))
+    const fields: WallFields = {
+      year,
+      month,
+      day,
+      hour: patch.hour ?? wall.hour,
+      minute: patch.minute ?? wall.minute,
+      second: patch.second ?? wall.second,
+      millisecond: patch.millisecond ?? wall.millisecond
+    }
 
-    if (normalized.weekday !== undefined) {
-      const delta = normalized.weekday - result.dayOfWeek
+    const t = wallToTimePreferOffset(fields, this.utc, offsetMsAt(this.getTime(), this.utc))
+    let result = this.clone(new Date(t))
+
+    if (patch.weekday !== undefined) {
+      const delta = patch.weekday - result.dayOfWeek
       if (delta !== 0) result = result.add({ days: delta })
     }
-
     return result
   }
 
-  /** Cached `Intl.RelativeTimeFormat` for this instance. */
+  /** Cached `Intl.RelativeTimeFormat` for this instance (`numeric: "always"`). */
   get relativeFormat(): Intl.RelativeTimeFormat {
-    this.#relativeFormat ??= new Intl.RelativeTimeFormat(this.locale)
+    this.#relativeFormat ??= new Intl.RelativeTimeFormat(this.locale, { numeric: 'always' })
     return this.#relativeFormat
   }
 
@@ -608,92 +661,111 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
     return this.relativeFormat.format(n, unit)
   }
 
-  /**
-   * Relative time from now to this date.
-   * @param unit Relative unit
-   */
-  fromNow(unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
-    return this.relativeTime(this.diff(new Date(), unit), unit)
+  #formatRelative(n: number, unit: Intl.RelativeTimeFormatUnit): string {
+    const count = zeroNegZero(n)
+    if (count === 0) {
+      this.#relativeAutoFormat ??= new Intl.RelativeTimeFormat(this.locale, { numeric: 'auto' })
+      return this.#relativeAutoFormat.format(0, unit)
+    }
+    return this.relativeTime(count, unit)
+  }
+
+  #relativeUnit(
+    other: DateLike,
+    unit: Intl.RelativeTimeFormatUnit | undefined
+  ): Intl.RelativeTimeFormatUnit {
+    if (unit !== undefined) return unit
+    const auto: readonly Intl.RelativeTimeFormatUnit[] = [
+      'years',
+      'months',
+      'days',
+      'hours',
+      'minutes',
+      'seconds'
+    ]
+    for (const candidate of auto) {
+      if (Math.abs(this.diff(other, candidate)) >= 1) return candidate
+    }
+    return 'seconds'
   }
 
   /**
-   * Relative time from `other` to this date.
+   * Relative time from now to this date. Omitting `unit` picks the largest of
+   * years, months, days, hours, minutes, seconds with absolute count at least 1.
+   * @param unit Relative unit
+   */
+  fromNow(unit?: Intl.RelativeTimeFormatUnit): string {
+    return this.from(new Date(), unit)
+  }
+
+  /**
+   * Relative time from `other` to this date. Omitting `unit` picks an automatic unit.
+   * A zero count uses `numeric: "auto"` phrasing ("today", "now", ...).
    * @param other Base date
    * @param unit Relative unit
    */
-  from(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
-    return this.relativeTime(this.diff(other, unit), unit)
+  from(other: DateLike, unit?: Intl.RelativeTimeFormatUnit): string {
+    const resolved = this.#relativeUnit(other, unit)
+    return this.#formatRelative(this.diff(other, resolved), resolved)
   }
 
   /**
-   * Relative time from this date to now.
+   * Relative time from this date to now. Omitting `unit` picks an automatic unit.
    * @param unit Relative unit
    */
-  toNow(unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
-    return this.relativeTime(-this.diff(new Date(), unit), unit)
+  toNow(unit?: Intl.RelativeTimeFormatUnit): string {
+    return this.to(new Date(), unit)
   }
 
   /**
-   * Relative time from this date to `other`.
+   * Relative time from this date to `other`. Omitting `unit` picks an automatic unit.
    * @param other Target date
    * @param unit Relative unit
    */
-  to(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
-    return this.relativeTime(-this.diff(other, unit), unit)
+  to(other: DateLike, unit?: Intl.RelativeTimeFormatUnit): string {
+    const resolved = this.#relativeUnit(other, unit)
+    return this.#formatRelative(zeroNegZero(-this.diff(other, resolved)), resolved)
   }
 
   /**
-   * Difference from `other` to this date in `unit`.
+   * Difference from `other` to this date in `unit` (Temporal `until` / `total` semantics).
+   * Calendar units use civil-date math; the default truncates toward zero.
    * @param other Base date
    * @param unit Duration unit
    * @param exact When true, leave fractional totals
    */
   diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false): number {
-    const dt = new IntlDate(other)
-    if (!this.isValid() || !dt.isValid()) return Number.NaN
+    const o = new IntlDate(other, { locale: this.locale, utc: this.utc })
+    if (!this.isValid() || !o.isValid()) return Number.NaN
     const field = durationField(unit)
-    const s = dt.getTime()
+    const s = o.getTime()
     const e = this.getTime()
+
+    const timeMs = TIME_UNIT_MS.get(field)
     let v: number
-    switch (field) {
-      case 'years':
-        v = calendarDiff(s, e, this.utc, 'months', 12, exact)
-        break
-      case 'quarters':
-        v = calendarDiff(s, e, this.utc, 'months', 3, exact)
-        break
-      case 'months':
-        v = calendarDiff(s, e, this.utc, 'months', 1, exact)
-        break
-      case 'weeks':
-        v = calendarDiff(s, e, this.utc, 'days', 7, exact)
-        break
-      case 'days':
-        v = calendarDiff(s, e, this.utc, 'days', 1, exact)
-        break
-      case 'hours':
-        v = (e - s) / 3_600_000
-        break
-      case 'minutes':
-        v = (e - s) / 60_000
-        break
-      case 'seconds':
-        v = (e - s) / 1_000
-        break
-      case 'milliseconds':
-        v = e - s
-        break
+    if (timeMs !== undefined) {
+      v = (e - s) / timeMs
+    } else if (field === 'years') {
+      v = calendarDiff(s, e, this.utc, 'months', 12, exact)
+    } else if (field === 'quarters') {
+      v = calendarDiff(s, e, this.utc, 'months', 3, exact)
+    } else if (field === 'months') {
+      v = calendarDiff(s, e, this.utc, 'months', 1, exact)
+    } else if (field === 'weeks') {
+      v = calendarDiff(s, e, this.utc, 'days', 7, exact)
+    } else {
+      v = calendarDiff(s, e, this.utc, 'days', 1, exact)
     }
-    const total = exact ? v : Math.trunc(v)
-    return total === 0 ? 0 : total
+
+    return zeroNegZero(exact ? v : Math.trunc(v))
   }
 
   /**
    * Adds a duration with calendar-correct month/year clamp and DST-safe calendar units.
+   * Calendar fields advance the wall date once, then time fields add exact milliseconds.
    * @param duration Duration fields, ms number, or Duration
    */
   add(duration: number | Duration | DurationObject): IntlDate {
-    if (!this.isValid()) return this
     return this.clone(addDuration(this.#date, toDurationObject(duration), 1, this.utc))
   }
 
@@ -702,36 +774,44 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
    * @param duration Duration fields, ms number, or Duration
    */
   subtract(duration: number | Duration | DurationObject): IntlDate {
-    if (!this.isValid()) return this
     return this.clone(subDuration(this.#date, toDurationObject(duration), this.utc))
   }
 
   /**
    * Start of the given unit. `week` uses the locale first day of week; `isoWeek` is Monday 00:00.
+   * Day-or-larger units use compatible wall resolution; hour/minute/second keep this offset when valid.
    * @param unit Duration unit, or `isoWeek` / `isoWeeks`
    */
   startOf(unit: DurationUnit | 'isoWeek' | 'isoWeeks'): IntlDate {
-    if (!this.isValid()) return this
-    const key = unit.toLowerCase()
-    const isIsoWeek = key === 'isoweek' || key === 'isoweeks'
-    let normalizedUnit: DurationField
-    if (isIsoWeek) {
-      normalizedUnit = 'weeks'
-    } else {
-      try {
-        normalizedUnit = durationField(unit)
-      } catch {
-        throw new ValueError(`Invalid unit ${unit}`)
-      }
-    }
+    const field = resolveStartUnit(unit)
+    if (field === 'milliseconds') return this.clone()
+    if (!this.isValid()) return this.clone()
 
-    if (normalizedUnit === 'weeks') {
-      const w = readWall(this.#date.getTime(), this.utc)
+    const t = this.getTime()
+    const w = readWall(t, this.utc)
+    let target: WallFields
+
+    if (field === 'years') {
+      target = { year: w.year, month: 1, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0 }
+    } else if (field === 'quarters') {
+      const month = 3 * Math.floor((w.month - 1) / 3) + 1
+      target = { year: w.year, month, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0 }
+    } else if (field === 'months') {
+      target = {
+        year: w.year,
+        month: w.month,
+        day: 1,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        millisecond: 0
+      }
+    } else if (field === 'weeks' || field === 'isoWeek') {
+      const rule = field === 'isoWeek' ? ISO_WEEK_RULE : localeWeekRule(this.locale)
       const dn = dayNumber(w.year, w.month, w.day)
-      const firstDay = isIsoWeek ? 1 : localeWeekRule(this.locale).firstDay
-      const startDn = dn - ((weekdayOf(dn) - firstDay + 7) % 7)
+      const startDn = dn - ((weekdayOf(dn) - rule.firstDay + 7) % 7)
       const civil = civilFromDayNumber(startDn)
-      const fields = {
+      target = {
         year: civil.year,
         month: civil.month,
         day: civil.day,
@@ -740,63 +820,92 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
         second: 0,
         millisecond: 0
       }
-      const t = this.utc ? utcWallToTime(fields) : localWallToTime(fields)
-      return this.clone(new Date(t))
+    } else if (field === 'days') {
+      target = {
+        year: w.year,
+        month: w.month,
+        day: w.day,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        millisecond: 0
+      }
+    } else if (field === 'hours') {
+      target = {
+        year: w.year,
+        month: w.month,
+        day: w.day,
+        hour: w.hour,
+        minute: 0,
+        second: 0,
+        millisecond: 0
+      }
+    } else if (field === 'minutes') {
+      target = {
+        year: w.year,
+        month: w.month,
+        day: w.day,
+        hour: w.hour,
+        minute: w.minute,
+        second: 0,
+        millisecond: 0
+      }
+    } else {
+      target = {
+        year: w.year,
+        month: w.month,
+        day: w.day,
+        hour: w.hour,
+        minute: w.minute,
+        second: w.second,
+        millisecond: 0
+      }
     }
 
-    const obj: DateObject = {}
-    switch (normalizedUnit) {
-      case 'years':
-        obj.month = 1
-      // falls through
-      case 'quarters':
-      case 'months':
-        obj.day = 1
-      // falls through
-      case 'days':
-        obj.hour = 0
-      // falls through
-      case 'hours':
-        obj.minute = 0
-      // falls through
-      case 'minutes':
-        obj.second = 0
-      // falls through
-      case 'seconds':
-        obj.millisecond = 0
-        break
-      case 'milliseconds':
-        break
-    }
-
-    if (normalizedUnit === 'quarters') {
-      const q = Math.ceil(this.month / 3)
-      obj.month = (q - 1) * 3 + 1
-    }
-
-    return this.set(obj)
+    const prefer = field === 'hours' || field === 'minutes' || field === 'seconds'
+    const resolved = prefer
+      ? wallToTimePreferOffset(target, this.utc, offsetMsAt(t, this.utc))
+      : this.utc
+        ? utcWallToTime(target)
+        : localWallToTime(target)
+    return this.clone(new Date(resolved))
   }
 
   /**
-   * End of the given unit: `startOf(unit)` + 1 unit - 1 ms.
+   * End of the given unit. Time units keep this offset when valid and never land before the receiver;
+   * day-or-larger units are `startOf(unit)` plus one unit minus 1 ms.
    * @param unit Duration unit, or `isoWeek` / `isoWeeks`
    */
   endOf(unit: DurationUnit | 'isoWeek' | 'isoWeeks'): IntlDate {
-    if (!this.isValid()) return this
-    const key = unit.toLowerCase()
-    const isIsoWeek = key === 'isoweek' || key === 'isoweeks'
-    let normalizedUnit: DurationField
-    if (isIsoWeek) {
-      normalizedUnit = 'weeks'
-    } else {
-      try {
-        normalizedUnit = durationField(unit)
-      } catch {
-        throw new ValueError(`Invalid unit ${unit}`)
+    const field = resolveStartUnit(unit)
+    if (field === 'milliseconds') return this.clone()
+    if (!this.isValid()) return this.clone()
+
+    if (field === 'hours' || field === 'minutes' || field === 'seconds') {
+      const t = this.getTime()
+      const w = readWall(t, this.utc)
+      const fields: WallFields = {
+        year: w.year,
+        month: w.month,
+        day: w.day,
+        hour: w.hour,
+        minute: field === 'hours' ? 59 : w.minute,
+        second: field === 'seconds' ? w.second : 59,
+        millisecond: 999
       }
+      if (field === 'hours') {
+        fields.minute = 59
+        fields.second = 59
+      } else if (field === 'minutes') {
+        fields.second = 59
+      }
+      const resolved = wallToTimePreferOffset(fields, this.utc, offsetMsAt(t, this.utc))
+      return this.clone(new Date(resolved))
     }
+
+    const addField: DurationField = field === 'isoWeek' ? 'weeks' : field
     return this.startOf(unit)
-      .add({ [normalizedUnit]: 1 })
+      .add({ [addField]: 1 })
       .subtract({ milliseconds: 1 })
   }
 
@@ -834,7 +943,7 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
   }
 }
 
-const DATE_OBJECT_KEYS: ReadonlySet<string> = new Set<keyof DateObject>([
+const DATE_OBJECT_KEYS: ReadonlySet<string> = new Set([
   'year',
   'month',
   'day',
@@ -846,20 +955,11 @@ const DATE_OBJECT_KEYS: ReadonlySet<string> = new Set<keyof DateObject>([
 ])
 
 function normalizeUnit(unit: string): string {
-  const normalized = unit.toLowerCase().replace(/s$/, '')
-  if (!DATE_OBJECT_KEYS.has(normalized)) throw new ValueError(`Invalid unit ${unit}`)
-  return normalized
-}
-
-function normalizeObject(
-  obj: DateObject,
-  normalizer: (unit: string) => string
-): Partial<Record<string, number>> {
-  const normalized: Partial<Record<string, number>> = {}
-  for (const key of Object.keys(obj) as (keyof DateObject)[]) {
-    const value = obj[key]
-    if (value == null) continue
-    normalized[normalizer(key)] = asNumber(value)
+  const lower = unit.toLowerCase()
+  if (DATE_OBJECT_KEYS.has(lower)) return lower
+  if (lower.endsWith('s')) {
+    const singular = lower.slice(0, -1)
+    if (DATE_OBJECT_KEYS.has(singular)) return singular
   }
-  return normalized
+  throw new ValueError(`Invalid unit ${unit}`)
 }
