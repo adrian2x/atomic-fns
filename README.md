@@ -193,7 +193,7 @@ One-time owner setup (must complete before any 2.0 release), in this order:
 1. Create a GitHub environment named `npm` with a required reviewer and a deployment rule of type `tag` matching `v*` only (no branch rules). Confirm both the required reviewer and the tag rule show on the environment page. GitHub auto-creates a referenced environment with no protection, so this step must precede any release.
 2. Create a repository ruleset that restricts who can create `v*` tags.
 3. On npm, bind a trusted publisher to this repository, workflow `publish.yml`, environment `npm`.
-4. After the first trusted publish succeeds, delete the repository secret `NPM_TOKEN`, revoke that npm token, and set the package to "Require two-factor authentication and disallow tokens".
+4. Once this branch is merged to main and no workflow on main references `NPM_TOKEN`, delete the repository secret `NPM_TOKEN`, revoke that npm token, and set the package to "Require two-factor authentication and disallow tokens", all before creating the first 2.0 release (a failed trusted publish fails safely and can be retried).
 
 ## Contributing
 
