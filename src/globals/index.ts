@@ -362,20 +362,73 @@ function isOwnDataProperty(base: object, key: PropertyKey): boolean {
   )
 }
 
-/** True when `fn` is a native function (`Function.prototype.toString` contains `[native code]`). */
-function isNativeFunction(fn: (...args: never[]) => unknown): boolean {
-  try {
-    return Function.prototype.toString.call(fn).includes('[native code]')
-  } catch {
-    return true
+/**
+ * Intrinsic prototypes whose function-valued members are treated as missing when inherited.
+ * Built once at module load - no `Function.prototype.toString` sniffing on the hot path.
+ */
+const INTRINSIC_PROTOTYPES: WeakSet<object> = (() => {
+  const set = new WeakSet<object>()
+  const add = (p: unknown): void => {
+    if (typeof p === 'object' && p !== null) set.add(p)
+    else if (typeof p === 'function') set.add(p)
   }
-}
+  const addCtor = (ctor: unknown): void => {
+    if (typeof ctor === 'function') {
+      add((ctor as { prototype?: unknown }).prototype)
+    }
+  }
+
+  for (const key of Object.getOwnPropertyNames(globalThis)) {
+    addCtor((globalThis as Record<string, unknown>)[key])
+  }
+  for (const sym of Object.getOwnPropertySymbols(globalThis)) {
+    addCtor((globalThis as Record<symbol, unknown>)[sym])
+  }
+
+  add(Object.prototype)
+  add(Function.prototype)
+  add(Object.getPrototypeOf(Uint8Array.prototype))
+
+  const asyncFn = async function intrinsicAsync() {
+    await Promise.resolve()
+  }
+  const genFn = function* intrinsicGen() {
+    yield 0
+  }
+  const asyncGenFn = async function* intrinsicAsyncGen() {
+    await Promise.resolve()
+    yield 0
+  }
+  addCtor(asyncFn.constructor)
+  addCtor(genFn.constructor)
+  addCtor(asyncGenFn.constructor)
+  // Instance prototypes (%AsyncFunctionPrototype%, %GeneratorPrototype%, ...).
+  add(Object.getPrototypeOf(asyncFn))
+  add(Object.getPrototypeOf(genFn()))
+  add(Object.getPrototypeOf(Object.getPrototypeOf(genFn())))
+  add(Object.getPrototypeOf(asyncGenFn()))
+  add(Object.getPrototypeOf(Object.getPrototypeOf(asyncGenFn())))
+
+  const arrayIter = [][Symbol.iterator]()
+  const mapIter = new Map()[Symbol.iterator]()
+  const setIter = new Set()[Symbol.iterator]()
+  const stringIter = ''[Symbol.iterator]()
+  const regexpIter = /a/[Symbol.matchAll]('')
+  add(Object.getPrototypeOf(arrayIter))
+  add(Object.getPrototypeOf(mapIter))
+  add(Object.getPrototypeOf(setIter))
+  add(Object.getPrototypeOf(stringIter))
+  add(Object.getPrototypeOf(regexpIter))
+  add(Object.getPrototypeOf(Object.getPrototypeOf(arrayIter)))
+
+  return set
+})()
 
 /**
  * True when `key` must be treated as missing on `base`: dangerous segments that are not an own
  * data property of a plain object or array; other members found only on Object.prototype /
- * Function.prototype; inherited (non-own) function-valued members whose function is native.
- * User-class methods and getters stay readable.
+ * Function.prototype; inherited (non-own) function-valued members whose owning prototype is an
+ * intrinsic. User-class methods and getters stay readable.
  */
 function isForbiddenPathSegment(base: object, key: PropertyKey): boolean {
   if (Object.hasOwn(base, key)) {
@@ -397,7 +450,7 @@ function isForbiddenPathSegment(base: object, key: PropertyKey): boolean {
         desc.set === undefined &&
         typeof desc.value === 'function'
       ) {
-        return isNativeFunction(desc.value as (...args: never[]) => unknown)
+        return INTRINSIC_PROTOTYPES.has(proto)
       }
       return false
     }
@@ -415,7 +468,8 @@ function isInheritedKey(base: object, key: PropertyKey): boolean {
  * Check if a given property is present in a given object.
  * Own properties and user-class prototype members count; `Object.prototype` /
  * `Function.prototype` members, prototype-reaching `__proto__`/`constructor`/`prototype`
- * segments (unless own data on a plain object or array), and inherited native functions do not.
+ * segments (unless own data on a plain object or array), and inherited functions whose owning
+ * prototype is an intrinsic do not.
  * @param obj The object to check.
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
@@ -431,10 +485,10 @@ export function has(obj: unknown, attr: PropertyKey): boolean {
  * Check if the attribute is present in the object or return a default value instead.
  * Path segments that would reach a built-in prototype via `__proto__`, `constructor`, or
  * `prototype` (unless that segment is an own data property of a plain object or array), or that
- * resolve only to `Object.prototype` / `Function.prototype` members, or to inherited native
- * functions, are treated as missing (return `value`). Own properties and user-class prototype
- * members (getters, methods) still resolve. Array / string `length` and non-function accessors
- * such as `Map.prototype.size` remain readable.
+ * resolve only to `Object.prototype` / `Function.prototype` members, or to inherited functions
+ * whose owning prototype is an intrinsic, are treated as missing (return `value`). Own properties
+ * and user-class prototype members (getters, methods) still resolve. Array / string `length` and
+ * non-function accessors such as `Map.prototype.size` remain readable.
  * @param key
  * @param obj
  * @param value

@@ -481,8 +481,8 @@ describe('globals', () => {
       TypeError,
       'refusing to write through inherited "fills"'
     )
-    // Buffer.prototype.toString is JS (not `[native code]`), so get may resolve it, but set
-    // still refuses to descend through the inherited property.
+    assert.equal(get('buf.toString', doc, 'D'), 'D')
+    assert.equal(has(doc.buf, 'toString'), false)
     assert.throws(
       () => set('buf.toString.call', doc, 'pwned', true, true),
       TypeError,
@@ -504,6 +504,41 @@ describe('globals', () => {
     const own = { fn: () => 1 }
     set('fn.x', own, 2, true, true)
     assert.equal((own.fn as { x?: number }).x, 2)
+  })
+
+  it('R12-C: bound function on a user prototype is readable; intrinsics stay missing', () => {
+    function baseGreet(this: { name: string }) {
+      return this.name
+    }
+    class Person {
+      name = 'ada'
+    }
+    Object.defineProperty(Person.prototype, 'greet', {
+      value: baseGreet.bind({ name: 'bound' }),
+      writable: true,
+      configurable: true
+    })
+    const greet = get('greet', new Person())
+    assert.equal(typeof greet, 'function')
+    assert.equal(get('toString', Buffer.from('x'), 'D'), 'D')
+    assert.equal(get('fill', new Uint8Array(2), 'D'), 'D')
+    assert.equal(get('next', [][Symbol.iterator](), 'D'), 'D')
+    assert.equal(get('size', new Map([[1, 1]])), 1)
+  })
+
+  it('R12-C: 100k get calls on a class method do not call Function.prototype.toString', () => {
+    class C {
+      m() {
+        return 1
+      }
+    }
+    const spy = vi.spyOn(Function.prototype, 'toString')
+    const o = new C()
+    for (let i = 0; i < 100_000; i++) {
+      assert.equal(typeof get('m', o), 'function')
+    }
+    assert.equal(spy.mock.calls.length, 0)
+    spy.mockRestore()
   })
 
   it('POL-20 path walks refuse prototype-reaching segments', () => {
