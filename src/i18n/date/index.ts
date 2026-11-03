@@ -255,7 +255,7 @@ export class IntlDate implements Comparable, Equatable {
    * @param str Format string
    * @example
 ```js
-new IntlDate().format('MM/DD/YYYY') // '10/31/2022'
+new IntlDate(new Date(2022, 9, 31)).format('MM/DD/YYYY') // '10/31/2022'
 ```
    */
   format(str: string): string {
@@ -271,7 +271,7 @@ new IntlDate().format('MM/DD/YYYY') // '10/31/2022'
    * Seconds since the Unix Epoch, floored.
    * @example
 ```js
-new IntlDate().toSeconds() // 1318874398
+new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toSeconds() // 1667256270
 ```
    */
   toSeconds(): number {
@@ -292,7 +292,7 @@ new IntlDate().toSeconds() // 1318874398
    * ISO-8601 string of this instant.
    * @example
 ```js
-new IntlDate().toISOString() // '2022-10-31T22:44:30.652Z'
+new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOString() // '2022-10-31T22:44:30.652Z'
 ```
    */
   toISOString(): string {
@@ -303,7 +303,7 @@ new IntlDate().toISOString() // '2022-10-31T22:44:30.652Z'
    * UTC date part of the ISO string.
    * @example
 ```js
-new IntlDate().toISODate() // '2022-10-31'
+new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISODate() // '2022-10-31'
 ```
    */
   toISODate(): string {
@@ -314,7 +314,7 @@ new IntlDate().toISODate() // '2022-10-31'
    * UTC time part of the ISO string.
    * @example
 ```js
-new IntlDate().toISOTime() // '22:44:30.652Z'
+new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z'
 ```
    */
   toISOTime(): string {

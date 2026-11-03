@@ -93,11 +93,10 @@ export function compact<T>(arr: T | T[]): T[] | Partial<T> {
  * @returns {Object} Returns an Object with the frequency values
  * @example
 ```js
-count([6.1, 4.2, 6.3], Math.floor);
+count([6.1, 4.2, 6.3], Math.floor)
 // { '4': 1, '6': 2 }
 
-// property iteratee shorthand.
-count(['one', 'two', 'three'], x => x.length);
+count(['one', 'two', 'three'], x => x.length)
 // { '3': 2, '5': 1 }
 ```
  */
@@ -117,21 +116,19 @@ export function count<T>(obj: T[] | object, func: Iteratee<T>): Record<string, n
  *
  * @example
 ```js
-let users = [
+const users = [
   { 'user': 'barney', 'age': 36, 'active': true },
   { 'user': 'fred',   'age': 40, 'active': false }
 ]
 
-filter(users, o => !o.active)
- // objects for ['fred']
+filter(users, o => !o.active).map(u => u.user)
+// ['fred']
 
-// The shape iteratee shorthand.
-filter(users, { age: 36, active: true })
-// objects for ['barney']
+filter(users, { age: 36, active: true }).map(u => u.user)
+// ['barney']
 
-// The property iteratee shorthand.
-filter(users, 'active')
-// objects for ['barney']
+filter(users, 'active').map(u => u.user)
+// ['barney']
 ```
  * @param {Array} arr The collection to iterate over
  * @param {Function} fn The predicate function invoked for each item
@@ -154,22 +151,20 @@ export function filter<T>(
  * Iterates over elements of collection, returning the first element where predicate returns truthy value. The predicate is invoked with three arguments: `(value, index|key, collection)`.
  * @example
 ```js
-let users = [
+const users = [
   { 'user': 'barney',  'age': 36, 'active': true },
   { 'user': 'fred',    'age': 40, 'active': false },
   { 'user': 'pebbles', 'age': 1,  'active': true }
 ]
 
-find(users, o => o.age < 40)
-// object for 'barney'
+find(users, o => o.age < 40).user
+// 'barney'
 
-// The shape iteratee shorthand.
-find(users, { 'age': 1, 'active': true })
-// object for 'pebbles'
+find(users, { 'age': 1, 'active': true }).user
+// 'pebbles'
 
-// The `property` iteratee shorthand.
-find(users, 'active')
-// object for 'barney'
+find(users, 'active').user
+// 'barney'
 ```
  * @param {Array} arr The collection to iterate over.
  * @param {Function} fn The function invoked per iteration.
@@ -191,9 +186,8 @@ export function find<T>(arr: T[] | object, fn: Iteratee<T> | object | PropertyKe
 }
 
 /**
- * Performs an efficient array insert operation in the given array. If the index or the array is invalid, it just returns the given array.
- *
- * **Note:** Uses the same behavior as `Array.splice`.
+ * Inserts `value` at `index` via `Array.splice`. Returns `arr` unchanged when `arr` is nullish or `index < 0`.
+ * An index past the end appends; a non-integer index follows `splice` coercion (for example `NaN` inserts at 0).
  *
  * @param {Array<*>} arr The given array to insert into
  * @param {number} index The index of the array insert operation.
@@ -210,7 +204,7 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
  * Creates a function that performs a partial deep comparison between a given object and `shape`, returning `true` if the given object has equivalent property values, else `false`.
  * @example
 ```js
-let objects = [
+const objects = [
   { a: 1, b: 2, c: 3 },
   { a: 4, b: 5, c: 6 }
 ]
@@ -255,21 +249,19 @@ function matchDeep(shape: unknown, obj: unknown): boolean {
  * Iterates over elements of collection and invokes `iteratee` for each element. The iteratee is invoked with three arguments: `(value, index|key, collection)`. Iteratee functions may exit iteration early by explicitly returning `false`.
  * @example
 ```js
-forEach([1, 2], (value) => {
-  console.log(value)
-})
-// 1
-// 2
+const out = []
+forEach([1, 2], (value) => { out.push(value) })
+out
+// [1, 2]
 
-forEach({ 'a': 1, 'b': 2 }, (value, key) => {
-  console.log(key)
-})
-// 'a'
-// 'b'
+const keysOut = []
+forEach({ 'a': 1, 'b': 2 }, (value, key) => { keysOut.push(key) })
+keysOut
+// ['a', 'b']
 ```
  * @param {Array|Object} collection The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
- * @returns {*} Returns `collection`.
+ * @returns {void}
  * @see {@link forEachRight}
  * @see {@link filter}
  * @see {@link map}
@@ -327,13 +319,14 @@ export function findLast<T>(arr: Iterable<T> | object, fn: Iteratee<T> | object)
 
  * @example
 ```js
-forEachRight([1, 2], console.log)
-// 2
-// 1
+const out = []
+forEachRight([1, 2], (value) => { out.push(value) })
+out
+// [2, 1]
 ```
  * @param {Array|Object} collection The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
- * @returns {*} Returns `collection`.
+ * @returns {void}
  * @see {@link forEach}
  * @see {@link filter}
  * @see {@link map}
@@ -378,26 +371,18 @@ flatten({
   dates: {
     expiry_date: '30 sep 2018',
     available: '30 sep 2017',
-    min_contract_period: [
-      {
-        id: 1,
-        name: '1 month'
-      }
-    ]
+    min_contract_period: [{ id: 1, name: '1 month' }]
   },
-  price: {
-    currency: 'RM',
-    value: 1500
-  }
+  price: { currency: 'RM', value: 1500 }
 })
 // {
-  'dates.expiry_date': '30 sep 2018',
-  'dates.available': '30 sep 2017',
-  'dates.min_contract_period[0].id': 1,
-  'dates.min_contract_period[0].name': '1 month',
-  'price.currency': 'RM',
-  'price.value': 1500
-}
+//   'dates.expiry_date': '30 sep 2018',
+//   'dates.available': '30 sep 2017',
+//   'dates.min_contract_period[0].id': 1,
+//   'dates.min_contract_period[0].name': '1 month',
+//   'price.currency': 'RM',
+//   'price.value': 1500
+// }
 ```
  * @param {Array|Object} arr The array or object to flatten.
  * @param {number} [depth=1] The max recursion depth.
@@ -487,9 +472,9 @@ map([4, 8], square)
 // [16, 64]
 
 map({ a: 4, b: 8 }, square)
-// [16, 64] (iteration order is not guaranteed)
+// [16, 64]
 
-let users = [
+const users = [
   { user: 'barney' },
   { user: 'fred' }
 ]
@@ -527,7 +512,7 @@ export function map<T, TResult>(
  * @returns {number} The index of the found value, else -1
  * @example
 ```js
-let users = [
+const users = [
   { 'user': 'barney',  'active': false },
   { 'user': 'fred',    'active': false },
   { 'user': 'pebbles', 'active': true }
@@ -605,7 +590,7 @@ export function indexOf<T>(obj: T[] | null | undefined, value: T, start = 0): nu
  * @returns {number} The index of the found value, else -1
  * @example
 ```js
-let users = [
+const users = [
   { 'user': 'barney',  'active': true },
   { 'user': 'fred',    'active': false },
   { 'user': 'pebbles', 'active': false }
@@ -707,7 +692,7 @@ export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identi
  * @returns Returns the new duplicate free array
  * @example
 ```js
-uniq([2, 1, 2])
+sortedUniq([2, 1, 2])
 // [1, 2]
 ```
  * @see {@link uniq}
@@ -719,7 +704,7 @@ export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = 
 }
 
 /**
- * Assigns own and inherited enumerable string keyed properties of source objects to the destination object for all destination properties that resolve to `undefined`. Source objects are applied from left to right. Once a property is set, additional values of the same property are ignored.
+ * Assigns own enumerable string keyed properties of source objects onto the destination for keys whose current value is `undefined`. Source objects are applied from left to right. Once a property is set, additional values of the same property are ignored.
  * **Note:** This method mutates `object`.
 
  * @param {Object} object The destination object.
@@ -832,12 +817,11 @@ export function groupBy<T, K extends PropertyKey>(
  *
  * @example
 ```js
-groupByMap([6.1, 4.2, 6.3], Math.floor)
-// Map { 4: [4.2], 6: [6.1, 6.3] }
+[...groupByMap([6.1, 4.2, 6.3], Math.floor)]
+// [[6, [6.1, 6.3]], [4, [4.2]]]
 
-// The `property` iteratee shorthand.
-groupByMap(['one', 'two', 'three'], 'length')
-// Map { 3: ['one', 'two'], 5: ['three'] }
+[...groupByMap(['one', 'two', 'three'], 'length')]
+// [[3, ['one', 'two']], [5, ['three']]]
 ```
  */
 export function groupByMap<T, K>(

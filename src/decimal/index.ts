@@ -223,7 +223,7 @@ export class Decimal {
   /**
    * Returns a new Decimal with the opposite sign.
    * @example
-   * decimal('5').negated() // -5
+   * decimal('5').negated().toString() // '-5'
    */
   negated(): Decimal {
     return Decimal.#fromIE(-this.#i, this.#e)
@@ -240,7 +240,7 @@ export class Decimal {
    * Exact sum of this and `x`.
    * @param x Addend.
    * @example
-   * decimal('0.1').add('0.2') // 0.3
+   * decimal('0.1').add('0.2').toString() // '0.3'
    */
   add(x: DecimalInput): Decimal {
     const b = decimal(x)

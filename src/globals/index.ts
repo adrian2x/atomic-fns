@@ -221,11 +221,11 @@ let idCounter = 1
  * @returns {string} The unique id string.
  * @example
 ```js
-uniqueId()
-// '1'
+uniqueId('user_').startsWith('user_')
+// true
 
-uniqueId('user_')
-// 'user_2'
+typeof uniqueId()
+// 'string'
 ```
  */
 export function uniqueId(prefix = ''): string {
@@ -238,8 +238,8 @@ export function uniqueId(prefix = ''): string {
  * @returns A GUID formatted string.
  * @example
 ```js
-uuid()
-// '183f8ef3-b8f0-4000-81f5-89234c836d00'
+/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(uuid())
+// true
 ```
  */
 export function uuid(): string {

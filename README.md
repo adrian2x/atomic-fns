@@ -13,17 +13,17 @@ You may prefer this library because:
 - **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
 - **Modular**: Pick what you need. Supports tree-shaking, no side effects, and works with all bundlers.
 - **Lazy**: Leverage generators, iterators, and functional composition.
-- **Tests**: All modules have comprehensive test suites and 100% test coverage.
+- **Tests**: Vitest with v8 coverage thresholds of lines 90, statements 90, functions 90, and branches 85.
 
 ## Docs
 
-📖 Available at [atomic-fns](https://atomic-stack.github.io/atomic-fns/)
+Available at [atomic-fns](https://atomic-stack.github.io/atomic-fns/)
 
 ## Get Started
 
 This library is available as an [npm package](https://www.npmjs.com/package/atomic-fns).
 
-To install the package you need to have [npm](https://www.npmjs.com/get-npm) (or [yarn](https://yarnpkg.com/getting-started/install)) installed and then run:
+Requires Node.js >= 24.
 
 ```bash
 npm install atomic-fns
@@ -36,15 +36,14 @@ Just import any function or class you need.
 ```js
 import { sorted, times, uniqueId } from 'atomic-fns'
 
-times(5, (i) => i)
+;[...times(5, (i) => i)]
 // -> [0, 1, 2, 3, 4]
 
 sorted([4, 3, 2, 1])
 // -> [1, 2, 3, 4]
 
 uniqueId('user_')
-// -> 'user_101225005'
-...
+// -> 'user_1'
 ```
 
 See the full list of [modules](https://atomic-stack.github.io/atomic-fns/modules.html).
@@ -55,18 +54,33 @@ This library features a data model similar to [Python](https://docs.python.org/3
 
 For example, in Python collections, `size()` is a method, while in JS it's just a property. So this library uses `size` property instead of method. Similarly, the `len` function implementation checks for both `length` and `size` since many JS objects have a `length` property.
 
-## Special method names
+## Protocol operators
 
-This library adds support for operators using object methods such as:
+Equality, ordering, arithmetic, cloning, and truthiness dispatch only on exported symbols in `protocol` (for example `protocol.compare`, `protocol.equals`). String method names such as `eq` / `lt` / `compare` on user objects are not called unless you opt in with `adaptProtocol`.
 
-- `obj.eq(other)` adds custom `obj == other`.
-- `obj.lt(other)` adds custom `obj < other`.
-- `obj.lte(other)` adds custom `obj <= other`.
-- `obj.gt(other)` adds custom `obj > other`.
-- `obj.gte(other)` adds custom `obj >= other`.
-- `obj.compare(other)` overloads sorting operations.
+```js
+import { adaptProtocol, compare, protocol, sorted } from 'atomic-fns'
 
-When working with objects, functions in this library use these custom operators for equality and sorting. You can also apply operators to values like `eq(x, y)`, `lte(x, y)`, `compare(x, y)`, etc.
+class V {
+  constructor(n) {
+    this.n = n
+  }
+  compare(o) {
+    return this.n - o.n
+  }
+}
+adaptProtocol(V)
+compare(new V(2), new V(1)) // 1
+sorted([new V(2), new V(1)]).map((v) => v.n) // [1, 2]
+
+const o = {
+  [protocol.add](y) {
+    return 42
+  }
+}
+```
+
+`eq` is value (numeric/semantic) equality. `compare` is a total order that keeps values of different kinds distinct, like Map keys. So `compare(decimal(1), 1) === 1` while `eq(decimal(1), 1) === true`, and `new SortedSet([decimal(1)]).has(1) === false`.
 
 ## New Types
 
@@ -88,17 +102,65 @@ Some common base interfaces and typing patterns you may have seen like `Optional
 
 - [SortedSet](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedSet.html)
 - [SortedMap](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedMap.html)
-- [SortedTree](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedTree.html)
 
 ### Other Containers
 
 - [Deque](https://atomic-stack.github.io/atomic-fns/classes/collections.Deque.html)
 - [FrozenSet](https://atomic-stack.github.io/atomic-fns/classes/collections.FrozenSet.html)
 - [LRUCache](https://atomic-stack.github.io/atomic-fns/classes/collections.LRUCache.html)
+- [BTree](https://atomic-stack.github.io/atomic-fns/classes/collections.BTree.html)
+- [SplayTree](https://atomic-stack.github.io/atomic-fns/classes/collections.SplayTree.html)
+- [Heap](https://atomic-stack.github.io/atomic-fns/classes/collections.Heap.html)
+- [Trie](https://atomic-stack.github.io/atomic-fns/classes/collections.Trie.html)
+
+## Migrating to 2.0
+
+Breaking changes from 1.1.7. There is no deprecation release; removed names are gone.
+
+### Removed
+
+| Before (1.1.7)                                                                                                           | Use instead                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `bind`, `callAsync`, `isArray`, `values`, `floor`, `ceil`, `isInteger`, `log2`                                           | natives (`Function.prototype.bind`, `Array.isArray`, `Object.values`, `Math.*`) |
+| `id`                                                                                                                     | `identity`                                                                      |
+| `HASH_KEY`, `IterableIterator`                                                                                           | gone (`hash` uses a WeakMap; iterators are native)                              |
+| `SortedTree`                                                                                                             | `SortedMap`                                                                     |
+| Interfaces `Container`, `Equals`, `Comparable`, `Ordered`, `Reversible`; abstract `Mapping`, `Sequence`                  | `SetCollection`, `MapCollection`                                                |
+| Collection `empty()`, `length`; Mapping `add(key)`; LRUCache `remove`; SplayTree `top`; Heap `at`; Deque `remove`, `add` | JS protocol names below                                                         |
+| String-method protocol dispatch (`obj.eq` / `obj.compare` called automatically)                                          | symbol hooks or `adaptProtocol(Class)`                                          |
+
+### Renamed
+
+| Before                                                                                                                                  | After                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `contains` (method)                                                                                                                     | `has`                                                                                                                      |
+| method `remove`                                                                                                                         | `delete` (returns boolean)                                                                                                 |
+| Deque `append` / `appendleft` / `popleft` / `get` / `first` / `reversed`                                                                | `push` / `unshift` / `shift` / `at` / `at(0)` / `toReversed`                                                               |
+| Heap `add` / `top`                                                                                                                      | `push` / `peek`                                                                                                            |
+| BTree `removeRange` / `removeKeys` / `rangeUpdate` / `rangeForEach` / `keysRange` / `extend` / `reversed` / `lowerBound` / `upperBound` | `deleteRange` / `deleteKeys` / `editRange` / `forRange` / `getRange` / `setPairs` / `entriesReversed` / `higher` / `lower` |
+| SplayTree `lowerBound`                                                                                                                  | `lower`                                                                                                                    |
+| SortedMap `reversed`                                                                                                                    | `entriesReversed`                                                                                                          |
+| type `Function`                                                                                                                         | `AnyFunction`                                                                                                              |
+
+### Added
+
+`protocol`, `adaptProtocol`, `reject`, `without`, `symmetricDifference`, Decimal rounding options, `Duration.format`, Deque `maxlen`, BTree/SortedMap `unfreeze`, `next(it, dflt)`, debounce `cancel` / `flush`.
+
+### Signature and behavior notes
+
+- Map-like `set` returns `this`. `uniqueId` returns a string. `hash` returns a number for all inputs. `CustomError(message, options)` forwards `cause`.
+- `cache` is a TC39 method decorator. `sorted(it, options)` accepts `{ key, reverse, compare }`. `Decimal.div(x, opts)` takes `{ precision, rounding }`. `Deque(items, { maxlen, arrType })`.
+- `remove(arr, pred)` mutates and returns removed elements (Lodash). Prefer `without(arr, ...values)` for the old pure value form; `reject` is the pure predicate form.
+- `compare` is a total order across kinds; `eq` is semantic equality (see Protocol operators). Decimal compare/equals with numbers uses exact binary values (`decimal('0.1').eq(0.1) === false`).
+- Decimal exponent bound `|e| <= 1e6`. `range(NaN)` throws. `uuid` throws without Web Crypto. `difference` is set difference. `strftime %Y` / `%y` follow C/POSIX. Decimal `valueOf` throws.
+
+### Platform
+
+Node >= 24; ESM `exports` subpaths; jasmine replaced by vitest.
 
 ## Contributing
 
-If you want to contribute to the project and make it better, your help is very welcome. Contributing is also a great way to learn more about social coding on Github, new technologies and and their ecosystems and how to make constructive, helpful bug reports, feature requests and the noblest of all contributions: a good, clean pull request. You will be listed as a **Champion** on the official site as well.
+If you want to contribute to the project and make it better, your help is very welcome. Contributing is also a great way to learn more about social coding on Github, new technologies and their ecosystems and how to make constructive, helpful bug reports, feature requests and the noblest of all contributions: a good, clean pull request. You will be listed as a **Champion** on the official site as well.
 
 ## License
 

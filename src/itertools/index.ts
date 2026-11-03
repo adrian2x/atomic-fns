@@ -54,7 +54,7 @@ export function accumulate<T>(
  * @example
 ```js
 all([0])
-// true
+// false
 
 all([1, 2, 3])
 // true
@@ -110,9 +110,6 @@ export function chain<T>(...iterables: Iterable<T>[]): IteratorObject<T> {
 contains([1, 2, 3], 1)
 // true
 
-contains([1, 2, 3], 1, 2)
-// false
-
 contains({ 'a': 1, 'b': 2 }, 1)
 // true
 
@@ -166,11 +163,10 @@ export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
  * @returns A generator with tuples like `[index, item]`.
  * @example
 ```js
-console.log([...enumerate(['hello', 'world'])])
+[...enumerate(['hello', 'world'])]
 // [[0, 'hello'], [1, 'world']]
 
-// Start with index `1`
-console.log([...enumerate(['hello', 'world'], 1)])
+[...enumerate(['hello', 'world'], 1)]
 // [[1, 'hello'], [2, 'world']]
 ```
  */
@@ -199,7 +195,7 @@ export function first<T>(iterable: Iterable<T>): T | undefined {
  * @returns A new array with the filtered values.
  * @example
 ```js
-compact([0, 1, false, 2, '', 3])
+[...icompact([0, 1, false, 2, '', 3])]
 // [1, 2, 3]
 ```
  */
@@ -304,19 +300,19 @@ export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T, bool
  * @param args When called with a single argument, it is assigned to `stop` param. If two arguments are given, it will assign them to `(start, stop)`. When three arguments, it means `(start, stop, step)`.
  * @example
 ```js
-range(5)
+[...range(5)]
 // [0, 1, 2, 3, 4]
 
-range(2, 5)
+[...range(2, 5)]
 // [2, 3, 4]
 
-range(0, 5, 2)
+[...range(0, 5, 2)]
 // [0, 2, 4]
 
-range(5, 0, -1)
+[...range(5, 0, -1)]
 // [5, 4, 3, 2, 1]
 
-range(-3)
+[...range(-3)]
 // []
 ```
  */
@@ -509,11 +505,8 @@ export function times<T>(n: number, fn: (index: number) => T): IteratorObject<T>
  * @returns Tuples with elements from each iterator
  * @example
 ```js
-for item of zip([1, 2, 3], ['sugar', 'spice', 'nice'])
-  console.log(item)
-// [1, 'sugar']
-// [2, 'spice']
-// [3, 'nice']
+[...zip([1, 2, 3], ['sugar', 'spice', 'nice'])]
+// [[1, 'sugar'], [2, 'spice'], [3, 'nice']]
 ```
  */
 export function zip<T extends unknown[]>(

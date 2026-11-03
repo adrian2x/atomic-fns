@@ -15,7 +15,7 @@ type Invokable<T = unknown> = (...args: unknown[]) => T
 export type LooseFunction = (...args: unknown[]) => LooseFunction
 
 /**
- * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least arity number of arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on. The arity of `func` may be specified if `func.length` is not sufficient.
+ * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least `func.length` arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on.
  * @param func The function to curry.
  * @returns The new curried function.
  */
@@ -250,8 +250,8 @@ export function throttle<F extends AnyFunction>(
  * @returns The new restricted function.
  * @example
 ```js
-let func = x => x
-let single = once(func)
+const func = x => x
+const single = once(func)
 single(1) // 1
 single(2) // 1
 single(3) // 1

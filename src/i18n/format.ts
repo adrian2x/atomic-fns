@@ -210,14 +210,14 @@ function buildValues(date: Date, locale: string | undefined): Map<string, () => 
 }
 
 /**
- * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as {@link https://momentjs.com/docs/#/displaying/format/ moment}.
+ * Returns a localized string representation of this date for the given format string. Tokens overlap with {@link https://momentjs.com/docs/#/displaying/format/ moment} (`YYYY`, `MM`, `DD`, ...). Differ from moment: default format is `YYYY-MM-DDTHH:mm:ssZ`; `Z`/`ZZ` are numeric offsets; `k`/`kk`/`E` are supported; there is no `Do`.
  * @param formatStr The format string to use
  * @param date The date value
  * @param locale The locale to use when formatting
  * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
  * @example
 ```js
-formatDate('MM/DD/YYYY', new Date()) // '10/31/2022'
+formatDate('MM/DD/YYYY', new Date(2022, 9, 31)) // '10/31/2022'
 ```
  */
 export function formatDate(formatStr: string, date: Date, locale?: string): string {
@@ -290,7 +290,7 @@ function strftimeValues(date: Date, locale: string | undefined): Map<string, () 
  * @see {@link https://strftime.org/ strftime format}
  * @example
 ```js
-strftime('%A, %d/%m/%y', new Date())
+strftime('%A, %d/%m/%y', new Date(2020, 1, 1))
 // 'Saturday, 01/02/20'
 ```
  */

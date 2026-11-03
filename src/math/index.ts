@@ -109,7 +109,7 @@ export function max<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity)
  * @returns The mean value or `NaN` if no elements.
  * @example
 ```js
-let objects = [{ 'n': 4 }, { 'n': 2 }, { 'n': 8 }, { 'n': 6 }]
+const objects = [{ 'n': 4 }, { 'n': 2 }, { 'n': 8 }, { 'n': 6 }]
 
 mean(objects, o => o.n)
 // 5
