@@ -24,9 +24,7 @@ export class SortedMap<K, V> extends MapCollection<K, V> {
     return this.#tree.size
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'SortedMap'
-  }
+  readonly [Symbol.toStringTag] = 'SortedMap'
 
   get(key: K): V | undefined {
     return this.#tree.get(key)

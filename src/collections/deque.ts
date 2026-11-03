@@ -63,9 +63,7 @@ export class Deque<T> extends SetCollection<T, number> {
     return this.#maxlen
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'Deque'
-  }
+  readonly [Symbol.toStringTag] = 'Deque'
 
   clear(): void {
     for (let i = 0; i < this.#size; i++) {
@@ -136,7 +134,7 @@ export class Deque<T> extends SetCollection<T, number> {
   set(i: number, v: T): this {
     let idx = Number.isNaN(i) ? 0 : Math.trunc(i)
     if (idx < 0) idx += this.#size
-    if (idx < 0 || idx >= this.#size) throw new RangeError(`index ${idx} out of range`)
+    if (idx < 0 || idx >= this.#size) throw new RangeError(`index ${String(idx)} out of range`)
     this.#buf[this.#phys(idx)] = v
     return this
   }

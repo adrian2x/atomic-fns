@@ -8,7 +8,6 @@ import {
   get,
   isBool,
   isEmpty,
-  isFunction,
   isIterable,
   isNull,
   isNumber,
@@ -57,6 +56,12 @@ function resolvePredicate<T>(
   return matches(predicate)
 }
 
+function toIteratee<T>(fn: Iteratee<T> | object | PropertyKey): Iteratee<T> {
+  if (typeof fn === 'function') return fn as Iteratee<T>
+  if (isObject(fn)) return matches(fn)
+  return (obj) => get(fn as PropertyKey, obj)
+}
+
 /**
  * Creates a new array with all falsy and empty values removed.
  * @param arr The array to compact
@@ -96,12 +101,10 @@ count(['one', 'two', 'three'], x => x.length);
 // { '3': 2, '5': 1 }
 ```
  */
-export function count<T>(obj: T[], fn: Iteratee<T>): Record<string, number>
-export function count<T>(obj: Object, fn: Iteratee<T>): Record<string, number>
-export function count<T>(obj: T[] | Object, func: Iteratee<T>): Record<string, number> {
+export function count<T>(obj: T[] | object, func: Iteratee<T>): Record<string, number> {
   const counters = Object.create(null) as Record<string, number>
   forEach(obj, (value, key) => {
-    const result = String(func(value as T, key))
+    const result = String(func(value, key))
     counters[result] = (counters[result] ?? 0) + 1
   })
   return counters
@@ -134,19 +137,14 @@ filter(users, 'active')
  * @param {Function} fn The predicate function invoked for each item
  * @returns {Array} The new filtered array
  */
-export function filter<T>(arr: T[], fn?: Iteratee<T>): T[]
-export function filter<T>(arr: T[], fn?: Object): T[]
-export function filter<T>(arr: Object, fn?: Iteratee<T>): T[]
-export function filter<T>(arr: Object, fn?: Object): T[]
-export function filter<T>(arr: T[] | Object, fn: Iteratee<T> | Object = identity): T[] {
+export function filter<T>(
+  arr: T[] | object | null | undefined,
+  fn: Iteratee<T> | object | PropertyKey = identity
+): T[] {
   if (!arr) return []
-  const predicate = isFunction(fn)
-    ? fn
-    : isObject(fn)
-      ? matches(fn)
-      : (obj: unknown) => get(fn as PropertyKey, obj)
+  const predicate = toIteratee<T>(fn)
   const results: T[] = []
-  forEach(arr, (value: T, key) => {
+  forEach<T>(arr, (value, key) => {
     if (predicate(value, key, arr)) results.push(value)
   })
   return results
@@ -178,20 +176,10 @@ find(users, 'active')
  * @returns {*} The matched element, else `undefined`.
  * @see {@link findLast}
  */
-export function find<T>(arr: T[], fn: Iteratee<T>): T | undefined
-export function find<T>(arr: T[], fn: Object): T | undefined
-export function find<T>(arr: T[], fn: PropertyKey): T | undefined
-export function find<T>(arr: Object, fn: Iteratee<T>): T | undefined
-export function find<T>(arr: Object, fn: Object): T | undefined
-export function find<T>(arr: Object, fn: PropertyKey): T | undefined
-export function find<T>(arr: T[] | Object, fn: Iteratee<T> | Object | PropertyKey): T | undefined {
-  const it = isFunction(fn)
-    ? fn
-    : isObject(fn)
-      ? matches(fn)
-      : (obj: unknown) => get(fn as PropertyKey, obj)
+export function find<T>(arr: T[] | object, fn: Iteratee<T> | object | PropertyKey): T | undefined {
+  const it = toIteratee<T>(fn)
   if (Array.isArray(arr)) {
-    return arr.find(it)
+    return (arr as T[]).find(it)
   } else if (isObject(arr)) {
     const record = arr as Record<string, T>
     for (const key of Object.keys(record)) {
@@ -212,7 +200,7 @@ export function find<T>(arr: T[] | Object, fn: Iteratee<T> | Object | PropertyKe
  * @param {*} value The value to insert in the array at the given `index`.
  * @returns {Array<*>} The given array.
  */
-export function insert<T>(arr: T[], index: number, value: T): T[] {
+export function insert<T, A extends T[] | null | undefined>(arr: A, index: number, value: T): A {
   if (!arr || index < 0) return arr
   arr.splice(index, 0, value)
   return arr
@@ -254,9 +242,7 @@ function matchDeep(shape: unknown, obj: unknown): boolean {
   }
   if (isPlainObject(shape)) {
     for (const key of Object.keys(shape)) {
-      if (
-        !matchDeep((shape as Record<string, unknown>)[key], (obj as Record<string, unknown>)[key])
-      ) {
+      if (!matchDeep(shape[key], (obj as Record<string, unknown>)[key])) {
         return false
       }
     }
@@ -288,13 +274,14 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
  * @see {@link filter}
  * @see {@link map}
  */
-export function forEach<T>(collection: Iterable<T>, fn: Iteratee<T>): void
-export function forEach<T>(collection: Object, fn: Iteratee<T>): void
-export function forEach<T>(collection: Iterable<T> | Object, fn: Iteratee<T>): void {
+export function forEach<T>(
+  collection: Iterable<T> | object | null | undefined,
+  fn: Iteratee<T>
+): void {
   if (collection == null) return
   if (Array.isArray(collection)) {
-    for (let i = 0; i < collection.length; i++) {
-      const res = fn(collection[i], i, collection)
+    for (const [i, value] of (collection as T[]).entries()) {
+      const res = fn(value, i, collection)
       if (res === false) return
     }
   } else if (isIterable(collection)) {
@@ -323,14 +310,10 @@ findLast([1, 2, 3, 4], n => n % 2 === 1)
  * @returns {*} The matched element, else `undefined`.
  * @see {@link find}
  */
-export function findLast<T>(arr: Iterable<T>, fn: Iteratee<T>): T | undefined
-export function findLast<T>(arr: Iterable<T>, fn: Object): T | undefined
-export function findLast<T>(arr: Object, fn: Iteratee<T>): T | undefined
-export function findLast<T>(arr: Object, fn: Object): T | undefined
-export function findLast<T>(arr: Iterable<T> | Object, fn: Iteratee<T> | Object): T | undefined {
-  let result
-  const it = isFunction(fn) ? fn : matches(fn)
-  forEachRight(arr, (val, key) => {
+export function findLast<T>(arr: Iterable<T> | object, fn: Iteratee<T> | object): T | undefined {
+  let result: T | undefined
+  const it: Iteratee<T> = typeof fn === 'function' ? (fn as Iteratee<T>) : matches(fn)
+  forEachRight<T>(arr, (val, key) => {
     if (it(val, key, arr)) {
       result = val
       return false
@@ -355,14 +338,15 @@ forEachRight([1, 2], console.log)
  * @see {@link filter}
  * @see {@link map}
  */
-export function forEachRight<T>(collection: T[], fn: Iteratee<T>): void
-export function forEachRight<T>(collection: Object, fn: Iteratee<T>): void
-export function forEachRight<T>(collection: T[] | Object, fn: Iteratee<T>): void {
+export function forEachRight<T>(
+  collection: Iterable<T> | object | null | undefined,
+  fn: Iteratee<T>
+): void {
   if (collection == null) return
   if (Array.isArray(collection)) {
-    for (let i = collection.length - 1; i >= 0; i--) {
-      const value = collection[i]
-      const res = fn(value, i, collection)
+    const items = collection as T[]
+    for (let i = items.length - 1; i >= 0; i--) {
+      const res = fn(items[i], i, collection)
       if (res === false) return
     }
   } else if (isIterable(collection)) {
@@ -421,14 +405,15 @@ flatten({
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flat Array.flat()}
  */
 export function flatten<T>(arr: T[], depth?: boolean | number): T[]
-export function flatten(arr: Object, depth?: boolean | number): Object
-export function flatten<T>(arr: T[] | Object, depth: boolean | number = 1): T[] | Object {
+export function flatten(arr: object, depth?: boolean | number): object
+export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] | object {
   if (Array.isArray(arr)) {
+    const items = arr as T[]
     const d = depth === true ? Infinity : Number(depth)
-    if (!(d > 0)) return arr.slice()
-    return flattenArray(arr, d)
+    if (!(d > 0)) return items.slice()
+    return flattenArray(items, d)
   }
-  if (isObject(arr)) return flattenObj(arr as Record<string, unknown>)
+  if (isObject(arr)) return flattenObj(arr)
   return arr
 }
 
@@ -457,14 +442,14 @@ function flattenObj(
   obj: unknown,
   prefix = '',
   result: Record<string, unknown> = {},
-  seen: WeakSet<object> = new WeakSet()
+  seen = new WeakSet<object>()
 ): Record<string, unknown> {
   if (isString(obj) || isNumber(obj) || isBool(obj) || isNull(obj)) {
     if (prefix) result[prefix] = obj
     return result
   }
 
-  if (obj !== null && typeof obj === 'object') {
+  if (typeof obj === 'object') {
     if (seen.has(obj)) throw new ValueError('cyclic structure')
     if (!isPlainObject(obj) && !Array.isArray(obj)) {
       if (prefix) result[prefix] = obj
@@ -518,17 +503,14 @@ map(users, 'user')
  * @returns Returns the new mapped array.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map Array.map()}
  */
-export function map<T, TResult>(arr: T[], fn: Iteratee<T, PropertyKey, TResult>): TResult[]
-export function map<T, TResult>(arr: T[], fn: PropertyKey): TResult[]
-export function map<T, TResult>(arr: Object, fn: Iteratee<T, PropertyKey, TResult>): TResult[]
-export function map<TResult>(arr: Object, fn: PropertyKey): TResult[]
 export function map<T, TResult>(
-  arr: T[] | Object,
+  arr: T[] | object,
   fn: Iteratee<T, PropertyKey, TResult> | PropertyKey
 ): TResult[] {
-  const it = isFunction(fn) ? fn : (obj: unknown) => get<TResult>(fn as PropertyKey, obj)
+  const it: Iteratee<T, PropertyKey, TResult> =
+    typeof fn === 'function' ? fn : (obj) => get<TResult>(fn, obj)
   if (Array.isArray(arr)) {
-    return arr.map((x, i) => it(x, i, arr))
+    return (arr as T[]).map((x, i) => it(x, i, arr))
   }
   if (isObject(arr)) {
     const obj = arr as Record<PropertyKey, T>
@@ -566,21 +548,18 @@ findIndex(users, 'active')
  * @see {@link findLastIndex}
  *
  */
-export function findIndex<T>(obj: T[], fn: Iteratee<T>, start?: number): number
-export function findIndex<T>(obj: T[], fn: Object, start?: number): number
-export function findIndex<T>(obj: T[], fn: PropertyKey, start?: number): number
-export function findIndex<T>(obj: T[], fn: Iteratee<T> | Object | PropertyKey, start = 0): number {
+export function findIndex<T>(
+  obj: T[] | null | undefined,
+  fn: Iteratee<T> | object | PropertyKey,
+  start = 0
+): number {
   if (!obj) return -1
   const length = obj.length
   if (length && start < 0) {
     start = Math.max(start + length, 0)
   }
   if (!length || start >= length) return -1
-  const it = isFunction(fn)
-    ? fn
-    : isObject(fn)
-      ? matches(fn)
-      : (item: unknown) => get(fn as PropertyKey, item)
+  const it = toIteratee<T>(fn)
   for (; start < length; start++) {
     if (it(obj[start], start, obj)) return start
   }
@@ -605,7 +584,7 @@ indexOf([1, 2, 1, 2], 2, 2)
  * @see {@link findIndex}
  * @see {@link lastIndexOf}
  */
-export function indexOf<T>(obj: T[], value: T, start = 0): number {
+export function indexOf<T>(obj: T[] | null | undefined, value: T, start = 0): number {
   if (!obj) return -1
   const length = obj.length
   if (length && start < 0) {
@@ -646,23 +625,16 @@ findLastIndex(users, 'active')
  * @see {@link findIndex}
  * @see {@link lastIndexOf}
  */
-export function findLastIndex<T>(arr: T[], fn: Iteratee<T>, start?: number): number
-export function findLastIndex<T>(arr: T[], fn: Object, start?: number): number
-export function findLastIndex<T>(arr: T[], fn: PropertyKey, start?: number): number
 export function findLastIndex<T>(
-  arr: T[],
-  fn: Iteratee<T> | Object | PropertyKey,
+  arr: T[] | null | undefined,
+  fn: Iteratee<T> | object | PropertyKey,
   start?: number
 ): number {
   if (arr == null) return -1
   const length = arr.length
-  if (start == null) start = length - 1
+  start ??= length - 1
   if (!length || start < 0) return -1
-  const it = isFunction(fn)
-    ? fn
-    : isObject(fn)
-      ? matches(fn)
-      : (item: unknown) => get(fn as PropertyKey, item)
+  const it = toIteratee<T>(fn)
   for (; start >= 0; start--) {
     if (it(arr[start], start, arr)) return start
   }
@@ -687,10 +659,10 @@ lastIndexOf([1, 2, 1, 2], 2, 2)
  * @see {@link findLastIndex}
  * @see {@link indexOf}
  */
-export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
+export function lastIndexOf<T>(obj: T[] | null | undefined, value: T, start?: number): number {
   if (obj == null) return -1
   const length = obj.length
-  if (start == null) start = length - 1
+  start ??= length - 1
   if (!length || start < 0) return -1
   if (start >= length) start = length - 1
   for (; start >= 0; start--) {
@@ -715,12 +687,10 @@ uniq([2.1, 1.2, 2.3], Math.floor)
  *
  * @see {@link sortedUniq}
  */
-export function uniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
-export function uniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
 export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
   const seen = new Set<unknown>()
   const result: T[] = []
-  const it = isFunction(fn) ? fn : (x: T) => get(fn, x)
+  const it: Iteratee<T> = typeof fn === 'function' ? fn : (x) => get(fn, x)
   for (const x of arr) {
     const key = it(x)
     if (seen.has(key)) continue
@@ -742,10 +712,8 @@ uniq([2, 1, 2])
 ```
  * @see {@link uniq}
  */
-export function sortedUniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
-export function sortedUniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
 export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
-  const values = uniq(arr, fn as Iteratee<T>)
+  const values = uniq(arr, fn)
   values.sort(compare)
   return values
 }
@@ -850,8 +818,8 @@ export function groupBy<T, K extends PropertyKey>(
   fn: ((v: T) => K) | string
 ): Partial<Record<K, T[]>> {
   const values = toValues(coll)
-  const keyFn = typeof fn === 'function' ? fn : (v: T) => get(fn, v) as K
-  return Object.groupBy(values, (v) => keyFn(v)) as Partial<Record<K, T[]>>
+  const keyFn = typeof fn === 'function' ? fn : (v: T) => get<K>(fn, v)
+  return Object.groupBy<K, T>(values, (v) => keyFn(v))
 }
 
 /**
@@ -877,15 +845,15 @@ export function groupByMap<T, K>(
   fn: ((v: T) => K) | string
 ): Map<K, T[]> {
   const values = toValues(coll)
-  const keyFn = typeof fn === 'function' ? fn : (v: T) => get(fn, v) as K
+  const keyFn = typeof fn === 'function' ? fn : (v: T) => get<K>(fn, v)
   return Map.groupBy(values, (v) => keyFn(v))
 }
 
-function toValues<T>(coll: Iterable<T> | Record<string, T>): T[] {
+function toValues<T>(coll: Iterable<T> | Record<string, T> | null | undefined): T[] {
   if (coll == null) return []
   if (isPlainObject(coll)) return Object.values(coll)
-  if (isIterable(coll)) return Array.from(coll as Iterable<T>)
-  return Object.values(coll as Record<string, T>)
+  if (isIterable(coll)) return Array.from(coll)
+  return Object.values(coll)
 }
 
 /**
@@ -921,7 +889,7 @@ export function reject<T>(
   const pred = resolvePredicate(predicate)
   const result: T[] = []
   let index = 0
-  forEach(collection as Iterable<T> | Object, (value: T) => {
+  forEach(collection as Iterable<T> | object, (value: T) => {
     if (!pred(value, index, collection)) result.push(value)
     index++
   })

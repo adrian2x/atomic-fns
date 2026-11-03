@@ -1,6 +1,6 @@
 import { ValueCollection } from './abc.js'
 
-type TrieNode = {
+interface TrieNode {
   children: Map<string, TrieNode>
   isWord: boolean
 }
@@ -34,8 +34,7 @@ export class Trie extends ValueCollection<string> {
   add(word: string): this {
     if (typeof word !== 'string') throw new TypeError('Trie stores strings')
     let node = this.#root
-    for (let i = 0; i < word.length; i++) {
-      const c = word[i]
+    for (const c of word.split('')) {
       let next = node.children.get(c)
       if (!next) {
         next = newNode()
@@ -58,8 +57,7 @@ export class Trie extends ValueCollection<string> {
     if (typeof word !== 'string') return false
     const path: { node: TrieNode; char: string }[] = []
     let node = this.#root
-    for (let i = 0; i < word.length; i++) {
-      const c = word[i]
+    for (const c of word.split('')) {
       const next = node.children.get(c)
       if (!next) return false
       path.push({ node, char: c })
@@ -80,7 +78,7 @@ export class Trie extends ValueCollection<string> {
   has(word: string): boolean {
     if (typeof word !== 'string') return false
     const node = this.#findNode(word)
-    return node !== undefined && node.isWord
+    return node?.isWord === true
   }
 
   /**
@@ -97,7 +95,9 @@ export class Trie extends ValueCollection<string> {
     let yielded = 0
     const stack: { node: TrieNode; path: string }[] = [{ node: start, path: prefix }]
     while (stack.length > 0 && yielded < limit) {
-      const { node, path } = stack.pop()!
+      const top = stack.pop()
+      if (top === undefined) break
+      const { node, path } = top
       if (node.isWord) {
         yield path
         yielded++
@@ -112,8 +112,8 @@ export class Trie extends ValueCollection<string> {
 
   #findNode(word: string): TrieNode | undefined {
     let node: TrieNode | undefined = this.#root
-    for (let i = 0; i < word.length; i++) {
-      node = node.children.get(word[i])
+    for (const c of word.split('')) {
+      node = node.children.get(c)
       if (!node) return undefined
     }
     return node
@@ -128,9 +128,7 @@ export class Trie extends ValueCollection<string> {
     return this.#count
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'Trie'
-  }
+  readonly [Symbol.toStringTag] = 'Trie'
 
   values(): IteratorObject<string> {
     return this.matches('', Infinity)

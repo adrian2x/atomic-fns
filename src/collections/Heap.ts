@@ -30,9 +30,7 @@ export class Heap<T> extends ValueCollection<T> {
     return this.#heap.length
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'Heap'
-  }
+  readonly [Symbol.toStringTag] = 'Heap'
 
   clear(): void {
     this.#heap.length = 0

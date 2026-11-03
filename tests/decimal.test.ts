@@ -200,17 +200,17 @@ describe('SPEC-R68 sqrt', () => {
 describe('SPEC-R69 Conversion protocol', () => {
   it('SPEC-R69 toString toNumber toJSON valueOf toPrimitive', () => {
     expect(JSON.stringify({ d: decimal('1.5') })).toBe('{"d":"1.5"}')
-    expect(`${decimal(2)}`).toBe('2')
+    expect(String(decimal(2))).toBe('2')
     expect(decimal(5).toNumber()).toBe(5)
     expect(() => decimal(5).valueOf()).toThrow(TypeError)
     expect(() => {
       const a: unknown = decimal(5)
-      return (a as unknown as number) + 1
+      return (a as number) + 1
     }).toThrow(TypeError)
     expect(() => {
       const a: unknown = decimal(1)
       const b: unknown = decimal(2)
-      return a < b
+      return (a as number) < (b as number)
     }).toThrow(TypeError)
   })
 })
@@ -236,7 +236,7 @@ describe('SPEC-R70 Decimal protocol', () => {
 
   it('SPEC-R70 protocol arithmetic and rank', () => {
     expect(Reflect.get(decimal(1), protocol.rank)).toBe(1)
-    expect(add(decimal('0.1'), '0.2').toString()).toBe('0.3')
+    expect(String(add(decimal('0.1'), '0.2'))).toBe('0.3')
     const abs = Reflect.get(decimal(3), protocol.abs) as (this: Decimal) => Decimal
     expect(abs.call(decimal(3)).toString()).toBe('3')
     expect(abs.call(decimal(-3)).toString()).toBe('3')

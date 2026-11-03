@@ -27,9 +27,7 @@ export class SortedSet<T> extends ValueCollection<T> {
     return this.#tree.size
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'SortedSet'
-  }
+  readonly [Symbol.toStringTag] = 'SortedSet'
 
   /**
    * Insert `value` if absent. Existing values are left unchanged.

@@ -44,7 +44,5 @@ export class FrozenSet<T = unknown> extends Set<T> {
     super.clear()
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'FrozenSet'
-  }
+  readonly [Symbol.toStringTag] = 'FrozenSet'
 }

@@ -31,27 +31,24 @@ import { max } from '../src/math/index.js'
 import { decimal } from '../src/decimal/index.js'
 import { ValueError } from '../src/globals/index.js'
 
-const Falsy = (x) => !x
+const Falsy = (x: unknown) => !x
 
 function* infiniteCounter() {
   let i = 0
-  while (true) yield i++
+  for (;;) yield i++
 }
 
 describe('itertools', () => {
   it('accumulate', () => {
     assert.deepEqual([...accumulate([1, 2, 3, 4])], [1, 3, 6, 10])
     assert.deepEqual(
-      [...accumulate([3, 4, 6, 2, 1, 9, 0, 7, 5, 8], (x, y) => max([x as number, y as number]))],
+      [...accumulate([3, 4, 6, 2, 1, 9, 0, 7, 5, 8], (x, y) => max([x as number, y]))],
       [3, 4, 6, 6, 6, 9, 9, 9, 9, 9]
     )
   })
 
   it('SPEC-R46 accumulate with initial yields seed then folds', () => {
-    assert.deepEqual(
-      [...accumulate([1, 2, 3], (a, b) => (a as number) + (b as number), 10)],
-      [10, 11, 13, 16]
-    )
+    assert.deepEqual([...accumulate([1, 2, 3], (a, b) => (a as number) + b, 10)], [10, 11, 13, 16])
     assert.deepEqual([...accumulate([], (a, b) => (a as number) + (b as number), 10)], [10])
     assert.deepEqual([...accumulate([])], [])
   })
@@ -59,7 +56,7 @@ describe('itertools', () => {
   it('all', () => {
     assert(all([1, true, [], 'test', {}]))
     assert(!all([[], {}, '']))
-    assert(all<any>([false, 0, '', null, undefined, NaN], Falsy))
+    assert(all<unknown>([false, 0, '', null, undefined, NaN], Falsy))
   })
 
   it('any', () => {
@@ -94,7 +91,7 @@ describe('itertools', () => {
     const start = performance.now()
     assert.deepEqual([...dropWhile([1, 2], () => true)], [])
     assert.ok(performance.now() - start < 100)
-    assert.deepEqual([...dropWhile([{ a: 1 }], (o) => (o as { a: number }).a)], [])
+    assert.deepEqual([...dropWhile([{ a: 1 }], (o) => o.a)], [])
   })
 
   it('enumerate', () => {
@@ -111,7 +108,8 @@ describe('itertools', () => {
     assert(first(['foo', 'bar']) === 'foo')
     assert(first([0, 1]) === 0)
     assert(first([1, 1]) === 1)
-    assert(first([]) === undefined)
+    const empty: number[] = []
+    assert(first(empty) === undefined)
   })
 
   it('flatMap', () => {
@@ -142,7 +140,7 @@ describe('itertools', () => {
   })
 
   it('SPEC-R52 flatMap string result throws TypeError', () => {
-    assert.throws(() => [...flatMap([1], () => 'ab' as unknown as Iterable<string>)], TypeError)
+    assert.throws(() => [...flatMap([1], () => 'ab')], TypeError)
   })
 
   it('icompact', () => {
@@ -245,9 +243,9 @@ describe('itertools', () => {
   })
 
   it('SPEC-R52 reduce empty TypeError and index base without initial', () => {
-    assert.throws(() => reduce([], (a, b) => (a as number) + (b as number)), TypeError)
+    assert.throws(() => reduce([] as number[], (a, b) => a + b), TypeError)
     assert.equal(
-      reduce([1, 2, 3], (acc, _v, i) => (acc as number) + i),
+      reduce([1, 2, 3], (acc, _v, i) => acc + i),
       4
     )
   })

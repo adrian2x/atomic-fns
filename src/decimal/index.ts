@@ -139,8 +139,8 @@ export class Decimal {
   /** Maximum absolute stored exponent; larger values throw {@link ValueError}. */
   static readonly MAX_EXPONENT = 1_000_000
 
-  #i: bigint = 0n
-  #e: number = 0
+  #i = 0n
+  #e = 0
 
   /**
    * Creates a Decimal from a number, bigint, string, or another Decimal.
@@ -178,7 +178,7 @@ export class Decimal {
     }
     const sign = m[1] === '-' ? '-' : ''
     const digits = m[2]
-    const expRaw = m[3]
+    const expRaw = m[3] as string | undefined
     const dot = digits.indexOf('.')
     const frac = dot === -1 ? '' : digits.slice(dot + 1)
     const intDigits = digits.replace('.', '')
@@ -364,7 +364,7 @@ export class Decimal {
   toString(): string {
     let s = this.#i.toString()
     let m = ''
-    if (s[0] === '-') {
+    if (s.startsWith('-')) {
       s = s.slice(1)
       m = '-'
     }

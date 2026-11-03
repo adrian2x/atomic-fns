@@ -6,7 +6,7 @@
 
 import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js'
 import { add, bool, compare, eq, identity, type Comparer } from '../operators/index.js'
-import type { AnyFunction, Iteratee, Predicate } from '../types.js'
+import type { Iteratee, Predicate } from '../types.js'
 
 export interface SortOptions<T = unknown> {
   key?: (x: T) => unknown
@@ -96,7 +96,7 @@ export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool) {
   return false
 }
 
-export function chain<T>(...iterables: Array<Iterable<T>>) {
+export function chain<T>(...iterables: Iterable<T>[]) {
   return iflatten(iterables)
 }
 
@@ -138,7 +138,7 @@ export function contains(collection: unknown, value: unknown): boolean {
 export function dropWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>): IteratorObject<T> {
   return (function* () {
     const it = Iterator.from(iterable)
-    while (true) {
+    for (;;) {
       const head = it.next()
       if (head.done) return
       if (!predicate(head.value)) {
@@ -231,7 +231,7 @@ export function imap<T, R>(iterable: Iterable<T>, fn: (v: T) => R): IteratorObje
 // [0, 1, 2, 3]
 ```
  */
-export function iflatten<T = any>(iterables: Iterable<Iterable<T>>): IteratorObject<T> {
+export function iflatten<T = unknown>(iterables: Iterable<Iterable<T>>): IteratorObject<T> {
   return (function* () {
     for (const iterator of iterables) {
       for (const item of iterator) {
@@ -281,10 +281,10 @@ export function itake<T>(n: number, iterable: Iterable<T>): IteratorObject<T> {
  * @param obj The given collection to iterate over.
  * @returns An Iterator type.
  */
-export function iter<T>(obj: any): Iterator<T, T> {
+export function iter<T>(obj: unknown): Iterator<T> {
   const iterable = call(obj, Symbol.iterator)
   if (notNull(iterable)) return iterable as Iterator<T>
-  return Object.keys(obj)[Symbol.iterator]() as Iterator<T>
+  return Object.keys(obj as object)[Symbol.iterator]() as Iterator<T>
 }
 
 export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T, boolean>): [T[], T[]] {
@@ -399,27 +399,27 @@ export function reversed<T>(iterable: Iterable<T>): T[] {
  *
  * If `args` is a plain Object, returns the sorted values.
  */
-export function sorted<T>(args: Iterable<T> | Record<string, T>): T[]
-export function sorted<T>(args: Iterable<T> | Record<string, T>, options: SortOptions<T>): T[]
-export function sorted<T>(args: Iterable<T> | Record<string, T>, reverse: boolean): T[]
+export function sorted<T>(
+  args: Iterable<T> | Record<string, T>,
+  key?: boolean | Predicate<T> | SortOptions<T>
+): T[]
 export function sorted<T>(
   args: Iterable<T> | Record<string, T>,
   reverse: boolean,
   comp: Comparer<T>
 ): T[]
-export function sorted<T>(args: Iterable<T> | Record<string, T>, key: AnyFunction): T[]
 export function sorted<T>(
   args: Iterable<T> | Record<string, T>,
-  key: AnyFunction,
+  key: Predicate<T>,
   reverse: boolean
 ): T[]
 export function sorted<T>(
   args: Iterable<T> | Record<string, T>,
-  key?: boolean | AnyFunction | SortOptions<T>,
+  key?: boolean | Predicate<T> | SortOptions<T>,
   reverse?: boolean | Comparer<T>,
   compareFn?: Comparer<T>
 ): T[] {
-  const items: T[] = isObject(args) ? Object.values(args) : Array.from(args as Iterable<T>)
+  const items: T[] = isObject(args) ? Object.values(args) : Array.from(args)
 
   let keyFn: (x: T) => unknown = identity
   let rev = false
@@ -461,16 +461,14 @@ export function sorted<T>(
  * @param {Comparer} [compareFn]
  * @return
  */
-export function sort<T>(args: T[]): T[]
-export function sort<T>(args: T[], reverse: boolean): T[]
-export function sort<T>(args: T[], compareFn: Comparer): T[]
+export function sort<T>(args: T[], reverse?: boolean | Comparer): T[]
 export function sort<T>(args: T[], reverse: boolean, compareFn: Comparer): T[]
 export function sort<T>(args: T[], reverse?: boolean | Comparer, compareFn?: Comparer): T[] {
   if (typeof reverse === 'function') {
     compareFn = reverse
     reverse = false
   }
-  const cmp = compareFn || compare
+  const cmp = compareFn ?? compare
   args.sort(reverse ? (a, b) => -cmp(a, b) : cmp)
   return args
 }
@@ -499,7 +497,7 @@ export function takeWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>): It
  * @param n The number of times to invoke `fn`.
  * @param fn A function used to produce the results.
  */
-export function times(n: number, fn: (index: number) => any): IteratorObject<any> {
+export function times<T>(n: number, fn: (index: number) => T): IteratorObject<T> {
   return (function* () {
     for (let i = 0; i < n; i++) yield fn(i)
   })()
@@ -518,18 +516,20 @@ for item of zip([1, 2, 3], ['sugar', 'spice', 'nice'])
 // [3, 'nice']
 ```
  */
-export function zip(...args: Array<Iterable<any>>): IteratorObject<any[]> {
+export function zip<T extends unknown[]>(
+  ...args: { [K in keyof T]: Iterable<T[K]> }
+): IteratorObject<T> {
   return (function* () {
     if (args.length === 0) return
-    const iterables = args.map((a) => Iterator.from(a))
-    while (true) {
+    const iterables = (args as Iterable<unknown>[]).map((a) => Iterator.from(a))
+    for (;;) {
       const items: unknown[] = []
       for (const iterator of iterables) {
-        const { value, done } = iterator.next()
-        if (done) return
-        items.push(value)
+        const result = iterator.next()
+        if (result.done) return
+        items.push(result.value)
       }
-      yield items
+      yield items as T
     }
   })()
 }

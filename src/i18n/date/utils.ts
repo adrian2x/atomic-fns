@@ -12,17 +12,19 @@ export interface DateObject {
   millisecond?: number
 }
 
+function unwrapDates<T>(args: T[]): T[] {
+  const first: unknown = args[0]
+  return Array.isArray(first) ? (first as T[]) : args
+}
+
 /**
  * Returns the minimum (most distant past) of the given date values.
  * @param dates Date-like values.
  */
-export function minDate<T>(dates: Array<T>): T
-export function minDate<T>(...dates: Array<T>): T {
+export function minDate<T>(dates: T[]): T
+export function minDate<T>(...args: T[]): T {
+  const dates = unwrapDates(args)
   let ans = dates[0]
-  if (Array.isArray(ans)) {
-    dates = ans
-    ans = ans[0]
-  }
   for (let i = 1; i < dates.length; i++) {
     if (Number(dates[i]) < Number(ans)) {
       ans = dates[i]
@@ -35,13 +37,10 @@ export function minDate<T>(...dates: Array<T>): T {
  * Returns the maximum (most distant future) of the given date values.
  * @param dates Date-like values.
  */
-export function maxDate<T>(dates: Array<T>): T
-export function maxDate<T>(...dates: Array<T>): T {
+export function maxDate<T>(dates: T[]): T
+export function maxDate<T>(...args: T[]): T {
+  const dates = unwrapDates(args)
   let ans = dates[0]
-  if (Array.isArray(ans)) {
-    dates = ans
-    ans = ans[0]
-  }
   for (let i = 1; i < dates.length; i++) {
     if (Number(dates[i]) > Number(ans)) {
       ans = dates[i]
@@ -87,7 +86,7 @@ export function daysInMonth(date: string | number | Date): number {
 export function asNumber(value: unknown): number {
   const numericValue = Number(value)
   if (typeof value === 'boolean' || value === '' || Number.isNaN(numericValue)) {
-    throw new Error(`Invalid unit value ${value}`)
+    throw new Error(`Invalid unit value ${String(value)}`)
   }
   return numericValue
 }
@@ -106,7 +105,7 @@ function parseMilliseconds(str: string | undefined) {
   }
 }
 
-type ISODurationFields = {
+interface ISODurationFields {
   years?: number
   months?: number
   weeks?: number
@@ -118,11 +117,13 @@ type ISODurationFields = {
 }
 
 function extractISODuration(match: RegExpExecArray): [ISODurationFields] {
-  const [s, yearStr, monthStr, weekStr, dayStr, hourStr, minuteStr, secondStr, millisecondsStr] =
-    match
+  const [s] = match
+  const groups: (string | undefined)[] = match
+  const [, yearStr, monthStr, weekStr, dayStr, hourStr, minuteStr, secondStr, millisecondsStr] =
+    groups
 
-  const hasNegativePrefix = s[0] === '-'
-  const negativeSeconds = secondStr && secondStr[0] === '-'
+  const hasNegativePrefix = s.startsWith('-')
+  const negativeSeconds = secondStr?.startsWith('-')
 
   const maybeNegate = (num: number | undefined, force = false) =>
     num !== undefined && (force || (num && hasNegativePrefix)) ? -num : num
@@ -142,7 +143,7 @@ function extractISODuration(match: RegExpExecArray): [ISODurationFields] {
 }
 
 /** Parses an ISO-8601 duration string into a duration object. */
-export function parseISODuration(s: string): [ISODurationFields] | [null, null] {
+export function parseISODuration(s: string | null | undefined): [ISODurationFields] | [null, null] {
   if (s == null) {
     return [null, null]
   }

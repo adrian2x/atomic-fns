@@ -21,7 +21,9 @@ describe('FrozenSet', () => {
     expect(() => fs.add(4)).toThrow(TypeError)
     expect(() => fs.add(4)).toThrow('FrozenSet is immutable')
     expect(() => fs.delete(1)).toThrow(TypeError)
-    expect(() => fs.clear()).toThrow(TypeError)
+    expect(() => {
+      fs.clear()
+    }).toThrow(TypeError)
     expect(fs.size).toBe(3)
     expect(fs.has(1)).toBe(true)
   })

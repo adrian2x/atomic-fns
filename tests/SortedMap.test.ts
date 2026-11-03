@@ -13,7 +13,7 @@ describe('SortedMap', () => {
   })
 
   it('SPEC-R78 initialized entries stay ordered', () => {
-    const entries: Array<[number, number]> = [
+    const entries: [number, number][] = [
       [5, 5],
       [4, 4],
       [3, 3],
@@ -34,7 +34,10 @@ describe('SortedMap', () => {
   })
 
   it('SPEC-R78 set replaces stored key object', () => {
-    type K = { id: number; tag: string }
+    interface K {
+      id: number
+      tag: string
+    }
     const cmp = (a: K, b: K) => a.id - b.id
     const m = new SortedMap<K, string>(undefined, cmp)
     const a = { id: 1, tag: 'a' }
@@ -92,7 +95,7 @@ describe('SortedMap', () => {
 
   it('SPEC-R78 entriesReversed yields descending keys', () => {
     const m = new SortedMap<number, number>()
-    const expected: Array<[number, number]> = []
+    const expected: [number, number][] = []
     for (let i = 100; i > 0; i--) {
       m.set(i, i)
       expected.push([i, i])
@@ -104,10 +107,12 @@ describe('SortedMap', () => {
     const m = new SortedMap<number, number>()
     for (let i = 10; i > 0; i--) m.set(i, i)
     m.freeze()
-    expect(() => m.set(11, 11)).toThrowError(TypeError)
-    expect(() => m.set(11, 11)).toThrowError('BTree is frozen')
-    expect(() => m.delete(1)).toThrowError('BTree is frozen')
-    expect(() => m.clear()).toThrowError('BTree is frozen')
+    expect(() => m.set(11, 11)).toThrow(TypeError)
+    expect(() => m.set(11, 11)).toThrow('BTree is frozen')
+    expect(() => m.delete(1)).toThrow('BTree is frozen')
+    expect(() => {
+      m.clear()
+    }).toThrow('BTree is frozen')
     expect(m.has(1)).toBe(true)
     expect(m.get(1)).toBe(1)
     m.unfreeze()
@@ -119,7 +124,7 @@ describe('SortedMap', () => {
   it('SPEC-R78 freeze without prior sets still blocks set', () => {
     const m = new SortedMap<number, string>()
     m.freeze()
-    expect(() => m.set(1, 'a')).toThrowError('BTree is frozen')
+    expect(() => m.set(1, 'a')).toThrow('BTree is frozen')
     m.unfreeze()
     m.set(1, 'a')
     expect(m.get(1)).toBe('a')

@@ -121,7 +121,7 @@ const exactMatrix = {
 type ConversionMatrix = Record<string, Record<string, number>>
 
 /** Maps singular and plural unit names to the plural form. */
-export const UNITS_PLURAL: Record<DurationUnit, DurationUnit> = {
+export const UNITS_PLURAL: Record<string, DurationUnit | undefined> = {
   year: 'years',
   years: 'years',
   quarter: 'quarters',
@@ -157,6 +157,10 @@ const orderedUnits = [
 type OrderedUnit = (typeof orderedUnits)[number]
 
 const reverseUnits = orderedUnits.slice(0).reverse()
+
+function unitValue(value: number | undefined): number {
+  return value === undefined || value === 0 || Number.isNaN(value) ? 0 : value
+}
 
 /**
  * An immutable length of time in calendar and clock units.
@@ -194,47 +198,47 @@ export class Duration {
 
   /** Get the years. */
   get years() {
-    return this.values.years || 0
+    return unitValue(this.values.years)
   }
 
   /** Get the quarters. */
   get quarters() {
-    return this.values.quarters || 0
+    return unitValue(this.values.quarters)
   }
 
   /** Get the months. */
   get months() {
-    return this.values.months || 0
+    return unitValue(this.values.months)
   }
 
   /** Get the weeks. */
   get weeks() {
-    return this.values.weeks || 0
+    return unitValue(this.values.weeks)
   }
 
   /** Get the days. */
   get days() {
-    return this.values.days || 0
+    return unitValue(this.values.days)
   }
 
   /** Get the hours. */
   get hours() {
-    return this.values.hours || 0
+    return unitValue(this.values.hours)
   }
 
   /** Get the minutes. */
   get minutes() {
-    return this.values.minutes || 0
+    return unitValue(this.values.minutes)
   }
 
   /** Get the seconds. */
   get seconds() {
-    return this.values.seconds || 0
+    return unitValue(this.values.seconds)
   }
 
   /** Get the milliseconds. */
   get milliseconds() {
-    return this.values.milliseconds || 0
+    return unitValue(this.values.milliseconds)
   }
 
   /**
@@ -245,7 +249,7 @@ export class Duration {
    * @example new Duration({years: 2, days: 3}).get('days') // 3
    */
   get(unit: string): number {
-    const key = UNITS_PLURAL[unit.toLowerCase() as DurationUnit]
+    const key = UNITS_PLURAL[unit.toLowerCase()]
     return key ? this[key as OrderedUnit] : 0
   }
 
@@ -287,7 +291,7 @@ new Duration({ hours: 1, seconds: 30 }).negated().toObject()
     const negated: DurationObject = {}
     for (const k of Object.keys(this.values) as OrderedUnit[]) {
       const v = this.values[k]
-      negated[k] = v === 0 ? 0 : -(v as number)
+      if (v !== undefined) negated[k] = v === 0 ? 0 : -v
     }
     return new Duration(negated, this.#exact)
   }
@@ -303,7 +307,8 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   abs() {
     const parts: DurationObject = {}
     for (const k of Object.keys(this.values) as OrderedUnit[]) {
-      parts[k] = Math.abs(this.values[k] as number)
+      const v = this.values[k]
+      if (v !== undefined) parts[k] = Math.abs(v)
     }
     return new Duration(parts, this.#exact)
   }
@@ -326,7 +331,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
       return this
     }
 
-    const targetUnits = units.map((u) => UNITS_PLURAL[u.toLowerCase() as DurationUnit])
+    const targetUnits = units.map((u) => UNITS_PLURAL[u.toLowerCase()])
 
     const built: DurationObject = {}
     const accumulated: DurationObject = {}
@@ -339,12 +344,12 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
         let own = 0
 
         for (const fromUnit in accumulated) {
-          own += (accumulated[fromUnit as OrderedUnit] as number) * this.#matrix[fromUnit][toUnit]
+          own += (accumulated[fromUnit as OrderedUnit] ?? 0) * this.#matrix[fromUnit][toUnit]
           accumulated[fromUnit as OrderedUnit] = 0
         }
 
         if (typeof vals[toUnit] === 'number') {
-          own += vals[toUnit] as number
+          own += vals[toUnit]
         }
 
         const i = Math.trunc(own)
@@ -362,12 +367,11 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
     }
 
     for (const key in accumulated) {
-      if (accumulated[key as OrderedUnit] !== 0 && lastUnit !== undefined) {
+      const pending = accumulated[key as OrderedUnit] ?? 0
+      if (pending !== 0 && lastUnit !== undefined) {
         built[lastUnit] =
-          (built[lastUnit] as number) +
-          (key === lastUnit
-            ? (accumulated[key as OrderedUnit] as number)
-            : (accumulated[key as OrderedUnit] as number) / this.#matrix[lastUnit][key])
+          (built[lastUnit] ?? 0) +
+          (key === lastUnit ? pending : pending / this.#matrix[lastUnit][key])
       }
     }
 
@@ -431,17 +435,17 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
    */
   toISOString() {
     let s = 'P'
-    if (this.years !== 0) s += this.years + 'Y'
+    if (this.years !== 0) s += `${String(this.years)}Y`
     const months = this.months + this.quarters * 3
-    if (months !== 0) s += months + 'M'
-    if (this.weeks !== 0) s += this.weeks + 'W'
-    if (this.days !== 0) s += this.days + 'D'
+    if (months !== 0) s += `${String(months)}M`
+    if (this.weeks !== 0) s += `${String(this.weeks)}W`
+    if (this.days !== 0) s += `${String(this.days)}D`
     if (this.hours !== 0 || this.minutes !== 0 || this.seconds !== 0 || this.milliseconds !== 0)
       s += 'T'
-    if (this.hours !== 0) s += this.hours + 'H'
-    if (this.minutes !== 0) s += this.minutes + 'M'
+    if (this.hours !== 0) s += `${String(this.hours)}H`
+    if (this.minutes !== 0) s += `${String(this.minutes)}M`
     if (this.seconds !== 0 || this.milliseconds !== 0)
-      s += round(this.seconds + this.milliseconds / 1000, 3) + 'S'
+      s += `${String(round(this.seconds + this.milliseconds / 1000, 3))}S`
     if (s === 'P') s += 'T0S'
     return s
   }
@@ -503,9 +507,9 @@ Duration.fromISO('P5Y3M').toObject()
 function normalizeUnits(obj: Record<string, unknown>): DurationObject {
   const vals: DurationObject = {}
   for (const unit of Object.keys(obj)) {
-    const plural = UNITS_PLURAL[unit as DurationUnit]
+    const plural = UNITS_PLURAL[unit]
     if (plural && typeof obj[unit] === 'number') {
-      vals[plural as OrderedUnit] = obj[unit] as number
+      vals[plural as OrderedUnit] = obj[unit]
     }
   }
   return vals
@@ -523,12 +527,14 @@ function convert(
   toUnit: OrderedUnit
 ) {
   const conv = matrix[toUnit][fromUnit]
-  const raw = (sources[fromUnit] as number) / conv
-  const sameSign = Math.sign(raw) === Math.sign(result[toUnit] as number)
+  const sourceValue = sources[fromUnit] ?? 0
+  const resultValue = result[toUnit] ?? 0
+  const raw = sourceValue / conv
+  const sameSign = Math.sign(raw) === Math.sign(resultValue)
   const added =
-    !sameSign && result[toUnit] !== 0 && Math.abs(raw) <= 1 ? antiTrunc(raw) : Math.trunc(raw)
-  result[toUnit] = (result[toUnit] as number) + added
-  sources[fromUnit] = (sources[fromUnit] as number) - added * conv
+    !sameSign && resultValue !== 0 && Math.abs(raw) <= 1 ? antiTrunc(raw) : Math.trunc(raw)
+  result[toUnit] = resultValue + added
+  sources[fromUnit] = sourceValue - added * conv
 }
 
 function normalizeValues(matrix: ConversionMatrix, vals: DurationObject) {

@@ -55,10 +55,8 @@ export function sample<T>(arr: readonly T[], k: number): T[] {
  * new shuffled array of their values.
  * @param coll Array or plain object.
  */
-export function shuffle<T>(arr: T[]): T[]
-export function shuffle<T>(obj: Record<string, T>): T[]
 export function shuffle<T>(coll: T[] | Record<string, T>): T[] {
-  const arr = isObject(coll) ? (Object.values(coll) as T[]) : coll
+  const arr = isObject(coll) ? Object.values(coll) : coll
   if (!arr.length) return arr
   const n = arr.length
   for (let i = 0; i < n - 1; i++) {

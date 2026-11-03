@@ -61,13 +61,19 @@ function kind(v: unknown): number {
   return 6
 }
 
+function constructorName(v: unknown): string {
+  const proto = Object.getPrototypeOf(v) as { constructor?: { name?: unknown } } | null
+  const name = proto?.constructor?.name
+  return typeof name === 'string' ? name : ''
+}
+
 function kindTieBreak(x: unknown, y: unknown): -1 | 0 | 1 {
   const kx = kind(x)
   const ky = kind(y)
   if (kx !== ky) return kx < ky ? -1 : 1
   if (kx === 7) {
-    const nx = Object.getPrototypeOf(x)?.constructor?.name ?? ('' as string)
-    const ny = Object.getPrototypeOf(y)?.constructor?.name ?? ('' as string)
+    const nx = constructorName(x)
+    const ny = constructorName(y)
     if (nx < ny) return -1
     if (nx > ny) return 1
     return seqCompare(x as object, y as object)

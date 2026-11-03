@@ -24,7 +24,7 @@ const oldNames = [
   'first'
 ] as const
 
-type Migrated = {
+interface Migrated {
   name: string
   create: () => object
   sample: unknown
@@ -127,7 +127,7 @@ describe('SPEC-R75 collection protocol (M8 classes)', () => {
       })
 
       it('old 1.x names absent on prototype', () => {
-        const proto = Object.getPrototypeOf(m.create())
+        const proto = Object.getPrototypeOf(m.create()) as object
         for (const name of oldNames) {
           if (m.skipOld?.includes(name)) continue
           expect(name in proto, `${m.name}.prototype.${name}`).toBe(false)

@@ -47,7 +47,14 @@ describe('merge', () => {
     expect(r.constructor).toBe('Ford')
     expect(r.prototype).toBe('p')
 
-    const withFn = merge({ constructor: function C() {} }, { constructor: 'x' })
+    const withFn = merge(
+      {
+        constructor: function C() {
+          return undefined
+        }
+      },
+      { constructor: 'x' }
+    )
     expect(typeof withFn.constructor).toBe('function')
   })
 
@@ -61,7 +68,7 @@ describe('merge', () => {
 
   it('SPEC-R31 null target throws; null source skipped; frozen target propagates', () => {
     expect(() => merge(null as unknown as object, { a: 1 })).toThrow(TypeError)
-    expect(merge({ a: 1 }, null as unknown as object, undefined as unknown as object).a).toBe(1)
+    expect(merge({ a: 1 }, null, undefined).a).toBe(1)
     const frozen = Object.freeze({ a: 1 }) as { a: number; b?: number }
     expect(() => merge(frozen, { b: 2 })).toThrow(TypeError)
   })

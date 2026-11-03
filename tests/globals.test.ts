@@ -52,9 +52,13 @@ describe('globals', () => {
     assert.equal(new KeyError().name, 'KeyError')
   })
 
-  it('True', () => assert(True() === true))
+  it('True', () => {
+    assert(True())
+  })
 
-  it('False', () => assert(False() === false))
+  it('False', () => {
+    assert(!False())
+  })
 
   it('SPEC-R20 type uses tags without calling user methods', () => {
     assert(type(null) === 'null')
@@ -64,10 +68,8 @@ describe('globals', () => {
     assert(type(True()) === 'boolean')
     assert(type(False()) === 'boolean')
     assert(type('') === 'string')
-    assert(type(String('')) === 'string')
     assert(type(NaN) === 'NaN')
     assert(type(42) === 'number')
-    assert(type(Number(42)) === 'number')
     assert(type(Number('42')) === 'number')
     assert(type(parseFloat('42.0')) === 'number')
     assert(type(42n) === 'bigint')
@@ -97,7 +99,13 @@ describe('globals', () => {
     assert(type(Object.create(null)) === 'object')
     assert(type(new Date()) === 'Date')
     assert(type(/x/) === 'RegExp')
-    assert(type({ call() {} }) === 'object')
+    assert(
+      type({
+        call() {
+          return undefined
+        }
+      }) === 'object'
+    )
     assert(
       type({
         toString() {
@@ -136,14 +144,30 @@ describe('globals', () => {
 
   it('SPEC-R21 isFunction typeof function', () => {
     assert(isFunction(noop))
-    assert(isFunction(async () => {}))
-    assert(isFunction(function* () {}))
+    assert(
+      isFunction(async () => {
+        await Promise.resolve()
+      })
+    )
+    assert(
+      isFunction(function* () {
+        yield undefined
+      })
+    )
     assert(!isFunction([]))
   })
 
   it('SPEC-R21 isAsyncFunction', () => {
-    assert(isAsyncFunction(async function () {}))
-    assert(isAsyncFunction(async () => {}))
+    assert(
+      isAsyncFunction(async function () {
+        await Promise.resolve()
+      })
+    )
+    assert(
+      isAsyncFunction(async () => {
+        await Promise.resolve()
+      })
+    )
     assert(!isAsyncFunction(noop))
     assert(!isAsyncFunction(Object.create(null)))
   })
@@ -160,7 +184,6 @@ describe('globals', () => {
   it('isNumber', () => {
     assert(!isNumber(NaN))
     assert(isNumber(42))
-    assert(isNumber(Number(42)))
     assert(isNumber(Number('42')))
     assert(isNumber(parseFloat('42.0')))
   })
@@ -250,6 +273,7 @@ describe('globals', () => {
         return 42
       },
       async m() {
+        await Promise.resolve()
         return 1
       },
       'a.b'() {
@@ -287,10 +311,10 @@ describe('globals', () => {
   })
 
   it('SPEC-R24 has uses Reflect.has', () => {
-    assert(has('abc', 'length') === true)
-    assert(has(0, 'x') === false)
-    assert(has({ a: 1 }, 'a') === true)
-    assert(has(null, 'a') === false)
+    assert(has('abc', 'length'))
+    assert(!has(0, 'x'))
+    assert(has({ a: 1 }, 'a'))
+    assert(!has(null, 'a'))
   })
 
   it('SPEC-R24 int truncates numbers and parseInt strings', () => {
@@ -361,7 +385,7 @@ describe('globals', () => {
   it('get', () => {
     const arr = [1, 2, 3]
     assert(get('2', arr) === 3)
-    assert(get('3', arr, false) === false)
+    assert(!get('3', arr, false))
     const obj = { foo: { bar: true } }
     assert(get('foo.bar', obj))
     assert(get(['foo', 'bar'], obj))

@@ -4,17 +4,14 @@
 
 /**
  * A custom error class that inherits from the Error object.
+ * Accepts the standard `Error` constructor arguments: an optional message and `ErrorOptions` (e.g. `cause`).
  */
 export class CustomError extends Error {
-  /**
-   * @param message Error message
-   * @param options Standard Error options (e.g. `cause`)
-   */
+  override name: string
   constructor(message?: string, options?: ErrorOptions) {
     super(message, options)
+    this.name = 'CustomError'
   }
-
-  override name: string = 'CustomError'
 }
 
 /** Custom error to signal an invalid index access. */

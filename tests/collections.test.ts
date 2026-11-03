@@ -69,12 +69,17 @@ describe('collections', () => {
 
   it('SPEC-R38 count groupBy groupByMap edge keys', () => {
     expect(count(['a.b', 'a.b'], (x) => x)['a.b']).toBe(2)
-    expect(count(['toString'], (x) => x).toString).toBe(1)
+    expect(
+      Reflect.get(
+        count(['toString'], (x) => x),
+        'toString'
+      )
+    ).toBe(1)
 
     const g = groupBy(['__proto__', 'constructor'], (x: string) => x)
     expect(Object.hasOwn(g, '__proto__')).toBe(true)
     expect(Object.hasOwn(g, 'constructor')).toBe(true)
-    expect(g['__proto__']).toHaveLength(1)
+    expect(g.__proto__).toHaveLength(1)
     expect(g.constructor).toHaveLength(1)
 
     const gm = groupByMap(['10', '10'], (v: string) => parseInt(v, 10))
@@ -85,7 +90,7 @@ describe('collections', () => {
   it('SPEC-R39 findLast on Set; forEach null', () => {
     expect(findLast(new Set([1, 2, 3]), (x) => x > 1)).toBe(3)
     const fn = vi.fn()
-    forEach(null as unknown as never, fn)
+    forEach(null, fn)
     expect(fn).not.toHaveBeenCalled()
   })
 
@@ -244,8 +249,8 @@ describe('collections', () => {
     expect(compact([0, 1, false, 2, '', 3])).toEqual([1, 2, 3])
     expect(compact({ a: 1, b: undefined, c: false, d: [] })).toEqual({ a: 1 })
     const counters = count([0, 1, false, 2, '', 3], (x) => !!x)
-    expect(counters['true']).toBe(3)
-    expect(counters['false']).toBe(3)
+    expect(counters.true).toBe(3)
+    expect(counters.false).toBe(3)
     expect(count(['one', 'two', 'three'], (x) => x.length)).toEqual({ '3': 2, '5': 1 })
   })
 })

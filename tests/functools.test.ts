@@ -54,10 +54,9 @@ describe('functools', () => {
   describe('memoize / cache', () => {
     it('SPEC-R55 memoize caches undefined results via Map.has', () => {
       let calls = 0
-      const fn = memoize((x: number) => {
+      const fn = memoize((x: number): number | undefined => {
         calls++
-        void x
-        return undefined
+        return x < 0 ? x : undefined
       })
       assert.equal(fn(1), undefined)
       assert.equal(fn(1), undefined)
@@ -80,7 +79,7 @@ describe('functools', () => {
           calls++
           return this.add(a, b)
         },
-        (a, b) => `${a}:${b}`
+        (a, b) => `${String(a)}:${String(b)}`
       )
       assert.equal(mem.call(obj, 1, 2), 13)
       assert.equal(mem.call(obj, 1, 2), 13)
@@ -119,9 +118,12 @@ describe('functools', () => {
         name: 'add',
         static: false,
         private: false,
-        addInitializer() {}
+        addInitializer() {
+          return undefined
+        }
       } as unknown as ClassMethodDecoratorContext<Counter, (this: Counter, x: number) => number>
-      Counter.prototype.add = cache(Counter.prototype.add, ctx)
+      const original = Reflect.get(Counter.prototype, 'add')
+      Counter.prototype.add = cache(original, ctx)
       const a = new Counter(10)
       const b = new Counter(100)
       assert.equal(a.add(1), 11)
@@ -263,7 +265,7 @@ describe('functools', () => {
       const f = once((x: number) => {
         calls++
         return x
-      })
+      }) as (x: number) => number
       assert.equal(f(1), 1)
       assert.equal(f(2), 1)
       assert.equal(f(3), 1)
@@ -271,7 +273,7 @@ describe('functools', () => {
     })
 
     it('result returns [value, undefined] or [undefined, error]', () => {
-      const ok = result((x: number) => x + 1)
+      const ok = result((x: number) => x + 1) as (x: number) => [number | undefined, unknown]
       assert.deepEqual(ok(2), [3, undefined])
       const bad = result(() => {
         throw new Error('nope')
@@ -279,15 +281,15 @@ describe('functools', () => {
       const [value, err] = bad()
       assert.equal(value, undefined)
       assert.ok(err instanceof Error)
-      assert.equal((err as Error).message, 'nope')
+      assert.equal(err.message, 'nope')
     })
 
     it('resultAsync awaits and catches', async () => {
-      const ok = resultAsync(async (x: number) => x + 1)
+      const ok = resultAsync((x: number) => Promise.resolve(x + 1)) as (
+        x: number
+      ) => Promise<[number | undefined, unknown]>
       assert.deepEqual(await ok(2), [3, undefined])
-      const bad = resultAsync(async () => {
-        throw new Error('async nope')
-      })
+      const bad = resultAsync(() => Promise.reject(new Error('async nope')))
       const [value, err] = await bad()
       assert.equal(value, undefined)
       assert.equal((err as Error).message, 'async nope')
@@ -298,7 +300,7 @@ describe('functools', () => {
         if (path === 'bad') cb(new Error('fail'))
         else cb(null, `data:${path}`)
       }
-      const readP = promisify<string>(read)
+      const readP = promisify<string>(read) as (path: string) => Promise<string>
       assert.equal(await readP('ok'), 'data:ok')
       await expect(readP('bad')).rejects.toThrow('fail')
     })
@@ -310,7 +312,7 @@ describe('functools', () => {
           cb(null, this.prefix)
         }
       }
-      const goP = promisify<string>(obj.go, obj)
+      const goP = promisify<string>(Reflect.get(obj, 'go'), obj)
       assert.equal(await goP(), 'p')
     })
   })

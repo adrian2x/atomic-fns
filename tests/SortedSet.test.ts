@@ -32,7 +32,10 @@ describe('SortedSet', () => {
   })
 
   it('SPEC-R78 add of existing value is a no-op', () => {
-    type V = { id: number; tag: string }
+    interface V {
+      id: number
+      tag: string
+    }
     const cmp = (a: V, b: V) => a.id - b.id
     const s = new SortedSet<V>(undefined, cmp)
     const a = { id: 1, tag: 'a' }
@@ -62,7 +65,9 @@ describe('SortedSet', () => {
   })
 
   it('SPEC-R78 custom comparator delete', () => {
-    type V = { id: number }
+    interface V {
+      id: number
+    }
     const cmp = (a: V, b: V) => a.id - b.id
     const s = new SortedSet([{ id: 1 }, { id: 2 }, { id: 3 }], cmp)
     expect(s.delete({ id: 2 })).toBe(true)

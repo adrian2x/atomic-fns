@@ -148,7 +148,7 @@ describe('SPEC-R13 antisymmetry and transitivity', () => {
   ]
 
   function pick(rng: () => number): unknown {
-    return corpus[Math.floor(rng() * corpus.length)]!
+    return corpus.at(Math.floor(rng() * corpus.length))
   }
 
   // deterministic LCG

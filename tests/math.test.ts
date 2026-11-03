@@ -59,7 +59,7 @@ describe('math', () => {
 
   it('abs dispatches protocol.abs', () => {
     expect(abs(-3)).toBe(3)
-    expect(abs(decimal(-4)).toString()).toBe('4')
+    expect(String(abs(decimal(-4)))).toBe('4')
   })
 
   it('sum', () => {

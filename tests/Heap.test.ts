@@ -79,7 +79,8 @@ describe('Heap', () => {
     expect(h.delete(1)).toBe(true)
     expect(h.peek()).toBe(2)
     const h2 = new Heap([1, 2, 3])
-    const last = [...h2.values()].at(-1) as number
+    const last = [...h2.values()].at(-1)
+    if (last === undefined) throw new Error('heap empty')
     expect(h2.delete(last)).toBe(true)
     expect(h2.size).toBe(2)
   })
@@ -113,7 +114,11 @@ describe('Heap', () => {
         if (idx >= 0) ref.splice(idx, 1)
       }
       const got: number[] = []
-      while (h.size) got.push(h.pop() as number)
+      while (h.size) {
+        const next = h.pop()
+        if (next === undefined) throw new Error('heap empty')
+        got.push(next)
+      }
       expect(got).toEqual(ref)
     }
   })

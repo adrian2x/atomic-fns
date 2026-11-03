@@ -11,7 +11,7 @@ describe('random', () => {
     for (let i = 0; i < 100; i++) {
       expect(arr).toContain(choice(arr))
     }
-    expect(choice([])).toBeUndefined()
+    expect(choice([] as number[])).toBeUndefined()
   })
 
   it('random is in [min, max)', () => {

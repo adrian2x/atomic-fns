@@ -79,7 +79,7 @@ words('lord of the rings')
  */
 export function words(s: string, pattern?: RegExp | string): string[] {
   if (pattern != null) return s.split(pattern)
-  return s.match(WORDS_REGEX) || []
+  return s.match(WORDS_REGEX) ?? []
 }
 
 /**

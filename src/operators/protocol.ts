@@ -2,21 +2,34 @@
  * Symbol protocol and truth helpers.
  */
 
+const compare: unique symbol = Symbol.for('atomic-fns.compare')
+const equals: unique symbol = Symbol.for('atomic-fns.equals')
+const rank: unique symbol = Symbol.for('atomic-fns.rank')
+const clone: unique symbol = Symbol.for('atomic-fns.clone')
+const add: unique symbol = Symbol.for('atomic-fns.add')
+const sub: unique symbol = Symbol.for('atomic-fns.sub')
+const mul: unique symbol = Symbol.for('atomic-fns.mul')
+const div: unique symbol = Symbol.for('atomic-fns.div')
+const mod: unique symbol = Symbol.for('atomic-fns.mod')
+const pow: unique symbol = Symbol.for('atomic-fns.pow')
+const abs: unique symbol = Symbol.for('atomic-fns.abs')
+const boolKey: unique symbol = Symbol.for('atomic-fns.bool')
+
 /** Shared protocol symbols for operator dispatch. */
 export const protocol = Object.freeze({
-  compare: Symbol.for('atomic-fns.compare'),
-  equals: Symbol.for('atomic-fns.equals'),
-  rank: Symbol.for('atomic-fns.rank'),
-  clone: Symbol.for('atomic-fns.clone'),
-  add: Symbol.for('atomic-fns.add'),
-  sub: Symbol.for('atomic-fns.sub'),
-  mul: Symbol.for('atomic-fns.mul'),
-  div: Symbol.for('atomic-fns.div'),
-  mod: Symbol.for('atomic-fns.mod'),
-  pow: Symbol.for('atomic-fns.pow'),
-  abs: Symbol.for('atomic-fns.abs'),
-  bool: Symbol.for('atomic-fns.bool')
-} as const)
+  compare,
+  equals,
+  rank,
+  clone,
+  add,
+  sub,
+  mul,
+  div,
+  mod,
+  pow,
+  abs,
+  bool: boolKey
+})
 
 /** Values that participate in the total order via `protocol.compare`. */
 export interface Comparable {

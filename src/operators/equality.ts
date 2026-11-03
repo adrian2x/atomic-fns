@@ -29,7 +29,7 @@ function deepEqualInner(a: unknown, b: unknown, seen: WeakMap<object, object>): 
   seen.set(a, b)
 
   if (a instanceof Date) {
-    return (a as Date).getTime() === (b as Date).getTime()
+    return a.getTime() === (b as Date).getTime()
   }
   if (a instanceof RegExp) {
     return a.source === (b as RegExp).source && a.flags === (b as RegExp).flags
@@ -38,7 +38,7 @@ function deepEqualInner(a: unknown, b: unknown, seen: WeakMap<object, object>): 
     return bytesEqual(a, b as ArrayBuffer)
   }
   if (ArrayBuffer.isView(a)) {
-    const va = a as ArrayBufferView
+    const va = a
     const vb = b as ArrayBufferView
     if (va.byteLength !== vb.byteLength) return false
     const ua = new Uint8Array(va.buffer, va.byteOffset, va.byteLength)
@@ -75,7 +75,7 @@ function deepEqualInner(a: unknown, b: unknown, seen: WeakMap<object, object>): 
   }
 
   const keysA = Object.keys(a)
-  const keysB = Object.keys(b as object)
+  const keysB = Object.keys(b)
   if (keysA.length !== keysB.length) return false
   for (const k of keysA) {
     if (!Object.prototype.hasOwnProperty.call(b, k)) return false

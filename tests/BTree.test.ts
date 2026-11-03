@@ -24,7 +24,7 @@ describe('BTree', () => {
   })
 
   it('SPEC-R79 has finds key with undefined value', () => {
-    const tree = new BTree<number, undefined>()
+    const tree = new BTree<number, number | undefined>()
     tree.set(1, undefined)
     expect(tree.has(1)).toBe(true)
     expect(tree.get(1)).toBeUndefined()
@@ -66,14 +66,16 @@ describe('BTree', () => {
     for (let i = 10; i > 0; i--) tree.set(i, i)
     tree.freeze()
     expect(tree.isFrozen).toBe(true)
-    expect(() => tree.set(11, 11)).toThrowError(TypeError)
-    expect(() => tree.set(11, 11)).toThrowError('BTree is frozen')
-    expect(() => tree.delete(1)).toThrowError('BTree is frozen')
-    expect(() => tree.clear()).toThrowError('BTree is frozen')
-    expect(() => tree.deleteRange(1, 3, true)).toThrowError('BTree is frozen')
-    expect(() => tree.deleteKeys([1])).toThrowError('BTree is frozen')
-    expect(() => tree.editRange(1, 1, true, () => ({ value: 9 }))).toThrowError('BTree is frozen')
-    expect(() => tree.setPairs([[12, 12]])).toThrowError('BTree is frozen')
+    expect(() => tree.set(11, 11)).toThrow(TypeError)
+    expect(() => tree.set(11, 11)).toThrow('BTree is frozen')
+    expect(() => tree.delete(1)).toThrow('BTree is frozen')
+    expect(() => {
+      tree.clear()
+    }).toThrow('BTree is frozen')
+    expect(() => tree.deleteRange(1, 3, true)).toThrow('BTree is frozen')
+    expect(() => tree.deleteKeys([1])).toThrow('BTree is frozen')
+    expect(() => tree.editRange(1, 1, true, () => ({ value: 9 }))).toThrow('BTree is frozen')
+    expect(() => tree.setPairs([[12, 12]])).toThrow('BTree is frozen')
     expect(tree.has(1)).toBe(true)
     tree.unfreeze()
     expect(tree.isFrozen).toBe(false)
@@ -127,7 +129,7 @@ describe('BTree', () => {
 
   it('SPEC-R79 iterates in order and reversed', () => {
     const tree = new BTree<number, number>()
-    const entries: Array<[number, number]> = []
+    const entries: [number, number][] = []
     for (let i = 9; i >= 0; i--) {
       tree.set(i, i * 2)
       entries.push([i, i * 2])
@@ -162,7 +164,7 @@ describe('BTree', () => {
   it('SPEC-R79 comparator NaN key throws KeyError', () => {
     const tree = new BTree<number, number>(undefined, (a, b) => a - b)
     tree.set(1, 1)
-    expect(() => tree.set(Number.NaN, 2)).toThrowError(/invalid key/)
+    expect(() => tree.set(Number.NaN, 2)).toThrow(/invalid key/)
   })
 
   it('SPEC-R79 differential fuzz vs Map', () => {

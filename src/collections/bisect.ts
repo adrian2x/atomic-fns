@@ -17,7 +17,7 @@ export function bisectLeft<T>(
   x: T,
   lo = 0,
   hi: number = arr.length,
-  cmp: Comparer<T> = compare as Comparer<T>
+  cmp: Comparer<T> = compare
 ): number {
   if (lo < 0) throw new RangeError('lo must be non-negative')
   hi = Math.min(hi, arr.length)
@@ -42,7 +42,7 @@ export function bisect<T>(
   x: T,
   lo = 0,
   hi: number = arr.length,
-  cmp: Comparer<T> = compare as Comparer<T>
+  cmp: Comparer<T> = compare
 ): number {
   if (lo < 0) throw new RangeError('lo must be non-negative')
   hi = Math.min(hi, arr.length)
@@ -67,7 +67,7 @@ export function insort<T>(
   x: T,
   lo = 0,
   hi: number = arr.length,
-  cmp: Comparer<T> = compare as Comparer<T>
+  cmp: Comparer<T> = compare
 ): T[] {
   arr.splice(bisect(arr, x, lo, hi, cmp), 0, x)
   return arr
@@ -86,7 +86,7 @@ export function insortLeft<T>(
   x: T,
   lo = 0,
   hi: number = arr.length,
-  cmp: Comparer<T> = compare as Comparer<T>
+  cmp: Comparer<T> = compare
 ): T[] {
   arr.splice(bisectLeft(arr, x, lo, hi, cmp), 0, x)
   return arr
@@ -106,7 +106,7 @@ export function binarySearch<T>(
   x: T,
   lo = 0,
   hi: number = arr.length,
-  cmp: Comparer<T> = compare as Comparer<T>
+  cmp: Comparer<T> = compare
 ): number {
   if (lo < 0) throw new RangeError('lo must be non-negative')
   hi = Math.min(hi, arr.length)

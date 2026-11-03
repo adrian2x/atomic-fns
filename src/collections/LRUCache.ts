@@ -71,9 +71,7 @@ export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
     return this.#capacity
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'LRUCache'
-  }
+  readonly [Symbol.toStringTag] = 'LRUCache'
 
   keys(): IteratorObject<K> {
     return Iterator.from(this.#items.keys())

@@ -7,7 +7,11 @@ const DeleteRange = () => Delete
 const Break = { done: true as const }
 const EmptyArray: never[] = []
 
-export type EditResult<V, R = unknown> = { value?: V; delete?: true; done?: R }
+export interface EditResult<V, R = unknown> {
+  value?: V
+  delete?: true
+  done?: R
+}
 
 /**
  * Leaf nodes and base class for internals.
@@ -17,7 +21,7 @@ export type EditResult<V, R = unknown> = { value?: V; delete?: true; done?: R }
 class BNode<K, V> {
   keys: K[]
   values: V[]
-  children?: Array<BNode<K, V>>
+  children?: BNode<K, V>[]
   isShared?: boolean
 
   get isLeaf() {
@@ -45,7 +49,7 @@ class BNode<K, V> {
       else if (c === 0) return mid
       else {
         if (key === key) return keys.length
-        else throw new KeyError(`BTree found an invalid key: ${key}`)
+        else throw new KeyError(`BTree found an invalid key: ${String(key)}`)
       }
       mid = (lo + hi) >> 1
     }
@@ -235,8 +239,8 @@ class BNode<K, V> {
     return count
   }
 
-  mergeSibling(rhs: BNode<K, V>, maxNodeSize: number) {
-    void maxNodeSize
+  mergeSibling(rhs: BNode<K, V>, maxNodeSize: number): void
+  mergeSibling(rhs: BNode<K, V>): void {
     this.keys.push(...rhs.keys)
     this.values.push(...rhs.values)
   }
@@ -283,9 +287,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return this.count
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'BTree'
-  }
+  readonly [Symbol.toStringTag] = 'BTree'
 
   get isFrozen(): boolean {
     return this.#frozen
@@ -363,19 +365,16 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   *#entriesBackward(highestKey?: K): Generator<[K, V], void, undefined> {
     let startKey = highestKey
-    let skipHighest = false
     if (startKey === undefined) {
       startKey = this.maxKey()
       if (startKey === undefined) return
-    } else {
-      skipHighest = false
     }
     const path = this.findPath(startKey) ?? this.findPath(this.maxKey())
     if (path === undefined) return
     const { nodequeue, nodeindex } = path
     let { leaf } = path
     let i = leaf.indexOf(startKey, 0, this._compare)
-    if (!skipHighest && i < leaf.keys.length && this._compare(leaf.keys[i], startKey) <= 0) i++
+    if (i < leaf.keys.length && this._compare(leaf.keys[i], startKey) <= 0) i++
     for (;;) {
       if (--i >= 0) {
         yield [leaf.keys[i], leaf.values[i]]
@@ -398,9 +397,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   private findPath(
     key?: K
-  ): { nodequeue: Array<Array<BNode<K, V>>>; nodeindex: number[]; leaf: BNode<K, V> } | undefined {
+  ): { nodequeue: BNode<K, V>[][]; nodeindex: number[]; leaf: BNode<K, V> } | undefined {
     let nextnode = this.root
-    let nodequeue: Array<Array<BNode<K, V>>>
+    let nodequeue: BNode<K, V>[][]
     let nodeindex: number[]
 
     if (nextnode.isLeaf) {
@@ -448,7 +447,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return result
   }
 
-  toArray(): Array<[K, V]> {
+  toArray(): [K, V][] {
     const min = this.minKey()
     const max = this.maxKey()
     if (min !== undefined && max !== undefined) return this.getRange(min, max, true)
@@ -492,9 +491,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   /**
    * @param maxLength Stop after this many pairs. `maxLength <= 0` returns `[]`.
    */
-  getRange(low: K, high: K, includeHigh?: boolean, maxLength: number = 0x3ffffff): Array<[K, V]> {
+  getRange(low: K, high: K, includeHigh?: boolean, maxLength = 0x3ffffff): [K, V][] {
     if (maxLength <= 0) return []
-    const results: Array<[K, V]> = []
+    const results: [K, V][] = []
     this.root.forRange(low, high, includeHigh, false, this, 0, (k, v) => {
       results.push([k, v])
       return results.length >= maxLength ? Break : undefined
@@ -522,7 +521,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     onFound?: (k: K, v: V, counter: number) => EditResult<V, R> | undefined,
     initialCounter?: number
   ): R | number {
-    const r = this.root.forRange(low, high, includeHigh, false, this, initialCounter || 0, onFound)
+    const r = this.root.forRange(low, high, includeHigh, false, this, initialCounter ?? 0, onFound)
     return typeof r === 'number' ? r : (r.done as R)
   }
 
@@ -537,7 +536,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     let root = this.root
     if (root.isShared) this.root = root = root.clone()
     try {
-      const r = root.forRange(low, high, includeHigh, true, this, initialCounter || 0, onFound)
+      const r = root.forRange(low, high, includeHigh, true, this, initialCounter ?? 0, onFound)
       return typeof r === 'number' ? r : (r.done as R)
     } finally {
       let isShared = false
@@ -551,7 +550,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   }
 
   deleteRange(low: K, high: K, includeHigh: boolean): number {
-    return this.editRange(low, high, includeHigh, DeleteRange) as number
+    return this.editRange<number>(low, high, includeHigh, DeleteRange)
   }
 
   deleteKeys(keys: Iterable<K>): number {
@@ -596,9 +595,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 }
 
 class BNodeInternal<K, V> extends BNode<K, V> {
-  declare children: Array<BNode<K, V>>
+  declare children: BNode<K, V>[]
 
-  constructor(children: Array<BNode<K, V>>, keys?: K[]) {
+  constructor(children: BNode<K, V>[], keys?: K[]) {
     let ks = keys
     if (!ks) {
       ks = []
@@ -610,7 +609,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
 
   override clone(): BNode<K, V> {
     const children = this.children.slice(0)
-    for (let i = 0; i < children.length; i++) children[i].isShared = true
+    for (const child of children) child.isShared = true
     return new BNodeInternal<K, V>(children, this.keys.slice(0))
   }
 
@@ -763,8 +762,8 @@ class BNodeInternal<K, V> extends BNode<K, V> {
         other.takeFromRight(child)
         this.keys[i - 1] = other.maxKey()
       } else if (
-        (other = c[i + 1]) !== undefined &&
-        other.keys.length < max &&
+        i + 1 < c.length &&
+        (other = c[i + 1]).keys.length < max &&
         cmp(child.maxKey(), key) < 0
       ) {
         if (other.isShared) c[i + 1] = other = other.clone()
@@ -898,7 +897,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     this.children.push(...rhsChildren)
 
     if (rhs.isShared && !this.isShared) {
-      for (let i = 0; i < rhsChildren.length; i++) rhsChildren[i].isShared = true
+      for (const child of rhsChildren) child.isShared = true
     }
 
     this.tryMerge(oldLength - 1, maxNodeSize)

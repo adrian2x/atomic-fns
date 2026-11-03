@@ -66,12 +66,10 @@ export function asDate(date: string | number | Date | null | undefined, utc = fa
     return new Date(NaN)
   }
 
-  if (date === undefined) {
-    date = Date.now()
-  }
+  date ??= Date.now()
 
   if (typeof date === 'string' && !/Z$/i.test(date)) {
-    const d = date.match(NATIVE_DATE)
+    const d: (string | undefined)[] | null = NATIVE_DATE.exec(date)
 
     if (d) {
       const year = Number(d[1])
@@ -198,8 +196,8 @@ function buildValues(date: Date, locale: string | undefined): Map<string, () => 
     ],
     ['z', () => partValue(locale, { timeZoneName: 'short' }, date, 'timeZoneName')],
     ['zzz', () => partValue(locale, { timeZoneName: 'long' }, date, 'timeZoneName')],
-    ['LT', () => `${hour12(h)}:${pad2(min)} ${formatMeridiem(h, false)}`],
-    ['LTS', () => `${hour12(h)}:${pad2(min)}:${pad2(sec)} ${formatMeridiem(h, false)}`],
+    ['LT', () => `${String(hour12(h))}:${pad2(min)} ${formatMeridiem(h, false)}`],
+    ['LTS', () => `${String(hour12(h))}:${pad2(min)}:${pad2(sec)} ${formatMeridiem(h, false)}`],
     ['L', () => cachedFormatter(locale, DATE_SHORT_DD).format(date)],
     ['LL', () => cachedFormatter(locale, DATE_FULL).format(date)],
     ['LLL', () => cachedFormatter(locale, DATE_LONG_TIME).format(date)],

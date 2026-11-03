@@ -52,9 +52,7 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     return this.#size
   }
 
-  get [Symbol.toStringTag](): string {
-    return 'SplayTree'
-  }
+  readonly [Symbol.toStringTag] = 'SplayTree'
 
   /**
    * Tree height via iterative BFS. Empty and single-node trees are `0`.
@@ -290,9 +288,10 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
           stack.push(n)
           n = n.left
         }
-        n = stack.pop()
-        yield n as Node<K, V>
-        n = (n as Node<K, V>).right
+        const current = stack.pop()
+        if (current === undefined) return
+        yield current
+        n = current.right
       }
     } finally {
       this.#active--

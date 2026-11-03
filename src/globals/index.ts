@@ -20,7 +20,9 @@ import type { AnyFunction } from '../types.js'
 import { NotImplementedError } from './errors.js'
 
 /** This is just a noop function. */
-export function noop() {}
+export function noop(): void {
+  return undefined
+}
 
 /** A function that always returns `true`. */
 export const True = () => true
@@ -127,7 +129,7 @@ export function isFunction(x: unknown): x is AnyFunction {
 
 /** Check if value is an async function. */
 export function isAsyncFunction(x: unknown): x is (...args: never[]) => Promise<unknown> {
-  return typeof x === 'function' && x.constructor?.name === 'AsyncFunction'
+  return typeof x === 'function' && x.constructor.name === 'AsyncFunction'
 }
 
 /** Check if value is a generator object. */
@@ -241,7 +243,7 @@ uuid()
 ```
  */
 export function uuid(): string {
-  const c = globalThis.crypto
+  const c = globalThis.crypto as Partial<typeof globalThis.crypto> | undefined
   if (c && typeof c.randomUUID === 'function') {
     return c.randomUUID()
   }
@@ -251,8 +253,8 @@ export function uuid(): string {
     bytes[6] = (bytes[6] & 0x0f) | 0x40
     bytes[8] = (bytes[8] & 0x3f) | 0x80
     let out = ''
-    for (let i = 0; i < bytes.length; i++) {
-      out += bytes[i].toString(16).padStart(2, '0')
+    for (const byte of bytes) {
+      out += byte.toString(16).padStart(2, '0')
     }
     return (
       out.slice(0, 8) +
@@ -277,14 +279,10 @@ export function uuid(): string {
  * @param args
  * @return The method result or `undefined`.
  */
-export function call<R = unknown>(
-  obj: unknown,
-  key: PropertyKey,
-  ...args: unknown[]
-): R | undefined {
+export function call(obj: unknown, key: PropertyKey, ...args: unknown[]): unknown {
   const fn = (obj as Record<PropertyKey, unknown> | null | undefined)?.[key]
   if (typeof fn === 'function') {
-    return (fn as (...a: unknown[]) => R).apply(obj, args)
+    return (fn as (...a: unknown[]) => unknown).apply(obj, args)
   }
   return undefined
 }
@@ -305,8 +303,8 @@ export function ord(s: string): number {
  * @returns The array of object keys.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
  */
-export function keys<T extends object>(object: T): Array<keyof T & string> {
-  return Object.keys(object) as Array<keyof T & string>
+export function keys<T extends object>(object: T): (keyof T & string)[] {
+  return Object.keys(object) as (keyof T & string)[]
 }
 
 /**
@@ -316,7 +314,7 @@ export function keys<T extends object>(object: T): Array<keyof T & string> {
  * @returns `true` if the object has the property name.
  */
 export function has(obj: unknown, attr: PropertyKey): boolean {
-  return obj != null && Reflect.has(Object(obj), attr)
+  return obj != null && Reflect.has(Object(obj) as object, attr)
 }
 
 /**
@@ -326,8 +324,6 @@ export function has(obj: unknown, attr: PropertyKey): boolean {
  * @param value
  * @return The property value or default value.
  */
-export function get<V = unknown>(key: PropertyKey, obj: unknown, value?: V): V
-export function get<V = unknown>(key: PropertyKey[], obj: unknown, value?: V): V
 export function get<V = unknown>(key: PropertyKey | PropertyKey[], obj: unknown, value?: V): V {
   if (obj == null) return value as V
 
@@ -353,8 +349,8 @@ export function get<V = unknown>(key: PropertyKey | PropertyKey[], obj: unknown,
  * @param x The given object.
  * @returns The modified object.
  */
-export function del<T extends object>(attr: PropertyKey, x: T): T {
-  if (x != null) delete (x as Record<PropertyKey, unknown>)[attr]
+export function del<T extends object | null | undefined>(attr: PropertyKey, x: T): T {
+  if (x != null) Reflect.deleteProperty(x, attr)
   return x
 }
 

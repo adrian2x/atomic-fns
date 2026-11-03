@@ -59,7 +59,7 @@ describe('clone', () => {
         return { cloned: true }
       }
     }
-    const o = Object.create(proto)
+    const o = Object.create(proto) as { a?: number; cloned?: boolean }
     o.a = 1
     const r = clone(o)
     expect(r).toBe(o)
@@ -81,7 +81,16 @@ describe('clone', () => {
     const c = clone(a, true)
     expect(c.self).toBe(c)
 
-    expect(typeof clone({ f() {} }, true).f).toBe('function')
+    expect(
+      typeof clone(
+        {
+          f() {
+            return undefined
+          }
+        },
+        true
+      ).f
+    ).toBe('function')
     expect(clone([() => 1], true)[0]()).toBe(1)
 
     const s = new Set([1, { x: 1 }])

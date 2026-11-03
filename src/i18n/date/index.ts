@@ -1,5 +1,5 @@
 import { isObject, ValueError } from '../../globals/index.js'
-import { protocol } from '../../operators/protocol.js'
+import { protocol, type Comparable, type Equatable } from '../../operators/protocol.js'
 import { Duration, UNITS_PLURAL, type DurationObject, type DurationUnit } from '../duration.js'
 import { asDate, formatDate, strftime } from '../format.js'
 import { addDuration, subDuration } from './arith.js'
@@ -32,9 +32,12 @@ export {
 
 export { addDuration, subDuration }
 export type { DurationObject, DateObject }
-export type DateLike = number | string | Date | IntlDate | DateObject
+export type DateLike = number | string | Date | IntlDate | DateObject | null
 
-type DateCtorOpts = { locale?: string; utc?: boolean }
+interface DateCtorOpts {
+  locale?: string
+  utc?: boolean
+}
 
 function isDateObject(v: unknown): v is DateObject {
   return isObject(v) && !(v instanceof Date) && !(v instanceof IntlDate)
@@ -91,7 +94,11 @@ function utcMirror(date: Date): Date {
  * A date tied to a locale (default system locale) with calendar-correct arithmetic
  * and an optional UTC view of the same instant.
  */
-export class IntlDate {
+export class IntlDate implements Comparable, Equatable {
+  declare readonly [protocol.rank]: 5
+  declare readonly [protocol.compare]: (other: unknown) => number | undefined
+  declare readonly [protocol.equals]: (other: unknown) => boolean
+
   private _date: Date
   readonly locale?: string
   readonly utc: boolean
@@ -126,7 +133,7 @@ export class IntlDate {
 
     if (obj instanceof IntlDate) {
       this._date = new Date(obj._date.getTime())
-      this.utc = opts.utc !== undefined ? Boolean(opts.utc) : obj.utc
+      this.utc = opts.utc ?? obj.utc
     } else {
       this.utc = Boolean(opts.utc)
       if (typeof obj === 'string') {
@@ -408,7 +415,7 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
    */
   compare(other: Date | IntlDate): number {
     const r = this.protocolCompare(other)
-    return r === undefined ? 0 : r
+    return r ?? 0
   }
 
   /** Protocol compare: invalid > valid; both invalid declines. */
@@ -477,9 +484,7 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
 
   /** Cached `Intl.RelativeTimeFormat` for this instance. */
   get relativeFormat(): Intl.RelativeTimeFormat {
-    if (!this._relativeFormat) {
-      this._relativeFormat = new Intl.RelativeTimeFormat(this.locale)
-    }
+    this._relativeFormat ??= new Intl.RelativeTimeFormat(this.locale)
     return this._relativeFormat
   }
 
@@ -564,7 +569,7 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
    */
   startOf(unit: DurationUnit): IntlDate {
     if (!this.isValid()) return this
-    const normalizedUnit = UNITS_PLURAL[unit.toLowerCase() as DurationUnit]
+    const normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
     if (!normalizedUnit) throw new ValueError(`Invalid unit ${unit}`)
 
     const obj: DateObject = {}
@@ -619,7 +624,7 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
    */
   endOf(unit: DurationUnit): IntlDate {
     if (!this.isValid()) return this
-    const normalizedUnit = UNITS_PLURAL[unit.toLowerCase() as DurationUnit]
+    const normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
     if (!normalizedUnit) throw new ValueError(`Invalid unit ${unit}`)
     return this.startOf(unit)
       .add({ [normalizedUnit]: 1 })
@@ -708,8 +713,8 @@ function normalizeUnit(unit: string): string {
 function normalizeObject(
   obj: DateObject,
   normalizer: (unit: string) => string
-): Record<string, number> {
-  const normalized: Record<string, number> = {}
+): Partial<Record<string, number>> {
+  const normalized: Partial<Record<string, number>> = {}
   for (const key of Object.keys(obj) as (keyof DateObject)[]) {
     const value = obj[key]
     if (value == null) continue

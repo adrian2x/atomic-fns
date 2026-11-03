@@ -17,8 +17,16 @@ export function defineData(target: object, key: PropertyKey, value: unknown): vo
 /** True when `x` is a plain object (`Object.prototype` or `null` prototype). */
 export function isPlainObject(x: unknown): x is Record<string, unknown> {
   if (x === null || typeof x !== 'object') return false
-  const proto = Object.getPrototypeOf(x)
+  const proto: unknown = Object.getPrototypeOf(x)
   return proto === Object.prototype || proto === null
+}
+
+function isNonNullObject(x: unknown): x is object {
+  return x !== null && typeof x === 'object'
+}
+
+function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown } {
+  return ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function'
 }
 
 function mergeInto(t: object, s: object, seen: WeakMap<object, object>): void {
@@ -51,8 +59,8 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>): void {
  * @param sources Source objects applied left to right.
  * @returns `target`
  */
-export function merge<T extends object>(target: T, ...sources: object[]): T {
-  if (target === null || typeof target !== 'object') {
+export function merge<T extends object>(target: T, ...sources: (object | null | undefined)[]): T {
+  if (!isNonNullObject(target)) {
     throw new TypeError('merge target must be an object')
   }
   const seen = new WeakMap<object, object>()
@@ -70,7 +78,7 @@ function getAtPath(obj: unknown, parts: string[]): unknown {
   let cur: unknown = obj
   for (const p of parts) {
     if (cur === null || (typeof cur !== 'object' && typeof cur !== 'function')) return undefined
-    if (!Object.hasOwn(cur as object, p)) return undefined
+    if (!Object.hasOwn(cur, p)) return undefined
     cur = (cur as Record<string, unknown>)[p]
   }
   return cur
@@ -97,7 +105,10 @@ function deleteAtPath(root: object, parts: string[]): void {
     cur = (cur as Record<string, unknown>)[parts[i]]
   }
   if (cur !== null && typeof cur === 'object') {
-    delete (cur as Record<string, unknown>)[parts[parts.length - 1]]
+    const key = parts[parts.length - 1]
+    if (!Reflect.deleteProperty(cur, key)) {
+      throw new TypeError(`Cannot delete property '${key}'`)
+    }
   }
 }
 
@@ -112,31 +123,31 @@ function deepClonePlain(value: unknown): unknown {
  * @param paths Property paths or a `(value, key)` predicate.
  */
 export function pick<T extends object>(
-  obj: T,
+  obj: T | null | undefined,
   paths: readonly string[] | ((v: unknown, k: string) => boolean)
 ): Partial<T> {
   const result: object = {}
-  if (obj == null) return result as Partial<T>
+  if (obj == null) return result
   if (typeof paths === 'function') {
     for (const key of Object.keys(obj)) {
       const v = (obj as Record<string, unknown>)[key]
       if (paths(v, key)) defineData(result, key, v)
     }
-    return result as Partial<T>
+    return result
   }
   for (const path of paths) {
     const parts = pathSegments(path)
     if (!hasPath(obj, parts)) continue
     setAtPath(result, parts, getAtPath(obj, parts))
   }
-  return result as Partial<T>
+  return result
 }
 
 function hasPath(obj: unknown, parts: string[]): boolean {
   let cur: unknown = obj
   for (const p of parts) {
     if (cur === null || (typeof cur !== 'object' && typeof cur !== 'function')) return false
-    if (!Object.hasOwn(cur as object, p)) return false
+    if (!Object.hasOwn(cur, p)) return false
     cur = (cur as Record<string, unknown>)[p]
   }
   return true
@@ -148,7 +159,7 @@ function hasPath(obj: unknown, parts: string[]): boolean {
  * @param paths Property paths or a `(value, key)` predicate.
  */
 export function omit<T extends object>(
-  obj: T,
+  obj: T | null | undefined,
   paths: readonly string[] | ((v: unknown, k: string) => boolean)
 ): Partial<T> {
   if (obj == null) return {}
@@ -158,13 +169,13 @@ export function omit<T extends object>(
       const v = (obj as Record<string, unknown>)[key]
       if (!paths(v, key)) defineData(result, key, v)
     }
-    return result as Partial<T>
+    return result
   }
   const result = deepClonePlain(obj) as object
   for (const path of paths) {
     deleteAtPath(result, pathSegments(path))
   }
-  return result as Partial<T>
+  return result
 }
 
 const BOXED_TAGS = new Set([
@@ -218,7 +229,7 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
   } else if (tag === '[object DataView]') {
     const dv = v as DataView
     r = new DataView(dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength))
-  } else if (ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function') {
+  } else if (isSliceableView(v)) {
     r = v.slice()
   } else if (BOXED_TAGS.has(tag)) {
     r = Object((v as { valueOf(): unknown }).valueOf())
@@ -239,10 +250,10 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
   }
 
   if (isPlainObject(v)) {
-    const out = Object.create(Object.getPrototypeOf(v))
+    const out = Object.create(Object.getPrototypeOf(v) as object | null) as Record<string, unknown>
     map.set(v, out)
     for (const k of Object.keys(v)) {
-      defineData(out, k, deep ? cloneInner((v as Record<string, unknown>)[k], true, map) : v[k])
+      defineData(out, k, deep ? cloneInner(v[k], true, map) : v[k])
     }
     return out
   }

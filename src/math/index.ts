@@ -117,7 +117,7 @@ mean(objects, o => o.n)
  */
 export function mean(iterable: number[]): number
 export function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): number
-export function mean<T>(iterable: Iterable<T>, key = identity): number {
+export function mean<T>(iterable: Iterable<T>, key: Predicate<T> = identity): number {
   let total = 0
   let count = 0
   for (const value of iterable) {
@@ -143,8 +143,8 @@ sum([{n: 1}, {n: 2}], o => o.n)
 ```
  */
 export function sum(args: number[]): number
-export function sum<T>(args: Iterable<T>, key?: Predicate<T>): number
-export function sum<T>(args: Iterable<T>, key: Predicate<T> = identity): number {
+export function sum<T>(args: Iterable<T>, key?: Predicate<T, number>): number
+export function sum<T>(args: Iterable<T>, key: Predicate<T, number> = (x) => x as number): number {
   let initial = 0
   for (const x of args) {
     initial += key(x)

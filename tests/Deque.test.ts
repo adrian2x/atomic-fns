@@ -120,11 +120,11 @@ describe('Deque', () => {
 
   it('SPEC-R80 find and forEach use indices', () => {
     const deque = new Deque([10, 20, 30])
-    expect(deque.find((v, i) => i === 1)).toBe(20)
+    expect(deque.find((_v, i) => i === 1)).toBe(20)
     expect(deque.find(() => false)).toBeUndefined()
-    const seen: Array<[unknown, number]> = []
+    const seen: [unknown, number][] = []
     deque.forEach((v, i) => {
-      seen.push([v, i as number])
+      seen.push([v, i])
     })
     expect(seen).toEqual([
       [10, 0],

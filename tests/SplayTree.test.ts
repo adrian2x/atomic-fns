@@ -37,7 +37,7 @@ describe('SplayTree', () => {
   })
 
   it('SPEC-R77 has finds key with undefined value', () => {
-    const tree = new SplayTree<number, undefined>()
+    const tree = new SplayTree<number, number | undefined>()
     tree.set(1, undefined)
     expect(tree.has(1)).toBe(true)
     expect(tree.get(1)).toBeUndefined()
@@ -94,7 +94,9 @@ describe('SplayTree', () => {
   })
 
   it('SPEC-R77 custom comparator delete', () => {
-    type Id = { id: number }
+    interface Id {
+      id: number
+    }
     const tree = new SplayTree<Id, string>((a, b) => a.id - b.id)
     tree.set({ id: 1 }, 'a')
     tree.set({ id: 2 }, 'b')
