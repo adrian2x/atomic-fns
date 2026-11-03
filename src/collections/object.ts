@@ -3,6 +3,7 @@
  */
 
 import { assertNestingDepth, withNesting } from '../internal/nesting.js'
+import { truncateForError } from '../internal/truncate.js'
 import { hasMethod, protocol } from '../operators/index.js'
 
 /** Define an own enumerable writable configurable data property. */
@@ -213,31 +214,7 @@ function buildOmitTrie(paths: string[][]): OmitTrie {
   return root
 }
 
-/** Built-ins with internal state: omit keeps them by reference and does not descend. */
-function isOmitOpaque(value: object): boolean {
-  if (ArrayBuffer.isView(value)) return true
-  if (value instanceof Error) return true
-  const tag = Object.prototype.toString.call(value)
-  switch (tag) {
-    case '[object Date]':
-    case '[object RegExp]':
-    case '[object Map]':
-    case '[object Set]':
-    case '[object WeakMap]':
-    case '[object WeakSet]':
-    case '[object WeakRef]':
-    case '[object Promise]':
-    case '[object ArrayBuffer]':
-    case '[object SharedArrayBuffer]':
-    case '[object DataView]':
-    case '[object Error]':
-      return true
-    default:
-      return false
-  }
-}
-
-function omitWithTrie(value: unknown, trie: OmitTrie): unknown {
+function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unknown {
   if (value === null || typeof value !== 'object') return value
   if (Array.isArray(value)) {
     const list = value as unknown[]
@@ -248,16 +225,24 @@ function omitWithTrie(value: unknown, trie: OmitTrie): unknown {
       if (!child?.kids) {
         out[i] = list[i]
       } else {
-        out[i] = omitWithTrie(list[i], child)
+        out[i] = omitWithTrie(list[i], child, pathPrefix.concat(String(i)))
       }
     }
     return out
   }
-  if (isOmitOpaque(value)) return value
-  return omitFromObject(value, trie)
+  if (isPlainObject(value)) {
+    return omitFromObject(value, trie, pathPrefix)
+  }
+  throw new TypeError(
+    `omit cannot descend into a non-plain object at ${truncateForError(pathPrefix.join('.'))}`
+  )
 }
 
-function omitFromObject(src: object, trie: OmitTrie): Record<string, unknown> {
+function omitFromObject(
+  src: object,
+  trie: OmitTrie,
+  pathPrefix: string[]
+): Record<string, unknown> {
   const result: Record<string, unknown> = {}
   for (const key of Object.keys(src)) {
     const child = trie.kids?.get(key)
@@ -265,7 +250,11 @@ function omitFromObject(src: object, trie: OmitTrie): Record<string, unknown> {
     if (!child?.kids) {
       copyKeptProperty(src, result, key)
     } else {
-      defineData(result, key, omitWithTrie((src as Record<string, unknown>)[key], child))
+      defineData(
+        result,
+        key,
+        omitWithTrie((src as Record<string, unknown>)[key], child, pathPrefix.concat(key))
+      )
     }
   }
   return result
@@ -324,11 +313,12 @@ function isStrictPrefix(prefix: string[], parts: string[]): boolean {
  * Never mutates `obj`. Builds a path trie once so cost is O(keys + total path length). Never
  * invokes getters of omitted keys (copies kept keys via property descriptors). String paths
  * split on `.`; an array of segments addresses literal keys. An omit path that ends at an array
- * index leaves a hole (`delete` semantics) on the copy. Descent continues through any object
- * except built-ins with internal state (Date, RegExp, Map, Set, WeakMap, WeakSet, WeakRef,
- * Promise, ArrayBuffer, SharedArrayBuffer, DataView, typed arrays, Error), which are kept by
- * reference. Class instances are copied like a top-level omit of a class instance (own
- * enumerable string keys via property descriptors into a plain object).
+ * index leaves a hole (`delete` semantics) on the copy. While walking a path, descends only into
+ * plain objects (`Object.prototype` or `null` prototype) and arrays. A remaining path segment on
+ * any other object (class instance, collection, Date, Map, ...) throws `TypeError` before any
+ * output is produced. Primitives / null / undefined along a path are a no-op. Values not on any
+ * path are kept by reference. Top-level input is unchanged: plain object, array, or class
+ * instance copied via own enumerable string keys.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
@@ -342,9 +332,9 @@ export function omit<T extends object>(
   }
   const trie = buildOmitTrie(paths.map(normalizePath))
   if (isPlainObject(obj) || Array.isArray(obj)) {
-    return omitWithTrie(obj, trie) as Partial<T>
+    return omitWithTrie(obj, trie, []) as Partial<T>
   }
-  return omitFromObject(obj, trie) as Partial<T>
+  return omitFromObject(obj, trie, []) as Partial<T>
 }
 
 const BOXED_TAGS = new Set([

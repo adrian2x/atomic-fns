@@ -324,38 +324,39 @@ describe('collections', () => {
     expect(rootOmit[2]).toBe(3)
 
     const d = new Date(0)
-    const withDate = omit({ d }, ['d.x']) as { d: Date }
-    expect(withDate.d).toBe(d)
+    expect(() => omit({ d }, ['d.x'])).toThrow(TypeError)
+    expect(d.getTime()).toBe(0)
 
     const m = new Map([['k', 1]])
-    expect((omit({ m }, ['m.k']) as { m: Map<string, number> }).m).toBe(m)
+    expect(() => omit({ m }, ['m.k'])).toThrow(TypeError)
+    expect(m.get('k')).toBe(1)
 
     class Box {
       x = 1
       y = 2
     }
     const box = new Box()
-    const throughBox = omit({ box, z: 3 }, ['box.x']) as { box: { y: number }; z: number }
-    expect(throughBox.box).not.toBe(box)
-    expect(throughBox.box).toEqual({ y: 2 })
+    const boxSrc = { box, z: 3 }
+    expect(() => omit(boxSrc, ['box.x'])).toThrow(TypeError)
+    expect(boxSrc.box).toBe(box)
     expect(box.x).toBe(1)
-    expect(throughBox.z).toBe(3)
 
     class Entity {
       passwordHash = 'secret'
       name = 'ada'
+      toJSON() {
+        return { name: this.name }
+      }
     }
     const entity = new Entity()
-    const scrubbed = omit({ user: entity }, ['user.passwordHash']) as {
-      user: { name: string; passwordHash?: string }
-    }
-    expect(scrubbed.user).not.toBe(entity)
-    expect(scrubbed.user.passwordHash).toBeUndefined()
-    expect(scrubbed.user.name).toBe('ada')
+    const resp = { user: entity, ok: true }
+    expect(() => omit(resp, ['user.email'])).toThrow(TypeError)
+    expect(JSON.stringify(resp)).not.toContain('passwordHash')
     expect(entity.passwordHash).toBe('secret')
 
     const ta = new Uint8Array([1, 2, 3])
-    expect((omit({ ta }, ['ta.0']) as { ta: Uint8Array }).ta).toBe(ta)
+    expect(() => omit({ ta }, ['ta.0'])).toThrow(TypeError)
+    expect(ta[0]).toBe(1)
 
     expect(
       omit(
@@ -529,7 +530,11 @@ describe('collections', () => {
     expect(typeof [].includes).toBe('function')
   })
 
-  it('omit does not mutate class instances; nested instances are copied, Date/Map kept by ref', () => {
+  it('omit fails closed on paths into non-plain objects; top-level instance and off-path refs ok', async () => {
+    const { Deque } = await import('../src/collections/deque.js')
+    const { FrozenSet } = await import('../src/collections/frozenset.js')
+    const { SortedMap } = await import('../src/collections/SortedMap.js')
+
     class P {
       a = 1
       b = 2
@@ -542,17 +547,31 @@ describe('collections', () => {
     expect(Object.getPrototypeOf(out)).toBe(Object.prototype)
 
     const nested = { x: new P() }
-    const out2 = omit(nested, ['x.a']) as { x: { b: number; a?: number } }
+    expect(() => omit(nested, ['x.a'])).toThrow(TypeError)
     expect(nested.x.a).toBe(1)
-    expect(out2.x).not.toBe(nested.x)
-    expect(out2.x).toEqual({ b: 2 })
-    expect(out2.x.a).toBeUndefined()
 
     const d = new Date(0)
     const m = new Map([['k', 1]])
-    const opaque = omit({ d, m }, ['d.x', 'm.k']) as { d: Date; m: Map<string, number> }
-    expect(opaque.d).toBe(d)
-    expect(opaque.m).toBe(m)
+    const fs = new FrozenSet(['a'])
+    const q = new Deque([1, 2])
+    const sm = new SortedMap([[1, 'x'] as [number, string]])
+    const roles = new Map([['admin', true]])
+    Object.defineProperty(roles, Symbol.toStringTag, { value: 'TaggedMap' })
+
+    expect(() => omit({ d }, ['d.x'])).toThrow(/omit cannot descend into a non-plain object/)
+    expect(() => omit({ m }, ['m.k'])).toThrow(TypeError)
+    expect(() => omit({ fs }, ['fs.x'])).toThrow(TypeError)
+    expect(() => omit({ q }, ['q.x'])).toThrow(TypeError)
+    expect(() => omit({ sm }, ['sm.x'])).toThrow(TypeError)
+    expect(() => omit({ roles }, ['roles.x'])).toThrow(TypeError)
+
+    const kept = omit({ d, m, fs, q, sm, roles, n: 1 }, ['n'])
+    expect(kept.d).toBe(d)
+    expect(kept.m).toBe(m)
+    expect(kept.fs).toBe(fs)
+    expect(kept.q).toBe(q)
+    expect(kept.sm).toBe(sm)
+    expect(kept.roles).toBe(roles)
   })
 
   it('pick never defines on objects reachable from a frozen source', () => {
