@@ -186,47 +186,47 @@ export function asciify(s: string): string {
   return out
 }
 
-/** Non-decomposable Latin letters folded like Lodash `deburr`. */
-const LATIN_FOLDS: Record<string, string> = {
-  Æ: 'Ae',
-  æ: 'ae',
-  Þ: 'Th',
-  þ: 'th',
-  ß: 'ss',
-  Œ: 'Oe',
-  œ: 'oe',
-  Ĳ: 'IJ',
-  ĳ: 'ij',
-  Ŀ: 'L',
-  ŀ: 'l',
-  ŉ: "'n",
-  ſ: 's',
-  Ð: 'D',
-  ð: 'd',
-  Đ: 'D',
-  đ: 'd',
-  Ħ: 'H',
-  ħ: 'h',
-  ı: 'i',
-  ĸ: 'k',
-  Ł: 'L',
-  ł: 'l',
-  Ŋ: 'N',
-  ŋ: 'n',
-  Ŧ: 'T',
-  ŧ: 't',
-  Ø: 'O',
-  ø: 'o'
-}
+/** Letter folds from the Unicode CLDR Latin-ASCII transform. */
+const CLDR_LATIN_ASCII_FOLDS: Readonly<Record<string, string>> = Object.freeze({
+  '\u00C6': 'AE',
+  '\u00D0': 'D',
+  '\u00D8': 'O',
+  '\u00DE': 'TH',
+  '\u00DF': 'ss',
+  '\u00E6': 'ae',
+  '\u00F0': 'd',
+  '\u00F8': 'o',
+  '\u00FE': 'th',
+  '\u0110': 'D',
+  '\u0111': 'd',
+  '\u0126': 'H',
+  '\u0127': 'h',
+  '\u0131': 'i',
+  '\u0132': 'IJ',
+  '\u0133': 'ij',
+  '\u0138': 'q',
+  '\u013F': 'L',
+  '\u0140': 'l',
+  '\u0141': 'L',
+  '\u0142': 'l',
+  '\u0149': "'n",
+  '\u014A': 'N',
+  '\u014B': 'n',
+  '\u0152': 'OE',
+  '\u0153': 'oe',
+  '\u0166': 'T',
+  '\u0167': 't',
+  '\u017F': 's'
+})
 
-const IS_MARK = /\p{M}/u
+const IS_NONSPACING_MARK = /\p{Mn}/u
 const IS_LATIN = /\p{Script=Latin}/u
+const IS_ASCII_DIGIT = /^[0-9]$/
 
 /**
- * Folds Latin accents and ligatures; strips combining marks only from Latin-script letters.
- * Non-Latin text is unchanged. Result is NFC.
+ * Applies the Unicode CLDR Latin-ASCII transform (mark strip + letter folds).
  * @param s The string
- * @returns The new string without Latin accents
+ * @returns The folded string
  * @example
 ```js
 removeAccents('Antoine de Saint-Exupéry')
@@ -234,23 +234,24 @@ removeAccents('Antoine de Saint-Exupéry')
 ```
  */
 export function removeAccents(s: string): string {
-  let mapped = ''
-  for (const ch of s) {
-    mapped += LATIN_FOLDS[ch] ?? ch
-  }
-  const nfd = mapped.normalize('NFD')
-  let out = ''
-  let lastWasLatin = false
+  const nfd = s.normalize('NFD')
+  let stripped = ''
+  let stripNextMarks = false
   for (const ch of nfd) {
-    if (IS_MARK.test(ch)) {
-      if (lastWasLatin) continue
-      out += ch
+    if (IS_NONSPACING_MARK.test(ch)) {
+      if (stripNextMarks) continue
+      stripped += ch
       continue
     }
-    lastWasLatin = IS_LATIN.test(ch)
-    out += ch
+    stripNextMarks = IS_LATIN.test(ch) || IS_ASCII_DIGIT.test(ch)
+    stripped += ch
   }
-  return out.normalize('NFC')
+  const nfc = stripped.normalize('NFC')
+  let out = ''
+  for (const ch of nfc) {
+    out += CLDR_LATIN_ASCII_FOLDS[ch] ?? ch
+  }
+  return out
 }
 
 /**

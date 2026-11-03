@@ -40,53 +40,56 @@ describe('string', () => {
 
   it('removeAccents', () => {
     expect(string.removeAccents('Antoine de Saint-Exupéry')).toBe('Antoine de Saint-Exupery')
-    expect(string.removeAccents('Œuvre ß ø Ł đ Æ þ')).toBe('Oeuvre ss o L d Ae th')
+    expect(string.removeAccents('Œuvre ß ø Ł đ Æ þ')).toBe('OEuvre ss o L d AE th')
     expect(string.removeAccents('Crème Brûlée Ångström')).toBe('Creme Brulee Angstrom')
     expect(string.removeAccents('й')).toBe('й')
     expect(string.removeAccents('が')).toBe('が')
     expect(string.removeAccents('が').length).toBe(1)
-    expect(string.removeAccents('a⃝ b︠')).toBe('a b')
+    expect(string.removeAccents('a\u0301')).toBe('a')
+    expect(string.removeAccents('\u03AC')).toBe('\u03AC')
   })
 
-  it('removeAccents Lodash deburr letter folds', () => {
+  it('removeAccents CLDR Latin-ASCII letter folds', () => {
     const folds: [string, string][] = [
-      ['Æ', 'Ae'],
-      ['æ', 'ae'],
-      ['Þ', 'Th'],
-      ['þ', 'th'],
-      ['ß', 'ss'],
-      ['Œ', 'Oe'],
-      ['œ', 'oe'],
-      ['Ĳ', 'IJ'],
-      ['ĳ', 'ij'],
-      ['Ŀ', 'L'],
-      ['ŀ', 'l'],
-      ['ŉ', "'n"],
-      ['ſ', 's'],
-      ['Ð', 'D'],
-      ['ð', 'd'],
-      ['Đ', 'D'],
-      ['đ', 'd'],
-      ['Ħ', 'H'],
-      ['ħ', 'h'],
-      ['ı', 'i'],
-      ['ĸ', 'k'],
-      ['Ł', 'L'],
-      ['ł', 'l'],
-      ['Ŋ', 'N'],
-      ['ŋ', 'n'],
-      ['Ŧ', 'T'],
-      ['ŧ', 't'],
-      ['Ø', 'O'],
-      ['ø', 'o']
+      ['\u00C6', 'AE'],
+      ['\u00D0', 'D'],
+      ['\u00D8', 'O'],
+      ['\u00DE', 'TH'],
+      ['\u00DF', 'ss'],
+      ['\u00E6', 'ae'],
+      ['\u00F0', 'd'],
+      ['\u00F8', 'o'],
+      ['\u00FE', 'th'],
+      ['\u0110', 'D'],
+      ['\u0111', 'd'],
+      ['\u0126', 'H'],
+      ['\u0127', 'h'],
+      ['\u0131', 'i'],
+      ['\u0132', 'IJ'],
+      ['\u0133', 'ij'],
+      ['\u0138', 'q'],
+      ['\u013F', 'L'],
+      ['\u0140', 'l'],
+      ['\u0141', 'L'],
+      ['\u0142', 'l'],
+      ['\u0149', "'n"],
+      ['\u014A', 'N'],
+      ['\u014B', 'n'],
+      ['\u0152', 'OE'],
+      ['\u0153', 'oe'],
+      ['\u0166', 'T'],
+      ['\u0167', 't'],
+      ['\u017F', 's']
     ]
     for (const [src, dest] of folds) {
       expect(string.removeAccents(src)).toBe(dest)
     }
-    expect(string.removeAccents('Æsir')).toBe('Aesir')
-    expect(string.removeAccents('Œuvre')).toBe('Oeuvre')
-    expect(string.removeAccents('Þór')).toBe('Thor')
-    expect(string.slugify('Ærøskøbing')).toBe('Aeroskobing')
+    expect(string.removeAccents('Æsir')).toBe('AEsir')
+    expect(string.removeAccents('Œuvre')).toBe('OEuvre')
+    expect(string.removeAccents('Þór')).toBe('THor')
+    expect(string.removeAccents('1\u0301')).toBe('1')
+    expect(string.removeAccents('e\u0301')).toBe('e')
+    expect(string.slugify('Ærøskøbing')).toBe('AEroskobing')
   })
 
   it('words', () => {
@@ -214,7 +217,7 @@ describe('string', () => {
     expect(string.slugify('equipment_class_name')).toBe('equipment-class-name')
     expect(string.slugify('equipment class name')).toBe('equipment-class-name')
     expect(string.slugify('Antoine de Saint-Exupéry')).toBe('Antoine-de-Saint-Exupery')
-    expect(string.slugify('Ægir og Ødin')).toBe('Aegir-og-Odin')
+    expect(string.slugify('Ægir og Ødin')).toBe('AEgir-og-Odin')
     expect(string.slugify('がぎ')).toBe('がぎ')
     expect(string.slugify('Йога')).toBe('Йога')
     expect(string.slugify('')).toBe('')
