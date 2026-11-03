@@ -1,9 +1,8 @@
 import { isObject, ValueError } from '../../globals/index.js'
-import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
+import { Duration, UNITS_PLURAL, type DurationUnit, type TDuration } from '../duration.js'
 import { asDate, formatDate, strftime } from '../format.js'
 import {
   asNumber,
-  DateObject,
   dayOfYear,
   daysInMonth,
   daysInYear,
@@ -11,7 +10,8 @@ import {
   maxDate,
   minDate,
   weekOfYear,
-  weeksInYear
+  weeksInYear,
+  type DateObject
 } from './utils.js'
 
 // Export date functions

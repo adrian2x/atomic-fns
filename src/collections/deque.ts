@@ -1,7 +1,7 @@
 import { KeyError, ValueError } from '../globals/index.js'
 import { IterableIterator } from '../itertools/index.js'
 import { eq } from '../operators/index.js'
-import { Iteratee } from '../types.js'
+import type { Iteratee } from '../types.js'
 import { Sequence } from './abc.js'
 
 /**

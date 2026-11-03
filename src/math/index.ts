@@ -7,7 +7,7 @@
 import { call } from '../globals/index.js'
 import { reduce } from '../itertools/index.js'
 import { gt, id, lt } from '../operators/index.js'
-import { Predicate } from '../types.js'
+import type { Predicate } from '../types.js'
 
 /**
  * Returns the absolute value of a number. The argument may be a number or an object implementing the `abs()`.

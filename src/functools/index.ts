@@ -4,7 +4,7 @@
  * @module functools
  */
 
-import { Function } from '../globals/index.js'
+import type { Function } from '../globals/index.js'
 
 /**
  * Creates a function that invokes `fn` with the this binding of `thisArg` and `partials` as partially applied arguments.

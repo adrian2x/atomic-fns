@@ -16,6 +16,7 @@
     "postversion": "git push && git push --tags",
     "prepublishOnly": "npm run build",
     "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "tsc": "tsc -p . --declaration",
     "tsc:w": "tsc -p . --declaration --watch",
     "lint": "eslint src/**/*.ts --fix",
@@ -23,6 +24,7 @@
     "docs": "typedoc"
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
     "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^8.25.0",
@@ -32,7 +34,7 @@
     "eslint-plugin-prettier": "^4.2.1",
     "prettier": "^2.7.1",
     "typedoc": "^0.23.16",
-    "typescript": "^4.8.4",
+    "typescript": "~6.0.3",
     "vitest": "^5.0.5"
   },
   "repository": {
