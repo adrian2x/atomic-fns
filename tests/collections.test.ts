@@ -554,16 +554,37 @@ describe('collections', () => {
     })
   })
 
-  it('POL-18 flatten rejects colliding dotted keys in either order', () => {
+  it('POL-18 flatten rejects keys that alias paths', () => {
+    expect(() => flatten(JSON.parse('{"profile.role":"admin"}') as object)).toThrow(
+      /flatten cannot represent key/
+    )
+    expect(() => flatten(JSON.parse('{"":{"role":"admin"}}') as object)).toThrow(
+      /flatten cannot represent key/
+    )
+    expect(() => flatten(JSON.parse('{"tags[0]":"admin"}') as object)).toThrow(
+      /flatten cannot represent key/
+    )
+    expect(() => flatten(JSON.parse('{"a":{"b.c":1}}') as object)).toThrow(
+      /flatten cannot represent key/
+    )
+    expect(() => flatten({ 'user.name': 'ada', 'user.role': 'admin' })).toThrow(
+      /flatten cannot represent key/
+    )
     const nestedFirst = JSON.parse('{"user":{"role":"user"},"user.role":"admin"}') as object
-    const flatFirst = JSON.parse('{"user.role":"admin","user":{"role":"user"}}') as object
-    expect(() => flatten(nestedFirst)).toThrow(TypeError)
-    expect(() => flatten(nestedFirst)).toThrow(/flatten produced duplicate key "user\.role"/)
-    expect(() => flatten(flatFirst)).toThrow(/flatten produced duplicate key "user\.role"/)
-    expect(flatten({ 'user.name': 'ada', 'user.role': 'admin' })).toEqual({
-      'user.name': 'ada',
-      'user.role': 'admin'
-    })
+    expect(() => flatten(nestedFirst)).toThrow(/flatten cannot represent key/)
+  })
+
+  it('POL-22 flatten key error messages are truncated', () => {
+    const huge = `h.\n${'F'.repeat(100_000)}`
+    let msg = ''
+    try {
+      flatten({ [huge]: 1 })
+    } catch (e) {
+      msg = e instanceof Error ? e.message : String(e)
+    }
+    expect(msg.startsWith('flatten cannot represent key ')).toBe(true)
+    expect(msg.length).toBeLessThan(80)
+    expect(msg.includes('\nF')).toBe(false)
   })
 
   it('pick omit key lists and predicates', () => {
@@ -635,6 +656,41 @@ describe('collections', () => {
     expect(kept.q).toBe(q)
     expect(kept.sm).toBe(sm)
     expect(kept.roles).toBe(roles)
+  })
+
+  it('POL-21 omit refuses only callable or accessor toJSON', () => {
+    const dataToJSON = JSON.parse('{"toJSON":"x","password":"p"}') as {
+      toJSON: string
+      password: string
+    }
+    expect(omit(dataToJSON, ['password'])).toEqual({ toJSON: 'x' })
+    const nested = { u: JSON.parse('{"toJSON":1,"secret":"s"}') as Record<string, unknown> }
+    expect(omit(nested, ['u.secret'])).toEqual({ u: { toJSON: 1 } })
+
+    const accessor: { password: string } = { password: 'p' }
+    Object.defineProperty(accessor, 'toJSON', {
+      get: (): (() => Record<string, never>) => {
+        return (): Record<string, never> => ({})
+      },
+      enumerable: true,
+      configurable: true
+    })
+    expect(() => omit(accessor, ['password'])).toThrow(/omit requires a plain object or array/)
+  })
+
+  it('POL-23 omit copies kept values with normal reads', () => {
+    const real = { password: 'hunter2', user: 'a' }
+    const masked = new Proxy(real, {
+      get(target, prop, receiver): unknown {
+        if (prop === 'password') return '***'
+        const value: unknown = Reflect.get(target, prop, receiver)
+        return value
+      }
+    })
+    const out = omit({ s: masked }, ['s.user']) as { s: { password: string } }
+    expect(out.s.password).toBe('***')
+    expect(JSON.stringify(out)).toContain('***')
+    expect(JSON.stringify(out)).not.toContain('hunter2')
   })
 
   it('POL-16 omit fails closed on Array subclass, own toJSON array, and own toJSON object', () => {

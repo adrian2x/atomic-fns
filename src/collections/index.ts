@@ -15,6 +15,7 @@ import {
   guardVisitBudget,
   visitNode
 } from '../internal/nesting.js'
+import { truncateForError } from '../internal/truncate.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, deepEqual, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
@@ -457,9 +458,15 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
   return result
 }
 
+function assertFlattenableKey(key: string): void {
+  if (key === '' || key.includes('.') || key.includes('[') || key.includes(']')) {
+    throw new TypeError(`flatten cannot represent key ${truncateForError(key)}`)
+  }
+}
+
 function setFlatKey(result: Record<string, unknown>, key: string, value: unknown): void {
   if (Object.hasOwn(result, key)) {
-    throw new TypeError(`flatten produced duplicate key "${key}"`)
+    throw new TypeError(`flatten produced duplicate key ${truncateForError(key)}`)
   }
   defineData(result, key, value)
 }
@@ -483,6 +490,7 @@ function flattenObj(
       }
       seen.add(obj)
       for (const i of Object.keys(obj)) {
+        assertFlattenableKey(i)
         let pref = prefix
         if (Array.isArray(obj)) {
           pref = `${pref}[${i}]`

@@ -31,17 +31,31 @@ export function isPlainObject(x: unknown): x is Record<string, unknown> {
   return proto === Object.prototype || proto === null
 }
 
-/** Array with prototype exactly `Array.prototype` and no own `toJSON`. */
+/** True when `toJSON` is an own function or an own accessor (getter/setter). */
+function hasCallableOrAccessorToJSON(x: object): boolean {
+  if (!Object.hasOwn(x, 'toJSON')) return false
+  const desc = Object.getOwnPropertyDescriptor(x, 'toJSON')
+  if (!desc) return false
+  if (desc.get !== undefined || desc.set !== undefined) return true
+  return typeof desc.value === 'function'
+}
+
+/** Array with prototype exactly `Array.prototype` and no callable/accessor `toJSON`. */
 function isPlainArray(x: unknown): x is unknown[] {
   return (
-    Array.isArray(x) && Object.getPrototypeOf(x) === Array.prototype && !Object.hasOwn(x, 'toJSON')
+    Array.isArray(x) &&
+    Object.getPrototypeOf(x) === Array.prototype &&
+    !hasCallableOrAccessorToJSON(x)
   )
 }
 
-/** Plain object or plain array with no own `toJSON` (omit may copy without losing redaction). */
+/**
+ * Plain object or plain array with no callable/accessor `toJSON` (omit may copy without losing
+ * redaction). A data property holding a non-function `toJSON` is ordinary data.
+ */
 function isOmitContainer(x: unknown): boolean {
   if (isPlainArray(x)) return true
-  return isPlainObject(x) && !Object.hasOwn(x, 'toJSON')
+  return isPlainObject(x) && !hasCallableOrAccessorToJSON(x)
 }
 
 function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown } {
@@ -157,14 +171,17 @@ function copyOwnEnumerable(src: object): Record<string, unknown> {
   return out
 }
 
-/** Copy one own property via its descriptor without invoking other getters. */
+/**
+ * Copy one own enumerable string-keyed property. Accessors are re-defined; data values are read
+ * with a normal `[[Get]]` so Proxy get traps that mask values still apply.
+ */
 function copyKeptProperty(src: object, dest: object, key: string): void {
   const desc = Object.getOwnPropertyDescriptor(src, key)
   if (!desc) return
   if (desc.get !== undefined || desc.set !== undefined) {
     Object.defineProperty(dest, key, desc)
   } else {
-    defineData(dest, key, desc.value)
+    defineData(dest, key, (src as Record<string, unknown>)[key])
   }
 }
 
@@ -262,7 +279,7 @@ function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unk
       }
       return out
     }
-    if (isPlainObject(value) && !Object.hasOwn(value, 'toJSON')) {
+    if (isPlainObject(value) && !hasCallableOrAccessorToJSON(value)) {
       return omitFromObject(value, trie, pathPrefix)
     }
     throw new TypeError(
@@ -369,14 +386,18 @@ function markPickedObject(parts: string[], root: PickPathTrie): void {
 /**
  * Create a deep copy of `obj` with the given paths omitted, or keep values where the predicate is falsy.
  * Never mutates `obj`. Builds a path trie once so cost is O(keys + total path length). Never
- * invokes getters of omitted keys (copies kept keys via property descriptors). String paths
- * split on `.`; an array of segments addresses literal keys. An omit path that ends at an array
- * index leaves a hole (`delete` semantics) on the copy. Top-level input and every descended
- * container must be a plain object (`Object.prototype` or `null` prototype) or a plain array
- * (`Array.prototype`, no own `toJSON`). An own `toJSON`, Array subclass, class instance, Map,
- * Date, collection, or function throws `TypeError('omit requires a plain object or array')` at
- * the top level, or `TypeError` naming the path when nested, before any output. Primitives /
- * null / undefined along a path are a no-op. Values not on any path are kept by reference.
+ * invokes getters of omitted keys. Kept own enumerable string-keyed data values are copied with a
+ * normal `[[Get]]` read (Proxy get traps that mask values still apply); accessors are re-defined.
+ * Symbol-keyed properties (e.g. `util.inspect.custom`) are not copied. String paths split on `.`;
+ * an array of segments addresses literal keys. An omit path that ends at an array index leaves a
+ * hole (`delete` semantics) on the copy. Top-level input and every descended container must be a
+ * plain object (`Object.prototype` or `null` prototype) or a plain array (`Array.prototype`)
+ * without a callable or accessor own `toJSON`. A function or accessor `toJSON`, Array subclass,
+ * class instance, Map, Date, collection, or function throws
+ * `TypeError('omit requires a plain object or array')` at the top level, or `TypeError` naming
+ * the path when nested, before any output. A data property holding a non-function `toJSON` is
+ * ordinary data. Primitives / null / undefined along a path are a no-op. Values not on any path
+ * are kept by reference.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
