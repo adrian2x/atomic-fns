@@ -127,7 +127,15 @@ export function compose<A extends unknown[]>(
 }
 
 /**
- * Creates a function that memoizes the result of `fn`. If `resolver` is provided, it determines the cache key from the arguments. By default the first argument is the key. Uses `Map.has`, so `undefined` results are cached. Invokes `fn` with the caller's `this`.
+ * A memoized function with its cache `Map` and a `clear` helper.
+ */
+export type Memoized<F extends AnyFunction> = F & {
+  cache: Map<unknown, ReturnType<F>>
+  clear(): void
+}
+
+/**
+ * Creates a function that memoizes the result of `fn`. If `resolver` is provided, it determines the cache key from the arguments. By default the first argument is the key. Uses `Map.has`, so `undefined` results are cached. Invokes `fn` with the caller's `this`. Exposes `memoized.cache` and `memoized.clear()`.
  * @param fn The function to have its output memoized.
  * @param resolver The function to resolve the cache key.
  * @returns The new memoized function.
@@ -135,7 +143,7 @@ export function compose<A extends unknown[]>(
 export function memoize<F extends AnyFunction>(
   fn: F,
   resolver?: (...args: Parameters<F>) => unknown
-): F {
+): Memoized<F> {
   const store = new Map<unknown, ReturnType<F>>()
   const memoized = function (this: unknown, ...args: Parameters<F>): ReturnType<F> {
     const key = resolver ? resolver(...args) : args[0]
@@ -145,8 +153,12 @@ export function memoize<F extends AnyFunction>(
     const value = fn.apply(this, args) as ReturnType<F>
     store.set(key, value)
     return value
+  } as Memoized<F>
+  memoized.cache = store
+  memoized.clear = (): void => {
+    store.clear()
   }
-  return memoized as F
+  return memoized
 }
 
 /**
@@ -266,7 +278,10 @@ export function debounce<F extends AnyFunction>(
 }
 
 /**
- * Creates a throttled function that invokes `fn` at most once per `wait` milliseconds on the leading edge. Calls within `wait` return the last result without invoking.
+ * Creates a throttled function that invokes `fn` at most once per `wait` milliseconds on the
+ * leading edge, and once more on the trailing edge with the latest arguments when calls arrived
+ * during the window (Lodash defaults: leading + trailing). `wait` of 0 still batches via
+ * `setTimeout(0)`: one leading invoke plus at most one trailing per macrotask.
  * @param fn The function to throttle.
  * @param wait The number of milliseconds to throttle invocations to.
  * @returns The new throttled function.
@@ -275,15 +290,35 @@ export function throttle<F extends AnyFunction>(
   fn: F,
   wait: number
 ): (...args: Parameters<F>) => ReturnType<F> | undefined {
+  if (wait < 0) wait = 0
   let cooling = false
   let lastResult: ReturnType<F> | undefined
-  return function (this: unknown, ...args: Parameters<F>): ReturnType<F> | undefined {
-    if (cooling) return lastResult
-    lastResult = fn.apply(this, args) as ReturnType<F>
-    cooling = true
-    setTimeout(() => {
+  let pending: { thisArg: unknown; args: Parameters<F> } | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  function schedule(): void {
+    timer = setTimeout(() => {
+      timer = undefined
       cooling = false
+      if (!pending) return
+      const call = pending
+      pending = undefined
+      lastResult = fn.apply(call.thisArg, call.args) as ReturnType<F>
+      cooling = true
+      schedule()
     }, wait)
+  }
+
+  return function (this: unknown, ...args: Parameters<F>): ReturnType<F> | undefined {
+    if (!cooling) {
+      lastResult = fn.apply(this, args) as ReturnType<F>
+      cooling = true
+      pending = undefined
+      if (timer !== undefined) clearTimeout(timer)
+      schedule()
+      return lastResult
+    }
+    pending = { thisArg: this, args }
     return lastResult
   }
 }

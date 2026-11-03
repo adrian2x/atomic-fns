@@ -130,6 +130,20 @@ describe('functools', () => {
       assert.equal(calls, 0)
     })
 
+    it('memoize exposes cache and clear', () => {
+      let calls = 0
+      const fn = memoize((x: number) => {
+        calls++
+        return x * 2
+      })
+      assert.equal(fn(1), 2)
+      assert.equal(fn.cache.get(1), 2)
+      fn.clear()
+      assert.equal(fn.cache.size, 0)
+      assert.equal(fn(1), 2)
+      assert.equal(calls, 2)
+    })
+
     it('SPEC-R55 cache decorator memoizes per instance with this', () => {
       class Counter {
         base: number
@@ -270,19 +284,32 @@ describe('functools', () => {
       vi.useRealTimers()
     })
 
-    it('SPEC-R57 throttle invokes on leading edge and returns last result', () => {
-      let calls = 0
+    it('SPEC-R57 throttle leading and trailing with latest args', () => {
+      const seen: number[] = []
       const t = throttle((x: number) => {
-        calls++
+        seen.push(x)
         return x * 10
-      }, 100)
+      }, 40)
       assert.equal(t(1), 10)
-      assert.equal(calls, 1)
       assert.equal(t(2), 10)
-      assert.equal(calls, 1)
+      assert.equal(t(3), 10)
+      assert.deepEqual(seen, [1])
       vi.advanceTimersByTime(100)
-      assert.equal(t(3), 30)
-      assert.equal(calls, 2)
+      assert.deepEqual(seen, [1, 3])
+    })
+
+    it('throttle wait 0: leading plus one trailing per macrotask', () => {
+      const seen: number[] = []
+      const t = throttle((x: number) => {
+        seen.push(x)
+        return x
+      }, 0)
+      t(1)
+      t(2)
+      t(3)
+      assert.deepEqual(seen, [1])
+      vi.advanceTimersByTime(0)
+      assert.deepEqual(seen, [1, 3])
     })
   })
 
