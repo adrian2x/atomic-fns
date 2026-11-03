@@ -68,20 +68,41 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
     expect(deepEqual(new Heap([1, 2]), new Heap([1, 3]))).toBe(false)
     expect(deepEqual(new Heap([1, 2]), new Heap([1, 2]))).toBe(true)
 
-    const tieCmp = (a: [number, number], b: [number, number]) => a[0] - b[0]
+    // Default comparator: object / nested-array items equal as a multiset
+    expect(deepEqual(new Heap([{ a: 1 }]), new Heap([{ a: 1 }]))).toBe(true)
+    expect(deepEqual(new Heap([[1]]), new Heap([[1]]))).toBe(true)
+
+    // -0 / 0 and null-proto twins equal in either insertion order
+    expect(deepEqual(new Heap([-0, 0]), new Heap([0, -0]))).toBe(true)
+    const np1: Record<string, number> = Object.create(null) as Record<string, number>
+    np1.a = 1
+    const np2: Record<string, number> = Object.create(null) as Record<string, number>
+    np2.a = 1
+    expect(deepEqual(new Heap([np1, { a: 1 }]), new Heap([{ a: 1 }, np2]))).toBe(true)
+    expect(deepEqual(new Heap([np1]), new Heap([{ a: 1 }]))).toBe(false)
+
     const n = 10_000
-    const items = Array.from({ length: n }, (_, i) => [0, i] as [number, number])
-    const h1 = new Heap(items, tieCmp)
-    const h2 = new Heap(items.slice().reverse(), tieCmp)
+    const keyed = Array.from({ length: n }, (_, i) => ({ i }))
+    const h1 = new Heap(keyed)
+    const h2 = new Heap(keyed.slice().reverse())
     const t0 = performance.now()
     expect(deepEqual(h1, h2)).toBe(true)
     expect(performance.now() - t0).toBeLessThan(200)
-    const h3 = new Heap(items, tieCmp)
+
+    const dated = Array.from({ length: 2000 }, (_, i) => ({ p: 0, at: new Date(i) }))
+    const hd1 = new Heap(dated)
+    const hd2 = new Heap(dated.slice().reverse())
+    const tDate = performance.now()
+    expect(deepEqual(hd1, hd2)).toBe(true)
+    expect(performance.now() - tDate).toBeLessThan(200)
+
+    const h3 = new Heap(keyed)
     h3.pop()
-    h3.push([0, -1])
+    h3.push({ i: -1 })
     const t1 = performance.now()
     expect(deepEqual(h1, h3)).toBe(false)
     expect(performance.now() - t1).toBeLessThan(200)
+
     interface Item {
       p: number
       id: string

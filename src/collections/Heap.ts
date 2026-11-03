@@ -36,10 +36,11 @@ export class Heap<T> extends ValueCollection<T> {
   }
 
   /**
-   * Multiset equality: same size; after sorting both with the heap comparator (ties broken by a
-   * canonical structural key when both sides have one), each maximal run of comparator-equal
-   * items is compared pairwise for JSON-like values, or as a multiset for the rest (class
-   * instances, functions, symbols, collections). Iteration / heap order is not part of equality.
+   * Multiset equality under `deepEqual`, independent of the heap comparator. Same size; keyed
+   * items (canonicalKey) are counted in a Map and compared; unkeyed items (functions, class
+   * instances without structural deepEqual, symbols, ...) are matched pairwise among themselves
+   * only (O(k^2) in the number of unkeyed items). Keys are computed once per item. Iteration /
+   * heap order is not part of equality.
    */
   override [protocol.equals](other: unknown): boolean {
     return withHookNesting(() => {
@@ -47,22 +48,40 @@ export class Heap<T> extends ValueCollection<T> {
       if (typeof other !== 'object' || other?.constructor !== this.constructor) return false
       const o = other as Heap<T>
       if (this.size !== o.size) return false
-      const a = sortHeapItems([...this.values()], this.#compare)
-      const b = sortHeapItems([...o.values()], o.#compare)
-      let i = 0
-      let j = 0
-      while (i < a.length && j < b.length) {
-        if (this.#compare(a[i], b[j]) !== 0) return false
-        let endA = i + 1
-        while (endA < a.length && this.#compare(a[i], a[endA]) === 0) endA++
-        let endB = j + 1
-        while (endB < b.length && o.#compare(b[j], b[endB]) === 0) endB++
-        if (endA - i !== endB - j) return false
-        if (!tieRunEqual(a, i, endA, b, j, endB)) return false
-        i = endA
-        j = endB
+      const counts = new Map<string, number>()
+      const freeA: T[] = []
+      const freeB: T[] = []
+      for (const item of this.values()) {
+        const k = canonicalKey(item)
+        if (k === undefined) freeA.push(item)
+        else counts.set(k, (counts.get(k) ?? 0) + 1)
       }
-      return i === a.length && j === b.length
+      for (const item of o.values()) {
+        const k = canonicalKey(item)
+        if (k === undefined) freeB.push(item)
+        else {
+          const n = counts.get(k)
+          if (n === undefined) return false
+          if (n === 1) counts.delete(k)
+          else counts.set(k, n - 1)
+        }
+      }
+      if (counts.size !== 0) return false
+      if (freeA.length !== freeB.length) return false
+      const used = new Array<boolean>(freeB.length).fill(false)
+      for (const item of freeA) {
+        let found = false
+        for (let y = 0; y < freeB.length; y++) {
+          if (used[y]) continue
+          if (deepEqual(item, freeB[y])) {
+            used[y] = true
+            found = true
+            break
+          }
+        }
+        if (!found) return false
+      }
+      return true
     })
   }
 
@@ -134,65 +153,6 @@ export class Heap<T> extends ValueCollection<T> {
   values(): IteratorObject<T> {
     return this.#heap.values()
   }
-}
-
-function sortHeapItems<T>(items: T[], compareFn: Comparer<T>): T[] {
-  return items.sort((x, y) => {
-    const c = compareFn(x, y)
-    if (c !== 0) return c
-    const kx = canonicalKey(x)
-    const ky = canonicalKey(y)
-    if (kx !== undefined && ky !== undefined) {
-      if (kx < ky) return -1
-      if (kx > ky) return 1
-      return 0
-    }
-    // Unkeyed (or mixed) stay in their relative order; matched as a multiset later.
-    if (kx !== undefined) return -1
-    if (ky !== undefined) return 1
-    return 0
-  })
-}
-
-/** Compare one comparator-tie run: keyed items pairwise, unkeyed by multiset deepEqual. */
-function tieRunEqual<T>(
-  a: T[],
-  startA: number,
-  endA: number,
-  b: T[],
-  startB: number,
-  endB: number
-): boolean {
-  const keyedA: T[] = []
-  const keyedB: T[] = []
-  const freeA: T[] = []
-  const freeB: T[] = []
-  for (let x = startA; x < endA; x++) {
-    if (canonicalKey(a[x]) === undefined) freeA.push(a[x])
-    else keyedA.push(a[x])
-  }
-  for (let y = startB; y < endB; y++) {
-    if (canonicalKey(b[y]) === undefined) freeB.push(b[y])
-    else keyedB.push(b[y])
-  }
-  if (keyedA.length !== keyedB.length || freeA.length !== freeB.length) return false
-  for (let i = 0; i < keyedA.length; i++) {
-    if (!deepEqual(keyedA[i], keyedB[i])) return false
-  }
-  const used = new Array<boolean>(freeB.length).fill(false)
-  for (const item of freeA) {
-    let found = false
-    for (let y = 0; y < freeB.length; y++) {
-      if (used[y]) continue
-      if (deepEqual(item, freeB[y])) {
-        used[y] = true
-        found = true
-        break
-      }
-    }
-    if (!found) return false
-  }
-  return true
 }
 
 /**
