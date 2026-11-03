@@ -1,10 +1,117 @@
-import { canonicalKey } from '../internal/canonicalKey.js'
+import { canonicalKeyInfo } from '../internal/canonicalKey.js'
 import { arrayFromIterable } from '../internal/iterable.js'
 import { withHookNesting } from '../internal/nesting.js'
 import type { Comparer } from '../operators/index.js'
 import { compare, deepEqual, protocol, sameValueZero } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
 import { clone } from './object.js'
+
+interface HeapEqItem<T> {
+  item: T
+  key: string | undefined
+  pure: boolean
+}
+
+function classifyHeapItem<T>(item: T): HeapEqItem<T> {
+  const info = canonicalKeyInfo(item)
+  if (info === undefined) return { item, key: undefined, pure: false }
+  return { item, key: info.key, pure: info.pure }
+}
+
+/**
+ * Cancel keyed items by key counts. Leftovers are items with no key, or keyed items whose
+ * key count did not cancel against the other side.
+ */
+function keyedLeftovers<T>(side: HeapEqItem<T>[]): {
+  byKey: Map<string, HeapEqItem<T>[]>
+  unkeyed: HeapEqItem<T>[]
+} {
+  const byKey = new Map<string, HeapEqItem<T>[]>()
+  const unkeyed: HeapEqItem<T>[] = []
+  for (const entry of side) {
+    if (entry.key === undefined) {
+      unkeyed.push(entry)
+      continue
+    }
+    const list = byKey.get(entry.key)
+    if (list === undefined) byKey.set(entry.key, [entry])
+    else list.push(entry)
+  }
+  return { byKey, unkeyed }
+}
+
+/**
+ * Multiset equality leftovers after key cancellation, then pairwise matching for every leftover
+ * impure item (O(leftover_impure × leftovers)). Pure leftovers may only be consumed by those
+ * matches. JSON-only heaps cancel entirely by key and never take the pairwise path.
+ */
+function heapMultisetEqual<T>(aItems: Iterable<T>, bItems: Iterable<T>): boolean {
+  const sideA = [...aItems].map(classifyHeapItem)
+  const sideB = [...bItems].map(classifyHeapItem)
+  const { byKey: keysA, unkeyed: unkeyedA } = keyedLeftovers(sideA)
+  const { byKey: keysB, unkeyed: unkeyedB } = keyedLeftovers(sideB)
+
+  const leftoverA: HeapEqItem<T>[] = [...unkeyedA]
+  const leftoverB: HeapEqItem<T>[] = [...unkeyedB]
+  const allKeys = new Set([...keysA.keys(), ...keysB.keys()])
+  for (const key of allKeys) {
+    const listA = keysA.get(key) ?? []
+    const listB = keysB.get(key) ?? []
+    const matched = Math.min(listA.length, listB.length)
+    for (let i = matched; i < listA.length; i++) leftoverA.push(listA[i])
+    for (let i = matched; i < listB.length; i++) leftoverB.push(listB[i])
+  }
+
+  if (leftoverA.length === 0 && leftoverB.length === 0) return true
+  if (leftoverA.length !== leftoverB.length) return false
+
+  const usedA = new Array<boolean>(leftoverA.length).fill(false)
+  const usedB = new Array<boolean>(leftoverB.length).fill(false)
+
+  const matchImpure = (fromA: boolean, index: number): boolean => {
+    if (fromA) {
+      if (usedA[index]) return true
+      const entry = leftoverA[index]
+      for (let j = 0; j < leftoverB.length; j++) {
+        if (usedB[j]) continue
+        if (deepEqual(entry.item, leftoverB[j].item)) {
+          usedA[index] = true
+          usedB[j] = true
+          return true
+        }
+      }
+      return false
+    }
+    if (usedB[index]) return true
+    const entry = leftoverB[index]
+    for (let j = 0; j < leftoverA.length; j++) {
+      if (usedA[j]) continue
+      if (deepEqual(entry.item, leftoverA[j].item)) {
+        usedB[index] = true
+        usedA[j] = true
+        return true
+      }
+    }
+    return false
+  }
+
+  for (let i = 0; i < leftoverA.length; i++) {
+    if (leftoverA[i].pure) continue
+    if (!matchImpure(true, i)) return false
+  }
+  for (let i = 0; i < leftoverB.length; i++) {
+    if (leftoverB[i].pure) continue
+    if (!matchImpure(false, i)) return false
+  }
+
+  for (let i = 0; i < leftoverA.length; i++) {
+    if (!usedA[i]) return false
+  }
+  for (let i = 0; i < leftoverB.length; i++) {
+    if (!usedB[i]) return false
+  }
+  return true
+}
 
 /**
  * Binary min-heap (or max-heap with a custom comparator).
@@ -36,11 +143,15 @@ export class Heap<T> extends ValueCollection<T> {
   }
 
   /**
-   * Multiset equality under `deepEqual`, independent of the heap comparator. Same size; keyed
-   * items (canonicalKey) are counted in a Map and compared; unkeyed items (functions, class
-   * instances without structural deepEqual, symbols, ...) are matched pairwise among themselves
-   * only (O(k^2) in the number of unkeyed items). Keys are computed once per item. Iteration /
-   * heap order is not part of equality.
+   * Multiset equality under `deepEqual`, independent of the heap comparator. Same size.
+   * Keyed items cancel by canonical-key counts. Items are pure when their key is built only
+   * from JSON-shaped data plus exact built-in Date/RegExp; otherwise impure (unkeyed, or keyed
+   * with boxed primitives / typed arrays / Map / Set). Two pure items are deepEqual iff their
+   * keys are equal, so cross-kind matches always involve an impure leftover. After key
+   * cancellation, every leftover impure item is matched pairwise by `deepEqual` against an
+   * unmatched leftover of the other side (leftover pures may only be consumed by those matches);
+   * any unmatched leftover yields false. Cost O(leftover_impure × leftovers); JSON-only heaps
+   * never take the pairwise path. Iteration / heap order is not part of equality.
    */
   override [protocol.equals](other: unknown): boolean {
     return withHookNesting(() => {
@@ -48,40 +159,7 @@ export class Heap<T> extends ValueCollection<T> {
       if (typeof other !== 'object' || other?.constructor !== this.constructor) return false
       const o = other as Heap<T>
       if (this.size !== o.size) return false
-      const counts = new Map<string, number>()
-      const freeA: T[] = []
-      const freeB: T[] = []
-      for (const item of this.values()) {
-        const k = canonicalKey(item)
-        if (k === undefined) freeA.push(item)
-        else counts.set(k, (counts.get(k) ?? 0) + 1)
-      }
-      for (const item of o.values()) {
-        const k = canonicalKey(item)
-        if (k === undefined) freeB.push(item)
-        else {
-          const n = counts.get(k)
-          if (n === undefined) return false
-          if (n === 1) counts.delete(k)
-          else counts.set(k, n - 1)
-        }
-      }
-      if (counts.size !== 0) return false
-      if (freeA.length !== freeB.length) return false
-      const used = new Array<boolean>(freeB.length).fill(false)
-      for (const item of freeA) {
-        let found = false
-        for (let y = 0; y < freeB.length; y++) {
-          if (used[y]) continue
-          if (deepEqual(item, freeB[y])) {
-            used[y] = true
-            found = true
-            break
-          }
-        }
-        if (!found) return false
-      }
-      return true
+      return heapMultisetEqual(this.values(), o.values())
     })
   }
 

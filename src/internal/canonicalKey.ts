@@ -3,8 +3,14 @@
  * for every value that has a key. Returns `undefined` for class instances, functions,
  * symbols, protocol-equality types (Decimal, collections), Invalid Dates, Map/Set with
  * non-primitive keys/elements, cyclic objects, values whose expanded key exceeds 64 KB
- * (shared-reference DAGs fall back to pairwise matching), and other values that cannot
- * be keyed exactly. Within one top-level call, each object node's key is memoized.
+ * (shared-reference DAGs fall back to pairwise matching), Date/RegExp/typed-array subclasses
+ * (deepEqual requires the exact built-in prototype), and other values that cannot be keyed
+ * exactly. Within one top-level call, each object node's key is memoized.
+ *
+ * A key is "pure" when built only from JSON-shaped data (primitives including numbers and
+ * bigints, arrays, plain objects) plus exact built-in Date/RegExp. Boxed primitives, typed
+ * arrays, ArrayBuffer, Map, and Set yield impure keys: two pure items are deepEqual iff their
+ * keys are equal, so cross-kind deepEqual matches always involve an impure item.
  */
 
 import { enterNesting, exitNesting, guardNesting } from './nesting.js'
@@ -14,8 +20,28 @@ const KEY_SIZE_LIMIT = 64 * 1024
 const BOXED_PRIMITIVES = [Number, String, Boolean, BigInt, Symbol] as const
 const NOT_BOXED = Symbol('not boxed')
 
+const TYPED_ARRAY_PROTOS: object[] = [
+  Int8Array.prototype,
+  Uint8Array.prototype,
+  Uint8ClampedArray.prototype,
+  Int16Array.prototype,
+  Uint16Array.prototype,
+  Int32Array.prototype,
+  Uint32Array.prototype,
+  Float32Array.prototype,
+  Float64Array.prototype,
+  BigInt64Array.prototype,
+  BigUint64Array.prototype
+]
+
+/** Result of a successful key: the key string and whether it is pure (JSON + Date/RegExp). */
+export interface CanonicalKeyInfo {
+  key: string
+  pure: boolean
+}
+
 interface KeyState {
-  memo: WeakMap<object, string>
+  memo: WeakMap<object, CanonicalKeyInfo>
   failed: WeakSet<object>
   inProgress: WeakSet<object>
 }
@@ -47,9 +73,17 @@ function bytesKey(v: ArrayBuffer | ArrayBufferView): string {
   return Array.from(bytes(v), (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+/** SameValueZero for bare numbers (match deepEqual / eq on primitives). */
 function numberKey(n: number): string {
-  // SameValueZero: -0 equals 0; NaN equals NaN (match deepEqual / eq).
   if (Number.isNaN(n)) return 'n:NaN'
+  if (n === 0) return 'n:0'
+  return `n:${n.toString()}`
+}
+
+/** Object.is for boxed Number values (match deepEqual on boxed primitives). */
+function boxedNumberKey(n: number): string {
+  if (Number.isNaN(n)) return 'n:NaN'
+  if (Object.is(n, -0)) return 'n:-0'
   if (n === 0) return 'n:0'
   return `n:${n.toString()}`
 }
@@ -80,18 +114,26 @@ function protoTag(obj: object): string | undefined {
   return undefined
 }
 
-function accept(state: KeyState, obj: object, key: string | undefined): string | undefined {
-  if (key === undefined || key.length > KEY_SIZE_LIMIT) {
+function accept(
+  state: KeyState,
+  obj: object,
+  info: CanonicalKeyInfo | undefined
+): CanonicalKeyInfo | undefined {
+  if (info === undefined || info.key.length > KEY_SIZE_LIMIT) {
     state.failed.add(obj)
     return undefined
   }
-  state.memo.set(obj, key)
-  return key
+  state.memo.set(obj, info)
+  return info
 }
 
-function canonicalKeyInner(value: unknown, state: KeyState): string | undefined {
+function isBuiltinTypedArrayProto(proto: object): boolean {
+  return TYPED_ARRAY_PROTOS.includes(proto)
+}
+
+function canonicalKeyInner(value: unknown, state: KeyState): CanonicalKeyInfo | undefined {
   const prim = primitiveKey(value)
-  if (prim !== undefined) return prim
+  if (prim !== undefined) return { key: prim, pure: true }
   const t = typeof value
   if (t === 'symbol' || t === 'function') return undefined
   if (t !== 'object' || value === null) return undefined
@@ -106,26 +148,41 @@ function canonicalKeyInner(value: unknown, state: KeyState): string | undefined 
   const tag = tagOf(obj)
 
   if (obj instanceof Date) {
+    if (Object.getPrototypeOf(obj) !== Date.prototype) return undefined
     const time = obj.getTime()
     if (Number.isNaN(time)) return undefined
-    return accept(state, obj, `Date:${String(time)}`)
+    return accept(state, obj, { key: `Date:${String(time)}`, pure: true })
   }
   if (obj instanceof RegExp) {
-    return accept(state, obj, `Re:${JSON.stringify(obj.source)}:${obj.flags}`)
+    if (Object.getPrototypeOf(obj) !== RegExp.prototype) return undefined
+    return accept(state, obj, {
+      key: `Re:${JSON.stringify(obj.source)}:${obj.flags}`,
+      pure: true
+    })
   }
 
   const boxed = unboxed(obj)
   if (boxed !== NOT_BOXED) {
-    const bk = primitiveKey(boxed)
+    // Boxed Number uses Object.is; other boxed primitives have no signed-zero issue.
+    let bk: string | undefined
+    if (typeof boxed === 'number') bk = boxedNumberKey(boxed)
+    else bk = primitiveKey(boxed)
     if (bk === undefined) return undefined
-    return accept(state, obj, `box:${tag}:${bk}`)
+    return accept(state, obj, { key: `box:${tag}:${bk}`, pure: false })
   }
 
   if (obj instanceof ArrayBuffer) {
-    return accept(state, obj, `AB:${bytesKey(obj)}`)
+    if (Object.getPrototypeOf(obj) !== ArrayBuffer.prototype) return undefined
+    return accept(state, obj, { key: `AB:${bytesKey(obj)}`, pure: false })
   }
   if (ArrayBuffer.isView(obj)) {
-    return accept(state, obj, `view:${tag}:${bytesKey(obj)}`)
+    const proto: unknown = Object.getPrototypeOf(obj)
+    if (obj instanceof DataView) {
+      if (proto !== DataView.prototype) return undefined
+    } else if (typeof proto !== 'object' || proto === null || !isBuiltinTypedArrayProto(proto)) {
+      return undefined
+    }
+    return accept(state, obj, { key: `view:${tag}:${bytesKey(obj)}`, pure: false })
   }
 
   state.inProgress.add(obj)
@@ -140,10 +197,10 @@ function canonicalKeyInner(value: unknown, state: KeyState): string | undefined 
           if (kk === undefined) return accept(state, obj, undefined)
           const vk = canonicalKeyInner(v, state)
           if (vk === undefined) return accept(state, obj, undefined)
-          parts.push(`${kk}=>${vk}`)
+          parts.push(`${kk}=>${vk.key}`)
         }
         parts.sort()
-        return accept(state, obj, `Map:{${parts.join(',')}}`)
+        return accept(state, obj, { key: `Map:{${parts.join(',')}}`, pure: false })
       } finally {
         exitNesting()
       }
@@ -160,7 +217,7 @@ function canonicalKeyInner(value: unknown, state: KeyState): string | undefined 
           parts.push(vk)
         }
         parts.sort()
-        return accept(state, obj, `Set:{${parts.join(',')}}`)
+        return accept(state, obj, { key: `Set:{${parts.join(',')}}`, pure: false })
       } finally {
         exitNesting()
       }
@@ -172,12 +229,14 @@ function canonicalKeyInner(value: unknown, state: KeyState): string | undefined 
       enterNesting()
       try {
         const parts: string[] = []
+        let pure = true
         for (const i of obj.keys()) {
           const k = canonicalKeyInner(obj[i], state)
           if (k === undefined) return accept(state, obj, undefined)
-          parts.push(k)
+          parts.push(k.key)
+          if (!k.pure) pure = false
         }
-        return accept(state, obj, `${pt}[${parts.join(',')}]`)
+        return accept(state, obj, { key: `${pt}[${parts.join(',')}]`, pure })
       } finally {
         exitNesting()
       }
@@ -191,12 +250,14 @@ function canonicalKeyInner(value: unknown, state: KeyState): string | undefined 
     try {
       const keys = Object.keys(obj).toSorted()
       const parts: string[] = []
+      let pure = true
       for (const key of keys) {
         const k = canonicalKeyInner((obj as Record<string, unknown>)[key], state)
         if (k === undefined) return accept(state, obj, undefined)
-        parts.push(`${JSON.stringify(key)}:${k}`)
+        parts.push(`${JSON.stringify(key)}:${k.key}`)
+        if (!k.pure) pure = false
       }
-      return accept(state, obj, `${pt}{${parts.join(',')}}`)
+      return accept(state, obj, { key: `${pt}{${parts.join(',')}}`, pure })
     } finally {
       exitNesting()
     }
@@ -205,18 +266,27 @@ function canonicalKeyInner(value: unknown, state: KeyState): string | undefined 
   }
 }
 
+function freshState(): KeyState {
+  return {
+    memo: new WeakMap(),
+    failed: new WeakSet(),
+    inProgress: new WeakSet()
+  }
+}
+
+/**
+ * Canonical structural key plus purity, or `undefined` when the value cannot be keyed to match
+ * deepEqual. Deviation for shared-reference DAGs: when the tree-expanded key would exceed 64 KB,
+ * returns `undefined` (no key) so Heap equality falls back to pairwise `deepEqual`, preserving
+ * the key/deepEqual agreement property for every value that does receive a key.
+ */
+export function canonicalKeyInfo(value: unknown): CanonicalKeyInfo | undefined {
+  return guardNesting(() => canonicalKeyInner(value, freshState()))
+}
+
 /**
  * Canonical structural key, or `undefined` when the value cannot be keyed to match deepEqual.
- * Deviation for shared-reference DAGs: when the tree-expanded key would exceed 64 KB, returns
- * `undefined` (no key) so Heap equality falls back to pairwise `deepEqual`, preserving the
- * key/deepEqual agreement property for every value that does receive a key.
  */
 export function canonicalKey(value: unknown): string | undefined {
-  return guardNesting(() =>
-    canonicalKeyInner(value, {
-      memo: new WeakMap(),
-      failed: new WeakSet(),
-      inProgress: new WeakSet()
-    })
-  )
+  return canonicalKeyInfo(value)?.key
 }

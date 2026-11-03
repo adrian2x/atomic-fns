@@ -11,6 +11,8 @@ import {
   Trie,
   clone
 } from '../src/collections/index.js'
+import { decimal } from '../src/decimal/index.js'
+import { IntlDate } from '../src/i18n/date/index.js'
 import { deepEqual, eq, protocol } from '../src/operators/index.js'
 
 describe('SPEC-R75 collection equality and clone protocol', () => {
@@ -144,6 +146,23 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
         )
       )
     ).toBe(false)
+
+    // Cross-kind deepEqual items (keyed vs unkeyed leftovers)
+    expect(deepEqual(new Heap([{ v: decimal(1) }]), new Heap([{ v: 1 }]))).toBe(true)
+    const ms = 1_700_000_000_000
+    expect(deepEqual(new Heap([new IntlDate(ms)]), new Heap([new Date(ms)]))).toBe(true)
+    expect(deepEqual(new Heap([new Number(-0)]), new Heap([new Number(0)]))).toBe(false)
+
+    const nJson = 5_000
+    const jsonA = Array.from({ length: nJson }, (_, i) =>
+      i % 3 === 0 ? i : i % 3 === 1 ? `s${String(i)}` : { n: i }
+    )
+    const jsonB = Array.from({ length: nJson }, (_, i) =>
+      i % 3 === 0 ? i + nJson : i % 3 === 1 ? `t${String(i)}` : { n: i + nJson }
+    )
+    const tJson = performance.now()
+    expect(deepEqual(new Heap(jsonA), new Heap(jsonB))).toBe(false)
+    expect(performance.now() - tJson).toBeLessThan(200)
   })
 
   it('Trie', () => {

@@ -135,4 +135,53 @@ describe('canonicalKey', () => {
     expect(canonicalKey(new Date(5))).toBe(canonicalKey(new Date(5)))
     expect(canonicalKey(/ab/g)).toBe(canonicalKey(new RegExp('ab', 'g')))
   })
+
+  it('agrees with deepEqual on boxed Number signed zero and exact-prototype built-ins', () => {
+    const nNeg = new Number(-0)
+    const nPos = new Number(0)
+    expect(deepEqual(nNeg, nPos)).toBe(false)
+    expect(canonicalKey(nNeg)).not.toBe(canonicalKey(nPos))
+    expect(canonicalKey(nNeg)).toBeDefined()
+    expect(canonicalKey(nPos)).toBeDefined()
+
+    class SubDate extends Date {}
+    class SubRegExp extends RegExp {}
+    class SubUint8 extends Uint8Array {}
+    const t = 1_700_000_000_000
+    expect(deepEqual(new Date(t), new SubDate(t))).toBe(false)
+    expect(canonicalKey(new SubDate(t))).toBeUndefined()
+    expect(canonicalKey(new Date(t))).toBeDefined()
+    expect(deepEqual(/ab/g, new SubRegExp('ab', 'g'))).toBe(false)
+    expect(canonicalKey(new SubRegExp('ab', 'g'))).toBeUndefined()
+    expect(canonicalKey(/ab/g)).toBeDefined()
+    const bytes = [1, 2, 3]
+    expect(deepEqual(new Uint8Array(bytes), new SubUint8(bytes))).toBe(false)
+    expect(canonicalKey(new SubUint8(bytes))).toBeUndefined()
+    expect(canonicalKey(new Uint8Array(bytes))).toBeDefined()
+
+    // Property: when both sides key, key equality iff deepEqual (incl. boxed / subclasses).
+    const samples: unknown[] = [
+      new Number(-0),
+      new Number(0),
+      new Number(1),
+      new Date(t),
+      new SubDate(t),
+      /x/i,
+      new SubRegExp('x', 'i'),
+      new Uint8Array([9]),
+      new SubUint8([9]),
+      { n: new Number(-0) },
+      { n: new Number(0) },
+      { d: new Date(t) },
+      { d: new SubDate(t) }
+    ]
+    for (const a of samples) {
+      for (const b of samples) {
+        const ka = canonicalKey(a)
+        const kb = canonicalKey(b)
+        if (ka === undefined || kb === undefined) continue
+        expect(deepEqual(a, b)).toBe(ka === kb)
+      }
+    }
+  })
 })
