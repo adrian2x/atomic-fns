@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { decimal, Decimal } from '../src/decimal/index.js'
+import { decimal, Decimal, isqrt } from '../src/decimal/index.js'
 import type { RoundingMode } from '../src/decimal/index.js'
 import { ValueError, ZeroDivisionError } from '../src/globals/errors.js'
 import { add, compare, eq } from '../src/operators/index.js'
@@ -311,6 +311,41 @@ describe('F-055 linear-time parse and normalize', () => {
     const start = performance.now()
     expect(decimal('1e80000').sqrt().toString().length).toBeGreaterThan(0)
     expect(performance.now() - start).toBeLessThan(250)
+  })
+})
+
+describe('isqrt precision-doubling', () => {
+  function assertIsqrt(N: bigint): void {
+    const x = isqrt(N)
+    expect(x * x <= N).toBe(true)
+    expect((x + 1n) * (x + 1n) > N).toBe(true)
+  }
+
+  it('exact floor root on edges and 2000 random bit lengths', () => {
+    const edges = [0n, 1n, 2n, 3n, 4n, (1n << 52n) - 1n, 1n << 52n, (1n << 52n) + 1n, 1n << 104n]
+    for (let k = 1; k <= 512; k++) {
+      const sq = 1n << BigInt(2 * k)
+      edges.push(sq - 1n)
+      edges.push(sq)
+    }
+    for (const N of edges) assertIsqrt(N)
+
+    // Seeded LCG for reproducibility.
+    let state = 0xc0ffee42
+    const rand = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+      return state
+    }
+    for (let i = 0; i < 2000; i++) {
+      const bits = 1 + (rand() % 3000)
+      let N = 1n
+      for (let b = 0; b < bits; b += 32) {
+        N = (N << 32n) | BigInt(rand())
+      }
+      N &= (1n << BigInt(bits)) - 1n
+      if (N === 0n) N = 1n
+      assertIsqrt(N)
+    }
   })
 })
 
