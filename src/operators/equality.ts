@@ -2,7 +2,7 @@
  * Structural equality helpers.
  */
 
-import { withNesting } from '../internal/nesting.js'
+import { enterNesting, exitNesting, guardNesting } from '../internal/nesting.js'
 import { eq, sameValueZero } from './order.js'
 import { hasMethod, protocol } from './protocol.js'
 
@@ -43,10 +43,12 @@ function bytesEqual(a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBuff
 }
 
 function deepEqualInner(a: unknown, b: unknown, pending: Pending): boolean {
-  return withNesting(() => {
-    if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) return eq(a, b)
-    if (eq(a, b)) return true
-    if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
+  if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) return eq(a, b)
+  if (eq(a, b)) return true
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
+
+  enterNesting()
+  try {
     if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false
     if (tagOf(a) !== tagOf(b)) return false
 
@@ -67,7 +69,9 @@ function deepEqualInner(a: unknown, b: unknown, pending: Pending): boolean {
     } finally {
       partners.delete(b)
     }
-  })
+  } finally {
+    exitNesting()
+  }
 }
 
 function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
@@ -126,10 +130,11 @@ function deepEqualChildren(a: object, b: object, pending: Pending): boolean {
  * `Object.is` on their primitive value. Nesting past 1000 levels throws `RangeError` (the cap
  * is a security bound, not an implementation limit). A pair already under comparison on the
  * current path is treated as equal. Collection equality hooks re-enter this function and
- * continue the same nesting count.
+ * continue the same nesting count. Nesting is counted only for object pairs (after primitive
+ * checks), so a 1000-deep structure ending in a primitive is accepted.
  */
 export function deepEqual(a: unknown, b: unknown): boolean {
-  return deepEqualInner(a, b, new WeakMap())
+  return guardNesting(() => deepEqualInner(a, b, new WeakMap()))
 }
 
 /**

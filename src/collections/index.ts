@@ -7,7 +7,7 @@
 import { get, isIterable, isObject, keys, ValueError } from '../globals/index.js'
 import { isCompactEmpty } from '../internal/compactEmpty.js'
 import { arrayFromIterable } from '../internal/iterable.js'
-import { assertNestingDepth, withNesting } from '../internal/nesting.js'
+import { assertNestingDepth, enterNesting, exitNesting, guardNesting } from '../internal/nesting.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, deepEqual, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
@@ -216,13 +216,14 @@ export function matches(shape: unknown): (obj: unknown) => boolean {
     return () => false
   }
   return function (obj) {
-    return matchDeep(shape, obj, true, 1)
+    return guardNesting(() => matchDeep(shape, obj, true, 1))
   }
 }
 
 function matchDeep(shape: unknown, obj: unknown, top: boolean, depth: number): boolean {
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
-  return withNesting(() => {
+  enterNesting()
+  try {
     assertNestingDepth(depth)
     if (Array.isArray(shape)) {
       if (shape.length === 0) return top || Array.isArray(obj)
@@ -256,7 +257,9 @@ function matchDeep(shape: unknown, obj: unknown, top: boolean, depth: number): b
       return true
     }
     return deepEqual(shape, obj)
-  })
+  } finally {
+    exitNesting()
+  }
 }
 
 /**
@@ -399,14 +402,16 @@ flatten({
 export function flatten<T>(arr: T[], depth?: boolean | number): T[]
 export function flatten(arr: object, depth?: boolean | number): object
 export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] | object {
-  if (Array.isArray(arr)) {
-    const items = arr as T[]
-    const d = depth === true ? Infinity : Number(depth)
-    if (!(d > 0)) return items.slice()
-    return flattenArray(items, d)
-  }
-  if (isObject(arr)) return flattenObj(arr)
-  return arr
+  return guardNesting(() => {
+    if (Array.isArray(arr)) {
+      const items = arr as T[]
+      const d = depth === true ? Infinity : Number(depth)
+      if (!(d > 0)) return items.slice()
+      return flattenArray(items, d)
+    }
+    if (isObject(arr)) return flattenObj(arr)
+    return arr
+  })
 }
 
 function flattenArray<T>(arr: T[], depth: number): T[] {
@@ -450,26 +455,31 @@ function flattenObj(
   nesting = 1
 ): Record<string, unknown> {
   if (typeof obj === 'object' && obj !== null) {
-    assertNestingDepth(nesting)
-    if (seen.has(obj)) throw new ValueError('cyclic structure')
-    if (!isPlainObject(obj) && !Array.isArray(obj)) {
-      if (prefix) defineData(result, prefix, obj)
-      return result
-    }
-    seen.add(obj)
-    for (const i of Object.keys(obj)) {
-      let pref = prefix
-      if (Array.isArray(obj)) {
-        pref = `${pref}[${i}]`
-      } else if (prefix) {
-        pref = `${prefix}.${i}`
-      } else {
-        pref = i
+    enterNesting()
+    try {
+      assertNestingDepth(nesting)
+      if (seen.has(obj)) throw new ValueError('cyclic structure')
+      if (!isPlainObject(obj) && !Array.isArray(obj)) {
+        if (prefix) defineData(result, prefix, obj)
+        return result
       }
-      flattenObj((obj as Record<string, unknown>)[i], pref, result, seen, nesting + 1)
+      seen.add(obj)
+      for (const i of Object.keys(obj)) {
+        let pref = prefix
+        if (Array.isArray(obj)) {
+          pref = `${pref}[${i}]`
+        } else if (prefix) {
+          pref = `${prefix}.${i}`
+        } else {
+          pref = i
+        }
+        flattenObj((obj as Record<string, unknown>)[i], pref, result, seen, nesting + 1)
+      }
+      seen.delete(obj)
+      return result
+    } finally {
+      exitNesting()
     }
-    seen.delete(obj)
-    return result
   }
 
   if (prefix) defineData(result, prefix, obj)

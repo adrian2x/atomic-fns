@@ -2,7 +2,7 @@
  * Object utilities: merge, pick, omit, clone.
  */
 
-import { assertNestingDepth, withNesting } from '../internal/nesting.js'
+import { assertNestingDepth, enterNesting, exitNesting, guardNesting } from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
 import { hasMethod, protocol } from '../operators/index.js'
 
@@ -61,7 +61,8 @@ function mergeKey(
 }
 
 function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: number): void {
-  withNesting(() => {
+  enterNesting()
+  try {
     assertNestingDepth(depth)
     if (t === Object.prototype || t === Function.prototype) return
     for (const key of Object.keys(s)) {
@@ -72,7 +73,9 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: n
       if (!desc?.enumerable) continue
       mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, depth + 1)
     }
-  })
+  } finally {
+    exitNesting()
+  }
 }
 
 /**
@@ -87,15 +90,17 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: n
  * @returns `target`
  */
 export function merge<T extends object>(target: T, ...sources: (object | null | undefined)[]): T {
-  const dest: unknown = target
-  if (dest === null || typeof dest !== 'object') {
-    throw new TypeError('merge target must be an object')
-  }
-  const seen = new WeakMap<object, object>()
-  for (const s of sources) {
-    if (s != null) mergeInto(target, s, seen, 1)
-  }
-  return target
+  return guardNesting(() => {
+    const dest: unknown = target
+    if (dest === null || typeof dest !== 'object') {
+      throw new TypeError('merge target must be an object')
+    }
+    const seen = new WeakMap<object, object>()
+    for (const s of sources) {
+      if (s != null) mergeInto(target, s, seen, 1)
+    }
+    return target
+  })
 }
 
 const MISSING = Symbol('MISSING')
@@ -216,26 +221,31 @@ function buildOmitTrie(paths: string[][]): OmitTrie {
 
 function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unknown {
   if (value === null || typeof value !== 'object') return value
-  if (Array.isArray(value)) {
-    const list = value as unknown[]
-    const out: unknown[] = new Array(list.length)
-    for (let i = 0; i < list.length; i++) {
-      const child = trie.kids?.get(String(i))
-      if (child?.drop) continue
-      if (!child?.kids) {
-        out[i] = list[i]
-      } else {
-        out[i] = omitWithTrie(list[i], child, pathPrefix.concat(String(i)))
+  enterNesting()
+  try {
+    if (Array.isArray(value)) {
+      const list = value as unknown[]
+      const out: unknown[] = new Array(list.length)
+      for (let i = 0; i < list.length; i++) {
+        const child = trie.kids?.get(String(i))
+        if (child?.drop) continue
+        if (!child?.kids) {
+          out[i] = list[i]
+        } else {
+          out[i] = omitWithTrie(list[i], child, pathPrefix.concat(String(i)))
+        }
       }
+      return out
     }
-    return out
+    if (isPlainObject(value)) {
+      return omitFromObject(value, trie, pathPrefix)
+    }
+    throw new TypeError(
+      `omit cannot descend into a non-plain object at ${truncateForError(pathPrefix.join('.'))}`
+    )
+  } finally {
+    exitNesting()
   }
-  if (isPlainObject(value)) {
-    return omitFromObject(value, trie, pathPrefix)
-  }
-  throw new TypeError(
-    `omit cannot descend into a non-plain object at ${truncateForError(pathPrefix.join('.'))}`
-  )
 }
 
 function omitFromObject(
@@ -325,15 +335,17 @@ export function omit<T extends object>(
   obj: T | null | undefined,
   paths: readonly PropertyPath[] | ((v: unknown, k: string) => boolean)
 ): Partial<T> {
-  if (obj == null) return {}
-  if (typeof paths === 'function') {
-    return pick(obj, (v, k) => !paths(v, k))
-  }
-  const trie = buildOmitTrie(paths.map(normalizePath))
-  if (isPlainObject(obj) || Array.isArray(obj)) {
-    return omitWithTrie(obj, trie, []) as Partial<T>
-  }
-  return omitFromObject(obj, trie, []) as Partial<T>
+  return guardNesting((): Partial<T> => {
+    if (obj == null) return {}
+    if (typeof paths === 'function') {
+      return pick(obj, (v, k) => !paths(v, k))
+    }
+    const trie = buildOmitTrie(paths.map(normalizePath))
+    if (isPlainObject(obj) || Array.isArray(obj)) {
+      return omitWithTrie(obj, trie, []) as Partial<T>
+    }
+    return omitFromObject(obj, trie, []) as Partial<T>
+  })
 }
 
 const BOXED_TAGS = new Set([
@@ -357,7 +369,7 @@ const BOXED_TAGS = new Set([
  * @param deep Deep clone when true.
  */
 export function clone<T>(value: T, deep = false): T {
-  return cloneInner(value, deep, new WeakMap()) as T
+  return guardNesting(() => cloneInner(value, deep, new WeakMap()) as T)
 }
 
 function copyEnumerableSymbols(
@@ -394,10 +406,13 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     if (hasMethod(v, protocol.clone)) return v[protocol.clone](false)
     return cloneShallow(v, map)
   }
-  return withNesting(() => {
+  enterNesting()
+  try {
     if (hasMethod(v, protocol.clone)) return v[protocol.clone](true)
     return cloneDeepBody(v, map)
-  })
+  } finally {
+    exitNesting()
+  }
 }
 
 function cloneShallow(v: object, map: WeakMap<object, unknown>): unknown {

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { clone, Deque, flatten, FrozenSet, matches, merge } from '../src/collections/index.js'
+import {
+  clone,
+  Deque,
+  flatten,
+  FrozenSet,
+  matches,
+  merge,
+  omit,
+  SortedSet
+} from '../src/collections/index.js'
 import { getNestingDepth } from '../src/internal/nesting.js'
 import { deepEqual } from '../src/operators/index.js'
 
@@ -11,39 +20,49 @@ function nestObject(depth: number): unknown {
   return JSON.parse('{"a":'.repeat(depth) + '1' + '}'.repeat(depth))
 }
 
+const NESTING_MSG = 'nesting deeper than 1000 levels'
+
 describe('MAX_NESTING_DEPTH = 1000', () => {
   it('deepEqual: depth 1000 works, 1001 throws', () => {
     const a1000 = nestArray(1000)
     expect(deepEqual(a1000, nestArray(1000))).toBe(true)
     expect(() => deepEqual(nestArray(1001), nestArray(1001))).toThrow(RangeError)
-    expect(() => deepEqual(nestArray(1001), nestArray(1001))).toThrow(
-      /nesting deeper than 1000 levels/
-    )
+    expect(() => deepEqual(nestArray(1001), nestArray(1001))).toThrow(NESTING_MSG)
+  })
+
+  it('deepEqual accepts 1000-deep object/array ending in a primitive', () => {
+    expect(deepEqual(nestObject(1000), nestObject(1000))).toBe(true)
+    expect(
+      deepEqual(
+        JSON.parse('['.repeat(999) + '[1]' + ']'.repeat(999)),
+        JSON.parse('['.repeat(999) + '[1]' + ']'.repeat(999))
+      )
+    ).toBe(true)
   })
 
   it('clone deep: depth 1000 works, 1001 throws', () => {
     expect(clone(nestArray(1000), true)).toEqual(nestArray(1000))
-    expect(() => clone(nestArray(1001), true)).toThrow(RangeError)
+    expect(() => clone(nestArray(1001), true)).toThrow(NESTING_MSG)
   })
 
   it('merge: depth 1000 works, 1001 throws', () => {
     expect(merge({}, nestObject(1000) as object)).toEqual(nestObject(1000))
-    expect(() => merge({}, nestObject(1001) as object)).toThrow(RangeError)
+    expect(() => merge({}, nestObject(1001) as object)).toThrow(NESTING_MSG)
   })
 
   it('matches: depth 1000 works, 1001 throws', () => {
     const s1000 = nestObject(1000)
     expect(matches(s1000)(nestObject(1000))).toBe(true)
-    expect(() => matches(nestObject(1001))(nestObject(1001))).toThrow(RangeError)
+    expect(() => matches(nestObject(1001))(nestObject(1001))).toThrow(NESTING_MSG)
   })
 
   it('flatten: depth 1000 works, 1001 throws', () => {
     expect(flatten(nestArray(1000) as unknown[], true)).toEqual([])
-    expect(() => flatten(nestArray(1001) as unknown[], true)).toThrow(RangeError)
+    expect(() => flatten(nestArray(1001) as unknown[], true)).toThrow(NESTING_MSG)
     expect(flatten(nestObject(1000) as object)).toEqual({
       ['a.'.repeat(999) + 'a']: 1
     })
-    expect(() => flatten(nestObject(1001) as object)).toThrow(RangeError)
+    expect(() => flatten(nestObject(1001) as object)).toThrow(NESTING_MSG)
   })
 
   it('5000-deep probe throws RangeError under 50ms', () => {
@@ -56,7 +75,7 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
       () => flatten(deep as unknown[], true)
     ]) {
       const start = performance.now()
-      expect(fn).toThrow(RangeError)
+      expect(fn).toThrow(NESTING_MSG)
       expect(performance.now() - start).toBeLessThan(50)
     }
   })
@@ -72,11 +91,67 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
       for (let i = 1; i < depth; i++) s = new FrozenSet([s])
       return s
     }
-    expect(() => deepEqual(nestDeque(1500), nestDeque(1500))).toThrow(RangeError)
+    function nestSortedSet(depth: number): SortedSet<unknown> {
+      let s = new SortedSet<unknown>([0])
+      for (let i = 1; i < depth; i++) s = new SortedSet<unknown>([s])
+      return s
+    }
+    expect(() => deepEqual(nestDeque(1500), nestDeque(1500))).toThrow(NESTING_MSG)
     expect(getNestingDepth()).toBe(0)
     expect(deepEqual(1, 1)).toBe(true)
-    expect(() => clone(nestFrozen(1500), true)).toThrow(RangeError)
+    expect(() => deepEqual(nestSortedSet(1500), nestSortedSet(1500))).toThrow(NESTING_MSG)
+    expect(getNestingDepth()).toBe(0)
+    expect(() => clone(nestFrozen(1500), true)).toThrow(NESTING_MSG)
     expect(getNestingDepth()).toBe(0)
     expect(deepEqual([1], [1])).toBe(true)
+  })
+
+  it('omit cyclic deep path hits nesting cap, not stack overflow', () => {
+    const o: { a?: unknown } = {}
+    o.a = o
+    const path = 'a.'.repeat(3000) + 'b'
+    expect(() => omit(o, [path])).toThrow(NESTING_MSG)
+    expect(getNestingDepth()).toBe(0)
+  })
+
+  it('headroom: depth 1000 succeeds inside 3000 caller frames', () => {
+    const deep = nestArray(1000)
+    function rec(n: number, fn: () => void): void {
+      if (n === 0) {
+        fn()
+        return
+      }
+      rec(n - 1, fn)
+    }
+    expect(() => {
+      rec(3000, () => {
+        expect(deepEqual(deep, nestArray(1000))).toBe(true)
+      })
+    }).not.toThrow()
+    expect(() => {
+      rec(3000, () => {
+        expect(clone(deep, true)).toEqual(deep)
+      })
+    }).not.toThrow()
+    expect(() => {
+      rec(3000, () => {
+        expect(merge({}, nestObject(1000) as object)).toEqual(nestObject(1000))
+      })
+    }).not.toThrow()
+    expect(() => {
+      rec(3000, () => {
+        expect(matches(nestObject(1000))(nestObject(1000))).toBe(true)
+      })
+    }).not.toThrow()
+    expect(() => {
+      rec(3000, () => {
+        expect(flatten(deep as unknown[], true)).toEqual([])
+      })
+    }).not.toThrow()
+    expect(() => {
+      rec(3000, () => {
+        expect(omit({ a: { b: 1 } }, ['a.b'])).toEqual({ a: {} })
+      })
+    }).not.toThrow()
   })
 })
