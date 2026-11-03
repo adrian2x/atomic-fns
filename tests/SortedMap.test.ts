@@ -168,4 +168,17 @@ describe('SortedMap', () => {
     expect([...sorted.entries()]).toEqual(final)
     expect(sorted.size).toBe(ref.size)
   })
+
+  it('SPEC-R78 undefined key appears in entriesReversed and toArray-style iteration', () => {
+    const m = new SortedMap<number | undefined, string>()
+    m.set(1, 'a').set(undefined, 'u').set(0, 'z')
+    const forward = [...m.entries()]
+    expect(forward).toHaveLength(3)
+    expect([...m.entriesReversed()]).toEqual([...forward].reverse())
+    expect([...m.entriesReversed()].some(([k, v]) => k === undefined && v === 'u')).toBe(true)
+    expect(m.has(undefined)).toBe(true)
+    expect(m.get(undefined)).toBe('u')
+    expect(m.max()).toBeUndefined()
+    expect(m.size).toBe(3)
+  })
 })

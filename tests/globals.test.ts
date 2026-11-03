@@ -172,6 +172,19 @@ describe('globals', () => {
     assert(!isAsyncFunction(Object.create(null)))
   })
 
+  it('SPEC-R21 isAsyncFunction does not throw on a null-prototype function', () => {
+    const f = function () {
+      return undefined
+    }
+    Object.setPrototypeOf(f, null)
+    assert.equal(isAsyncFunction(f), false)
+    const g = async function () {
+      await Promise.resolve()
+    }
+    Object.setPrototypeOf(g, null)
+    assert.equal(isAsyncFunction(g), false)
+  })
+
   it('SPEC-R21 isGenerator is generator object only', () => {
     function* gen() {
       yield 1

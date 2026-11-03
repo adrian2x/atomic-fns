@@ -207,4 +207,94 @@ describe('BTree', () => {
       tree.__checkValid()
     }
   })
+
+  it('SPEC-R79 internals are private: assigned count and compare do not affect the tree', () => {
+    const t = new BTree<number, number>([
+      [1, 1],
+      [2, 2]
+    ])
+    const internals = t as unknown as Record<string, unknown>
+    internals.count = 99
+    internals._compare = () => 1
+    internals._maxNodeSize = 1
+    expect(t.size).toBe(2)
+    expect(t.maxNodeSize).toBe(64)
+    expect(t.get(2)).toBe(2)
+    expect(t.has(1)).toBe(true)
+    t.set(3, 3)
+    expect(t.size).toBe(3)
+    t.__checkValid()
+  })
+
+  it('SPEC-R79 undefined is a valid key in iteration, ranges and lookups', () => {
+    const t = new BTree<number | undefined, string>()
+    t.set(2, 'b').set(undefined, 'u').set(1, 'a')
+    const forward = [...t.entries()]
+    expect(forward).toHaveLength(3)
+    expect(t.toArray()).toEqual(forward)
+    expect([...t.entriesReversed()]).toEqual([...forward].reverse())
+    expect([...t.keys()]).toContain(undefined)
+    expect(t.has(undefined)).toBe(true)
+    expect(t.get(undefined)).toBe('u')
+    expect([...t.entries(undefined)]).toEqual([[undefined, 'u']])
+    expect([...t.entriesReversed(undefined)]).toEqual([...forward].reverse().slice(0))
+    expect(t.delete(undefined)).toBe(true)
+    expect(t.size).toBe(2)
+    expect(t.has(undefined)).toBe(false)
+  })
+
+  it('SPEC-R79 undefined is the only key', () => {
+    const t = new BTree<undefined, number>()
+    t.set(undefined, 1)
+    expect(t.toArray()).toEqual([[undefined, 1]])
+    expect([...t.entriesReversed()]).toEqual([[undefined, 1]])
+    expect(t.higher(undefined)).toBeUndefined()
+    expect(t.lower(undefined)).toBeUndefined()
+  })
+
+  it('SPEC-R79 iteration terminates when mutated during iteration', () => {
+    const t = new BTree<number, number>(undefined, undefined, 4)
+    for (let i = 0; i < 200; i++) t.set(i, i)
+    let visited = 0
+    for (const [k] of t.entries()) {
+      visited++
+      t.delete(k + 1)
+      if (k < 200 && k % 3 === 0) t.set(k + 1000, 0)
+      t.set(k, k)
+      expect(visited).toBeLessThan(10_000)
+    }
+    t.__checkValid()
+    let reversed = 0
+    for (const [k] of t.entriesReversed()) {
+      reversed++
+      t.delete(k - 1)
+      if (k > 0 && k % 5 === 0) t.set(k - 1000, 0)
+      expect(reversed).toBeLessThan(10_000)
+    }
+    t.__checkValid()
+    for (const k of t.keys()) t.delete(k)
+    expect(t.size).toBe(0)
+    expect([...t.entries()]).toEqual([])
+  })
+
+  it('SPEC-R79 clear during iteration ends iteration', () => {
+    const t = new BTree<number, number>([
+      [1, 1],
+      [2, 2],
+      [3, 3]
+    ])
+    const seen: number[] = []
+    for (const [k] of t.entries()) {
+      seen.push(k)
+      t.clear()
+    }
+    expect(seen).toEqual([1])
+    const back: number[] = []
+    t.set(1, 1).set(2, 2)
+    for (const [k] of t.entriesReversed()) {
+      back.push(k)
+      t.clear()
+    }
+    expect(back).toEqual([2])
+  })
 })

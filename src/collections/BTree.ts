@@ -83,8 +83,8 @@ class BNode<K, V> {
     return this.isShared && !force ? this : this.clone()
   }
 
-  get(key: K, defaultValue: V | undefined, tree: BTree<K, V>): V | undefined {
-    const i = this.indexOf(key, -1, tree._compare)
+  get(key: K, defaultValue: V | undefined, tree: TreeState<K>): V | undefined {
+    const i = this.indexOf(key, -1, tree.compare)
     return i < 0 ? defaultValue : this.values[i]
   }
 
@@ -121,7 +121,7 @@ class BNode<K, V> {
     return undefined
   }
 
-  checkValid(depth: number, _tree: BTree<K, V>, baseIndex: number): number {
+  checkValid(depth: number, _tree: TreeState<K>, baseIndex: number): number {
     const kL = this.keys.length
     const vL = this.values.length
     assert(
@@ -138,12 +138,12 @@ class BNode<K, V> {
     return kL
   }
 
-  set(key: K, value: V, overwrite: boolean | undefined, tree: BTree<K, V>): boolean | BNode<K, V> {
-    let i = this.indexOf(key, -1, tree._compare)
+  set(key: K, value: V, overwrite: boolean | undefined, tree: TreeState<K>): boolean | BNode<K, V> {
+    let i = this.indexOf(key, -1, tree.compare)
     if (i < 0) {
       i = ~i
       tree.count++
-      if (this.keys.length < tree._maxNodeSize) {
+      if (this.keys.length < tree.maxNodeSize) {
         return this.insertInLeaf(i, key, value)
       }
       const newRightSibling = this.splitOffRightSide()
@@ -195,11 +195,11 @@ class BNode<K, V> {
     high: K,
     includeHigh: boolean | undefined,
     editMode: boolean,
-    tree: BTree<K, V>,
+    tree: TreeState<K>,
     count: number,
     onFound?: (k: K, v: V, counter: number) => EditResult<V> | undefined
   ): EditResult<V> | number {
-    const cmp = tree._compare
+    const cmp = tree.compare
     let iLow: number
     let iHigh: number
     if (high === low) {
@@ -260,16 +260,31 @@ function emptyRoot<K, V>(): BNode<K, V> {
 }
 
 /**
- * B+ tree map. Keys are totally ordered by a comparator; values may be `undefined`.
+ * Mutable tree state shared with the nodes. Held in a `#` private field of {@link BTree}
+ * so callers cannot reach or corrupt it.
+ * @private
+ */
+interface TreeState<K> {
+  count: number
+  readonly maxNodeSize: number
+  readonly compare: Comparer<K>
+}
+
+/**
+ * B+ tree map. Keys are totally ordered by a comparator; values may be `undefined`,
+ * and so may keys when the comparator orders `undefined` (the default {@link compare} does).
+ *
+ * Mutating the tree while iterating it (`entries`, `keys`, `values`, `entriesReversed`)
+ * yields an unspecified order and may skip or repeat entries, but never throws or loops
+ * forever: iteration always terminates.
  *
  * @template K, V
  */
 export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   private root: BNode<K, V> = emptyRoot()
-  count = 0
-  _maxNodeSize: number
-  _compare: Comparer<K>
+  readonly #state: TreeState<K>
   #frozen = false
+  #version = 0
 
   /**
    * @param entries Initial key-value pairs.
@@ -278,13 +293,20 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
    */
   constructor(entries?: Iterable<[K, V]>, compareFn?: Comparer<K>, maxNodeSize = 64) {
     super()
-    this._maxNodeSize = maxNodeSize >= 4 ? Math.min(maxNodeSize, 256) : 64
-    this._compare = compareFn ?? compare
+    this.#state = {
+      count: 0,
+      maxNodeSize: maxNodeSize >= 4 ? Math.min(maxNodeSize, 256) : 64,
+      compare: compareFn ?? compare
+    }
     if (entries) this.setPairs(entries)
   }
 
   get size(): number {
-    return this.count
+    return this.#state.count
+  }
+
+  protected override cloneFrom(entries: Iterable<[K, V]>): this {
+    return new BTree(entries, this.#state.compare, this.#state.maxNodeSize) as this
   }
 
   readonly [Symbol.toStringTag] = 'BTree'
@@ -300,11 +322,12 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   clear(): void {
     this.#checkMutable()
     this.root = emptyRoot()
-    this.count = 0
+    this.#state.count = 0
+    this.#version++
   }
 
   get(key: K, defaultValue?: V): V | undefined {
-    return this.root.get(key, defaultValue, this)
+    return this.root.get(key, defaultValue, this.#state)
   }
 
   /**
@@ -313,8 +336,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
    */
   set(key: K, value: V): this {
     this.#checkMutable()
+    this.#version++
     if (this.root.isShared) this.root = this.root.clone()
-    const result = this.root.set(key, value, true, this)
+    const result = this.root.set(key, value, true, this.#state)
     if (result !== true && result !== false) {
       this.root = new BNodeInternal<K, V>([this.root, result])
     }
@@ -329,20 +353,87 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return this.editRange(key, key, true, DeleteRange) !== 0
   }
 
-  entries(lowestKey?: K): IteratorObject<[K, V]> {
-    return Iterator.from(this.#entriesForward(lowestKey))
+  /**
+   * Entries in ascending key order.
+   * @param from Optional lowest key to start at. Pass nothing to start at the minimum;
+   * an explicit `undefined` is a real key and starts at `undefined`.
+   */
+  entries(...from: [lowestKey?: K]): IteratorObject<[K, V]> {
+    return Iterator.from(this.#entriesForward(from))
   }
 
-  entriesReversed(highestKey?: K): IteratorObject<[K, V]> {
-    return Iterator.from(this.#entriesBackward(highestKey))
+  /**
+   * Entries in descending key order.
+   * @param from Optional highest key to start at. Pass nothing to start at the maximum;
+   * an explicit `undefined` is a real key and starts at `undefined`.
+   */
+  entriesReversed(...from: [highestKey?: K]): IteratorObject<[K, V]> {
+    return Iterator.from(this.#entriesBackward(from))
   }
 
-  *#entriesForward(lowestKey?: K): Generator<[K, V], void, undefined> {
-    const info = this.findPath(lowestKey)
+  /**
+   * Walks forward, re-seeking from the last yielded key whenever the tree was mutated
+   * since the previous step, so a stale path is never followed.
+   */
+  *#entriesForward(from: readonly [K?]): Generator<[K, V], void, undefined> {
+    let start = from
+    let reseeked = false
+    let lastKey: K | undefined
+    for (;;) {
+      const version = this.#version
+      let mutated = false
+      for (const entry of this.#scanForward(start)) {
+        if (reseeked) {
+          if (this.#state.compare(entry[0], lastKey as K) <= 0) continue
+          reseeked = false
+        }
+        lastKey = entry[0]
+        yield entry
+        if (this.#version !== version) {
+          mutated = true
+          break
+        }
+      }
+      if (!mutated) return
+      start = [lastKey]
+      reseeked = true
+    }
+  }
+
+  /**
+   * Mirror of `#entriesForward` for descending order.
+   */
+  *#entriesBackward(from: readonly [K?]): Generator<[K, V], void, undefined> {
+    let start = from
+    let reseeked = false
+    let lastKey: K | undefined
+    for (;;) {
+      const version = this.#version
+      let mutated = false
+      for (const entry of this.#scanBackward(start)) {
+        if (reseeked) {
+          if (this.#state.compare(entry[0], lastKey as K) >= 0) continue
+          reseeked = false
+        }
+        lastKey = entry[0]
+        yield entry
+        if (this.#version !== version) {
+          mutated = true
+          break
+        }
+      }
+      if (!mutated) return
+      start = [lastKey]
+      reseeked = true
+    }
+  }
+
+  *#scanForward(from: readonly [K?]): Generator<[K, V], void, undefined> {
+    const info = this.findPath(from)
     if (info === undefined) return
     const { nodequeue, nodeindex } = info
     let { leaf } = info
-    let i = lowestKey === undefined ? -1 : leaf.indexOf(lowestKey, 0, this._compare) - 1
+    let i = from.length === 0 ? -1 : leaf.indexOf(from[0] as K, 0, this.#state.compare) - 1
     for (;;) {
       if (++i < leaf.keys.length) {
         yield [leaf.keys[i], leaf.values[i]]
@@ -363,18 +454,16 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     }
   }
 
-  *#entriesBackward(highestKey?: K): Generator<[K, V], void, undefined> {
-    let startKey = highestKey
-    if (startKey === undefined) {
-      startKey = this.maxKey()
-      if (startKey === undefined) return
-    }
-    const path = this.findPath(startKey) ?? this.findPath(this.maxKey())
+  *#scanBackward(from: readonly [K?]): Generator<[K, V], void, undefined> {
+    if (this.#state.count === 0) return
+    const maxKey = this.maxKey() as K
+    const startKey = from.length === 0 ? maxKey : (from[0] as K)
+    const path = this.findPath([startKey]) ?? this.findPath([maxKey])
     if (path === undefined) return
     const { nodequeue, nodeindex } = path
     let { leaf } = path
-    let i = leaf.indexOf(startKey, 0, this._compare)
-    if (i < leaf.keys.length && this._compare(leaf.keys[i], startKey) <= 0) i++
+    let i = leaf.indexOf(startKey, 0, this.#state.compare)
+    if (i < leaf.keys.length && this.#state.compare(leaf.keys[i], startKey) <= 0) i++
     for (;;) {
       if (--i >= 0) {
         yield [leaf.keys[i], leaf.values[i]]
@@ -396,7 +485,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   }
 
   private findPath(
-    key?: K
+    from: readonly [K?]
   ): { nodequeue: BNode<K, V>[][]; nodeindex: number[]; leaf: BNode<K, V> } | undefined {
     let nextnode = this.root
     let nodequeue: BNode<K, V>[][]
@@ -410,7 +499,8 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
       nodeindex = []
       for (let d = 0; !nextnode.isLeaf; d++) {
         nodequeue[d] = (nextnode as BNodeInternal<K, V>).children
-        nodeindex[d] = key === undefined ? 0 : nextnode.indexOf(key, 0, this._compare)
+        nodeindex[d] =
+          from.length === 0 ? 0 : nextnode.indexOf(from[0] as K, 0, this.#state.compare)
         if (nodeindex[d] >= nodequeue[d].length) return undefined
         nextnode = nodequeue[d][nodeindex[d]]
       }
@@ -420,12 +510,12 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     return { nodequeue, nodeindex, leaf: nextnode }
   }
 
-  keys(firstKey?: K): IteratorObject<K> {
-    return this.entries(firstKey).map(([k]) => k)
+  keys(...from: [firstKey?: K]): IteratorObject<K> {
+    return this.entries(...from).map(([k]) => k)
   }
 
-  values(firstKey?: K): IteratorObject<V> {
-    return this.entries(firstKey).map(([, v]) => v)
+  values(...from: [firstKey?: K]): IteratorObject<V> {
+    return this.entries(...from).map(([, v]) => v)
   }
 
   minKey(): K | undefined {
@@ -437,21 +527,19 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   }
 
   get maxNodeSize(): number {
-    return this._maxNodeSize
+    return this.#state.maxNodeSize
   }
 
   clone(force = false): BTree<K, V> {
-    const result = new BTree<K, V>(undefined, this._compare, this._maxNodeSize)
+    const result = new BTree<K, V>(undefined, this.#state.compare, this.#state.maxNodeSize)
     result.root = this.root.greedyClone(force)
-    result.count = this.count
+    result.#state.count = this.#state.count
     return result
   }
 
   toArray(): [K, V][] {
-    const min = this.minKey()
-    const max = this.maxKey()
-    if (min !== undefined && max !== undefined) return this.getRange(min, max, true)
-    return []
+    if (this.#state.count === 0) return []
+    return this.getRange(this.minKey() as K, this.maxKey() as K, true)
   }
 
   toString(): string {
@@ -460,32 +548,28 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   /**
    * Least entry with key strictly greater than `key`, or undefined.
-   * When `key` is undefined, returns the minimum pair.
    */
-  higher(key?: K, reusedArray?: [K, V]): [K, V] | undefined {
+  higher(key: K, reusedArray?: [K, V]): [K, V] | undefined {
     const buf: [K, V] = reusedArray ?? ([undefined as K, undefined as V] as [K, V])
-    if (key === undefined) return this.root.minPair(buf)
-    return this.root.getPairOrNextHigher(key, this._compare, false, buf)
+    return this.root.getPairOrNextHigher(key, this.#state.compare, false, buf)
   }
 
   /**
    * Greatest entry with key strictly less than `key`, or undefined.
-   * When `key` is undefined, returns the maximum pair.
    */
-  lower(key?: K, reusedArray?: [K, V]): [K, V] | undefined {
+  lower(key: K, reusedArray?: [K, V]): [K, V] | undefined {
     const buf: [K, V] = reusedArray ?? ([undefined as K, undefined as V] as [K, V])
-    if (key === undefined) return this.root.maxPair(buf)
-    return this.root.getPairOrNextLower(key, this._compare, false, buf)
+    return this.root.getPairOrNextLower(key, this.#state.compare, false, buf)
   }
 
   floor(key: K, reusedArray?: [K, V]): [K, V] | undefined {
     const buf: [K, V] = reusedArray ?? ([undefined as K, undefined as V] as [K, V])
-    return this.root.getPairOrNextLower(key, this._compare, true, buf)
+    return this.root.getPairOrNextLower(key, this.#state.compare, true, buf)
   }
 
   ceiling(key: K, reusedArray?: [K, V]): [K, V] | undefined {
     const buf: [K, V] = reusedArray ?? ([undefined as K, undefined as V] as [K, V])
-    return this.root.getPairOrNextHigher(key, this._compare, true, buf)
+    return this.root.getPairOrNextHigher(key, this.#state.compare, true, buf)
   }
 
   /**
@@ -494,7 +578,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   getRange(low: K, high: K, includeHigh?: boolean, maxLength = 0x3ffffff): [K, V][] {
     if (maxLength <= 0) return []
     const results: [K, V][] = []
-    this.root.forRange(low, high, includeHigh, false, this, 0, (k, v) => {
+    this.root.forRange(low, high, includeHigh, false, this.#state, 0, (k, v) => {
       results.push([k, v])
       return results.length >= maxLength ? Break : undefined
     })
@@ -521,7 +605,15 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     onFound?: (k: K, v: V, counter: number) => EditResult<V, R> | undefined,
     initialCounter?: number
   ): R | number {
-    const r = this.root.forRange(low, high, includeHigh, false, this, initialCounter ?? 0, onFound)
+    const r = this.root.forRange(
+      low,
+      high,
+      includeHigh,
+      false,
+      this.#state,
+      initialCounter ?? 0,
+      onFound
+    )
     return typeof r === 'number' ? r : (r.done as R)
   }
 
@@ -533,10 +625,19 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     initialCounter?: number
   ): R | number {
     this.#checkMutable()
+    this.#version++
     let root = this.root
     if (root.isShared) this.root = root = root.clone()
     try {
-      const r = root.forRange(low, high, includeHigh, true, this, initialCounter ?? 0, onFound)
+      const r = root.forRange(
+        low,
+        high,
+        includeHigh,
+        true,
+        this.#state,
+        initialCounter ?? 0,
+        onFound
+      )
       return typeof r === 'number' ? r : (r.done as R)
     } finally {
       let isShared = false
@@ -589,8 +690,8 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
    * Structural integrity check for tests. Not part of the public collections export.
    */
   __checkValid(): void {
-    const size = this.root.checkValid(0, this, 0)
-    assert(size === this.count, 'size mismatch', size, this.count)
+    const size = this.root.checkValid(0, this.#state, 0)
+    assert(size === this.#state.count, 'size mismatch', size, this.#state.count)
   }
 }
 
@@ -632,8 +733,8 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     return this.children[this.children.length - 1].maxPair(reusedArray)
   }
 
-  override get(key: K, defaultValue: V | undefined, tree: BTree<K, V>): V | undefined {
-    const i = this.indexOf(key, 0, tree._compare)
+  override get(key: K, defaultValue: V | undefined, tree: TreeState<K>): V | undefined {
+    const i = this.indexOf(key, 0, tree.compare)
     const children = this.children
     return i < children.length ? children[i].get(key, defaultValue, tree) : defaultValue
   }
@@ -667,7 +768,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     return result
   }
 
-  override checkValid(depth: number, tree: BTree<K, V>, baseIndex: number): number {
+  override checkValid(depth: number, tree: TreeState<K>, baseIndex: number): number {
     const kL = this.keys.length
     const cL = this.children.length
     assert(
@@ -717,7 +818,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
           baseIndex
         )
       }
-      if (!(i === 0 || tree._compare(k[i - 1], k[i]) < 0)) {
+      if (!(i === 0 || tree.compare(k[i - 1], k[i]) < 0)) {
         assert(false, 'sort violation at depth', depth, 'index', i, 'keys', k[i - 1], k[i])
       }
     }
@@ -746,11 +847,11 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     key: K,
     value: V,
     overwrite: boolean | undefined,
-    tree: BTree<K, V>
+    tree: TreeState<K>
   ): boolean | BNodeInternal<K, V> {
     const c = this.children
-    const max = tree._maxNodeSize
-    const cmp = tree._compare
+    const max = tree.maxNodeSize
+    const cmp = tree.compare
     let i = Math.min(this.indexOf(key, 0, cmp), c.length - 1)
     let child = c[i]
 
@@ -823,11 +924,11 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     high: K,
     includeHigh: boolean | undefined,
     editMode: boolean,
-    tree: BTree<K, V>,
+    tree: TreeState<K>,
     count: number,
     onFound?: (k: K, v: V, counter: number) => EditResult<V> | undefined
   ): EditResult<V> | number {
-    const cmp = tree._compare
+    const cmp = tree.compare
     const keys = this.keys
     const children = this.children
     let iLow = this.indexOf(low, 0, cmp)
@@ -857,12 +958,12 @@ class BNodeInternal<K, V> extends BNode<K, V> {
           count = result
         }
       } finally {
-        const half = tree._maxNodeSize >> 1
+        const half = tree.maxNodeSize >> 1
         if (iLow > 0) iLow--
         for (i = iHigh; i >= iLow; i--) {
           if (children[i].keys.length <= half) {
             if (children[i].keys.length !== 0) {
-              this.tryMerge(i, tree._maxNodeSize)
+              this.tryMerge(i, tree.maxNodeSize)
             } else {
               keys.splice(i, 1)
               children.splice(i, 1)

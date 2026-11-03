@@ -132,7 +132,10 @@ export function isFunction(x: unknown): x is AnyFunction {
 
 /** Check if value is an async function. */
 export function isAsyncFunction(x: unknown): x is (...args: never[]) => Promise<unknown> {
-  return typeof x === 'function' && x.constructor.name === 'AsyncFunction'
+  if (typeof x !== 'function') return false
+  // A function with a null prototype has no inherited `constructor`.
+  const ctor = (x as { constructor?: { name?: string } }).constructor
+  return ctor?.name === 'AsyncFunction'
 }
 
 /** Check if value is a generator object. */

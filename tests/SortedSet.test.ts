@@ -87,4 +87,37 @@ describe('SortedSet', () => {
     for (let i = 1; i <= 5; i++) s.add(i * 2)
     expect([...s.values()]).toEqual([2, 4, 6, 8, 10])
   })
+
+  it('SPEC-R78 entriesReversed yields descending [value, value] pairs', () => {
+    const s = new SortedSet([3, 1, 2])
+    expect([...s.entriesReversed()]).toEqual([
+      [3, 3],
+      [2, 2],
+      [1, 1]
+    ])
+    expect([...new SortedSet<number>().entriesReversed()]).toEqual([])
+  })
+
+  it('SPEC-R78 entriesReversed includes an undefined value', () => {
+    const s = new SortedSet<number | undefined>([1, undefined, 0])
+    expect([...s.entriesReversed()]).toEqual([...s.entries()].reverse())
+    expect([...s.entriesReversed()].some(([v]) => v === undefined)).toBe(true)
+  })
+
+  it('SPEC-R78 freeze rejects mutators and unfreeze restores them', () => {
+    const s = new SortedSet([1, 2])
+    expect(s.freeze()).toBe(s)
+    expect(() => s.add(3)).toThrow(TypeError)
+    expect(() => s.delete(1)).toThrow(TypeError)
+    expect(() => {
+      s.clear()
+    }).toThrow(TypeError)
+    expect([...s]).toEqual([1, 2])
+    expect(s.has(1)).toBe(true)
+    expect(s.add(2)).toBe(s)
+    expect(s.unfreeze()).toBe(s)
+    s.add(3)
+    expect(s.delete(1)).toBe(true)
+    expect([...s]).toEqual([2, 3])
+  })
 })

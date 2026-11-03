@@ -10,6 +10,7 @@ import { BTree } from './BTree.js'
  */
 export class SortedSet<T> extends ValueCollection<T> {
   readonly #tree: BTree<T, true>
+  readonly #compareFn: Comparer<T> | undefined
 
   /**
    * @param values Initial values.
@@ -17,6 +18,7 @@ export class SortedSet<T> extends ValueCollection<T> {
    */
   constructor(values?: Iterable<T>, compareFn?: Comparer<T>) {
     super()
+    this.#compareFn = compareFn
     this.#tree = new BTree<T, true>(undefined, compareFn)
     if (values) {
       for (const x of values) this.add(x)
@@ -25,6 +27,10 @@ export class SortedSet<T> extends ValueCollection<T> {
 
   get size(): number {
     return this.#tree.size
+  }
+
+  protected override cloneFrom(values: Iterable<T>): this {
+    return new SortedSet(values, this.#compareFn) as this
   }
 
   readonly [Symbol.toStringTag] = 'SortedSet'
@@ -66,5 +72,28 @@ export class SortedSet<T> extends ValueCollection<T> {
 
   values(): IteratorObject<T> {
     return this.#tree.keys()
+  }
+
+  /**
+   * Values in descending order.
+   */
+  entriesReversed(): IteratorObject<[T, T]> {
+    return this.#tree.entriesReversed().map(([k]): [T, T] => [k, k])
+  }
+
+  /**
+   * Reject mutators until {@link unfreeze}.
+   */
+  freeze(): this {
+    this.#tree.freeze()
+    return this
+  }
+
+  /**
+   * Clear the frozen flag set by {@link freeze}.
+   */
+  unfreeze(): this {
+    this.#tree.unfreeze()
+    return this
   }
 }
