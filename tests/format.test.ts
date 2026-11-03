@@ -141,13 +141,32 @@ describe('SPEC-R85 formatDate localized tokens', () => {
     expect(formatDate('[Do] D', new Date(2022, 0, 2), 'en')).toBe('Do 2')
   })
 
-  it('Do token computed once per formatDate call (5000 under 50ms)', () => {
+  it('Do token builds PluralRules once per resolved locale (5000 without explicit locale)', () => {
     const d = new Date(2024, 0, 2)
     const pattern = 'Do'.repeat(5000)
-    const start = performance.now()
-    const out = formatDate(pattern, d, 'en')
-    expect(performance.now() - start).toBeLessThan(50)
-    expect(out).toBe('2nd'.repeat(5000))
+    const Original = Intl.PluralRules
+    let constructions = 0
+    const Spy = class extends Original {
+      constructor(...args: ConstructorParameters<typeof Original>) {
+        super(...args)
+        constructions++
+      }
+    }
+    Object.defineProperty(Intl, 'PluralRules', { value: Spy, configurable: true, writable: true })
+    try {
+      // Evict any prior default-locale cache entry (capacity 64).
+      for (let i = 0; i < 70; i++) formatDate('Do', d, `en-${String(1000 + i)}`)
+      constructions = 0
+      const out = formatDate(pattern, d)
+      expect(out).toBe('2nd'.repeat(5000))
+      expect(constructions).toBe(1)
+    } finally {
+      Object.defineProperty(Intl, 'PluralRules', {
+        value: Original,
+        configurable: true,
+        writable: true
+      })
+    }
   })
 })
 

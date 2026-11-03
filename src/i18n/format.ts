@@ -206,7 +206,7 @@ class FormatterCache {
 
 const formatterCache = new FormatterCache()
 
-/** Cached ordinal PluralRules per resolved locale tag; `null` means non-English (bare day). */
+/** Cached ordinal PluralRules keyed by canonical resolved locale; `null` means non-English. */
 const ordinalPluralCache = new Map<string, Intl.PluralRules | null>()
 
 function cachedFormatter(
@@ -218,18 +218,40 @@ function cachedFormatter(
 }
 
 function cachedOrdinalPlural(tag: string): Intl.PluralRules | null {
-  const hit = ordinalPluralCache.get(tag)
-  if (hit !== undefined) return hit
-  let language: string
+  let canonical: string
   try {
-    language = new Intl.Locale(tag).language
+    canonical = Intl.getCanonicalLocales(tag)[0] ?? tag
   } catch {
-    ordinalPluralCache.set(tag, null)
     return null
   }
-  const rules = language === 'en' ? new Intl.PluralRules(tag, { type: 'ordinal' }) : null
-  ordinalPluralCache.set(tag, rules)
-  return rules
+  const hit = ordinalPluralCache.get(canonical)
+  if (hit !== undefined) {
+    ordinalPluralCache.delete(canonical)
+    ordinalPluralCache.set(canonical, hit)
+    return hit
+  }
+  try {
+    const language = new Intl.Locale(canonical).language
+    const rules = language === 'en' ? new Intl.PluralRules(canonical, { type: 'ordinal' }) : null
+    const key = rules?.resolvedOptions().locale ?? canonical
+    if (key !== canonical) {
+      const keyed = ordinalPluralCache.get(key)
+      if (keyed !== undefined) {
+        ordinalPluralCache.delete(key)
+        ordinalPluralCache.set(key, keyed)
+        return keyed
+      }
+    }
+    if (ordinalPluralCache.size >= FORMATTER_CACHE_CAPACITY) {
+      const oldest = ordinalPluralCache.keys().next().value
+      if (oldest !== undefined) ordinalPluralCache.delete(oldest)
+    }
+    ordinalPluralCache.set(key, rules)
+    if (key !== canonical) ordinalPluralCache.set(canonical, rules)
+    return rules
+  } catch {
+    return null
+  }
 }
 
 function partValue(
