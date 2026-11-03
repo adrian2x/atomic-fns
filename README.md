@@ -80,7 +80,7 @@ const o = {
 }
 ```
 
-`eq` is value (numeric/semantic) equality. `compare` is a total order that keeps values of different kinds distinct, like Map keys. So `compare(decimal(1), 1) === 1` while `eq(decimal(1), 1) === true`, and `new SortedSet([decimal(1)]).has(1) === false`.
+`eq` is value (numeric/semantic) equality. `compare` is a total order that keeps values of different kinds distinct, like Map keys. So `compare(decimal(1), 1) === 1` while `eq(decimal(1), 1) === true`, and `new SortedSet([decimal(1)]).has(1) === false`. Rank-1 values (number, bigint, Decimal, Currency) order by numeric value, then unit code (`''` when unit-less), then kind. `eq` is numeric equality plus the same unit when both sides carry one, and is never derived from `compare`, so `eq` is not transitive across units (`USD 5 = 5 = JPY 5`, but `USD 5 != JPY 5`). Units come from `protocol.unit` (`Symbol.for('atomic-fns.unit')`).
 
 ## New Types
 
@@ -149,7 +149,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 | `flatten` on objects whose keys contain `.`, `[`, `]`, or the empty string (aliasing nested paths)                                              | throw `TypeError(\`flatten cannot represent key …\`)`; rename keys before flattening                                                                                      |
 | `get('toString', {})` / `get('constructor.constructor', {})` resolving built-in prototypes                                                      | returns the default; own keys and user-class prototype members still resolve                                                                                              |
 | `Currency` mixed-currency `add`/`sub`/`mul`/`div`/`lt`/`lte`/`gt`/`gte`/`compare`                                                               | throws `ValueError('currency mismatch: …')`; convert explicitly or use same-currency amounts                                                                              |
-| operators `lt`/`lte`/`gt`/`gte` and `math` `min`/`max` over Currencies with different codes                                                     | throw `ValueError('currency mismatch: X vs Y')`; `compare` and `sorted` never throw and order by currency code, then amount (plain numbers sort before every Currency)    |
+| operators `lt`/`lte`/`gt`/`gte` and `math` `min`/`max` over values with different unit codes                                                    | throw `ValueError('currency mismatch: X vs Y')`; `compare` and `sorted` never throw and order by amount, then unit code (`''` for unit-less), then kind                   |
 
 ### Added
 

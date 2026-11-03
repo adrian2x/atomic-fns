@@ -13,6 +13,7 @@ export {
   bool,
   not,
   hasMethod,
+  unitOf,
   type Comparable,
   type Equatable,
   type Rank

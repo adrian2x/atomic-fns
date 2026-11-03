@@ -5,7 +5,7 @@
 import { Decimal } from '../decimal/index.js'
 import type { DecimalInput, DivOptions } from '../decimal/index.js'
 import { ValueError } from '../globals/errors.js'
-import { registerCurrencyCode } from '../internal/rank1.js'
+import { protocol } from '../operators/protocol.js'
 
 /** Runtime accepts decimal strings via ToIntlMathematicalValue (ECMA-402). */
 function formatExact(fmt: Intl.NumberFormat, decimalStr: string): string {
@@ -54,7 +54,11 @@ export class Currency extends Decimal {
     const resolved = this.#numberFormat.resolvedOptions()
     this.currency = resolved.currency ?? currency
     this.locale = resolved.locale
-    registerCurrencyCode(this, this.currency)
+  }
+
+  /** ISO 4217 code for rank-1 unit ordering and equality. */
+  get [protocol.unit](): string {
+    return this.currency
   }
 
   /**
@@ -170,12 +174,5 @@ export class Currency extends Decimal {
    */
   precision(digits?: number): string {
     return this.format({ maximumFractionDigits: digits })
-  }
-
-  override eq(x: DecimalInput): boolean {
-    if (x instanceof Currency && x.currency !== this.currency) {
-      return false
-    }
-    return super.eq(x)
   }
 }

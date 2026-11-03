@@ -14,6 +14,7 @@ const mod: unique symbol = Symbol.for('atomic-fns.mod')
 const pow: unique symbol = Symbol.for('atomic-fns.pow')
 const abs: unique symbol = Symbol.for('atomic-fns.abs')
 const boolKey: unique symbol = Symbol.for('atomic-fns.bool')
+const unit: unique symbol = Symbol.for('atomic-fns.unit')
 
 /** Shared protocol symbols for operator dispatch. */
 export const protocol: {
@@ -29,6 +30,7 @@ export const protocol: {
   readonly pow: typeof pow
   readonly abs: typeof abs
   readonly bool: typeof boolKey
+  readonly unit: typeof unit
 } = Object.freeze({
   compare,
   equals,
@@ -41,7 +43,8 @@ export const protocol: {
   mod,
   pow,
   abs,
-  bool: boolKey
+  bool: boolKey,
+  unit
 })
 
 /** Values that participate in the total order via `protocol.compare`. */
@@ -118,7 +121,8 @@ function defineCompareFromOrdering(proto: object): void {
 
 /**
  * Wires 1.x string-named protocol methods on `Class.prototype` to symbol keys.
- * Returns `Class`. Does not overwrite an existing symbol method.
+ * Also wires a string-named `unit` getter/value to `protocol.unit` when present.
+ * Returns `Class`. Does not overwrite an existing symbol method or unit hook.
  */
 export function adaptProtocol<C extends abstract new (...args: never[]) => object>(Class: C): C {
   const proto = Class.prototype as object & Record<string | symbol, unknown>
@@ -135,10 +139,32 @@ export function adaptProtocol<C extends abstract new (...args: never[]) => objec
       configurable: true
     })
   }
+  if (proto[protocol.unit] === undefined) {
+    const unitDesc = Object.getOwnPropertyDescriptor(proto, 'unit')
+    if (unitDesc !== undefined && (unitDesc.get !== undefined || 'value' in unitDesc)) {
+      Object.defineProperty(proto, protocol.unit, {
+        get: function (this: { unit: unknown }) {
+          return this.unit
+        },
+        enumerable: false,
+        configurable: true
+      })
+    }
+  }
   if (typeof proto.compare !== 'function') {
     defineCompareFromOrdering(proto)
   }
   return Class
+}
+
+/**
+ * Unit code of `v` via `protocol.unit`, or `''` when absent / not a string.
+ * Used by rank-1 ordering and equality so operators stay currency-agnostic.
+ */
+export function unitOf(v: unknown): string {
+  if ((typeof v !== 'object' && typeof v !== 'function') || v === null) return ''
+  const u = (v as Record<symbol, unknown>)[protocol.unit]
+  return typeof u === 'string' ? u : ''
 }
 
 /**

@@ -5,9 +5,10 @@
  */
 
 import { ValueError, ZeroDivisionError } from '../globals/errors.js'
-import { compareCodeThenValue, currencyCodeOf } from '../internal/rank1.js'
+import { compareValueThenUnit } from '../internal/rank1.js'
 import { truncateForError } from '../internal/truncate.js'
-import { protocol } from '../operators/protocol.js'
+import { compare as totalCompare, eq as totalEq } from '../operators/order.js'
+import { protocol, unitOf } from '../operators/protocol.js'
 import { isqrtRoot } from './isqrt.js'
 
 /** Rounding mode for {@link Decimal.div}, {@link Decimal.round} and {@link Decimal.sqrt}. */
@@ -477,25 +478,31 @@ export class Decimal {
   }
 
   /**
-   * Exact comparison with a Decimal, bigint, or number (exact binary for numbers).
+   * Rank-1 total order with a Decimal, bigint, or number (exact binary for numbers).
+   * Matches the `compare` operator for those inputs; string inputs stay numeric-only.
    * @param x Other value.
    */
   compare(x: DecimalInput): -1 | 0 | 1 {
     if (typeof x === 'number') {
-      const r = this.#numericCompare(x)
-      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
-      return r < 0 ? -1 : r > 0 ? 1 : 0
+      if (Number.isNaN(x)) throw new TypeError('cannot compare Decimal with NaN')
+      return totalCompare(this, x)
+    }
+    if (typeof x === 'bigint' || x instanceof Decimal) {
+      return totalCompare(this, x)
     }
     const o = decimal(x)
     return compareIE(this.#i, this.#e, o.#i, o.#e)
   }
 
   /**
-   * Value equality (exact binary when `x` is a number).
+   * Semantic equality (exact binary when `x` is a number). Matches the `eq` operator for
+   * Decimal, number, and bigint; string inputs stay numeric-only.
    * @param x Other value.
    */
   eq(x: DecimalInput): boolean {
-    if (typeof x === 'number') return this.#numericCompare(x) === 0
+    if (typeof x === 'number' || typeof x === 'bigint' || x instanceof Decimal) {
+      return totalEq(this, x)
+    }
     const o = decimal(x)
     return this.#i === o.#i && this.#e === o.#e
   }
@@ -563,18 +570,25 @@ export class Decimal {
 
   /**
    * Protocol compare: Decimal/bigint exact; finite number exact-binary; +/-Infinity; else undefined.
-   * Rank-1 order is lexicographic: currency code (`''` for non-Currency), then numeric value.
-   * Plain numbers therefore sort before every Currency, and Currencies group by code.
+   * Rank-1 order is lexicographic: numeric value, then unit code (`''` when unit-less).
    */
   protocolCompare(o: unknown): number | undefined {
     const numeric = this.#numericCompare(o)
     if (numeric === undefined) return undefined
-    return compareCodeThenValue(currencyCodeOf(this), currencyCodeOf(o), numeric)
+    return compareValueThenUnit(numeric, unitOf(this), unitOf(o))
   }
 
-  /** Protocol equality over the same domain as protocol compare. */
+  /**
+   * Protocol equality: numeric equality, plus the same unit code when both sides carry a unit.
+   * Never derived from compare (eq is not transitive across units).
+   */
   protocolEquals(o: unknown): boolean {
-    return this.protocolCompare(o) === 0
+    const numeric = this.#numericCompare(o)
+    if (numeric === undefined || numeric !== 0) return false
+    const ux = unitOf(this)
+    const uy = unitOf(o)
+    if (ux !== '' && uy !== '' && ux !== uy) return false
+    return true
   }
 
   get [protocol.rank]() {

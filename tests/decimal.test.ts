@@ -170,7 +170,8 @@ describe('SPEC-R66 Arithmetic and rounding', () => {
 describe('SPEC-R67 Zero and normalization', () => {
   it('SPEC-R67 normalizes zero and trailing zeros', () => {
     expect(decimal('0.01').sub('0.01').eq(0)).toBe(true)
-    expect(decimal('0.01').sub('0.01').compare(0)).toBe(0)
+    expect(decimal('0.01').sub('0.01').compare(decimal(0))).toBe(0)
+    expect(decimal('0.01').sub('0.01').compare(0)).toBe(1)
     expect(decimal('0.01').sub('0.01').toString()).toBe('0')
     expect(decimal('0').mul('1000').toString()).toBe('0')
     expect(decimal('0.00').toString()).toBe('0')
