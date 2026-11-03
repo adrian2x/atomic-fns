@@ -139,8 +139,25 @@ function assertCompareResult(r: unknown): asserts r is number | undefined {
 /**
  * Total order over all values: `-1`, `0`, or `1`.
  * Antisymmetric and transitive; never applies `<`/`>` to objects.
+ * Same-type non-NaN numbers and same-type strings take a cheap path before rank logic;
+ * the total order is identical to the slow path.
  */
 export function compare(x: unknown, y: unknown): -1 | 0 | 1 {
+  if (typeof x === 'number' && typeof y === 'number') {
+    if (!Number.isNaN(x) && !Number.isNaN(y)) {
+      return x < y ? -1 : x > y ? 1 : 0
+    }
+  } else if (typeof x === 'string' && typeof y === 'string') {
+    return x < y ? -1 : x > y ? 1 : 0
+  }
+  return compareSlow(x, y)
+}
+
+/**
+ * Rank/protocol path used when the number/string fast path does not apply.
+ * Exported for tests that the fast path agrees with this order.
+ */
+export function compareSlow(x: unknown, y: unknown): -1 | 0 | 1 {
   const rx = rankOf(x)
   const ry = rankOf(y)
   if (rx !== ry) return rx < ry ? -1 : 1

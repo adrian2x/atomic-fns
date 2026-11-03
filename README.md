@@ -165,6 +165,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 - `defaults` fills keys missing as own properties (including names like `toString`).
 - `titleCase` only title-cases the first letter of each word (rest unchanged). `capitalize` uses Unicode titlecase for digraphs (`ǆ` -> `ǅ`). `removeAccents` / `slugify` fold Latin ligatures, strip marks only from Latin letters, return NFC; non-Latin text is unchanged.
 - `throttle` uses Lodash leading+trailing defaults (latest args at window end). `throttle(fn, 0)` is leading plus one trailing per macrotask. `memoize` exposes `.cache` and `.clear()`.
+- `compare` fast-paths same-type non-NaN numbers and strings; total order unchanged.
 
 ### Platform
 

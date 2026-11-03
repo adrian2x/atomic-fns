@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { compare, eq, adaptProtocol, protocol } from '../src/operators/index.js'
+import { compareSlow } from '../src/operators/order.js'
 import { sorted } from '../src/itertools/index.js'
 import { decimal } from '../src/decimal/index.js'
 
@@ -203,6 +204,43 @@ describe('SPEC-R13 antisymmetry and transitivity', () => {
       if (compare(a, b) <= 0 && compare(b, c) <= 0) {
         expect(compare(a, c)).toBeLessThanOrEqual(0)
       }
+    }
+  })
+
+  it('number/string fast path agrees with slow path on randomized corpus', () => {
+    const values: unknown[] = [
+      0,
+      -0,
+      1,
+      -1,
+      2,
+      1e9,
+      -1e9,
+      Math.PI,
+      Number.MAX_SAFE_INTEGER,
+      Number.MIN_SAFE_INTEGER,
+      Infinity,
+      -Infinity,
+      NaN,
+      '',
+      'a',
+      'b',
+      'aa',
+      'A',
+      '0',
+      '10',
+      ' ',
+      '\u0000'
+    ]
+    for (let i = 0; i < 5000; i++) {
+      const a = values[Math.floor(rng() * values.length)]
+      const b = values[Math.floor(rng() * values.length)]
+      expect(compare(a, b)).toBe(compareSlow(a, b))
+    }
+    for (let i = 0; i < 2000; i++) {
+      const a = pick(rng)
+      const b = pick(rng)
+      expect(compare(a, b)).toBe(compareSlow(a, b))
     }
   })
 })
