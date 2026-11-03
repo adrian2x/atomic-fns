@@ -104,19 +104,18 @@ function msOfDay(w: WallFields): number {
   return w.hour * 3_600_000 + w.minute * 60_000 + w.second * 1000 + w.millisecond
 }
 
-function wallAfterCalendar(
+function wallFieldsAfter(
   a: WallFields,
-  utc: boolean,
   kind: 'months' | 'days',
   size: number,
   j: number
-): number {
+): WallFields {
   if (kind === 'months') {
     const idx = a.year * 12 + (a.month - 1) + j * size
     const y = Math.floor(idx / 12)
     const m = idx - y * 12 + 1
     const d = Math.min(a.day, daysInMonthOf(y, m))
-    const wall: WallFields = {
+    return {
       year: y,
       month: m,
       day: d,
@@ -125,10 +124,9 @@ function wallAfterCalendar(
       second: a.second,
       millisecond: a.millisecond
     }
-    return utc ? utcWallToTime(wall) : localWallToTime(wall)
   }
   const civil = civilFromDayNumber(dayNumber(a.year, a.month, a.day) + j * size)
-  const wall: WallFields = {
+  return {
     year: civil.year,
     month: civil.month,
     day: civil.day,
@@ -137,7 +135,11 @@ function wallAfterCalendar(
     second: a.second,
     millisecond: a.millisecond
   }
-  return utc ? utcWallToTime(wall) : localWallToTime(wall)
+}
+
+/** Linear civil timeline (day number * ms/day + ms of day); used when Date cannot represent a wall. */
+function civilInstant(w: WallFields): number {
+  return dayNumber(w.year, w.month, w.day) * 86_400_000 + msOfDay(w)
 }
 
 function calendarDiff(
@@ -173,17 +175,25 @@ function calendarDiff(
 
   if (!exact) return k
 
-  const instantAfter = (j: number): number => wallAfterCalendar(a, utc, kind, size, j)
-  let t0 = instantAfter(k)
-  let t1 = instantAfter(k + sign)
-  if (Math.abs(e - t0) >= Math.abs(t1 - t0)) {
+  const anchors = (j0: number, j1: number): { t0: number; t1: number; end: number } => {
+    const w0 = wallFieldsAfter(a, kind, size, j0)
+    const w1 = wallFieldsAfter(a, kind, size, j1)
+    const d0 = utc ? utcWallToTime(w0) : localWallToTime(w0)
+    const d1 = utc ? utcWallToTime(w1) : localWallToTime(w1)
+    if (Number.isFinite(d0) && Number.isFinite(d1)) {
+      return { t0: d0, t1: d1, end: e }
+    }
+    return { t0: civilInstant(w0), t1: civilInstant(w1), end: civilInstant(b) }
+  }
+
+  let { t0, t1, end } = anchors(k, k + sign)
+  if (Math.abs(end - t0) >= Math.abs(t1 - t0)) {
     k += sign
-    t0 = instantAfter(k)
-    t1 = instantAfter(k + sign)
+    ;({ t0, t1, end } = anchors(k, k + sign))
   }
   const denom = Math.abs(t1 - t0)
   if (denom === 0) return k
-  return k + (e - t0) / denom
+  return k + (end - t0) / denom
 }
 
 const TIME_UNIT_MS: ReadonlyMap<DurationField, number> = new Map([

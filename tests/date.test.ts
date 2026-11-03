@@ -271,6 +271,23 @@ describe('IntlDate', () => {
     expect(jul.diff(jan, 'months')).toBe(6)
   })
 
+  it('diff across full Date range stays finite for calendar units', () => {
+    const lo = new IntlDate(-8.64e15)
+    const hi = new IntlDate(8.64e15)
+    for (const unit of ['months', 'weeks', 'years', 'quarters'] as const) {
+      for (const exact of [false, true]) {
+        const fwd = lo.diff(hi, unit, exact)
+        const back = hi.diff(lo, unit, exact)
+        expect(Number.isFinite(fwd)).toBe(true)
+        expect(Number.isFinite(back)).toBe(true)
+        expect(Number.isNaN(fwd)).toBe(false)
+        if (!exact) {
+          expect(fwd).toBe(-back)
+        }
+      }
+    }
+  })
+
   it('SPEC-R95 min/max parse strings like the constructor', () => {
     expect(IntlDate.min(['2022-03-01', '2021-12-31', '2022-01-01'])).toBe('2021-12-31')
     expect(IntlDate.max(['2022-03-01', '2021-12-31', '2022-01-01'])).toBe('2022-03-01')
