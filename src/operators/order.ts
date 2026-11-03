@@ -2,6 +2,7 @@
  * Total-order compare and derived relations.
  */
 
+import { assertSameCurrency } from '../internal/rank1.js'
 import { hasMethod, protocol } from './protocol.js'
 
 /** User comparator; `compare` itself always returns `-1 | 0 | 1`. */
@@ -197,22 +198,38 @@ export function eq(x: unknown, y: unknown): boolean {
   return sameValueZero(x, y)
 }
 
-/** `compare(x, y) < 0` */
+/**
+ * `compare(x, y) < 0`.
+ * @throws {ValueError} when both are Currencies with different codes.
+ */
 export function lt(x: unknown, y: unknown): boolean {
+  assertSameCurrency(x, y)
   return compare(x, y) < 0
 }
 
-/** `compare(x, y) <= 0` */
+/**
+ * `compare(x, y) <= 0`.
+ * @throws {ValueError} when both are Currencies with different codes.
+ */
 export function lte(x: unknown, y: unknown): boolean {
+  assertSameCurrency(x, y)
   return compare(x, y) <= 0
 }
 
-/** `compare(x, y) > 0` */
+/**
+ * `compare(x, y) > 0`.
+ * @throws {ValueError} when both are Currencies with different codes.
+ */
 export function gt(x: unknown, y: unknown): boolean {
+  assertSameCurrency(x, y)
   return compare(x, y) > 0
 }
 
-/** `compare(x, y) >= 0` */
+/**
+ * `compare(x, y) >= 0`.
+ * @throws {ValueError} when both are Currencies with different codes.
+ */
 export function gte(x: unknown, y: unknown): boolean {
+  assertSameCurrency(x, y)
   return compare(x, y) >= 0
 }

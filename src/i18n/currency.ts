@@ -5,6 +5,7 @@
 import { Decimal } from '../decimal/index.js'
 import type { DecimalInput, DivOptions } from '../decimal/index.js'
 import { ValueError } from '../globals/errors.js'
+import { registerCurrencyCode } from '../internal/rank1.js'
 
 /** Runtime accepts decimal strings via ToIntlMathematicalValue (ECMA-402). */
 function formatExact(fmt: Intl.NumberFormat, decimalStr: string): string {
@@ -53,6 +54,7 @@ export class Currency extends Decimal {
     const resolved = this.#numberFormat.resolvedOptions()
     this.currency = resolved.currency ?? currency
     this.locale = resolved.locale
+    registerCurrencyCode(this, this.currency)
   }
 
   /**
@@ -141,14 +143,14 @@ export class Currency extends Decimal {
   }
 
   /**
-   * Formats with optional overrides.
+   * Formats with optional overrides. The instance currency always wins over `opts.currency`.
    * @param opts NumberFormat options (not mutated).
    * @param locale Override locale.
    * @throws {RangeError} when `|amount| > Number.MAX_VALUE`.
    */
   format(opts: Intl.NumberFormatOptions = {}, locale?: string): string {
     assertFormattable(this)
-    const options: Intl.NumberFormatOptions = { ...this.#options, ...opts }
+    const options: Intl.NumberFormatOptions = { ...this.#options, ...opts, currency: this.currency }
     return formatExact(new Intl.NumberFormat(locale ?? this.locale, options), super.toString())
   }
 
@@ -175,29 +177,5 @@ export class Currency extends Decimal {
       return false
     }
     return super.eq(x)
-  }
-
-  /**
-   * Total order for operators `compare`: currency code first, then amount. Never throws.
-   * @param o Other value.
-   */
-  override protocolCompare(o: unknown): number | undefined {
-    if (o instanceof Currency) {
-      if (this.currency < o.currency) return -1
-      if (this.currency > o.currency) return 1
-      return super.protocolCompare(o)
-    }
-    return super.protocolCompare(o)
-  }
-
-  /**
-   * Equal value and, when `o` is Currency, the same currency code.
-   * @param o Other value.
-   */
-  override protocolEquals(o: unknown): boolean {
-    if (o instanceof Currency) {
-      return this.currency === o.currency && super.protocolEquals(o)
-    }
-    return super.protocolEquals(o)
   }
 }

@@ -5,6 +5,7 @@
  */
 
 import { ValueError, ZeroDivisionError } from '../globals/errors.js'
+import { compareCodeThenValue, currencyCodeOf } from '../internal/rank1.js'
 import { truncateForError } from '../internal/truncate.js'
 import { protocol } from '../operators/protocol.js'
 import { isqrtRoot } from './isqrt.js'
@@ -481,7 +482,7 @@ export class Decimal {
    */
   compare(x: DecimalInput): -1 | 0 | 1 {
     if (typeof x === 'number') {
-      const r = this.protocolCompare(x)
+      const r = this.#numericCompare(x)
       if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
       return r < 0 ? -1 : r > 0 ? 1 : 0
     }
@@ -494,7 +495,7 @@ export class Decimal {
    * @param x Other value.
    */
   eq(x: DecimalInput): boolean {
-    if (typeof x === 'number') return this.protocolEquals(x)
+    if (typeof x === 'number') return this.#numericCompare(x) === 0
     const o = decimal(x)
     return this.#i === o.#i && this.#e === o.#e
   }
@@ -545,8 +546,8 @@ export class Decimal {
     return this.compare(x) >= 0
   }
 
-  /** Protocol compare: Decimal/bigint exact; finite number exact-binary; +/-Infinity; else undefined. */
-  protocolCompare(o: unknown): number | undefined {
+  /** Numeric-only compare (no currency code): Decimal/bigint exact; finite number exact-binary. */
+  #numericCompare(o: unknown): number | undefined {
     if (o instanceof Decimal) return compareIE(this.#i, this.#e, o.#i, o.#e)
     if (typeof o === 'bigint') return compareIE(this.#i, this.#e, o, 0)
     if (typeof o === 'number') {
@@ -558,6 +559,17 @@ export class Decimal {
       return compareIE(this.#i, this.#e, exact.i, exact.e)
     }
     return undefined
+  }
+
+  /**
+   * Protocol compare: Decimal/bigint exact; finite number exact-binary; +/-Infinity; else undefined.
+   * Rank-1 order is lexicographic: currency code (`''` for non-Currency), then numeric value.
+   * Plain numbers therefore sort before every Currency, and Currencies group by code.
+   */
+  protocolCompare(o: unknown): number | undefined {
+    const numeric = this.#numericCompare(o)
+    if (numeric === undefined) return undefined
+    return compareCodeThenValue(currencyCodeOf(this), currencyCodeOf(o), numeric)
   }
 
   /** Protocol equality over the same domain as protocol compare. */

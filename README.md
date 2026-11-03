@@ -149,6 +149,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 | `flatten` on objects whose keys contain `.`, `[`, `]`, or the empty string (aliasing nested paths)                                              | throw `TypeError(\`flatten cannot represent key …\`)`; rename keys before flattening                                                                                      |
 | `get('toString', {})` / `get('constructor.constructor', {})` resolving built-in prototypes                                                      | returns the default; own keys and user-class prototype members still resolve                                                                                              |
 | `Currency` mixed-currency `add`/`sub`/`mul`/`div`/`lt`/`lte`/`gt`/`gte`/`compare`                                                               | throws `ValueError('currency mismatch: …')`; convert explicitly or use same-currency amounts                                                                              |
+| operators `lt`/`lte`/`gt`/`gte` and `math` `min`/`max` over Currencies with different codes                                                     | throw `ValueError('currency mismatch: X vs Y')`; `compare` and `sorted` never throw and order by currency code, then amount (plain numbers sort before every Currency)    |
 
 ### Added
 
