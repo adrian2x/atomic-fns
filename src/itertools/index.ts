@@ -372,7 +372,7 @@ export function sorted<T, K = T>(
 ): T[]
 export function sorted<T, K = T>(
   args: Iterable<T> | Record<string, T>,
-  key: Predicate<T>,
+  key: (x: T) => K,
   reverse: boolean,
   compareFn?: Comparer<K>
 ): T[]

@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest'
+import { describe, expectTypeOf, it } from 'vitest'
 import assert from 'assert'
 import {
   accumulate,
@@ -468,5 +468,30 @@ describe('itertools', () => {
     const byPositional: number[] = sorted([3, 1, 2], true, (a, b) => a - b)
     assert.deepEqual(byOptions, [1, 2, 3])
     assert.deepEqual(byPositional, [3, 2, 1])
+  })
+
+  it('positional sorted comparator is typed on keys', () => {
+    const users = [
+      { name: 'fred', age: 40 },
+      { name: 'barney', age: 36 }
+    ]
+    const byName = sorted(
+      users,
+      (u) => u.name,
+      false,
+      (a: string, b: string) => a.localeCompare(b)
+    )
+    assert.deepEqual(
+      byName.map((u) => u.name),
+      ['barney', 'fred']
+    )
+    expectTypeOf(
+      sorted(
+        users,
+        (u) => u.name,
+        false,
+        (a, b) => a.localeCompare(b)
+      )
+    ).toEqualTypeOf<{ name: string; age: number }[]>()
   })
 })
