@@ -1,8 +1,11 @@
 /** Max structural nesting for deepEqual, clone, merge, matches, flatten, omit, and related walks. */
 export const MAX_NESTING_DEPTH = 1000
 
-/** Max nodes visited per top-level merge / matches / flatten call (shared-reference DAG bound). */
-export const MAX_VISITED_NODES = 1_000_000
+/**
+ * Max re-expansions of an already-expanded container per top-level merge / matches / flatten call
+ * (shared-reference DAG bound). First visits are unbounded, so tree-shaped inputs stay linear.
+ */
+export const MAX_SHARED_REVISITS = 10_000
 
 /**
  * Levels charged per nested collection hop (dispatch + hook body together).
@@ -26,13 +29,14 @@ export function setHookNestingCost(cost: number): void {
 }
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
-const VISIT_ERROR = 'input exceeds 1000000 nodes'
+const REVISIT_ERROR = 'input repeats shared objects more than 10000 times'
 
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
 let currentDepth = 0
 
-let visitCount = 0
-let visitGuardDepth = 0
+let revisitCount = 0
+let revisitGuardDepth = 0
+let expanded = new WeakSet<object>()
 
 /**
  * Enter `cost` nesting levels (default 1). Throws `RangeError` past {@link MAX_NESTING_DEPTH}.
@@ -107,26 +111,40 @@ export function getNestingDepth(): number {
 }
 
 /**
- * Run `fn` under a fresh visited-node budget of {@link MAX_VISITED_NODES}.
- * Re-entrant calls share the outer budget. Exceeding it throws
- * `RangeError('input exceeds 1000000 nodes')`.
+ * Run `fn` under a fresh expanded-container set and a revisit budget of {@link MAX_SHARED_REVISITS}.
+ * Re-entrant calls share the outer set and budget. Exceeding the budget throws
+ * `RangeError('input repeats shared objects more than 10000 times')`.
  */
-export function guardVisitBudget<T>(fn: () => T): T {
-  if (visitGuardDepth === 0) visitCount = 0
-  visitGuardDepth++
+export function guardSharedRevisits<T>(fn: () => T): T {
+  if (revisitGuardDepth === 0) {
+    revisitCount = 0
+    expanded = new WeakSet<object>()
+  }
+  revisitGuardDepth++
   try {
     return fn()
   } finally {
-    visitGuardDepth--
-    if (visitGuardDepth === 0) visitCount = 0
+    revisitGuardDepth--
+    if (revisitGuardDepth === 0) {
+      revisitCount = 0
+      expanded = new WeakSet<object>()
+    }
   }
 }
 
-/** Count one visited node against the active {@link guardVisitBudget} (no-op outside a guard). */
-export function visitNode(): void {
-  if (visitGuardDepth === 0) return
-  visitCount++
-  if (visitCount > MAX_VISITED_NODES) {
-    throw new RangeError(VISIT_ERROR)
+/**
+ * Record that container `obj` is being expanded under the active {@link guardSharedRevisits}
+ * (no-op outside a guard). The first expansion is free; each later expansion of the same object
+ * counts against {@link MAX_SHARED_REVISITS}.
+ */
+export function noteExpanded(obj: object): void {
+  if (revisitGuardDepth === 0) return
+  if (!expanded.has(obj)) {
+    expanded.add(obj)
+    return
+  }
+  revisitCount++
+  if (revisitCount > MAX_SHARED_REVISITS) {
+    throw new RangeError(REVISIT_ERROR)
   }
 }

@@ -12,8 +12,8 @@ import {
   enterNesting,
   exitNesting,
   guardNesting,
-  guardVisitBudget,
-  visitNode
+  guardSharedRevisits,
+  noteExpanded
 } from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
 import { enumerate } from '../itertools/index.js'
@@ -224,7 +224,7 @@ export function matches(shape: unknown): (obj: unknown) => boolean {
     return () => false
   }
   return function (obj) {
-    return guardVisitBudget(() => guardNesting(() => matchDeep(shape, obj, true, 1)))
+    return guardSharedRevisits(() => guardNesting(() => matchDeep(shape, obj, true, 1)))
   }
 }
 
@@ -232,7 +232,7 @@ function matchDeep(shape: unknown, obj: unknown, top: boolean, depth: number): b
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
   enterNesting()
   try {
-    visitNode()
+    noteExpanded(shape)
     assertNestingDepth(depth)
     if (Array.isArray(shape)) {
       if (shape.length === 0) return top || Array.isArray(obj)
@@ -411,7 +411,7 @@ flatten({
 export function flatten<T>(arr: T[], depth?: boolean | number): T[]
 export function flatten(arr: object, depth?: boolean | number): object
 export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] | object {
-  return guardVisitBudget(() =>
+  return guardSharedRevisits(() =>
     guardNesting(() => {
       if (Array.isArray(arr)) {
         const items = arr as T[]
@@ -427,6 +427,7 @@ export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] 
 
 function flattenArray<T>(arr: T[], depth: number): T[] {
   assertNestingDepth(1)
+  noteExpanded(arr)
   const result: T[] = []
   const stack: { items: T[]; depthLeft: number; nesting: number; index: number }[] = [
     { items: arr, depthLeft: depth, nesting: 1, index: 0 }
@@ -445,6 +446,7 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
     const value = frame.items[i]
     if (frame.depthLeft > 0 && Array.isArray(value)) {
       assertNestingDepth(frame.nesting + 1)
+      noteExpanded(value)
       stack.push({
         items: value as T[],
         depthLeft: frame.depthLeft - 1,
@@ -481,13 +483,13 @@ function flattenObj(
   if (typeof obj === 'object' && obj !== null) {
     enterNesting()
     try {
-      visitNode()
       assertNestingDepth(nesting)
       if (seen.has(obj)) throw new ValueError('cyclic structure')
       if (!isPlainObject(obj) && !Array.isArray(obj)) {
         if (prefix) setFlatKey(result, prefix, obj)
         return result
       }
+      noteExpanded(obj)
       seen.add(obj)
       for (const i of Object.keys(obj)) {
         assertFlattenableKey(i)

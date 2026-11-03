@@ -28,25 +28,56 @@ describe('shared-reference DAG budgets', () => {
     const t0 = performance.now()
     const key = canonicalKey(a)
     expect(performance.now() - t0).toBeLessThan(50)
-    // Tree expansion exceeds 64 KB -> no key (preserves key/deepEqual agreement).
+    // Tree expansion exceeds 64 KB -> no exact key (pairwise fallback).
     expect(key).toBeUndefined()
   })
 
-  it('flatten of a depth-20 DAG throws the visit budget error', () => {
-    expect(() => flatten(dag(20))).toThrow(RangeError)
-    expect(() => flatten(dag(20))).toThrow(/input exceeds 1000000 nodes/)
+  const REVISIT_MESSAGE = 'input repeats shared objects more than 10000 times'
+
+  describe.each([23, 40])('depth-%i DAG', (depth) => {
+    it('flatten throws the revisit error in < 20 ms', () => {
+      const src = dag(depth)
+      const t0 = performance.now()
+      expect(() => flatten(src)).toThrow(RangeError)
+      expect(() => flatten(src)).toThrow(REVISIT_MESSAGE)
+      expect((performance.now() - t0) / 2).toBeLessThan(20)
+    })
+
+    it('merge throws the revisit error in < 20 ms', () => {
+      const src = dag(depth)
+      const t0 = performance.now()
+      expect(() => merge({}, src)).toThrow(RangeError)
+      expect(() => merge({}, src)).toThrow(REVISIT_MESSAGE)
+      expect((performance.now() - t0) / 2).toBeLessThan(20)
+    })
+
+    it('matches throws the revisit error in < 20 ms', () => {
+      const src = dag(depth)
+      const t0 = performance.now()
+      expect(() => matches(src)(src)).toThrow(RangeError)
+      expect(() => matches(src)(src)).toThrow(REVISIT_MESSAGE)
+      expect((performance.now() - t0) / 2).toBeLessThan(20)
+    })
+
+    it('flatten of a nested-array DAG throws the revisit error in < 20 ms', () => {
+      let x: unknown[] = [1]
+      for (let i = 0; i < depth; i++) x = [x, x]
+      const t0 = performance.now()
+      expect(() => flatten(x, true)).toThrow(REVISIT_MESSAGE)
+      expect(performance.now() - t0).toBeLessThan(20)
+    })
   })
 
-  it('merge of a depth-23 DAG throws the budget error quickly without OOM', () => {
-    const src = dag(23)
-    const t0 = performance.now()
-    expect(() => merge({}, src)).toThrow(/input exceeds 1000000 nodes/)
-    expect(performance.now() - t0).toBeLessThan(500)
+  it('merge of 1.2M distinct empty objects succeeds (first visits are unbounded)', () => {
+    const items = Array.from({ length: 1_200_000 }, () => ({}))
+    const out = merge({}, { a: items }) as { a: unknown[] }
+    expect(out.a).toHaveLength(1_200_000)
   })
 
-  it('matches on a deep DAG hits the visit budget', () => {
-    const a = dag(22)
-    expect(() => matches(a)(a)).toThrow(/input exceeds 1000000 nodes/)
+  it('a failed call does not leak revisit state into the next call', () => {
+    expect(() => merge({}, dag(23))).toThrow(REVISIT_MESSAGE)
+    const shared = {}
+    expect(merge({}, { a: shared, b: shared })).toEqual({ a: {}, b: {} })
   })
 
   it('Duration.round error echo for a depth-22 DAG builds in < 5 ms', () => {
