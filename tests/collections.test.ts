@@ -195,6 +195,23 @@ describe('collections', () => {
     expect(pick({ a: { b: 1, c: 2 } }, ['a.b'])).toEqual({ a: { b: 1 } })
   })
 
+  it('pick copies each intermediate once (20k array paths under 100ms)', () => {
+    const n = 20_000
+    const arr = Array.from({ length: n }, (_, i) => i)
+    const src = { a: arr }
+    const paths = Array.from({ length: n }, (_, i) => `a.${String(i)}`)
+    const small = pick({ a: [1, 2, 3] }, ['a.0', 'a.2']) as { a: unknown[] }
+    expect(small.a[0]).toBe(1)
+    expect(small.a[2]).toBe(3)
+    expect(1 in small.a).toBe(false)
+    const start = performance.now()
+    const out = pick(src, paths) as { a: number[] }
+    expect(performance.now() - start).toBeLessThan(100)
+    expect(out.a.length).toBe(n)
+    expect(out.a[0]).toBe(0)
+    expect(out.a[n - 1]).toBe(n - 1)
+  })
+
   it('pick/omit: literal segment paths, array containers, no omitted getters', () => {
     expect(pick({ 'a.b': 1 }, [['a.b']])).toEqual({ 'a.b': 1 })
     expect(pick({ 'a.b': 1, a: { b: 2 } }, [['a.b']])).toEqual({ 'a.b': 1 })

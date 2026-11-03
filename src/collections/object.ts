@@ -137,9 +137,15 @@ function copyKeptProperty(src: object, dest: object, key: string): void {
 
 /**
  * Assign a picked leaf onto `root`, mirroring the source container kind (array vs plain object)
- * at each intermediate step.
+ * at each intermediate step. Containers already created for this pick are reused (copied once).
  */
-function setPickedPath(root: object, parts: string[], value: unknown, source: object): void {
+function setPickedPath(
+  root: object,
+  parts: string[],
+  value: unknown,
+  source: object,
+  created: WeakSet<object>
+): void {
   let cur: object = root
   let srcCur: unknown = source
   for (let i = 0; i < parts.length - 1; i++) {
@@ -151,6 +157,11 @@ function setPickedPath(root: object, parts: string[], value: unknown, source: ob
       Object.hasOwn(srcCur, p)
         ? (srcCur as Record<string, unknown>)[p]
         : undefined
+    if (next !== undefined && created.has(next as object)) {
+      cur = next as object
+      srcCur = srcNext
+      continue
+    }
     if (next === undefined) {
       next = Array.isArray(srcNext) ? [] : {}
     } else if (Array.isArray(next)) {
@@ -161,6 +172,7 @@ function setPickedPath(root: object, parts: string[], value: unknown, source: ob
       next = Array.isArray(srcNext) ? [] : {}
     }
     defineData(cur, p, next)
+    created.add(next as object)
     cur = next as object
     srcCur = srcNext
   }
@@ -247,11 +259,12 @@ export function pick<T extends object>(
     }
     return result
   }
+  const created = new WeakSet<object>([result])
   for (const path of paths) {
     const parts = normalizePath(path)
     const value = getAtPath(obj, parts)
     if (value === MISSING) continue
-    setPickedPath(result, parts, value, obj)
+    setPickedPath(result, parts, value, obj, created)
   }
   return result
 }
