@@ -333,6 +333,16 @@ describe('collections', () => {
     expect(Object.keys(out)).toHaveLength(10_000)
   })
 
+  it('POL-17 pick ancestor check is linear in total segments', () => {
+    const t0 = performance.now()
+    expect(pick({}, ['.'.repeat(10_000)])).toEqual({})
+    expect(performance.now() - t0).toBeLessThan(20)
+
+    const t1 = performance.now()
+    expect(pick({}, ['a.'.repeat(5000)])).toEqual({})
+    expect(performance.now() - t1).toBeLessThan(20)
+  })
+
   it('pick dedupe key uses JSON parts so NUL keys do not collide with dotted paths', () => {
     expect(pick({ a: { b: 2 } }, ['a\u0000b', ['a', 'b']])).toEqual({ a: { b: 2 } })
   })

@@ -318,28 +318,52 @@ export function pick<T extends object>(
   }
   const created = new WeakSet<object>([result])
   const seen = new Set<string>()
-  const pickedObjects = new Set<string>()
+  const pickedTrie: PickPathTrie = {}
   for (const path of paths) {
     const parts = normalizePath(path)
     const key = JSON.stringify(parts)
     if (seen.has(key)) continue
-    if (hasPickedAncestor(parts, pickedObjects)) continue
+    if (hasPickedAncestor(parts, pickedTrie)) continue
     const value = getAtPath(obj, parts)
     if (value === MISSING) continue
     seen.add(key)
     setPickedPath(result, parts, value, obj, created)
     if (value !== null && typeof value === 'object') {
-      pickedObjects.add(key)
+      markPickedObject(parts, pickedTrie)
     }
   }
   return result
 }
 
-function hasPickedAncestor(parts: string[], pickedObjects: Set<string>): boolean {
-  for (let i = 1; i < parts.length; i++) {
-    if (pickedObjects.has(JSON.stringify(parts.slice(0, i)))) return true
+/** Nested map of picked object paths; ancestor checks walk segment by segment. */
+interface PickPathTrie {
+  kids?: Map<string, PickPathTrie>
+  object?: boolean
+}
+
+function hasPickedAncestor(parts: string[], root: PickPathTrie): boolean {
+  let node = root
+  for (let i = 0; i < parts.length - 1; i++) {
+    const next = node.kids?.get(parts[i])
+    if (!next) return false
+    if (next.object) return true
+    node = next
   }
   return false
+}
+
+function markPickedObject(parts: string[], root: PickPathTrie): void {
+  let node = root
+  for (const part of parts) {
+    node.kids ??= new Map()
+    let next = node.kids.get(part)
+    if (!next) {
+      next = {}
+      node.kids.set(part, next)
+    }
+    node = next
+  }
+  node.object = true
 }
 
 /**
