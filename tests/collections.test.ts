@@ -278,6 +278,26 @@ describe('collections', () => {
     expect(out.a[n - 1]).toBe(n - 1)
   })
 
+  it('pick skips child paths under an already-picked ancestor', () => {
+    const subtree: Record<string, number> = {}
+    for (let i = 0; i < 20_000; i++) subtree[`k${String(i)}`] = i
+    const record = { a: subtree }
+    const paths: string[] = []
+    let bytes = 0
+    for (let i = 0; bytes < 10_000; i++) {
+      paths.push('a', `a.k${String(i)}`)
+      bytes += 3 + 4 + String(i).length
+    }
+    expect(pick({ a: { k0: 1, k1: 2 } }, ['a', 'a.k0', 'a', 'a.k1'])).toEqual({
+      a: { k0: 1, k1: 2 }
+    })
+    const start = performance.now()
+    const out = pick(record, paths) as { a: Record<string, number> }
+    expect(performance.now() - start).toBeLessThan(50)
+    expect(out.a).toEqual(subtree)
+    expect(out.a).not.toBe(subtree)
+  })
+
   it('pick/omit: literal segment paths, array containers, no omitted getters', () => {
     expect(pick({ 'a.b': 1 }, [['a.b']])).toEqual({ 'a.b': 1 })
     expect(pick({ 'a.b': 1, a: { b: 2 } }, [['a.b']])).toEqual({ 'a.b': 1 })

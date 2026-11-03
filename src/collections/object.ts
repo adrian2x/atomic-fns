@@ -178,7 +178,15 @@ function setPickedPath(
     cur = next as object
     srcCur = srcNext
   }
-  defineData(cur, parts[parts.length - 1], value)
+  let leaf = value
+  if (Array.isArray(value)) {
+    leaf = value.slice()
+    created.add(leaf as object)
+  } else if (isPlainObject(value)) {
+    leaf = copyOwnEnumerable(value)
+    created.add(leaf as object)
+  }
+  defineData(cur, parts[parts.length - 1], leaf)
 }
 
 /** Trie of omit paths: O(keys + total path length) walks. */
@@ -285,13 +293,30 @@ export function pick<T extends object>(
     return result
   }
   const created = new WeakSet<object>([result])
+  const seen = new Set<string>()
+  const covered: string[][] = []
   for (const path of paths) {
     const parts = normalizePath(path)
+    const key = parts.join('\0')
+    if (seen.has(key)) continue
+    if (covered.some((prefix) => isStrictPrefix(prefix, parts))) continue
+    seen.add(key)
     const value = getAtPath(obj, parts)
     if (value === MISSING) continue
     setPickedPath(result, parts, value, obj, created)
+    if (value !== null && typeof value === 'object') {
+      covered.push(parts)
+    }
   }
   return result
+}
+
+function isStrictPrefix(prefix: string[], parts: string[]): boolean {
+  if (prefix.length >= parts.length) return false
+  for (let i = 0; i < prefix.length; i++) {
+    if (prefix[i] !== parts[i]) return false
+  }
+  return true
 }
 
 /**
