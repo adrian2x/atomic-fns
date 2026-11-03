@@ -139,6 +139,39 @@ describe('shared-reference DAG budgets', () => {
     expect(out.a).not.toBe(out.b)
   })
 
+  it('R12-F: merge into a mirrored DAG completes in < 20 ms', () => {
+    /** Copy that preserves shared references (unlike merge, which gives each key its own copy). */
+    function copyShared(node: object, map = new WeakMap<object, object>()): object {
+      const hit = map.get(node)
+      if (hit) return hit
+      const out: object = Array.isArray(node) ? [] : {}
+      map.set(node, out)
+      for (const k of Object.keys(node)) {
+        const v = (node as Record<string, unknown>)[k]
+        ;(out as Record<string, unknown>)[k] =
+          v !== null && typeof v === 'object' ? copyShared(v, map) : v
+      }
+      return out
+    }
+    for (const depth of [20, 24, 40]) {
+      const src = dag(depth)
+      const target = copyShared(src)
+      const t0 = performance.now()
+      const out = merge(target, src)
+      expect(performance.now() - t0).toBeLessThan(20)
+      expect(out).toBe(target)
+      expect(deepEqual(out, src)).toBe(true)
+    }
+    let a: unknown[] = [1]
+    for (let i = 0; i < 40; i++) a = [a, a]
+    const msg = { a }
+    const target = copyShared(msg)
+    const t0 = performance.now()
+    merge(target, msg)
+    expect(performance.now() - t0).toBeLessThan(20)
+    expect(deepEqual(target, msg)).toBe(true)
+  })
+
   it('Duration.round error echo for a depth-22 DAG builds in < 5 ms', () => {
     const a = dag(22)
     const t0 = performance.now()

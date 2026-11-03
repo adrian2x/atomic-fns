@@ -64,11 +64,15 @@ function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown 
   return ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function'
 }
 
+/** Pairs (source, target) already merged within one top-level `merge` call. */
+type MergedPairs = WeakMap<object, WeakSet<object>>
+
 function mergeKey(
   t: object,
   key: PropertyKey,
   sv: unknown,
   seen: WeakMap<object, object>,
+  pairs: MergedPairs,
   depth: number
 ): void {
   const tv = Object.hasOwn(t, key) ? (t as Record<PropertyKey, unknown>)[key] : undefined
@@ -95,7 +99,7 @@ function mergeKey(
       seen.set(sv, base)
     }
     try {
-      mergeInto(base, sv, seen, depth)
+      mergeInto(base, sv, seen, pairs, depth)
     } finally {
       // Drop after this key so a sibling key with the same shared source gets its own copy.
       if (!intoExisting) {
@@ -108,9 +112,24 @@ function mergeKey(
   }
 }
 
-function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: number): void {
+function mergeInto(
+  t: object,
+  s: object,
+  seen: WeakMap<object, object>,
+  pairs: MergedPairs,
+  depth: number
+): void {
   enterNesting()
   try {
+    // Already merged this source into this target in this call - nothing changes.
+    let targets = pairs.get(s)
+    if (targets?.has(t)) return
+    if (targets === undefined) {
+      targets = new WeakSet<object>()
+      pairs.set(s, targets)
+    }
+    targets.add(t)
+
     // DAG fan-in: re-expanding a node whose children were already expanded would walk
     // exponentially many paths. Charge those edges heavily so the shared-revisit budget
     // trips before the walk becomes a multi-second DoS; tree-shaped and shallow shared
@@ -128,12 +147,12 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: n
     assertNestingDepth(depth)
     if (t === Object.prototype || t === Function.prototype) return
     for (const key of Object.keys(s)) {
-      mergeKey(t, key, (s as Record<string, unknown>)[key], seen, depth + 1)
+      mergeKey(t, key, (s as Record<string, unknown>)[key], seen, pairs, depth + 1)
     }
     for (const sym of Object.getOwnPropertySymbols(s)) {
       const desc = Object.getOwnPropertyDescriptor(s, sym)
       if (!desc?.enumerable) continue
-      mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, depth + 1)
+      mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, pairs, depth + 1)
     }
   } finally {
     exitNesting()
@@ -146,8 +165,9 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: n
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
  * Nesting deeper than 1000 levels throws `RangeError`. Each key gets its own fresh copy of a
- * shared source (the seen map is path-scoped for cycle protection only). Re-expanding a shared
- * source more than 100000 times throws
+ * shared source (the seen map is path-scoped for cycle protection only). Within one call,
+ * (source, target) pairs already merged are skipped (merging the same source into the same
+ * target again changes nothing). Re-expanding a shared source more than 100000 times throws
  * `RangeError('input repeats shared objects more than 100000 times')`. On either throw,
  * `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
@@ -162,8 +182,9 @@ export function merge<T extends object>(target: T, ...sources: (object | null | 
         throw new TypeError('merge target must be an object')
       }
       const seen = new WeakMap<object, object>()
+      const pairs: MergedPairs = new WeakMap()
       for (const s of sources) {
-        if (s != null) mergeInto(target, s, seen, 1)
+        if (s != null) mergeInto(target, s, seen, pairs, 1)
       }
       return target
     })
