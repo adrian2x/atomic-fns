@@ -4,6 +4,8 @@
  * @module decimal
  */
 
+import { protocol } from '../operators/protocol.js'
+
 const NUMBER_REGEX = /^(-?)([0-9]+)(\.([0-9]+))?$/
 
 /**
@@ -11,6 +13,41 @@ const NUMBER_REGEX = /^(-?)([0-9]+)(\.([0-9]+))?$/
  */
 export function decimal(x): Decimal {
   return new Decimal(x)
+}
+
+function normalizeIE(i: bigint, e: number): { i: bigint; e: number } {
+  if (i === 0n) return { i: 0n, e: 0 }
+  while (i % 10n === 0n) {
+    i /= 10n
+    e++
+  }
+  return { i, e }
+}
+
+/** Exact binary value of a finite number as decimal `(i, e)`. */
+function toExact(n: number): { i: bigint; e: number } {
+  const dv = new DataView(new ArrayBuffer(8))
+  dv.setFloat64(0, n)
+  const bits = dv.getBigUint64(0)
+  const exp = Number((bits >> 52n) & 0x7ffn)
+  const frac = bits & ((1n << 52n) - 1n)
+  const m = exp === 0 ? frac : frac | (1n << 52n)
+  const k = (exp === 0 ? 1 : exp) - 1075
+  const sign = bits >> 63n ? -1n : 1n
+  if (k >= 0) {
+    return normalizeIE(sign * m * 2n ** BigInt(k), 0)
+  }
+  return normalizeIE(sign * m * 5n ** BigInt(-k), k)
+}
+
+function compareIE(ai: bigint, ae: number, bi: bigint, be: number): -1 | 0 | 1 {
+  if (ae === be) return ai < bi ? -1 : ai > bi ? 1 : 0
+  if (ae > be) {
+    const scaled = ai * 10n ** BigInt(ae - be)
+    return scaled < bi ? -1 : scaled > bi ? 1 : 0
+  }
+  const scaled = bi * 10n ** BigInt(be - ae)
+  return ai < scaled ? -1 : ai > scaled ? 1 : 0
 }
 
 /**
@@ -338,12 +375,32 @@ a.div(b)  // 0.333333333333333333333333333333
     Decimal.PRECISION = value
   }
 
+  /** Exact-binary / Decimal / bigint compare used by the symbol protocol (F9b). */
+  protocolCompare(o: unknown): number | undefined {
+    if (o instanceof Decimal) return compareIE(this.i, this.e, o.i, o.e)
+    if (typeof o === 'bigint') return compareIE(this.i, this.e, o, 0)
+    if (typeof o === 'number') {
+      if (Number.isNaN(o)) return undefined
+      if (o === Infinity) return -1
+      if (o === -Infinity) return 1
+      if (!Number.isFinite(o)) return undefined
+      const exact = toExact(o)
+      return compareIE(this.i, this.e, exact.i, exact.e)
+    }
+    return undefined
+  }
+
+  protocolEquals(o: unknown): boolean {
+    return this.protocolCompare(o) === 0
+  }
+
   /**
    * Returns `true` if this value is equal to the value of `x`, otherwise `false`.
    * @param {*} x other
    * @returns {boolean}
    */
   eq(x: any): boolean {
+    if (typeof x === 'number') return this.protocolEquals(x)
     const other = decimal(x)
     return this.i === other.i && this.e === other.e
   }
@@ -354,6 +411,11 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {boolean}
    */
   lt(x): boolean {
+    if (typeof x === 'number') {
+      const r = this.protocolCompare(x)
+      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
+      return r < 0
+    }
     const other = decimal(x)
     if (this.e === other.e) return this.i < other.i
     const e = this.e - other.e
@@ -372,6 +434,11 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {number}
    */
   compare(x): 0 | 1 | -1 {
+    if (typeof x === 'number') {
+      const r = this.protocolCompare(x)
+      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
+      return r < 0 ? -1 : r > 0 ? 1 : 0
+    }
     if (this.eq(x)) return 0
     if (this.lt(x)) return -1
     return 1
@@ -383,6 +450,11 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {boolean}
    */
   gt(x): boolean {
+    if (typeof x === 'number') {
+      const r = this.protocolCompare(x)
+      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
+      return r > 0
+    }
     return this.compare(x) > 0
   }
 
@@ -392,6 +464,11 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {boolean}
    */
   lte(x): boolean {
+    if (typeof x === 'number') {
+      const r = this.protocolCompare(x)
+      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
+      return r <= 0
+    }
     return this.compare(x) <= 0
   }
 
@@ -401,9 +478,34 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {boolean}
    */
   gte(x): boolean {
+    if (typeof x === 'number') {
+      const r = this.protocolCompare(x)
+      if (r === undefined) throw new TypeError('cannot compare Decimal with NaN')
+      return r >= 0
+    }
     return this.compare(x) >= 0
   }
 }
+
+Object.defineProperty(Decimal.prototype, protocol.rank, {
+  get: () => 1,
+  enumerable: false,
+  configurable: true
+})
+Object.defineProperty(Decimal.prototype, protocol.compare, {
+  value: function (this: Decimal, o: unknown) {
+    return this.protocolCompare(o)
+  },
+  enumerable: false,
+  configurable: true
+})
+Object.defineProperty(Decimal.prototype, protocol.equals, {
+  value: function (this: Decimal, o: unknown) {
+    return this.protocolEquals(o)
+  },
+  enumerable: false,
+  configurable: true
+})
 
 /** Returns a BigInt that is equal to `i` times `10^e` */
 function exp(i: bigint, e: number): bigint {

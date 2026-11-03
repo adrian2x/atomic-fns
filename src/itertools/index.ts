@@ -5,8 +5,8 @@
  */
 
 import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js'
-import { add, bool, compare, eq, id, type Comparer } from '../operators/index.js'
-import type { Function, Iteratee, Predicate } from '../types.js'
+import { add, bool, compare, eq, identity, type Comparer } from '../operators/index.js'
+import type { AnyFunction, Iteratee, Predicate } from '../types.js'
 
 /**
  * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
@@ -231,7 +231,7 @@ export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>) {
   }
 }
 
-export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = id) {
+export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = identity) {
   return iflatten<T>(imap(iterable, mapFn))
 }
 
@@ -371,21 +371,21 @@ const compKey = (compare: Comparer, key) => (x, y) => compare(key(x), key(y))
  *
  *
  * @param {(Array | Object)} args
- * @param {(boolean | Function)} [key]
+ * @param {(boolean | AnyFunction)} [key]
  * @param {(boolean | Comparer)} [reverse]
  * @param {Comparer} [compareFn]
  * @return
  */
 export function sorted<T>(args: T[]): T[]
 export function sorted<T>(args: T[], reverse: boolean): T[]
-export function sorted<T>(args: T[], reverse: boolean, comp: Comparer): T[]
-export function sorted<T>(args: T[], key: Function): T[]
-export function sorted<T>(args: T[], key: Function, reverse: boolean): T[]
+export function sorted<T>(args: T[], reverse: boolean, comp: Comparer<T>): T[]
+export function sorted<T>(args: T[], key: AnyFunction): T[]
+export function sorted<T>(args: T[], key: AnyFunction, reverse: boolean): T[]
 export function sorted<T>(
   args: T[] | Object,
-  key?: boolean | Function,
-  reverse?: boolean | Comparer,
-  compareFn?: Comparer
+  key?: boolean | AnyFunction,
+  reverse?: boolean | Comparer<T>,
+  compareFn?: Comparer<T>
 ): T[] {
   if (isObject(args)) {
     args = Object.keys(args) as T[]
@@ -397,10 +397,10 @@ export function sorted<T>(
     } else {
       reverse = true
     }
-    key = id
+    key = identity
   }
   const copy = Array.from(args as T[])
-  const _compare = compKey(compareFn || compare, key || id)
+  const _compare = compKey(compareFn || compare, key || identity)
   copy.sort(_compare)
   if (reverse) copy.reverse()
   return copy

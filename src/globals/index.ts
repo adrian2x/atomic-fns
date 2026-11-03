@@ -4,10 +4,16 @@
  * @module globals
  */
 
-/**
- * A generic function type with arbitrary arguments and return.
- */
-export type Function<TReturn = any> = (...args: any) => TReturn
+export type { AnyFunction } from '../types.js'
+export {
+  CustomError,
+  IndexError,
+  IOError,
+  KeyError,
+  NotImplementedError,
+  ValueError,
+  ZeroDivisionError
+} from './errors.js'
 
 /** This is just a noop function. */
 export function noop() {}
@@ -17,65 +23,6 @@ export const True = () => true
 
 /** A function that always returns `false`. */
 export const False = () => false
-
-/**
- * A custom error class that inherits from the Error object.
- * @class CustomError
- * @extends {Error}
- */
-export class CustomError extends Error {
-  /**
-   * Returns a new CustomError with the specified message.
-   * @param {string} message
-   * @constructor
-   */
-  constructor(message?: string) {
-    super(message)
-    this.name = this.constructor.name
-    if (typeof Error.captureStackTrace === 'function') {
-      Error.captureStackTrace(this, this.constructor)
-    } else {
-      this.stack = new Error(message).stack
-    }
-  }
-}
-
-/**
- * Custom error to signal an invalid index access.
- * @extends {CustomError}
- */
-export class IndexError extends CustomError {}
-
-/**
- * Raised when a system function returns an I/O failure such as "file not found"
- * or "disk full".
- * @extends {CustomError}
- */
-export class IOError extends CustomError {}
-
-/**
- * Custom error to signal an invalid key access.
- * @extends {CustomError}
- */
-export class KeyError extends CustomError {}
-
-/**
- * Custom error to signal an invalid operation.
- * @extends {CustomError}
- */
-export class NotImplementedError extends CustomError {}
-
-/**
- * Custom error to signal an invalid value.
- * @extends {CustomError}
- */
-export class ValueError extends CustomError {}
-
-/**
- * Raised when the second argument of a division or modulo operation is zero.
- * @extends {CustomError}
- */
-export class ZeroDivisionError extends CustomError {}
 
 /**
  * Returns the true type of any value with correct detection for `null`, `Array`,
@@ -193,8 +140,8 @@ export function isPromise(x): x is Promise<any> {
 }
 
 /** Check if value is a function type. */
-export function isFunction(x): x is Function {
-  return x?.constructor === Function
+export function isFunction(x): x is import('../types.js').AnyFunction {
+  return typeof x === 'function'
 }
 
 /** Check if value is an async function type. */

@@ -119,7 +119,7 @@ export class Heap<T> extends Collection {
   }
 }
 
-function heapifyDown(heap, i: number, halfLength: number, compareFn = compare) {
+function heapifyDown(heap, i: number, halfLength: number, compareFn: Comparer = compare) {
   const item = heap[i]
   while (i < halfLength) {
     let left = (i << 1) | 1

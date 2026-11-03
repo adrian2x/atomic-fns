@@ -17,14 +17,6 @@ export interface Equals {
 }
 
 /**
- * Implements an iterable that allows comparing two elements to determine ordering.
- * @interface Ordered
- */
-export interface Comparable {
-  compare: (other) => number
-}
-
-/**
  * Implements an iterable that allows sorting elements.
  * @interface Ordered
  */
