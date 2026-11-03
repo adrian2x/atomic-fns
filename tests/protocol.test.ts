@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { BTree } from '../src/collections/BTree.js'
 import { FrozenSet } from '../src/collections/frozenset.js'
 import { Heap } from '../src/collections/Heap.js'
 import { LRUCache } from '../src/collections/LRUCache.js'
@@ -58,6 +59,11 @@ const migrated: Migrated[] = [
   {
     name: 'SplayTree',
     create: () => new SplayTree<number, string>().set(1, 'a').set(2, 'b'),
+    sample: 1
+  },
+  {
+    name: 'BTree',
+    create: () => new BTree<number, string>().set(1, 'a').set(2, 'b'),
     sample: 1
   }
 ]

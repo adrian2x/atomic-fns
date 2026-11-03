@@ -73,7 +73,7 @@ export class SortedTree<K, V> extends LegacyMapping<K, V> {
    * @returns {boolean} `true` if key was removed, otherwise `false`.
    */
   delete(key: K): boolean {
-    return this.store.remove(key)
+    return this.store.delete(key)
   }
 
   /**
@@ -94,10 +94,10 @@ export class SortedTree<K, V> extends LegacyMapping<K, V> {
 
   /**
    * Returns a new iterator of `[K, V]` pairs in reverse order of keys.
-   * @returns {IterableIterator<[K, V]>}
+   * @returns {IteratorObject<[K, V]>}
    */
-  reversed(): IterableIterator<[K, V]> {
-    return this.store.reversed()
+  reversed(): IteratorObject<[K, V]> {
+    return this.store.entriesReversed()
   }
 
   /**
@@ -113,7 +113,7 @@ export class SortedTree<K, V> extends LegacyMapping<K, V> {
    * @returns {boolean} `true` if is empty.
    */
   empty(): boolean {
-    return this.store.empty()
+    return this.store.size === 0
   }
 
   /**
@@ -122,7 +122,7 @@ export class SortedTree<K, V> extends LegacyMapping<K, V> {
    * @returns {boolean} `true` if key is found, otherwise `false`.
    */
   contains(key: K): boolean {
-    return this.store.contains(key)
+    return this.store.has(key)
   }
 
   /**
@@ -131,30 +131,30 @@ export class SortedTree<K, V> extends LegacyMapping<K, V> {
    * @returns {boolean} `true` if key is found, otherwise `false`.
    */
   has(key: K): boolean {
-    return this.store.contains(key)
+    return this.store.has(key)
   }
 
   /**
    * Returns a new iterator of all **ordered** keys in the tree.
-   * @returns {IterableIterator<K>}
+   * @returns {IteratorObject<K>}
    */
-  keys(): IterableIterator<K> {
+  keys(): IteratorObject<K> {
     return this.store.keys()
   }
 
   /**
    * Returns a new iterator of all values **ordered** by their keys.
-   * @returns {IterableIterator<V>}
+   * @returns {IteratorObject<V>}
    */
-  values(): IterableIterator<V> {
+  values(): IteratorObject<V> {
     return this.store.values()
   }
 
   /**
    * Returns a new iterator of all key value pairs **ordered** by their keys.
-   * @returns {IterableIterator<[K, V]>}
+   * @returns {IteratorObject<[K, V]>}
    */
-  entries(): IterableIterator<[K, V]> {
+  entries(): IteratorObject<[K, V]> {
     return this.store.entries()
   }
 }
