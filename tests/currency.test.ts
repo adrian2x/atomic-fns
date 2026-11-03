@@ -25,6 +25,21 @@ describe('SPEC-R71 Currency', () => {
     expect(new Currency('12345678901234567.89', 'USD', 'en-US').toString()).toBe(
       '$12,345,678,901,234,567.89'
     )
+    expect(new Currency('123456789012345678901234567890.25', 'USD', 'en-US').toString()).toBe(
+      '$123,456,789,012,345,678,901,234,567,890.25'
+    )
+  })
+
+  it('rejects amounts outside the Intl formattable range', () => {
+    const huge = new Currency('1e309', 'USD', 'en-US')
+    expect(huge.toJSON()).toMatch(/^1(?:0{309}|e\+?309)$/i)
+    expect(() => huge.toString()).toThrow(RangeError)
+    expect(() => huge.format()).toThrow('amount is outside the formattable range')
+    const neg = new Currency('-1e400', 'USD', 'en-US')
+    expect(neg.toJSON().startsWith('-')).toBe(true)
+    expect(neg.toJSON().length).toBeGreaterThan(100)
+    expect(() => neg.toString()).toThrow(RangeError)
+    expect(() => neg.format()).toThrow(RangeError)
   })
 
   it('SPEC-R71 opts are not mutated', () => {

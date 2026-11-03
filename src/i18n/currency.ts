@@ -10,6 +10,12 @@ function formatExact(fmt: Intl.NumberFormat, decimalStr: string): string {
   return (fmt.format as (value: string) => string)(decimalStr)
 }
 
+function assertFormattable(amount: Decimal): void {
+  if (amount.abs().gt(Number.MAX_VALUE)) {
+    throw new RangeError('amount is outside the formattable range')
+  }
+}
+
 /**
  * Currency represents a local currency amount formatted with `Intl.NumberFormat`.
  */
@@ -82,8 +88,10 @@ export class Currency extends Decimal {
 
   /**
    * Formats the exact decimal string with the instance NumberFormat.
+   * @throws {RangeError} when `|amount| > Number.MAX_VALUE`.
    */
   override toString(): string {
+    assertFormattable(this)
     return formatExact(this.#numberFormat, super.toString())
   }
 
@@ -100,8 +108,10 @@ export class Currency extends Decimal {
    * Formats with optional overrides.
    * @param opts NumberFormat options (not mutated).
    * @param locale Override locale.
+   * @throws {RangeError} when `|amount| > Number.MAX_VALUE`.
    */
   format(opts: Intl.NumberFormatOptions = {}, locale?: string): string {
+    assertFormattable(this)
     const options: Intl.NumberFormatOptions = { ...this.#options, ...opts }
     return formatExact(new Intl.NumberFormat(locale ?? this.locale, options), super.toString())
   }
