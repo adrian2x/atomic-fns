@@ -34,9 +34,9 @@ function sameItems<C extends object & { readonly size: number }>(
   const other = b as C
   if (a.size !== other.size) return false
   if (beginCompare(a, other)) return true
+  const ia = items(a)
+  const ib = items(other)
   try {
-    const ia = items(a)
-    const ib = items(other)
     for (;;) {
       const x = ia.next()
       const y = ib.next()
@@ -44,6 +44,8 @@ function sameItems<C extends object & { readonly size: number }>(
       if (!deepEqual(x.value, y.value)) return false
     }
   } finally {
+    ia.return?.()
+    ib.return?.()
     endCompare(a, other)
   }
 }
@@ -118,9 +120,9 @@ export function sameEntrySequence<C extends object & { readonly size: number }>(
   const other = b as C
   if (a.size !== other.size) return false
   if (beginCompare(a, other)) return true
+  const ia = entries(a)
+  const ib = entries(other)
   try {
-    const ia = entries(a)
-    const ib = entries(other)
     for (;;) {
       const x = ia.next()
       const y = ib.next()
@@ -130,6 +132,8 @@ export function sameEntrySequence<C extends object & { readonly size: number }>(
       if (!deepEqual(kx, ky) || !deepEqual(vx, vy)) return false
     }
   } finally {
+    ia.return?.()
+    ib.return?.()
     endCompare(a, other)
   }
 }

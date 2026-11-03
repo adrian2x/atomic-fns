@@ -222,4 +222,44 @@ describe('SplayTree', () => {
     }
     expect(keys).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
   })
+
+  it('C4-2 abandoned iterator does not disable splaying; deepEqual closes iterators', async () => {
+    const { deepEqual } = await import('../src/operators/index.js')
+    let compares = 0
+    const cmp = (x: number, y: number) => {
+      compares++
+      return x - y
+    }
+    const mk = () => {
+      const t = new SplayTree<number, number>(cmp, 1)
+      for (let i = 1; i <= 64; i++) t.set(i, i)
+      return t
+    }
+    const a = mk()
+    const b = mk()
+    b.set(65, 65)
+    expect(deepEqual(a, b)).toBe(false)
+    // After unequal deepEqual, splaying still runs: get(1) stays near-root (few compares).
+    compares = 0
+    a.get(1)
+    compares = 0
+    a.get(1)
+    expect(compares).toBeLessThan(8)
+
+    const t = mk()
+    t.keys().next()
+    compares = 0
+    t.get(1)
+    compares = 0
+    t.get(1)
+    expect(compares).toBeLessThan(8)
+
+    const live = mk()
+    const seen: number[] = []
+    for (const k of live.keys()) {
+      seen.push(k)
+      live.get(32)
+    }
+    expect(seen).toEqual(Array.from({ length: 64 }, (_, i) => i + 1))
+  })
 })

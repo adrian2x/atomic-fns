@@ -20,9 +20,8 @@ class Node<K, V> {
  * accessed elements are quick to access again. Insertion, look-up and removal in O(log n)
  * amortized time.
  *
- * Reads (`get`, `has`, `min`, `max`, `lower`, `higher`) do not restructure the tree while any
- * iterator is open. An iterator abandoned without `return()` leaves splaying disabled for that
- * tree (performance only). `delete`/`set`/`splay` during an open iterator invalidate it.
+ * Iterators capture a structural version; splaying bumps it. A stale iterator re-seeks from its
+ * last yielded key, so an abandoned iterator can never disable splaying.
  *
  * @see {@link https://en.wikipedia.org/wiki/Splay_tree Splay tree}
  * @see {@link https://web.archive.org/web/20220930173835/http://www14.in.tum.de/personen/albers/papers/ipl02.pdf Randomized Splay Trees}
@@ -33,11 +32,11 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
   readonly #cmp: Comparer<K>
   readonly #p: number
   #size = 0
-  #active = 0
+  #version = 0
 
   /**
    * @param compareFn Key comparator. Defaults to {@link compare}.
-   * @param p Probability of splaying on a read when no iterator is open. Must be in `[0, 1]`.
+   * @param p Probability of splaying on a read. Must be in `[0, 1]`.
    * @throws {RangeError} when `p` is outside `[0, 1]`.
    */
   constructor(compareFn?: Comparer<K>, p = 0.5) {
@@ -87,7 +86,7 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
 
   get(key: K): V | undefined {
     if (!this.#root) return undefined
-    if (this.#active === 0 && Math.random() < this.#p) {
+    if (Math.random() < this.#p) {
       this.splay(key)
       return this.#cmp(key, this.#root.key) === 0 ? this.#root.value : undefined
     }
@@ -96,7 +95,7 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
 
   has(key: K): boolean {
     if (!this.#root) return false
-    if (this.#active === 0 && Math.random() < this.#p) {
+    if (Math.random() < this.#p) {
       this.splay(key)
       return this.#cmp(key, this.#root.key) === 0
     }
@@ -149,29 +148,30 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
   clear(): void {
     this.#root = undefined
     this.#size = 0
+    this.#version++
   }
 
   /**
-   * Minimum key. Splays the found node when no iterator is open.
+   * Minimum key. Splays the found node.
    */
   min(): K | undefined {
     if (!this.#root) return undefined
     let n = this.#root
     while (n.left) n = n.left
     const key = n.key
-    if (this.#active === 0) this.splay(key)
+    this.splay(key)
     return key
   }
 
   /**
-   * Maximum key. Splays the found node when no iterator is open.
+   * Maximum key. Splays the found node.
    */
   max(): K | undefined {
     if (!this.#root) return undefined
     let n = this.#root
     while (n.right) n = n.right
     const key = n.key
-    if (this.#active === 0) this.splay(key)
+    this.splay(key)
     return key
   }
 
@@ -180,19 +180,6 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
    */
   lower(key: K): K | undefined {
     if (!this.#root) return undefined
-    if (this.#active > 0) {
-      let best: K | undefined
-      let n: Node<K, V> | undefined = this.#root
-      while (n) {
-        if (this.#cmp(n.key, key) < 0) {
-          best = n.key
-          n = n.right
-        } else {
-          n = n.left
-        }
-      }
-      return best
-    }
     this.splay(key)
     if (this.#cmp(this.#root.key, key) < 0) return this.#root.key
     let n = this.#root.left
@@ -206,19 +193,6 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
    */
   higher(key: K): K | undefined {
     if (!this.#root) return undefined
-    if (this.#active > 0) {
-      let best: K | undefined
-      let n: Node<K, V> | undefined = this.#root
-      while (n) {
-        if (this.#cmp(n.key, key) > 0) {
-          best = n.key
-          n = n.left
-        } else {
-          n = n.right
-        }
-      }
-      return best
-    }
     this.splay(key)
     if (this.#cmp(this.#root.key, key) > 0) return this.#root.key
     let n = this.#root.right
@@ -228,7 +202,8 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
   }
 
   /**
-   * Top-down splay of `key` (Sleator and Tarjan).
+   * Top-down splay of `key` (Sleator and Tarjan). Bumps the structural version so open
+   * iterators re-seek from their last key.
    * @see {@link https://doi.org/10.1145%2F3828.3835 Self-Adjusting Binary Search Trees}
    */
   splay(key: K): void {
@@ -276,6 +251,7 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     root.left = stub.right
     root.right = stub.left
     this.#root = root
+    this.#version++
   }
 
   keys(): IteratorObject<K> {
@@ -291,22 +267,34 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
   }
 
   *#inorder(): Generator<Node<K, V>, void, undefined> {
-    this.#active++
-    try {
-      const stack: Node<K, V>[] = []
-      let n: Node<K, V> | undefined = this.#root
-      while (stack.length > 0 || n) {
-        while (n) {
-          stack.push(n)
-          n = n.left
-        }
-        const current = stack.pop()
-        if (current === undefined) return
-        yield current
-        n = current.right
+    let version = this.#version
+    let lastKey: K | undefined
+    let haveLast = false
+    const stack: Node<K, V>[] = []
+    let n: Node<K, V> | undefined = this.#root
+
+    const resetFromLast = (): void => {
+      stack.length = 0
+      n = this.#root
+      version = this.#version
+    }
+
+    while (stack.length > 0 || n) {
+      if (version !== this.#version) resetFromLast()
+      while (n) {
+        stack.push(n)
+        n = n.left
       }
-    } finally {
-      this.#active--
+      const current = stack.pop()
+      if (current === undefined) return
+      if (haveLast && lastKey !== undefined && this.#cmp(current.key, lastKey) <= 0) {
+        n = current.right
+        continue
+      }
+      yield current
+      lastKey = current.key
+      haveLast = true
+      n = current.right
     }
   }
 
