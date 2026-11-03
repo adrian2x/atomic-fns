@@ -1,11 +1,18 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { protocol, type Comparable, type Equatable } from '../../operators/protocol.js'
-import { Duration, UNITS_PLURAL, type DurationObject, type DurationUnit } from '../duration.js'
+import {
+  Duration,
+  durationField,
+  type DurationField,
+  type DurationObject,
+  type DurationUnit
+} from '../duration.js'
 import { asDate, formatDate, strftime } from '../format.js'
 import { addDuration, lastDayOfMonth, subDuration } from './arith.js'
 import {
   civilFromDayNumber,
   dayNumber,
+  daysInMonthOf,
   ISO_WEEK_RULE,
   localeWeekRule,
   localWallToTime,
@@ -13,7 +20,8 @@ import {
   utcWallToTime,
   weekdayOf,
   weekDateOf,
-  weeksInWeekYear
+  weeksInWeekYear,
+  type WallFields
 } from './calendar.js'
 import {
   asNumber,
@@ -88,6 +96,95 @@ function toDurationObject(duration: number | Duration | DurationObject): Duratio
     seconds: src.seconds,
     milliseconds: src.milliseconds
   }
+}
+
+function compare3(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number]
+): number {
+  if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1
+  if (a[1] !== b[1]) return a[1] < b[1] ? -1 : 1
+  if (a[2] !== b[2]) return a[2] < b[2] ? -1 : 1
+  return 0
+}
+
+function msOfDay(w: WallFields): number {
+  return w.hour * 3_600_000 + w.minute * 60_000 + w.second * 1000 + w.millisecond
+}
+
+function calendarDiff(
+  s: number,
+  e: number,
+  utc: boolean,
+  kind: 'months' | 'days',
+  size: number,
+  exact: boolean
+): number {
+  if (s === e) return 0
+  const sign: 1 | -1 = e > s ? 1 : -1
+  const a = readWall(s, utc)
+  const b = readWall(e, utc)
+  const dnA = dayNumber(a.year, a.month, a.day)
+  let dnB = dayNumber(b.year, b.month, b.day)
+  if (sign * (msOfDay(b) - msOfDay(a)) < 0) dnB -= sign
+  const bd = civilFromDayNumber(dnB)
+
+  let k: number
+  if (kind === 'days') {
+    k = Math.trunc((dnB - dnA) / size)
+  } else {
+    k = Math.trunc(((bd.year - a.year) * 12 + (bd.month - a.month)) / size)
+    const surpasses = (kk: number): boolean => {
+      const idx = a.year * 12 + a.month - 1 + kk * size
+      const y = Math.floor(idx / 12)
+      const m = idx - 12 * y + 1
+      return sign * compare3([y, m, a.day], [bd.year, bd.month, bd.day]) > 0
+    }
+    while (k !== 0 && surpasses(k)) k -= sign
+  }
+
+  if (!exact) return k
+
+  const instantAfter = (j: number): number => {
+    if (kind === 'days') {
+      const civil = civilFromDayNumber(dayNumber(a.year, a.month, a.day) + j * size)
+      const fields: WallFields = {
+        year: civil.year,
+        month: civil.month,
+        day: civil.day,
+        hour: a.hour,
+        minute: a.minute,
+        second: a.second,
+        millisecond: a.millisecond
+      }
+      return utc ? utcWallToTime(fields) : localWallToTime(fields)
+    }
+    const idx = a.year * 12 + (a.month - 1) + j * size
+    const ty = Math.floor(idx / 12)
+    const tm = idx - ty * 12 + 1
+    const td = Math.min(a.day, daysInMonthOf(ty, tm))
+    const fields: WallFields = {
+      year: ty,
+      month: tm,
+      day: td,
+      hour: a.hour,
+      minute: a.minute,
+      second: a.second,
+      millisecond: a.millisecond
+    }
+    return utc ? utcWallToTime(fields) : localWallToTime(fields)
+  }
+
+  let t0 = instantAfter(k)
+  let t1 = instantAfter(k + sign)
+  if (Math.abs(e - t0) >= Math.abs(t1 - t0)) {
+    k += sign
+    t0 = instantAfter(k)
+    t1 = instantAfter(k + sign)
+  }
+  const denom = Math.abs(t1 - t0)
+  if (denom === 0) return k
+  return k + (e - t0) / denom
 }
 
 /**
@@ -553,11 +650,41 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
    */
   diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false): number {
     const dt = new IntlDate(other)
-    const dur = new Duration(this.getTime() - dt.getTime(), exact)
-    // Quarters are a month diff / 3, so 181 days (6 months) is 2 quarters, not 1.
-    let total =
-      UNITS_PLURAL[unit.toLowerCase()] === 'quarters' ? dur.total('months') / 3 : dur.total(unit)
-    if (!exact) total = Math.trunc(total)
+    if (!this.isValid() || !dt.isValid()) return Number.NaN
+    const field = durationField(unit)
+    const s = dt.getTime()
+    const e = this.getTime()
+    let v: number
+    switch (field) {
+      case 'years':
+        v = calendarDiff(s, e, this.utc, 'months', 12, exact)
+        break
+      case 'quarters':
+        v = calendarDiff(s, e, this.utc, 'months', 3, exact)
+        break
+      case 'months':
+        v = calendarDiff(s, e, this.utc, 'months', 1, exact)
+        break
+      case 'weeks':
+        v = calendarDiff(s, e, this.utc, 'days', 7, exact)
+        break
+      case 'days':
+        v = calendarDiff(s, e, this.utc, 'days', 1, exact)
+        break
+      case 'hours':
+        v = (e - s) / 3_600_000
+        break
+      case 'minutes':
+        v = (e - s) / 60_000
+        break
+      case 'seconds':
+        v = (e - s) / 1_000
+        break
+      case 'milliseconds':
+        v = e - s
+        break
+    }
+    const total = exact ? v : Math.trunc(v)
     return total === 0 ? 0 : total
   }
 
@@ -587,8 +714,16 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
     if (!this.isValid()) return this
     const key = unit.toLowerCase()
     const isIsoWeek = key === 'isoweek' || key === 'isoweeks'
-    const normalizedUnit = isIsoWeek ? 'weeks' : UNITS_PLURAL[key]
-    if (!normalizedUnit) throw new ValueError(`Invalid unit ${unit}`)
+    let normalizedUnit: DurationField
+    if (isIsoWeek) {
+      normalizedUnit = 'weeks'
+    } else {
+      try {
+        normalizedUnit = durationField(unit)
+      } catch {
+        throw new ValueError(`Invalid unit ${unit}`)
+      }
+    }
 
     if (normalizedUnit === 'weeks') {
       const w = readWall(this.#date.getTime(), this.utc)
@@ -650,8 +785,16 @@ new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z
     if (!this.isValid()) return this
     const key = unit.toLowerCase()
     const isIsoWeek = key === 'isoweek' || key === 'isoweeks'
-    const normalizedUnit = isIsoWeek ? 'weeks' : UNITS_PLURAL[key]
-    if (!normalizedUnit) throw new ValueError(`Invalid unit ${unit}`)
+    let normalizedUnit: DurationField
+    if (isIsoWeek) {
+      normalizedUnit = 'weeks'
+    } else {
+      try {
+        normalizedUnit = durationField(unit)
+      } catch {
+        throw new ValueError(`Invalid unit ${unit}`)
+      }
+    }
     return this.startOf(unit)
       .add({ [normalizedUnit]: 1 })
       .subtract({ milliseconds: 1 })

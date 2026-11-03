@@ -39,6 +39,18 @@ describe('NFR-4 ReDoS guards', () => {
     expect(performance.now() - t0).toBeLessThan(200)
   })
 
+  it('SPEC-R94 Duration.fromISO ReDoS vectors stay under 50ms', () => {
+    for (const input of [
+      'P' + '1Y'.repeat(5e4),
+      '-P' + '-1.1'.repeat(5e4),
+      'P' + '9'.repeat(5e4) + 'X'
+    ]) {
+      const t0 = performance.now()
+      expect(() => Duration.fromISO(input)).toThrow(ValueError)
+      expect(performance.now() - t0).toBeLessThan(50)
+    }
+  })
+
   it('SPEC-R85 formatDate and strftime scanners stay linear on adversarial patterns', () => {
     const d = new Date(2024, 0, 5)
     for (const run of [
