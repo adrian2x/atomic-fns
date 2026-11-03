@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { clone, flatten, matches, merge } from '../src/collections/index.js'
+import { clone, Deque, flatten, FrozenSet, matches, merge } from '../src/collections/index.js'
+import { getNestingDepth } from '../src/internal/nesting.js'
 import { deepEqual } from '../src/operators/index.js'
 
 function nestArray(depth: number): unknown {
@@ -58,5 +59,24 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
       expect(fn).toThrow(RangeError)
       expect(performance.now() - start).toBeLessThan(50)
     }
+  })
+
+  it('nesting depth survives collection hook re-entry', () => {
+    function nestDeque(depth: number): Deque<unknown> {
+      let d = new Deque<unknown>([0])
+      for (let i = 1; i < depth; i++) d = new Deque<unknown>([d])
+      return d
+    }
+    function nestFrozen(depth: number): FrozenSet {
+      let s: FrozenSet = new FrozenSet([0])
+      for (let i = 1; i < depth; i++) s = new FrozenSet([s])
+      return s
+    }
+    expect(() => deepEqual(nestDeque(1500), nestDeque(1500))).toThrow(RangeError)
+    expect(getNestingDepth()).toBe(0)
+    expect(deepEqual(1, 1)).toBe(true)
+    expect(() => clone(nestFrozen(1500), true)).toThrow(RangeError)
+    expect(getNestingDepth()).toBe(0)
+    expect(deepEqual([1], [1])).toBe(true)
   })
 })

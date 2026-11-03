@@ -2,7 +2,7 @@
  * Object utilities: merge, pick, omit, clone.
  */
 
-import { assertNestingDepth } from '../internal/nesting.js'
+import { assertNestingDepth, withNesting } from '../internal/nesting.js'
 import { hasMethod, protocol } from '../operators/index.js'
 
 /** Define an own enumerable writable configurable data property. */
@@ -60,16 +60,18 @@ function mergeKey(
 }
 
 function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: number): void {
-  assertNestingDepth(depth)
-  if (t === Object.prototype || t === Function.prototype) return
-  for (const key of Object.keys(s)) {
-    mergeKey(t, key, (s as Record<string, unknown>)[key], seen, depth + 1)
-  }
-  for (const sym of Object.getOwnPropertySymbols(s)) {
-    const desc = Object.getOwnPropertyDescriptor(s, sym)
-    if (!desc?.enumerable) continue
-    mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, depth + 1)
-  }
+  withNesting(() => {
+    assertNestingDepth(depth)
+    if (t === Object.prototype || t === Function.prototype) return
+    for (const key of Object.keys(s)) {
+      mergeKey(t, key, (s as Record<string, unknown>)[key], seen, depth + 1)
+    }
+    for (const sym of Object.getOwnPropertySymbols(s)) {
+      const desc = Object.getOwnPropertyDescriptor(s, sym)
+      if (!desc?.enumerable) continue
+      mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, depth + 1)
+    }
+  })
 }
 
 /**
@@ -341,15 +343,14 @@ const BOXED_TAGS = new Set([
  * @param deep Deep clone when true.
  */
 export function clone<T>(value: T, deep = false): T {
-  return cloneInner(value, deep, new WeakMap(), 1) as T
+  return cloneInner(value, deep, new WeakMap()) as T
 }
 
 function copyEnumerableSymbols(
   src: object,
   dest: object,
   deep: boolean,
-  map: WeakMap<object, unknown>,
-  depth: number
+  map: WeakMap<object, unknown>
 ): void {
   for (const sym of Object.getOwnPropertySymbols(src)) {
     const desc = Object.getOwnPropertyDescriptor(src, sym)
@@ -358,7 +359,7 @@ function copyEnumerableSymbols(
       dest,
       sym,
       deep
-        ? cloneInner((src as Record<symbol, unknown>)[sym], true, map, depth + 1)
+        ? cloneInner((src as Record<symbol, unknown>)[sym], true, map)
         : (src as Record<symbol, unknown>)[sym]
     )
   }
@@ -372,17 +373,81 @@ function isNodeBuffer(v: unknown): v is Uint8Array {
   )
 }
 
-function cloneInner(
-  v: unknown,
-  deep: boolean,
-  map: WeakMap<object, unknown>,
-  depth: number
-): unknown {
+function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): unknown {
   if (v === null || typeof v !== 'object') return v
   if (map.has(v)) return map.get(v)
-  if (hasMethod(v, protocol.clone)) return v[protocol.clone](deep)
-  if (deep) assertNestingDepth(depth)
+  if (!deep) {
+    if (hasMethod(v, protocol.clone)) return v[protocol.clone](false)
+    return cloneShallow(v, map)
+  }
+  return withNesting(() => {
+    if (hasMethod(v, protocol.clone)) return v[protocol.clone](true)
+    return cloneDeepBody(v, map)
+  })
+}
 
+function cloneShallow(v: object, map: WeakMap<object, unknown>): unknown {
+  const tag = Object.prototype.toString.call(v)
+  let r: unknown
+
+  if (tag === '[object Date]') {
+    r = new Date((v as Date).getTime())
+  } else if (tag === '[object RegExp]') {
+    const re = v as RegExp
+    r = new RegExp(re.source, re.flags)
+    ;(r as RegExp).lastIndex = re.lastIndex
+  } else if (tag === '[object Map]') {
+    const out = new Map(v as Map<unknown, unknown>)
+    map.set(v, out)
+    return out
+  } else if (tag === '[object Set]') {
+    const out = new Set(v as Set<unknown>)
+    map.set(v, out)
+    return out
+  } else if (tag === '[object ArrayBuffer]') {
+    r = (v as ArrayBuffer).slice(0)
+  } else if (tag === '[object DataView]') {
+    const dv = v as DataView
+    const buf = dv.buffer.slice(0)
+    r = new DataView(buf, dv.byteOffset, dv.byteLength)
+  } else if (isNodeBuffer(v)) {
+    r = Buffer.from(v)
+  } else if (isSliceableView(v)) {
+    r = v.slice()
+  } else if (BOXED_TAGS.has(tag)) {
+    r = Object((v as { valueOf(): unknown }).valueOf())
+  }
+
+  if (r !== undefined) {
+    map.set(v, r)
+    return r
+  }
+
+  if (Array.isArray(v)) {
+    const out = v.slice() as unknown[] & { index?: number; input?: string; groups?: unknown }
+    map.set(v, out)
+    const arr = v as unknown[] & { index?: number; input?: string; groups?: unknown }
+    if ('index' in arr) out.index = arr.index
+    if ('input' in arr) out.input = arr.input
+    if ('groups' in arr) out.groups = arr.groups
+    copyEnumerableSymbols(v, out, false, map)
+    return out
+  }
+
+  if (isPlainObject(v)) {
+    const out = Object.create(Object.getPrototypeOf(v) as object | null) as Record<string, unknown>
+    map.set(v, out)
+    for (const k of Object.keys(v)) {
+      defineData(out, k, v[k])
+    }
+    copyEnumerableSymbols(v, out, false, map)
+    return out
+  }
+
+  return v
+}
+
+function cloneDeepBody(v: object, map: WeakMap<object, unknown>): unknown {
   const tag = Object.prototype.toString.call(v)
   let r: unknown
 
@@ -397,14 +462,14 @@ function cloneInner(
     map.set(v, out)
     for (const [k, x] of v as Map<unknown, unknown>) {
       // Deep clone keeps Map key identity (Lodash); values are deep-cloned.
-      out.set(k, deep ? cloneInner(x, true, map, depth + 1) : x)
+      out.set(k, cloneInner(x, true, map))
     }
     return out
   } else if (tag === '[object Set]') {
     const out = new Set()
     map.set(v, out)
     for (const x of v as Set<unknown>) {
-      out.add(deep ? cloneInner(x, true, map, depth + 1) : x)
+      out.add(cloneInner(x, true, map))
     }
     return out
   } else if (tag === '[object ArrayBuffer]') {
@@ -430,17 +495,15 @@ function cloneInner(
     const out: unknown[] = new Array(v.length)
     map.set(v, out)
     for (let i = 0; i < v.length; i++) {
-      if (i in v) out[i] = deep ? cloneInner(v[i], true, map, depth + 1) : v[i]
+      if (i in v) out[i] = cloneInner(v[i], true, map)
     }
     const arr = v as unknown[] & { index?: number; input?: string; groups?: unknown }
     if ('index' in arr) (out as { index?: number }).index = arr.index
     if ('input' in arr) (out as { input?: string }).input = arr.input
     if ('groups' in arr) {
-      ;(out as { groups?: unknown }).groups = deep
-        ? cloneInner(arr.groups, true, map, depth + 1)
-        : arr.groups
+      ;(out as { groups?: unknown }).groups = cloneInner(arr.groups, true, map)
     }
-    copyEnumerableSymbols(v, out, deep, map, depth)
+    copyEnumerableSymbols(v, out, true, map)
     return out
   }
 
@@ -448,9 +511,9 @@ function cloneInner(
     const out = Object.create(Object.getPrototypeOf(v) as object | null) as Record<string, unknown>
     map.set(v, out)
     for (const k of Object.keys(v)) {
-      defineData(out, k, deep ? cloneInner(v[k], true, map, depth + 1) : v[k])
+      defineData(out, k, cloneInner(v[k], true, map))
     }
-    copyEnumerableSymbols(v, out, deep, map, depth)
+    copyEnumerableSymbols(v, out, true, map)
     return out
   }
 

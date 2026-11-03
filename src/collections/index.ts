@@ -6,7 +6,7 @@
 
 import { get, isEmpty, isIterable, isObject, keys, ValueError } from '../globals/index.js'
 import { arrayFromIterable } from '../internal/iterable.js'
-import { assertNestingDepth } from '../internal/nesting.js'
+import { assertNestingDepth, withNesting } from '../internal/nesting.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, deepEqual, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
@@ -240,39 +240,41 @@ export function matches(shape: unknown): (obj: unknown) => boolean {
 
 function matchDeep(shape: unknown, obj: unknown, top: boolean, depth: number): boolean {
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
-  assertNestingDepth(depth)
-  if (Array.isArray(shape)) {
-    if (shape.length === 0) return top || Array.isArray(obj)
-    if (!Array.isArray(obj)) return false
-    for (const item of shape) {
-      let found = false
-      for (const candidate of obj) {
-        if (matchDeep(item, candidate, false, depth + 1)) {
-          found = true
-          break
+  return withNesting(() => {
+    assertNestingDepth(depth)
+    if (Array.isArray(shape)) {
+      if (shape.length === 0) return top || Array.isArray(obj)
+      if (!Array.isArray(obj)) return false
+      for (const item of shape) {
+        let found = false
+        for (const candidate of obj) {
+          if (matchDeep(item, candidate, false, depth + 1)) {
+            found = true
+            break
+          }
         }
+        if (!found) return false
       }
-      if (!found) return false
+      return true
     }
-    return true
-  }
-  if (isPlainObject(shape)) {
-    const shapeKeys = Object.keys(shape)
-    if (shapeKeys.length === 0) {
-      return top || (obj !== null && typeof obj === 'object' && !Array.isArray(obj))
-    }
-    if (obj === null || typeof obj !== 'object') return false
-    const record = obj as Record<string, unknown>
-    for (const key of shapeKeys) {
-      const expected = shape[key]
-      if (expected === undefined) {
-        if (!Object.hasOwn(obj, key)) return false
+    if (isPlainObject(shape)) {
+      const shapeKeys = Object.keys(shape)
+      if (shapeKeys.length === 0) {
+        return top || (obj !== null && typeof obj === 'object' && !Array.isArray(obj))
       }
-      if (!matchDeep(expected, record[key], false, depth + 1)) return false
+      if (obj === null || typeof obj !== 'object') return false
+      const record = obj as Record<string, unknown>
+      for (const key of shapeKeys) {
+        const expected = shape[key]
+        if (expected === undefined) {
+          if (!Object.hasOwn(obj, key)) return false
+        }
+        if (!matchDeep(expected, record[key], false, depth + 1)) return false
+      }
+      return true
     }
-    return true
-  }
-  return deepEqual(shape, obj)
+    return deepEqual(shape, obj)
+  })
 }
 
 /**
