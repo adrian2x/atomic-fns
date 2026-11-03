@@ -736,9 +736,14 @@ export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = 
 
 /**
  * Assigns own enumerable string keyed properties of source objects onto the destination for keys
- * that are missing as own properties or whose own value is `undefined` (fills names like
- * `toString` that are only inherited). Source objects are applied from left to right. Once a
- * property is set, additional values of the same property are ignored.
+ * whose own value is `undefined`, or that are missing as own properties and whose current value
+ * is exactly `Object.prototype[key]` (fills names like `toString` that are only inherited from
+ * Object.prototype). Inherited getters and methods from a class prototype are never overridden.
+ * `__proto__` is never filled on an ordinary target (its value is the prototype, not
+ * `Object.prototype.__proto__`). Writes use plain assignment so inherited setters run, except
+ * `__proto__` which is defined as an own data property (reachable only on null-prototype targets).
+ * Source objects are applied from left to right. Once a property is set, additional values of
+ * the same property are ignored.
  * **Note:** This method mutates `object`.
 
  * @param {Object} object The destination object.
@@ -754,8 +759,17 @@ export function defaults<T extends object>(object: T, ...sources: object[]): T {
   const target = object as Record<string, unknown>
   for (const source of sources) {
     for (const key of Object.keys(source)) {
-      if (!Object.hasOwn(object, key) || target[key] === undefined) {
-        defineData(target, key, (source as Record<string, unknown>)[key])
+      const value = target[key]
+      const fill =
+        value === undefined ||
+        (!Object.hasOwn(object, key) &&
+          value === (Object.prototype as Record<string, unknown>)[key])
+      if (!fill) continue
+      const srcVal = (source as Record<string, unknown>)[key]
+      if (key === '__proto__') {
+        defineData(target, key, srcVal)
+      } else {
+        target[key] = srcVal
       }
     }
   }

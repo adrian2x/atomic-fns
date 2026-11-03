@@ -175,8 +175,16 @@ describe('collections', () => {
     ) as { name?: string; isAdmin?: boolean; role?: string; __proto__?: unknown }
     expect(Object.getPrototypeOf(opts)).toBe(Object.prototype)
     expect(Object.getOwnPropertyDescriptor(Object.prototype, 'isAdmin')).toBeUndefined()
-    expect(Object.hasOwn(opts, '__proto__')).toBe(true)
+    expect(Object.hasOwn(opts, '__proto__')).toBe(false)
     expect(opts.name).toBe('eve')
+
+    const nullProto = defaults(
+      Object.create(null) as object,
+      JSON.parse('{"__proto__":{"isAdmin":true}}') as object
+    ) as Record<string, unknown>
+    expect(Object.getPrototypeOf(nullProto)).toBe(null)
+    expect(Object.hasOwn(nullProto, '__proto__')).toBe(true)
+    expect(Object.getOwnPropertyDescriptor(Object.prototype, 'isAdmin')).toBeUndefined()
 
     class Config {
       readonly secure = true
@@ -189,6 +197,46 @@ describe('collections', () => {
     expect(Object.getPrototypeOf(cfg)).toBe(Config.prototype)
     expect(cfg.secure).toBe(true)
     expect(typeof cfg.check).toBe('function')
+  })
+
+  it('defaults fills only undefined or Object.prototype-inherited keys; setters run', () => {
+    class Gate {
+      greet() {
+        return 'hi'
+      }
+      toString() {
+        return 'Gate'
+      }
+    }
+    Object.defineProperty(Gate.prototype, 'isAdmin', {
+      get() {
+        return false
+      },
+      configurable: true
+    })
+    const g = defaults(new Gate(), { isAdmin: true, greet: 'x', toString: 'ts' }) as Gate & {
+      isAdmin: boolean
+    }
+    expect(g.isAdmin).toBe(false)
+    expect(typeof g.greet).toBe('function')
+    expect(g.toString()).toBe('Gate')
+
+    const plain = defaults({}, { toString: 'ts' }) as { toString: string }
+    expect(plain.toString).toBe('ts')
+
+    class Srv {
+      #port: number | undefined
+      get port(): number | undefined {
+        return this.#port
+      }
+      set port(v: number | undefined) {
+        if (v === 22) throw new Error('port 22 blocked')
+        this.#port = v
+      }
+    }
+    expect(() => defaults(new Srv(), { port: 22 })).toThrow('port 22 blocked')
+    const s = defaults(new Srv(), { port: 443 })
+    expect(s.port).toBe(443)
   })
 
   it('SPEC-R32 pick omit nested and pollution', () => {
