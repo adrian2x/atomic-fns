@@ -265,7 +265,7 @@ describe('functools', () => {
       const f = once((x: number) => {
         calls++
         return x
-      }) as (x: number) => number
+      })
       assert.equal(f(1), 1)
       assert.equal(f(2), 1)
       assert.equal(f(3), 1)
@@ -273,7 +273,7 @@ describe('functools', () => {
     })
 
     it('result returns [value, undefined] or [undefined, error]', () => {
-      const ok = result((x: number) => x + 1) as (x: number) => [number | undefined, unknown]
+      const ok = result((x: number) => x + 1)
       assert.deepEqual(ok(2), [3, undefined])
       const bad = result(() => {
         throw new Error('nope')
@@ -285,9 +285,7 @@ describe('functools', () => {
     })
 
     it('resultAsync awaits and catches', async () => {
-      const ok = resultAsync((x: number) => Promise.resolve(x + 1)) as (
-        x: number
-      ) => Promise<[number | undefined, unknown]>
+      const ok = resultAsync((x: number) => Promise.resolve(x + 1))
       assert.deepEqual(await ok(2), [3, undefined])
       const bad = resultAsync(() => Promise.reject(new Error('async nope')))
       const [value, err] = await bad()
@@ -296,23 +294,21 @@ describe('functools', () => {
     })
 
     it('promisify wraps node-style callbacks', async () => {
-      const read = (path: string, cb: (err: Error | null, data?: string) => void) => {
-        if (path === 'bad') cb(new Error('fail'))
+      const read = (path: string, cb: (err: Error | null, data: string) => void) => {
+        if (path === 'bad') cb(new Error('fail'), '')
         else cb(null, `data:${path}`)
       }
-      const readP = promisify<string>(read) as (path: string) => Promise<string>
+      const readP = promisify(read)
       assert.equal(await readP('ok'), 'data:ok')
       await expect(readP('bad')).rejects.toThrow('fail')
     })
 
     it('promisify binds thisArg', async () => {
-      const obj = {
-        prefix: 'p',
-        go(cb: (err: null, v: string) => void) {
-          cb(null, this.prefix)
-        }
+      const obj = { prefix: 'p' }
+      function go(this: { prefix: string }, cb: (err: null, v: string) => void) {
+        cb(null, this.prefix)
       }
-      const goP = promisify<string>(Reflect.get(obj, 'go'), obj)
+      const goP = promisify(go, obj)
       assert.equal(await goP(), 'p')
     })
   })

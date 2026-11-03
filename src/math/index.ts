@@ -62,6 +62,21 @@ export function logBase(x: number, y: number): number {
   return Number.NaN
 }
 
+function extreme<T>(
+  iterable: Iterable<T>,
+  key: (x: T) => unknown,
+  better: (a: unknown, b: unknown) => boolean
+): T | undefined {
+  const it = Iterator.from(iterable)
+  const head = it.next()
+  if (head.done) return undefined
+  let best = head.value
+  for (const value of it) {
+    if (better(key(value), key(best))) best = value
+  }
+  return best
+}
+
 /**
  * Returns the smallest element in an iterable. Among ties, returns the first.
  * The optional `key` transforms elements before comparing. Empty -> `undefined`.
@@ -72,14 +87,7 @@ export function logBase(x: number, y: number): number {
 export function min(iterable: number[]): number | undefined
 export function min<T>(iterable: Iterable<T>, key?: (x: T) => unknown): T | undefined
 export function min<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity): T | undefined {
-  const it = Iterator.from(iterable)
-  const head = it.next()
-  if (head.done) return undefined
-  let best = head.value
-  for (const value of it) {
-    if (lt(key(value), key(best))) best = value
-  }
-  return best
+  return extreme(iterable, key, lt)
 }
 
 /**
@@ -92,14 +100,7 @@ export function min<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity)
 export function max(iterable: number[]): number | undefined
 export function max<T>(iterable: Iterable<T>, key?: (x: T) => unknown): T | undefined
 export function max<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity): T | undefined {
-  const it = Iterator.from(iterable)
-  const head = it.next()
-  if (head.done) return undefined
-  let best = head.value
-  for (const value of it) {
-    if (gt(key(value), key(best))) best = value
-  }
-  return best
+  return extreme(iterable, key, gt)
 }
 
 /**
@@ -118,14 +119,8 @@ mean(objects, o => o.n)
 export function mean(iterable: number[]): number
 export function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): number
 export function mean<T>(iterable: Iterable<T>, key: Predicate<T> = identity): number {
-  let total = 0
-  let count = 0
-  for (const value of iterable) {
-    total += Number(key(value))
-    count++
-  }
-  if (count !== 0) return total / count
-  return Number.NaN
+  const values = Array.from(iterable, (x) => Number(key(x)))
+  return sum(values) / values.length
 }
 
 /**

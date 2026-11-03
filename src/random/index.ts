@@ -33,8 +33,7 @@ export function randomInt(min: number, max: number): number {
  * @param arr The sequence to pick from.
  */
 export function choice<T>(arr: readonly T[]): T | undefined {
-  if (!arr.length) return undefined
-  return arr[randomInt(0, arr.length - 1)]
+  return arr[Math.floor(Math.random() * arr.length)]
 }
 
 /**
@@ -63,13 +62,10 @@ export function shuffle<T>(coll: T[] | Record<string, T> | Iterable<T>): T[] {
       : isObject(coll)
         ? Object.values(coll)
         : []
-  if (!arr.length) return arr
   const n = arr.length
   for (let i = 0; i < n - 1; i++) {
     const j = randomInt(i, n - 1)
-    const temp = arr[j]
-    arr[j] = arr[i]
-    arr[i] = temp
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
 }

@@ -6,10 +6,8 @@
 
 import type { AnyFunction } from '../types.js'
 
-type Invokable<T = unknown> = (...args: unknown[]) => T
-
 /**
- * A loosely typed callable used for curry/flow/partial return values.
+ * A loosely typed callable used for curry return values.
  * Recursive so arity-splitting calls type-check; the final application is a value at runtime.
  */
 export type LooseFunction = (...args: unknown[]) => LooseFunction
@@ -19,18 +17,19 @@ export type LooseFunction = (...args: unknown[]) => LooseFunction
  * @param func The function to curry.
  * @returns The new curried function.
  */
-export function curry(func: AnyFunction): LooseFunction {
-  const callable = func as Invokable
+export function curry<A extends unknown[], R>(
+  func: (...args: A) => R
+): LooseFunction & ((...args: A) => R) {
   const curried: LooseFunction = function (this: unknown, ...args: unknown[]) {
-    if (args.length >= callable.length) {
-      return callable.apply(this, args) as LooseFunction
+    if (args.length >= func.length) {
+      return func.apply(this, args as A) as unknown as LooseFunction
     }
 
     return (...args2: unknown[]) => {
       return curried.apply(this, args.concat(args2))
     }
   }
-  return curried
+  return curried as LooseFunction & ((...args: A) => R)
 }
 
 /**
@@ -40,8 +39,11 @@ export function curry(func: AnyFunction): LooseFunction {
  * @param args The arguments to apply to `fn`.
  * @returns The new partially applied function.
  */
-export function partial(fn: AnyFunction, ...args: unknown[]): LooseFunction {
-  return (fn as Invokable).bind(undefined, ...args) as LooseFunction
+export function partial<A extends unknown[], R>(
+  fn: (...args: A) => R,
+  ...args: Partial<A>
+): (...rest: unknown[]) => R {
+  return (...rest: unknown[]) => fn(...([...args, ...rest] as A))
 }
 
 /**
@@ -49,13 +51,15 @@ export function partial(fn: AnyFunction, ...args: unknown[]): LooseFunction {
  * @param args The set of functions to apply.
  * @returns A new function that applies each given function on the result of the previous one.
  */
-export function flow(...args: AnyFunction[]): LooseFunction {
+export function flow<A extends unknown[]>(
+  ...fns: ((...args: A) => unknown)[]
+): (...args: A) => unknown {
   return ((x: unknown) => {
-    for (const fn of args) {
-      x = (fn as Invokable)(x)
+    for (const fn of fns) {
+      x = (fn as unknown as (v: unknown) => unknown)(x)
     }
     return x
-  }) as LooseFunction
+  }) as unknown as (...args: A) => unknown
 }
 
 /**
@@ -70,7 +74,9 @@ export const pipe = flow
  * @param args The set of functions to apply.
  * @returns A new function that applies each given function on the result of the previous step.
  */
-export function compose(...args: AnyFunction[]): LooseFunction {
+export function compose<A extends unknown[]>(
+  ...args: ((...args: A) => unknown)[]
+): (...args: A) => unknown {
   return flow(...args.slice().reverse())
 }
 
@@ -184,21 +190,13 @@ export function debounce<F extends AnyFunction>(
 
     if (timer !== undefined) clearTimeout(timer)
     timer = setTimeout(() => {
-      timer = undefined
-      if (maxTimer !== undefined) {
-        clearTimeout(maxTimer)
-        maxTimer = undefined
-      }
+      clearTimers()
       invoke()
     }, wait)
 
     if (maxWait !== undefined && maxTimer === undefined) {
       maxTimer = setTimeout(() => {
-        maxTimer = undefined
-        if (timer !== undefined) {
-          clearTimeout(timer)
-          timer = undefined
-        }
+        clearTimers()
         invoke()
       }, maxWait)
     }
@@ -257,16 +255,15 @@ single(2) // 1
 single(3) // 1
 ```
  */
-export function once<T>(fn: AnyFunction<T>): AnyFunction<T> {
-  let result: T
+export function once<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
+  let value!: R
   let isCalled = false
-  const callable = fn as Invokable<T>
-  return function (this: unknown, ...args: unknown[]) {
+  return function (this: unknown, ...args: A): R {
     if (!isCalled) {
-      result = callable.apply(this, args)
+      value = fn.apply(this, args)
       isCalled = true
     }
-    return result
+    return value
   }
 }
 
@@ -290,13 +287,14 @@ export type Optional<T> = Maybe<T>
  * @param fn The function to wrap.
  * @returns A new function that wraps `fn` and returns the result tuple.
  */
-export function result<T = unknown, E = unknown>(fn: AnyFunction<T>): AnyFunction<Result<T, E>> {
-  const callable = fn as Invokable<T>
-  return function (this: unknown, ...args: unknown[]): Result<T, E> {
+export function result<A extends unknown[], T, E = unknown>(
+  fn: (...args: A) => T
+): (...args: A) => Result<T, E> {
+  return function (this: unknown, ...args: A): Result<T, E> {
     let value: Maybe<T>
     let err: Maybe<E>
     try {
-      value = callable.apply(this, args)
+      value = fn.apply(this, args)
     } catch (error) {
       err = error as E
     }
@@ -309,15 +307,14 @@ export function result<T = unknown, E = unknown>(fn: AnyFunction<T>): AnyFunctio
  * @param fn The async function to await.
  * @returns A new function that awaits the given function and returns the result tuple.
  */
-export function resultAsync<T = unknown, E = unknown>(
-  fn: AnyFunction<Promise<T>>
-): AnyFunction<Promise<Result<T, E>>> {
-  const callable = fn as Invokable<Promise<T>>
-  return async function (this: unknown, ...args: unknown[]): Promise<Result<T, E>> {
+export function resultAsync<A extends unknown[], T, E = unknown>(
+  fn: (...args: A) => Promise<T>
+): (...args: A) => Promise<Result<T, E>> {
+  return async function (this: unknown, ...args: A): Promise<Result<T, E>> {
     let value: Maybe<T>
     let err: Maybe<E>
     try {
-      value = await callable.apply(this, args)
+      value = await fn.apply(this, args)
     } catch (error) {
       err = error as E
     }
@@ -331,17 +328,23 @@ export function resultAsync<T = unknown, E = unknown>(
  * @param thisArg Optional `this` binding.
  * @returns A function that wraps `fun` and returns a `Promise`.
  */
-export function promisify<T>(fun: AnyFunction, thisArg?: unknown): AnyFunction<Promise<T>> {
-  const callable = fun as Invokable
-  const original = thisArg !== undefined && thisArg !== null ? callable.bind(thisArg) : callable
-  return (...args: unknown[]) =>
+export function promisify<A extends unknown[], T>(
+  fun: (...args: [...A, (err: Error | null | undefined, result: T) => void]) => void,
+  thisArg?: unknown
+): (...args: A) => Promise<T> {
+  return (...args: A) =>
     new Promise<T>((resolve, reject) => {
-      original(...args, (err: Error | null | undefined, resultValue: T) => {
-        if (err) {
+      const cb = (err: Error | null | undefined, resultValue: T) => {
+        if (err !== undefined && err !== null) {
           reject(err)
           return
         }
         resolve(resultValue)
-      })
+      }
+      if (thisArg !== undefined && thisArg !== null) {
+        fun.call(thisArg, ...args, cb)
+      } else {
+        fun(...args, cb)
+      }
     })
 }

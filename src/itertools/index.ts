@@ -134,18 +134,12 @@ export function contains(collection: unknown, value: unknown): boolean {
  * @returns Elements
  */
 export function dropWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>): IteratorObject<T> {
-  return (function* () {
-    const it = Iterator.from(iterable)
-    for (;;) {
-      const head = it.next()
-      if (head.done) return
-      if (!predicate(head.value)) {
-        yield head.value
-        break
-      }
-    }
-    for (const value of it) yield value
-  })()
+  let dropping = true
+  return Iterator.from(iterable).filter((value) => {
+    if (dropping && predicate(value)) return false
+    dropping = false
+    return true
+  })
 }
 
 export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
@@ -172,12 +166,8 @@ export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
 ```
  */
 export function enumerate<T>(iterable: Iterable<T>, start = 0): IteratorObject<[number, T]> {
-  return (function* () {
-    let index = start
-    for (const item of iterable) {
-      yield [index++, item] as [number, T]
-    }
-  })()
+  let index = start
+  return Iterator.from(iterable).map((item) => [index++, item] as [number, T])
 }
 
 /**
@@ -201,11 +191,7 @@ export function first<T>(iterable: Iterable<T>): T | undefined {
 ```
  */
 export function icompact<T>(iterable: Iterable<T>): IteratorObject<T> {
-  return (function* () {
-    for (const value of iterable) {
-      if (!isEmpty(value)) yield value
-    }
-  })()
+  return Iterator.from(iterable).filter((value) => !isEmpty(value))
 }
 
 /**
@@ -310,35 +296,18 @@ export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T, bool
  */
 export function range(...args: number[]): IteratorObject<number> {
   return (function* () {
-    let start = 0
-    let step = 1
-    let stop: number
-    if (args.length === 1) {
-      stop = args[0]
-    } else if (args.length === 2) {
-      start = args[0]
-      stop = args[1]
-    } else {
-      start = args[0]
-      stop = args[1]
-      step = args[2]
-    }
+    const [start, stop, step] =
+      args.length === 1 ? [0, args[0], 1] : [args[0], args[1], args[2] ?? 1]
     if ([start, stop, step].some((n) => Number.isNaN(n))) {
       throw new RangeError('range bounds must be numbers')
     }
     if (step === 0) throw new RangeError('range step must not be zero')
-    if (Number.isFinite(start) && Number.isFinite(stop) && Number.isFinite(step)) {
-      const n = Math.ceil((stop - start) / step)
-      for (let i = 0; i < n; i++) {
-        const value = start + i * step
-        // Fractional steps can accumulate error and land on or past `stop`.
-        if (step > 0 ? !(value < stop) : !(value > stop)) return
-        yield value
-      }
-      return
-    }
-    for (; step > 0 ? start < stop : start > stop; start += step) {
-      yield start
+    const n = Math.ceil((stop - start) / step)
+    for (let i = 0; i < n; i++) {
+      const value = start + i * step
+      // Fractional steps can accumulate error and land on or past `stop`.
+      if (step > 0 ? !(value < stop) : !(value > stop)) return
+      yield value
     }
   })()
 }

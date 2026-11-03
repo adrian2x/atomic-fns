@@ -255,7 +255,7 @@ describe('SPEC-R107 JSDoc @example', () => {
   })
 
   it('src/functools/index.ts #1', () => {
-    const single = once((x: number) => x) as (x: number) => number
+    const single = once((x: number) => x)
     expect(single(1)).toEqual(1)
     expect(single(2)).toEqual(1)
     expect(single(3)).toEqual(1)
