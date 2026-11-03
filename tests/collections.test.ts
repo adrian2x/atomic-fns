@@ -138,6 +138,26 @@ describe('collections', () => {
     expect(matches([])('x')).toBe(true)
   })
 
+  it('nested empty shapes require the same kind', () => {
+    expect(find([{ email: 'a', token: 't' }], { email: 'a', token: {} })).toBeUndefined()
+    expect(find([{ email: 'a', token: { x: 1 } }], { email: 'a', token: {} })).toEqual({
+      email: 'a',
+      token: { x: 1 }
+    })
+    expect(find([{ email: 'a', token: [] }], { email: 'a', token: [] })).toEqual({
+      email: 'a',
+      token: []
+    })
+    expect(filter([{ email: 'a', token: 't' }], { token: [] })).toEqual([])
+    expect(matches({ a: {} })({})).toBe(false)
+    expect(matches({ a: {} })({ a: 'str' })).toBe(false)
+    expect(matches({ a: {} })({ a: null })).toBe(false)
+    expect(matches({ a: {} })({ a: [] })).toBe(false)
+    expect(matches({ a: {} })({ a: { b: 1 } })).toBe(true)
+    expect(matches({ a: [] })({ a: 'str' })).toBe(false)
+    expect(matches({ a: [] })({ a: [1] })).toBe(true)
+  })
+
   it('defaults never assigns __proto__ as a prototype', () => {
     const opts = defaults(
       { name: undefined },

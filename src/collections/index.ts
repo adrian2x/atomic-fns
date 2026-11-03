@@ -200,10 +200,12 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
 
 /**
  * Creates a function that performs a Lodash-style partial deep comparison (`isMatch`) between a
- * given value and `shape`. Empty plain-object or empty-array shapes match any value. Arrays in the
- * shape match as subsets (each shape element must match some target element). Shape keys whose
- * value is `undefined` require that own key on the target. Non-plain shape values (Date, RegExp,
- * Map, Set, typed arrays) compare with {@link deepEqual}.
+ * given value and `shape`. A top-level empty plain object or empty array matches any value; a
+ * nested empty `{}` matches only a non-null non-array object, and a nested empty `[]` matches only
+ * an array (primitives, missing keys, and null never match). Arrays in the shape match as subsets
+ * (each shape element must match some target element). Shape keys whose value is `undefined`
+ * require that own key on the target. Non-plain shape values (Date, RegExp, Map, Set, typed arrays)
+ * compare with {@link deepEqual}.
  * @example
 ```js
 const objects = [
@@ -228,19 +230,19 @@ export function matches(shape: unknown): (obj: unknown) => boolean {
     return () => false
   }
   return function (obj) {
-    return matchDeep(shape, obj)
+    return matchDeep(shape, obj, true)
   }
 }
 
-function matchDeep(shape: unknown, obj: unknown): boolean {
+function matchDeep(shape: unknown, obj: unknown, top: boolean): boolean {
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
   if (Array.isArray(shape)) {
-    if (shape.length === 0) return true
+    if (shape.length === 0) return top || Array.isArray(obj)
     if (!Array.isArray(obj)) return false
     for (const item of shape) {
       let found = false
       for (const candidate of obj) {
-        if (matchDeep(item, candidate)) {
+        if (matchDeep(item, candidate, false)) {
           found = true
           break
         }
@@ -251,7 +253,9 @@ function matchDeep(shape: unknown, obj: unknown): boolean {
   }
   if (isPlainObject(shape)) {
     const shapeKeys = Object.keys(shape)
-    if (shapeKeys.length === 0) return true
+    if (shapeKeys.length === 0) {
+      return top || (obj !== null && typeof obj === 'object' && !Array.isArray(obj))
+    }
     if (obj === null || typeof obj !== 'object') return false
     const record = obj as Record<string, unknown>
     for (const key of shapeKeys) {
@@ -259,7 +263,7 @@ function matchDeep(shape: unknown, obj: unknown): boolean {
       if (expected === undefined) {
         if (!Object.hasOwn(obj, key)) return false
       }
-      if (!matchDeep(expected, record[key])) return false
+      if (!matchDeep(expected, record[key], false)) return false
     }
     return true
   }
