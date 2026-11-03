@@ -161,6 +161,7 @@ Breaking changes from 1.1.7. There is no deprecation release; removed names are 
 - `merge` copies own enumerable symbol keys. When a path's target and source containers differ in kind (array vs plain object), the source replaces the target.
 - `pick` / `omit` accept array-of-segments paths for literal keys (`[['a.b']]`); string paths still split on `.`. `pick` mirrors array vs object containers from the source. `omit` is O(keys + paths), never invokes getters of omitted keys.
 - `isEmpty(fn)` ignores arity; a function is empty unless it has own enumerable properties.
+- `uniq` / `without` normalize `-0` to `+0` in results (native Set semantics).
 
 ### Platform
 

@@ -658,8 +658,14 @@ export function lastIndexOf<T>(obj: T[] | null | undefined, value: T, start?: nu
   return findLastIndex(obj, (x) => eq(value, x), start)
 }
 
+/** Normalize `-0` to `+0` (native Set / Lodash semantics). */
+function normalizeZero<T>(x: T): T {
+  return Object.is(x, -0) ? (0 as T) : x
+}
+
 /**
  * Creates a duplicate-free version of an array, using SameValueZero equality on `iteratee` keys, keeping the first element for each key.
+ * Results normalize `-0` to `+0`.
  * @param arr The array containing duplicated elements
  * @param fn The iteratee invoked per element.
  * @returns Returns the new duplicate free array.
@@ -682,7 +688,7 @@ export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | object | PropertyKey
     const key = it(x)
     if (seen.has(key)) continue
     seen.add(key)
-    result.push(x)
+    result.push(normalizeZero(x))
   }
   return result
 }
@@ -897,10 +903,11 @@ export function reject<T>(
 
 /**
  * Return a new array excluding every element SameValueZero-equal to one of `values`.
+ * Results normalize `-0` to `+0`.
  * @param array Source array (not mutated).
  * @param values Values to exclude.
  */
 export function without<T>(array: readonly T[], ...values: T[]): T[] {
   const exclude = new Set(values)
-  return array.filter((x) => !exclude.has(x))
+  return array.filter((x) => !exclude.has(x)).map(normalizeZero)
 }

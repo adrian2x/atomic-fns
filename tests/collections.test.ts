@@ -46,6 +46,8 @@ describe('collections', () => {
     expect(without(input, 1, NaN)).toEqual([2])
     expect(input).toEqual([1, 2, 1, NaN])
     expect(without(['a', 'b'], 'a')).toEqual(['b'])
+    expect(Object.is(without([-0, 1], 2)[0], -0)).toBe(false)
+    expect(without([-0, 1], 2)).toEqual([0, 1])
   })
 
   it('SPEC-R34 difference symmetricDifference intersection union', () => {
@@ -60,6 +62,8 @@ describe('collections', () => {
     expect(uniq([2.1, 1.2, 2.3], Math.floor)).toEqual([2.1, 1.2])
     expect(uniq([4, 7, 1, 1, 9, 4, 7], (x) => x * 2)).toEqual([4, 7, 1, 9])
     expect(sortedUniq([4, 7, 1, 1, 9, 4, 7])).toEqual([1, 4, 7, 9])
+    expect(uniq([-0, 0])).toEqual([0])
+    expect(Object.is(uniq([-0, 0])[0], -0)).toBe(false)
   })
 
   it('SPEC-R36 lastIndexOf default start', () => {
