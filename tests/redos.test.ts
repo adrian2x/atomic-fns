@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ValueError } from '../src/globals/errors.js'
 import { Duration } from '../src/i18n/duration.js'
-import { asDate } from '../src/i18n/format.js'
+import { asDate, formatDate, strftime } from '../src/i18n/format.js'
 import { words } from '../src/string/index.js'
 
 describe('NFR-4 ReDoS guards', () => {
@@ -37,5 +37,20 @@ describe('NFR-4 ReDoS guards', () => {
     const t0 = performance.now()
     expect(() => Duration.fromISO(input)).toThrow(ValueError)
     expect(performance.now() - t0).toBeLessThan(200)
+  })
+
+  it('SPEC-R85 formatDate and strftime scanners stay linear on adversarial patterns', () => {
+    const d = new Date(2024, 0, 5)
+    for (const run of [
+      () => formatDate('['.repeat(1e5), d),
+      () => formatDate('[a'.repeat(5e4), d),
+      () => strftime('%-'.repeat(5e4), d),
+      () => strftime('%' + 'a'.repeat(1e5), d)
+    ]) {
+      const t0 = performance.now()
+      run()
+      expect(performance.now() - t0).toBeLessThan(100)
+    }
+    expect(formatDate('['.repeat(10), d)).toBe('['.repeat(10))
   })
 })

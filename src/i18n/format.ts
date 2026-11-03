@@ -1,11 +1,116 @@
 import { daysInMonthOf, localWallToTime, utcWallToTime, type WallFields } from './date/calendar.js'
 
-const TOKEN_RE =
-  /\[([^\]]*)]|YYYY|YY|Q|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|d|E|HH|H|hh|h|kk|k|mm|m|ss|s|SSS|A|a|ZZ|Z|zzz|z|NNNN|NNN|NN|N|X|x|LTS|LT|LLLL|LLL|LL|L|llll|lll|ll|l/g
-
-const STRFTIME_RE = /%%|%(?:-?)([A-Za-z])\1*/g
-
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
+const FORMATTER_CACHE_CAPACITY = 64
+
+function isAsciiLetter(c: string): boolean {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+}
+
+function formatYearYYYY(year: number): string {
+  return year >= 0 ? String(year).padStart(4, '0') : '-' + String(-year).padStart(4, '0')
+}
+
+function formatYearYY(year: number): string {
+  return String(Math.abs(year) % 100).padStart(2, '0')
+}
+
+/**
+ * Single-pass formatDate scanner: maximal ASCII letter runs, compound Do/LT/LTS,
+ * bracket literals, unknown runs emitted whole. O(n); see SPEC-R85.
+ */
+function scanFormat(pattern: string, valueOf: (token: string) => string | undefined): string {
+  const out: string[] = []
+  const n = pattern.length
+  let i = 0
+  let noMoreClosers = false
+  while (i < n) {
+    const c = pattern.charAt(i)
+    if (c === '[') {
+      const j = noMoreClosers ? -1 : pattern.indexOf(']', i + 1)
+      if (j === -1) {
+        noMoreClosers = true
+        out.push('[')
+        i += 1
+        continue
+      }
+      out.push(pattern.slice(i + 1, j))
+      i = j + 1
+      continue
+    }
+    if (isAsciiLetter(c)) {
+      let r = 1
+      while (i + r < n && pattern.charAt(i + r) === c) {
+        r += 1
+      }
+      let token = pattern.slice(i, i + r)
+      if (c === 'D' && r === 1 && pattern.charAt(i + 1) === 'o') {
+        token = 'Do'
+      } else if (c === 'L' && r === 1 && pattern.charAt(i + 1) === 'T') {
+        token = pattern.charAt(i + 2) === 'S' ? 'LTS' : 'LT'
+      }
+      const v = valueOf(token)
+      out.push(v ?? token)
+      i += token.length
+      continue
+    }
+    let j = i + 1
+    while (j < n) {
+      const next = pattern.charAt(j)
+      if (isAsciiLetter(next) || next === '[') break
+      j += 1
+    }
+    out.push(pattern.slice(i, j))
+    i = j
+  }
+  return out.join('')
+}
+
+/**
+ * Single-pass strftime scanner: %-flag, %bb, %%, unknown directives rescan after `%`.
+ * O(n); see SPEC-R86.
+ */
+function scanStrftime(fmt: string, valueOf: (directive: string) => string | undefined): string {
+  const out: string[] = []
+  const n = fmt.length
+  let i = 0
+  while (i < n) {
+    const p = fmt.indexOf('%', i)
+    if (p === -1) {
+      out.push(fmt.slice(i))
+      break
+    }
+    out.push(fmt.slice(i, p))
+    let k = p + 1
+    const flag = fmt.charAt(k) === '-' ? '-' : ''
+    if (flag) {
+      k += 1
+    }
+    if (k >= n) {
+      out.push(fmt.slice(p))
+      break
+    }
+    const letter = fmt.charAt(k)
+    let directive = '%' + flag + letter
+    if (flag === '' && letter === 'b' && fmt.charAt(k + 1) === 'b') {
+      directive = '%bb'
+    }
+    if (flag === '' && letter === '%') {
+      out.push('%')
+      i = k + 1
+      continue
+    }
+    const v = valueOf(directive)
+    if (v === undefined) {
+      out.push('%')
+      i = p + 1
+      continue
+    }
+    out.push(v)
+    i = p + directive.length
+  }
+  return out.join('')
+}
 
 /** Options shared by {@link formatDate} and {@link strftime}. */
 export interface FormatOptions {
@@ -70,21 +175,43 @@ function readFields(date: Date, utc: boolean): DateFields {
   }
 }
 
-const formatterCache = new Map<string, Intl.DateTimeFormat>()
+/** Capacity-64 LRU of Intl.DateTimeFormat; contents are not observable through results. */
+class FormatterCache {
+  #entries = new Map<string, Intl.DateTimeFormat>()
+
+  get(
+    locale: string | undefined,
+    opts: Intl.DateTimeFormatOptions,
+    utc: boolean
+  ): Intl.DateTimeFormat {
+    const resolved = utc ? { ...opts, timeZone: 'UTC' } : opts
+    const key = String(locale) + JSON.stringify(resolved)
+    const hit = this.#entries.get(key)
+    if (hit) {
+      this.#entries.delete(key)
+      this.#entries.set(key, hit)
+      return hit
+    }
+    if (this.#entries.size >= FORMATTER_CACHE_CAPACITY) {
+      const oldest = this.#entries.keys().next().value
+      if (oldest !== undefined) {
+        this.#entries.delete(oldest)
+      }
+    }
+    const fmt = new Intl.DateTimeFormat(locale, resolved)
+    this.#entries.set(key, fmt)
+    return fmt
+  }
+}
+
+const formatterCache = new FormatterCache()
 
 function cachedFormatter(
   locale: string | undefined,
   opts: Intl.DateTimeFormatOptions,
   utc: boolean
-) {
-  const resolved = utc ? { ...opts, timeZone: 'UTC' } : opts
-  const key = String(locale) + JSON.stringify(resolved)
-  let fmt = formatterCache.get(key)
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat(locale, resolved)
-    formatterCache.set(key, fmt)
-  }
-  return fmt
+): Intl.DateTimeFormat {
+  return formatterCache.get(locale, opts, utc)
 }
 
 function partValue(
@@ -414,8 +541,8 @@ function buildValues(date: Date, opts: ResolvedFormatOptions): Map<string, () =>
     ['SSS', () => pad3(ms)],
     ['X', () => String(Math.floor(date.getTime() / 1000))],
     ['x', () => String(date.getTime())],
-    ['YY', () => String(year).slice(-2)],
-    ['YYYY', () => String(year)],
+    ['YY', () => formatYearYY(year)],
+    ['YYYY', () => formatYearYYYY(year)],
     ['M', () => String(month)],
     ['MM', () => pad2(month)],
     ['MMM', () => partValue(opts, { month: 'short' }, date, 'month')],
@@ -462,12 +589,14 @@ function buildValues(date: Date, opts: ResolvedFormatOptions): Map<string, () =>
 }
 
 /**
- * Returns a localized string representation of this date for the given format string. Tokens overlap with {@link https://momentjs.com/docs/#/displaying/format/ moment} (`YYYY`, `MM`, `DD`, ...). Differ from moment: default format is `YYYY-MM-DDTHH:mm:ssZ`; `Z`/`ZZ` are numeric offsets; `k`/`kk`/`E` are supported; `Do` renders English ordinals only (other languages render the bare day number).
- * With `utc: true`, UTC fields are read and `Z`/`ZZ`/`z` render `+00:00`/`+0000`/`UTC`.
+ * Returns a localized string representation of this date for the given format string.
+ * Tokens are maximal runs of one ASCII letter, plus compound `Do` / `LT` / `LTS`.
+ * Known tokens: `H HH h hh k kk a A m mm s ss SSS X x YY YYYY M MM MMM MMMM Q D DD Do d E ddd dddd N NN NNN NNNN Z ZZ z zzz L LL LLL LLLL l ll lll llll LT LTS`.
+ * Unknown letter runs stay literal as a whole (`Y`, `YYY`, `dd`). `YYYY` is zero-padded to 4 digits (`0050`, `-0001`); `YY` is `|year| % 100` zero-padded to 2. Bracket text `[...]` is literal (unclosed `[` stays). Empty `formatStr` means `YYYY-MM-DDTHH:mm:ssZ`.
+ * With `utc: true`, UTC fields are read and `Z`/`ZZ`/`z` render `+00:00`/`+0000`/`UTC`. `Do` renders English ordinals only (other languages render the bare day number).
  * @param formatStr The format string to use
  * @param date The date value
  * @param localeOrOptions A locale tag, or options with `locale` and `utc`
- * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
  * @example
 ```js
 formatDate('MM/DD/YYYY', new Date(2022, 9, 31)) // '10/31/2022'
@@ -485,11 +614,9 @@ export function formatDate(
 
   const str = formatStr || FORMAT_DEFAULT
   const values = buildValues(date, resolveOptions(localeOrOptions))
-
-  return str.replace(TOKEN_RE, (match, literal: string | undefined) => {
-    if (literal !== undefined) return literal
-    const getter = values.get(match)
-    return getter ? getter() : match
+  return scanFormat(str, (token) => {
+    const getter = values.get(token)
+    return getter ? getter() : undefined
   })
 }
 
@@ -514,8 +641,8 @@ function strftimeValues(date: Date, opts: ResolvedFormatOptions): Map<string, ()
     ['%B', () => partValue(opts, { month: 'long' }, date, 'month')],
     ['%b', () => partValue(opts, { month: 'short' }, date, 'month')],
     ['%bb', () => String(month)],
-    ['%Y', () => String(year)],
-    ['%y', () => String(year).slice(-2)],
+    ['%Y', () => formatYearYYYY(year)],
+    ['%y', () => formatYearYY(year)],
     ['%N', () => partValue(opts, { era: 'long' }, date, 'era')],
     ['%n', () => partValue(opts, { era: 'short' }, date, 'era')],
     ['%I', () => pad2(hour12(h))],
@@ -543,6 +670,8 @@ function strftimeValues(date: Date, opts: ResolvedFormatOptions): Map<string, ()
 
 /**
  * Formats a date using a formatting string in the {@link https://strftime.org/ strftime} format, in any given locale.
+ * Directives: `%A %a %d %-d %m %-m %B %b %bb %Y %y %N %n %I %-I %H %-H %K %k %M %-M %S %-S %p %P %z %Z`, plus `%%` -> `%`.
+ * `%Y` / `%y` match `YYYY` / `YY` (4-digit padded year / `|year| % 100`). Unknown directives and a trailing `%` stay literal (`%Q` -> `%Q`); scanning resumes after a lone `%` for unknown forms.
  * With `utc: true`, UTC fields are read and `%z`/`%Z` render `+0000`/`UTC`.
  * @param fmt The format string to apply
  * @param date The date value
@@ -565,10 +694,8 @@ export function strftime(
   }
 
   const values = strftimeValues(date, resolveOptions(localeOrOptions))
-
-  return fmt.replace(STRFTIME_RE, (match) => {
-    if (match === '%%') return '%'
-    const getter = values.get(match)
-    return getter ? getter() : match
+  return scanStrftime(fmt, (directive) => {
+    const getter = values.get(directive)
+    return getter ? getter() : undefined
   })
 }

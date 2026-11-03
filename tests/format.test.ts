@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { daysInMonth, IntlDate } from '../src/i18n/date/index.js'
 import { asDate, formatDate, strftime } from '../src/i18n/format.js'
 
@@ -260,6 +260,99 @@ describe('SPEC-R86 strftime', () => {
     expect(strftime('%-H:%-M:%-S', date, locale)).toMatch(/\d+:\d+:\d+$/)
     expect(strftime('%K:%M:%S %p', date, locale)).toMatch(/\d+:\d+:\d+\s*AM|PM$/)
     expect(strftime('%k:%-M:%-S %P', date, locale)).toMatch(/\d+:\d+:\d+\s*am|pm$/)
+  })
+})
+
+describe('SPEC-R85 tokenizer', () => {
+  const prev = process.env.TZ
+  let d: Date
+
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York'
+    d = new Date(2024, 0, 5, 0, 7, 9, 45)
+  })
+  afterAll(() => {
+    if (prev === undefined) delete process.env.TZ
+    else process.env.TZ = prev
+  })
+
+  it('SPEC-R85 unknown runs stay literal as a whole', () => {
+    expect(formatDate('Y', d)).toBe('Y')
+    expect(formatDate('YYY', d)).toBe('YYY')
+    expect(formatDate('YYYYY', d)).toBe('YYYYY')
+    expect(formatDate('dd', d)).toBe('dd')
+    expect(formatDate('S', d)).toBe('S')
+    expect(formatDate('SS', d)).toBe('SS')
+    expect(formatDate('SSSS', d)).toBe('SSSS')
+    expect(formatDate('SSS', d)).toBe('045')
+    expect(formatDate('DDo', d)).toBe('05o')
+    expect(formatDate('LLT', d)).toBe(formatDate('LL', d) + 'T')
+  })
+
+  it('SPEC-R85 year padding for YYYY YY %Y %y', () => {
+    const d50 = new Date(0)
+    d50.setFullYear(50, 2, 1)
+    expect(formatDate('YYYY-MM-DD', d50)).toBe('0050-03-01')
+
+    const d5 = new Date(0)
+    d5.setFullYear(5, 0, 1)
+    expect(formatDate('YY', d5)).toBe('05')
+
+    const dNeg = new Date(0)
+    dNeg.setFullYear(-1, 0, 1)
+    expect(formatDate('YYYY', dNeg)).toBe('-0001')
+
+    const year7 = new Date(0)
+    year7.setFullYear(7, 0, 1)
+    expect(strftime('%y', year7)).toBe('07')
+    expect(strftime('%Y', year7)).toBe('0007')
+
+    expect(
+      new IntlDate(new Date(0))
+        .set({ year: 99, month: 12, day: 31 })
+        .add({ days: 61 })
+        .format('YYYY-MM-DD')
+    ).toBe('0100-03-02')
+  })
+
+  it('SPEC-R85 brackets literal and unclosed', () => {
+    expect(formatDate('[YYYY]', d)).toBe('YYYY')
+    expect(formatDate('[YYYY', d)).toBe('[2024')
+    expect(formatDate('[]', d)).toBe('')
+    expect(formatDate('[a[b]', d)).toBe('a[b')
+    expect(formatDate('[[YYYY]]', d)).toBe('[YYYY]')
+  })
+
+  it('SPEC-R86 strftime %% flag and %bb', () => {
+    expect(strftime('%%Y', d)).toBe('%Y')
+    expect(strftime('%-', d)).toBe('%-')
+    expect(strftime('%-Q', d)).toBe('%-Q')
+    expect(strftime('%bb', d)).toBe('1')
+    expect(strftime('%b%b', d)).toBe('JanJan')
+  })
+
+  it('SPEC-R85 prototype-named letter runs do not throw', () => {
+    const out = formatDate('constructor toString __proto__', d)
+    expect(out).toContain('__proto__')
+  })
+
+  it('SPEC-R85 formatter cache is capacity 64 LRU', () => {
+    const spy = vi.spyOn(Intl, 'DateTimeFormat')
+    try {
+      formatDate('MMM', d, 'en-x-k0')
+      for (let i = 1; i <= 64; i++) {
+        formatDate('MMM', d, 'en-x-k' + String(i))
+      }
+      formatDate('MMM', d, 'en-x-k0')
+      expect(spy.mock.calls.filter((c) => c[0] === 'en-x-k0')).toHaveLength(2)
+
+      spy.mockClear()
+      formatDate('MMM', d, 'en-x-k1')
+      formatDate('MMM', d, 'en-x-k1')
+      expect(spy.mock.calls.filter((c) => c[0] === 'en-x-k1')).toHaveLength(1)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 
