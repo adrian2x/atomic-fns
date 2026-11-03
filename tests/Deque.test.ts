@@ -173,9 +173,6 @@ describe('Deque', () => {
     expect(() => new Deque([], { maxlen: NaN })).toThrow(RangeError)
   })
 
-  // F-074: slot clearing after pop/shift/clear is covered by the tests below via observable
-  // buffer reuse (no leaked prior values). A WeakRef/FinalizationRegistry pin is not deterministic
-  // without --expose-gc, so that form of the check is skipped.
   it('SPEC-R80 after pop vacated Array slot is undefined', () => {
     const deque = new Deque([1, 2, 3])
     expect(deque.pop()).toBe(3)
@@ -199,6 +196,53 @@ describe('Deque', () => {
     expect(d.at(0)).toBeUndefined()
     d.push('z')
     expect(d.toArray()).toEqual(['z'])
+  })
+
+  // F-074: WeakRef pins require --expose-gc (vitest.config execArgv).
+  function track(d: Deque<object>): WeakRef<object> {
+    const obj = { n: 1 }
+    d.push(obj)
+    return new WeakRef(obj)
+  }
+
+  async function awaitCollected(ref: WeakRef<object>): Promise<void> {
+    const gc = globalThis.gc
+    expect(typeof gc).toBe('function')
+    for (let round = 0; round < 10; round++) {
+      if (typeof gc === 'function') {
+        for (let i = 0; i < 5; i++) {
+          gc()
+          gc()
+        }
+      }
+      await new Promise<void>((r) => setImmediate(r))
+      if (typeof gc === 'function') {
+        for (let i = 0; i < 5; i++) gc()
+      }
+      if (ref.deref() === undefined) return
+    }
+    expect(ref.deref()).toBeUndefined()
+  }
+
+  it('F-074 pop releases the vacated slot for GC', async () => {
+    const d = new Deque<object>()
+    const ref = track(d)
+    void d.pop()
+    await awaitCollected(ref)
+  })
+
+  it('F-074 shift releases the vacated slot for GC', async () => {
+    const d = new Deque<object>()
+    const ref = track(d)
+    void d.shift()
+    await awaitCollected(ref)
+  })
+
+  it('F-074 clear releases slots for GC', async () => {
+    const d = new Deque<object>()
+    const ref = track(d)
+    d.clear()
+    await awaitCollected(ref)
   })
 
   it('SPEC-R80 typed backing grows without huge maxlen prealloc', () => {

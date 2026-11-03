@@ -4,6 +4,8 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     environment: 'node',
     setupFiles: ['tests/setup.ts'],
+    pool: 'forks',
+    execArgv: ['--expose-gc'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
