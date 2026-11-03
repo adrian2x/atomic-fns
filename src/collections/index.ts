@@ -5,6 +5,7 @@
  */
 
 import { get, isEmpty, isIterable, isObject, keys, ValueError } from '../globals/index.js'
+import { assertNestingDepth } from '../internal/nesting.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, deepEqual, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
@@ -205,7 +206,7 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
  * an array (primitives, missing keys, and null never match). Arrays in the shape match as subsets
  * (each shape element must match some target element). Shape keys whose value is `undefined`
  * require that own key on the target. Non-plain shape values (Date, RegExp, Map, Set, typed arrays)
- * compare with {@link deepEqual}.
+ * compare with {@link deepEqual}. Nesting deeper than 1000 levels throws `RangeError`.
  * @example
 ```js
 const objects = [
@@ -230,19 +231,20 @@ export function matches(shape: unknown): (obj: unknown) => boolean {
     return () => false
   }
   return function (obj) {
-    return matchDeep(shape, obj, true)
+    return matchDeep(shape, obj, true, 1)
   }
 }
 
-function matchDeep(shape: unknown, obj: unknown, top: boolean): boolean {
+function matchDeep(shape: unknown, obj: unknown, top: boolean, depth: number): boolean {
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
+  assertNestingDepth(depth)
   if (Array.isArray(shape)) {
     if (shape.length === 0) return top || Array.isArray(obj)
     if (!Array.isArray(obj)) return false
     for (const item of shape) {
       let found = false
       for (const candidate of obj) {
-        if (matchDeep(item, candidate, false)) {
+        if (matchDeep(item, candidate, false, depth + 1)) {
           found = true
           break
         }
@@ -263,7 +265,7 @@ function matchDeep(shape: unknown, obj: unknown, top: boolean): boolean {
       if (expected === undefined) {
         if (!Object.hasOwn(obj, key)) return false
       }
-      if (!matchDeep(expected, record[key], false)) return false
+      if (!matchDeep(expected, record[key], false, depth + 1)) return false
     }
     return true
   }
@@ -381,6 +383,7 @@ export function forEachRight<T>(
 
 /**
  * Flattens an array or object. Arrays will be flattened recursively up to `depth` times. Objects will be flattened recursively.
+ * Structural nesting deeper than 1000 levels throws `RangeError`.
  * @example
 ```js
 flatten([1, [2, [3, [4]], 5]])
@@ -421,7 +424,8 @@ export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] 
   return arr
 }
 
-function flattenArray<T>(arr: T[], depth: number): T[] {
+function flattenArray<T>(arr: T[], depth: number, nesting = 1): T[] {
+  assertNestingDepth(nesting)
   const result: T[] = []
   for (let i = 0; i < arr.length; i++) {
     if (!(i in arr)) {
@@ -430,7 +434,7 @@ function flattenArray<T>(arr: T[], depth: number): T[] {
     }
     const value = arr[i]
     if (depth > 0 && Array.isArray(value)) {
-      const nested = flattenArray(value as T[], depth - 1)
+      const nested = flattenArray(value as T[], depth - 1, nesting + 1)
       for (let j = 0; j < nested.length; j++) {
         if (j in nested) result.push(nested[j])
         else result.push(undefined as T)
@@ -446,9 +450,11 @@ function flattenObj(
   obj: unknown,
   prefix = '',
   result: Record<string, unknown> = {},
-  seen = new WeakSet<object>()
+  seen = new WeakSet<object>(),
+  nesting = 1
 ): Record<string, unknown> {
   if (typeof obj === 'object' && obj !== null) {
+    assertNestingDepth(nesting)
     if (seen.has(obj)) throw new ValueError('cyclic structure')
     if (!isPlainObject(obj) && !Array.isArray(obj)) {
       if (prefix) defineData(result, prefix, obj)
@@ -464,7 +470,7 @@ function flattenObj(
       } else {
         pref = i
       }
-      flattenObj((obj as Record<string, unknown>)[i], pref, result, seen)
+      flattenObj((obj as Record<string, unknown>)[i], pref, result, seen, nesting + 1)
     }
     seen.delete(obj)
     return result

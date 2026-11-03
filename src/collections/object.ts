@@ -2,6 +2,7 @@
  * Object utilities: merge, pick, omit, clone.
  */
 
+import { assertNestingDepth } from '../internal/nesting.js'
 import { hasMethod, protocol } from '../operators/index.js'
 
 /** Define an own enumerable writable configurable data property. */
@@ -25,7 +26,13 @@ function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown 
   return ArrayBuffer.isView(v) && 'slice' in v && typeof v.slice === 'function'
 }
 
-function mergeKey(t: object, key: PropertyKey, sv: unknown, seen: WeakMap<object, object>): void {
+function mergeKey(
+  t: object,
+  key: PropertyKey,
+  sv: unknown,
+  seen: WeakMap<object, object>,
+  depth: number
+): void {
   const tv = Object.hasOwn(t, key) ? (t as Record<PropertyKey, unknown>)[key] : undefined
   if (key === 'constructor' && typeof tv === 'function') return
   if (sv === undefined && tv !== undefined) return
@@ -44,7 +51,7 @@ function mergeKey(t: object, key: PropertyKey, sv: unknown, seen: WeakMap<object
       base = {}
     }
     seen.set(sv, base)
-    mergeInto(base, sv, seen)
+    mergeInto(base, sv, seen, depth)
     seen.delete(sv)
     defineData(t, key, base)
   } else {
@@ -52,15 +59,16 @@ function mergeKey(t: object, key: PropertyKey, sv: unknown, seen: WeakMap<object
   }
 }
 
-function mergeInto(t: object, s: object, seen: WeakMap<object, object>): void {
+function mergeInto(t: object, s: object, seen: WeakMap<object, object>, depth: number): void {
+  assertNestingDepth(depth)
   if (t === Object.prototype || t === Function.prototype) return
   for (const key of Object.keys(s)) {
-    mergeKey(t, key, (s as Record<string, unknown>)[key], seen)
+    mergeKey(t, key, (s as Record<string, unknown>)[key], seen, depth + 1)
   }
   for (const sym of Object.getOwnPropertySymbols(s)) {
     const desc = Object.getOwnPropertyDescriptor(s, sym)
     if (!desc?.enumerable) continue
-    mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen)
+    mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, depth + 1)
   }
 }
 
@@ -69,6 +77,8 @@ function mergeInto(t: object, s: object, seen: WeakMap<object, object>): void {
  * Writes via defineProperty. Skips undefined source values when the target already has a defined value.
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
+ * Nesting deeper than 1000 levels throws `RangeError`; on throw, `target` may already hold a
+ * partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.
  * @returns `target`
@@ -80,7 +90,7 @@ export function merge<T extends object>(target: T, ...sources: (object | null | 
   }
   const seen = new WeakMap<object, object>()
   for (const s of sources) {
-    if (s != null) mergeInto(target, s, seen)
+    if (s != null) mergeInto(target, s, seen, 1)
   }
   return target
 }
@@ -287,18 +297,20 @@ const BOXED_TAGS = new Set([
  * `groups`. Class instances stay by reference. Symbol `protocol.clone` is honored and
  * receives the `deep` flag; a string-named `clone` method is ignored. Collection classes
  * deep-clone their values when `deep` is true (comparator-ordered keys stay by reference).
+ * Deep nesting deeper than 1000 levels throws `RangeError`.
  * @param value Value to clone.
  * @param deep Deep clone when true.
  */
 export function clone<T>(value: T, deep = false): T {
-  return cloneInner(value, deep, new WeakMap()) as T
+  return cloneInner(value, deep, new WeakMap(), 1) as T
 }
 
 function copyEnumerableSymbols(
   src: object,
   dest: object,
   deep: boolean,
-  map: WeakMap<object, unknown>
+  map: WeakMap<object, unknown>,
+  depth: number
 ): void {
   for (const sym of Object.getOwnPropertySymbols(src)) {
     const desc = Object.getOwnPropertyDescriptor(src, sym)
@@ -307,7 +319,7 @@ function copyEnumerableSymbols(
       dest,
       sym,
       deep
-        ? cloneInner((src as Record<symbol, unknown>)[sym], true, map)
+        ? cloneInner((src as Record<symbol, unknown>)[sym], true, map, depth + 1)
         : (src as Record<symbol, unknown>)[sym]
     )
   }
@@ -321,10 +333,16 @@ function isNodeBuffer(v: unknown): v is Uint8Array {
   )
 }
 
-function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): unknown {
+function cloneInner(
+  v: unknown,
+  deep: boolean,
+  map: WeakMap<object, unknown>,
+  depth: number
+): unknown {
   if (v === null || typeof v !== 'object') return v
   if (map.has(v)) return map.get(v)
   if (hasMethod(v, protocol.clone)) return v[protocol.clone](deep)
+  if (deep) assertNestingDepth(depth)
 
   const tag = Object.prototype.toString.call(v)
   let r: unknown
@@ -340,14 +358,14 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     map.set(v, out)
     for (const [k, x] of v as Map<unknown, unknown>) {
       // Deep clone keeps Map key identity (Lodash); values are deep-cloned.
-      out.set(k, deep ? cloneInner(x, true, map) : x)
+      out.set(k, deep ? cloneInner(x, true, map, depth + 1) : x)
     }
     return out
   } else if (tag === '[object Set]') {
     const out = new Set()
     map.set(v, out)
     for (const x of v as Set<unknown>) {
-      out.add(deep ? cloneInner(x, true, map) : x)
+      out.add(deep ? cloneInner(x, true, map, depth + 1) : x)
     }
     return out
   } else if (tag === '[object ArrayBuffer]') {
@@ -373,15 +391,17 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     const out: unknown[] = new Array(v.length)
     map.set(v, out)
     for (let i = 0; i < v.length; i++) {
-      if (i in v) out[i] = deep ? cloneInner(v[i], true, map) : v[i]
+      if (i in v) out[i] = deep ? cloneInner(v[i], true, map, depth + 1) : v[i]
     }
     const arr = v as unknown[] & { index?: number; input?: string; groups?: unknown }
     if ('index' in arr) (out as { index?: number }).index = arr.index
     if ('input' in arr) (out as { input?: string }).input = arr.input
     if ('groups' in arr) {
-      ;(out as { groups?: unknown }).groups = deep ? cloneInner(arr.groups, true, map) : arr.groups
+      ;(out as { groups?: unknown }).groups = deep
+        ? cloneInner(arr.groups, true, map, depth + 1)
+        : arr.groups
     }
-    copyEnumerableSymbols(v, out, deep, map)
+    copyEnumerableSymbols(v, out, deep, map, depth)
     return out
   }
 
@@ -389,9 +409,9 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
     const out = Object.create(Object.getPrototypeOf(v) as object | null) as Record<string, unknown>
     map.set(v, out)
     for (const k of Object.keys(v)) {
-      defineData(out, k, deep ? cloneInner(v[k], true, map) : v[k])
+      defineData(out, k, deep ? cloneInner(v[k], true, map, depth + 1) : v[k])
     }
-    copyEnumerableSymbols(v, out, deep, map)
+    copyEnumerableSymbols(v, out, deep, map, depth)
     return out
   }
 
