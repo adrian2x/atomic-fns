@@ -187,7 +187,11 @@ Node >= 24; ESM `exports` subpaths; jasmine replaced by vitest.
 
 ## Releasing
 
-One-time owner setup: create a GitHub environment named `npm` with a required reviewer and a deployment branch/tag rule of `v*`. On npm, bind a trusted publisher to this repository, workflow `publish.yml`, environment `npm`.
+One-time owner setup:
+
+1. Create a GitHub environment named `npm` with a required reviewer and a deployment rule of type `tag` matching `v*` only (no branch rules).
+2. Create a repository ruleset that restricts who can create `v*` tags.
+3. On npm, bind a trusted publisher to this repository, workflow `publish.yml`, environment `npm`.
 
 ## Contributing
 

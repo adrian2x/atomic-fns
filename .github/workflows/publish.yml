@@ -26,6 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      sha256: ${{ steps.hash.outputs.sha256 }}
+      tarball: ${{ steps.hash.outputs.tarball }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -42,15 +45,17 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm pack
-      - name: Write SHA256SUMS
-        run: sha256sum atomic-fns-*.tgz > SHA256SUMS
+      - name: Record tarball hash
+        id: hash
+        run: |
+          tarball=$(echo atomic-fns-*.tgz)
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$tarball" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Upload package tarball
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: package
-          path: |
-            atomic-fns-*.tgz
-            SHA256SUMS
+          path: atomic-fns-*.tgz
           if-no-files-found: error
   publish:
     needs: [check, pack]
@@ -59,6 +64,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      EXPECTED_SHA256: ${{ needs.pack.outputs.sha256 }}
+      TARBALL: ${{ needs.pack.outputs.tarball }}
     steps:
       - name: Download package tarball
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -74,5 +82,11 @@ jobs:
           npm -v
           node -e "const v=require('child_process').execSync('npm -v',{encoding:'utf8'}).trim();const[a,b,c]=v.split('.').map(Number);const ok=a>11||(a===11&&(b>5||(b===5&&c>=1)));if(!ok){console.error('npm '+v+' < 11.5.1');process.exit(1)}"
       - name: Verify package checksum
-        run: sha256sum -c SHA256SUMS
-      - run: npm publish ./atomic-fns-*.tgz --provenance --access public
+        run: |
+          actual=$(sha256sum "$TARBALL" | cut -d' ' -f1)
+          if [ "$actual" != "$EXPECTED_SHA256" ]; then
+            echo "checksum mismatch: got $actual expected $EXPECTED_SHA256"
+            exit 1
+          fi
+      - name: Publish
+        run: npm publish "./$TARBALL" --provenance --access public
