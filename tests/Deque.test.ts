@@ -180,6 +180,17 @@ describe('Deque', () => {
     expect(performance.now() - start).toBeLessThan(5)
   })
 
+  it('maxlen above 2**30 grows without overwriting live slots', () => {
+    for (const maxlen of [2 ** 31, Number.MAX_SAFE_INTEGER]) {
+      const d = new Deque<number>([], { maxlen })
+      for (let i = 0; i < 20; i++) d.push(i)
+      expect(d.toArray()).toEqual([...Array(20).keys()])
+    }
+    const small = new Deque<number>([], { maxlen: 3 })
+    small.push(0, 1, 2, 3, 4)
+    expect(small.toArray()).toEqual([2, 3, 4])
+  })
+
   it('SPEC-R80 after pop vacated Array slot is undefined', () => {
     const deque = new Deque([1, 2, 3])
     expect(deque.pop()).toBe(3)

@@ -30,16 +30,23 @@ export class Deque<T> extends SetCollection<T, number> {
   ) {
     super()
     const maxlen = options?.maxlen
-    if (maxlen !== undefined && (!Number.isInteger(maxlen) || maxlen < 0)) {
-      throw new RangeError('maxlen must be a non-negative integer')
+    if (
+      maxlen !== undefined &&
+      maxlen !== Infinity &&
+      (!Number.isInteger(maxlen) || maxlen < 0 || maxlen > Number.MAX_SAFE_INTEGER)
+    ) {
+      throw new RangeError(
+        'maxlen must be a non-negative integer <= Number.MAX_SAFE_INTEGER or Infinity'
+      )
     }
     this.#maxlen = maxlen
     this.#arrType = options?.arrType
     this.#empty = (this.#arrType ? 0 : undefined) as T
 
     const list = items == null ? [] : arrayFromIterable<T>(items)
-    const bound = maxlen === undefined ? list.length : Math.min(list.length, maxlen)
-    this.#cap = Math.max(8, nextPow2(bound))
+    const bound =
+      maxlen === undefined || maxlen === Infinity ? list.length : Math.min(list.length, maxlen)
+    this.#cap = Math.max(8, capacityFor(bound, maxlen))
     this.#buf = this.#alloc(this.#cap)
 
     for (const x of list) {
@@ -107,7 +114,7 @@ export class Deque<T> extends SetCollection<T, number> {
     if (this.#size === 0) return undefined
     const x = this.#buf[this.#head]
     this.#buf[this.#head] = this.#empty
-    this.#head = (this.#head + 1) & (this.#cap - 1)
+    this.#head = (this.#head + 1) % this.#cap
     this.#size--
     return x
   }
@@ -201,7 +208,7 @@ export class Deque<T> extends SetCollection<T, number> {
   }
 
   #phys(i: number): number {
-    return (this.#head + i) & (this.#cap - 1)
+    return (this.#head + i) % this.#cap
   }
 
   #alloc(n: number): { [i: number]: T; length: number } {
@@ -210,8 +217,13 @@ export class Deque<T> extends SetCollection<T, number> {
   }
 
   #grow(): void {
-    if (this.#maxlen !== undefined && this.#cap >= nextPow2(this.#maxlen)) return
-    const newCap = this.#cap * 2
+    const needed = this.#size + 1
+    let newCap = Math.max(this.#cap * 2, needed)
+    if (this.#maxlen !== undefined && this.#maxlen !== Infinity) {
+      if (this.#cap >= this.#maxlen) return
+      newCap = Math.min(newCap, this.#maxlen)
+    }
+    if (newCap <= this.#cap) return
     const nb = this.#alloc(newCap)
     for (let i = 0; i < this.#size; i++) nb[i] = this.#buf[this.#phys(i)]
     this.#buf = nb
@@ -235,13 +247,16 @@ export class Deque<T> extends SetCollection<T, number> {
       this.pop()
     }
     if (this.#size === this.#cap) this.#grow()
-    this.#head = (this.#head - 1) & (this.#cap - 1)
+    this.#head = (this.#head - 1 + this.#cap) % this.#cap
     this.#buf[this.#head] = x
     this.#size++
   }
 }
 
-function nextPow2(n: number): number {
-  if (n <= 1) return 1
-  return 1 << (32 - Math.clz32(n - 1))
+/** Initial buffer capacity: enough for `bound` live slots, never above finite maxlen. */
+function capacityFor(bound: number, maxlen: number | undefined): number {
+  if (bound <= 1) return 1
+  if (maxlen !== undefined && maxlen !== Infinity && bound >= maxlen) return maxlen
+  if (bound > 2 ** 30) return bound
+  return 1 << (32 - Math.clz32(bound - 1))
 }
