@@ -8,7 +8,7 @@ import { ValueError, ZeroDivisionError } from '../globals/errors.js'
 import { assertSameCurrency, compareValueThenUnit } from '../internal/rank1.js'
 import { truncateForError } from '../internal/truncate.js'
 import { registerRank1NumericCompare } from '../operators/order.js'
-import { protocol, unitOf } from '../operators/protocol.js'
+import { protocol, unitOf, type Rank } from '../operators/protocol.js'
 import { isqrtRoot } from './isqrt.js'
 import { pow10, pow10Squares } from './pow10.js'
 
@@ -988,40 +988,38 @@ export class Decimal {
     return true
   }
 
-  get [protocol.rank]() {
-    return 1 as const
-  }
+  readonly [protocol.rank]: Rank = 1;
 
-  [protocol.compare](o: unknown) {
+  [protocol.compare](o: unknown): number | undefined {
     return this.protocolCompare(o)
   }
 
-  [protocol.equals](o: unknown) {
+  [protocol.equals](o: unknown): boolean {
     return this.protocolEquals(o)
   }
 
-  [protocol.add](o: unknown) {
+  [protocol.add](o: unknown): Decimal {
     // Check units on the original operand before brand→string coercion drops the unit hook.
     assertSameCurrency(this, o)
     return this.add(toDecimalInput(o))
   }
 
-  [protocol.sub](o: unknown) {
+  [protocol.sub](o: unknown): Decimal {
     assertSameCurrency(this, o)
     return this.sub(toDecimalInput(o))
   }
 
-  [protocol.mul](o: unknown) {
+  [protocol.mul](o: unknown): Decimal {
     assertSameCurrency(this, o)
     return this.mul(toDecimalInput(o))
   }
 
-  [protocol.div](o: unknown) {
+  [protocol.div](o: unknown): Decimal {
     assertSameCurrency(this, o)
     return this.div(toDecimalInput(o))
   }
 
-  [protocol.abs]() {
+  [protocol.abs](): Decimal {
     return this.abs()
   }
 }

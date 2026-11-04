@@ -1,6 +1,6 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { truncateForError } from '../../internal/truncate.js'
-import { protocol, type Comparable, type Equatable } from '../../operators/protocol.js'
+import { protocol, type Comparable, type Equatable, type Rank } from '../../operators/protocol.js'
 import {
   Duration,
   durationField,
@@ -235,9 +235,7 @@ export class IntlDate implements Comparable, Equatable {
   #relativeFormat?: Intl.RelativeTimeFormat
   #relativeAutoFormat?: Intl.RelativeTimeFormat
 
-  get [protocol.rank]() {
-    return 5 as const
-  }
+  readonly [protocol.rank]: Rank = 5;
 
   [protocol.compare](o: unknown): number | undefined {
     return this.protocolCompare(o)
