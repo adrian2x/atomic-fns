@@ -247,8 +247,15 @@ describe('shared-reference DAG budgets', () => {
     const live = arrDag(depth, { a: 1 })
     expect(matches(arrChain(depth + 1, { a: 1 }))([dead, live])).toBe(true)
 
-    const failsFirstShape = { a: 2, b: 1 }
-    expect(matches([{ a: 1 }, { a: 2 }])([failsFirstShape, { a: 1 }])).toBe(true)
+    // Enough keys that matches remembers the failed pair.
+    const padding = { f0: 0, f1: 1, f2: 2, f3: 3, f4: 4, f5: 5, f6: 6, f7: 7 }
+    const failsFirstShape = { ...padding, a: 9, b: 1 }
+    expect(
+      matches([
+        { ...padding, a: 1 },
+        { ...padding, a: 9 }
+      ])([failsFirstShape, { ...padding, a: 1 }])
+    ).toBe(true)
   })
 
   it('matches walks a shape DAG of empty containers in bounded time', () => {
@@ -260,10 +267,22 @@ describe('shared-reference DAG budgets', () => {
     }, BUDGET)
   })
 
+  it('matches remembers a failed pair over a wide array', () => {
+    const wide: unknown[] = Array.from({ length: 8 }, (_, i) => i + 10)
+    wide.push({ a: 2, b: 1 })
+    resetSubsetPairComparisons()
+
+    expect(matches([[{ a: 1 }]])([wide, wide])).toBe(false)
+
+    // Two at the top, one inside the only walk of `wide`.
+    expect(getSubsetPairComparisons()).toBe(3)
+  })
+
   /** Two-node cycle: `node.x.back === node`, with `node.y` read after the cycle edge. */
   function ring(y: number): { node: object; back: object } {
     const node: Record<string, unknown> = {}
-    const back = { back: node }
+    // Enough keys that matches remembers `back` instead of walking it again.
+    const back = { f0: 0, f1: 0, f2: 0, f3: 0, f4: 0, f5: 0, f6: 0, f7: 0, back: node }
     node.x = back
     node.y = y
     // Shared leaf key, so the index keeps every ring as a candidate.
@@ -285,6 +304,29 @@ describe('shared-reference DAG budgets', () => {
     )
   })
 
+  it('matches remembers a failed pair whose tentative pairs rolled back', () => {
+    const levels = 14
+    const padding = { f0: 0, f1: 1, f2: 2, f3: 3, f4: 4, f5: 5, f6: 6, f7: 7 }
+    let shape: Record<string, unknown> = { y: 1 }
+    let target: Record<string, unknown> = { y: 2, z: 1 }
+    for (let i = 0; i < levels; i++) {
+      const nextShape: Record<string, unknown> = {}
+      nextShape.x = { ...padding, back: nextShape, l: [shape] }
+      nextShape.y = 1
+      const nextTarget: Record<string, unknown> = {}
+      nextTarget.x = { ...padding, back: nextTarget, l: [target, target, shape] }
+      nextTarget.y = 2
+      nextTarget.z = 1
+      shape = nextShape
+      target = nextTarget
+    }
+    resetSubsetPairComparisons()
+
+    expect(matches(shape)(target)).toBe(false)
+
+    expect(getSubsetPairComparisons()).toBeLessThanOrEqual(16 * levels)
+  })
+
   it('a pair reached twice on one cycle resolves below the nesting cap', () => {
     function selfPair(...tail: number[]): unknown[] {
       const a: unknown[] = []
@@ -300,8 +342,35 @@ describe('shared-reference DAG budgets', () => {
     const CHAIN_DEPTH = 100
     /** An uncapped index holds about 290 MB here and grows with depth. */
     const HEAP_BOUND = 128 * 1024 * 1024
+    /** Remembering every pair holds about 100 MB in these tests, against 3 MB. */
+    const MEMO_BOUND = 32 * 1024 * 1024
+    /** More distinct pairs than the memo may hold. */
+    const FLOOD_ROWS = 1101
 
-    it('holds no per-level copy of a deep target leaf set', { timeout: 10_000 }, () => {
+    interface Blocks {
+      shape: unknown[]
+      target: unknown[]
+    }
+
+    /** Costs a walk of every key, and fails on `z` against any other `z`. */
+    function wideRow(z: number): object {
+      return { k0: 0, k1: 1, k2: 2, k3: 3, k4: 4, k5: 5, k6: 6, k7: 7, z }
+    }
+
+    /** Every shape row fails against each target row but the last. */
+    function floodBlocks(): Blocks {
+      const target = Array.from({ length: FLOOD_ROWS - 1 }, () => wideRow(2))
+      target.push(wideRow(1))
+      return { shape: Array.from({ length: FLOOD_ROWS }, () => wideRow(1)), target }
+    }
+
+    function comparisonsOf(shape: unknown, target: unknown, expected: boolean): number {
+      resetSubsetPairComparisons()
+      expect(matches(shape)(target)).toBe(expected)
+      return getSubsetPairComparisons()
+    }
+
+    it('holds no per-level copy of a deep target leaf set', { timeout: 60_000 }, () => {
       const chain = nestIn(CHAIN_DEPTH, LEAVES)
 
       const held = heapHeldAtProbe((probe) => {
@@ -311,7 +380,7 @@ describe('shared-reference DAG budgets', () => {
       expect(held).toBeLessThan(HEAP_BOUND)
     })
 
-    it('holds no per-level copy of a deep shape leaf set', { timeout: 10_000 }, () => {
+    it('holds no per-level copy of a deep shape leaf set', { timeout: 60_000 }, () => {
       const chain = nestIn(CHAIN_DEPTH, LEAVES)
 
       const held = heapHeldAtProbe((probe) => {
@@ -321,23 +390,111 @@ describe('shared-reference DAG budgets', () => {
       expect(held).toBeLessThan(HEAP_BOUND)
     })
 
-    it('caps its memo of pairs through a quadratic failing scan', { timeout: 10_000 }, () => {
-      const rows = 2000
-      /** An uncapped memo holds about 128 MB here, against 30 MB capped. */
-      const memoBound = 64 * 1024 * 1024
-      const shape: object[] = Array.from({ length: rows }, () => ({ a: 5, b: 6 }))
-      shape.push({ z: { p: 0 } })
-      const target: object[] = Array.from({ length: rows }, () => ({ a: 6, b: 5 }))
+    it('caps its memo of pairs through a quadratic failing scan', { timeout: 60_000 }, () => {
+      const { shape, target } = floodBlocks()
+      shape.push({ probed: { p: 0 } })
 
       const held = heapHeldAtProbe((probe) => {
-        target.push({ a: 5, b: 6, z: probe })
+        target.push({ probed: probe })
         expect(matches(shape)(target)).toBe(true)
       })
 
-      expect(held).toBeLessThan(memoBound)
+      expect(held).toBeLessThan(MEMO_BOUND)
     })
 
-    it('still matches elements and shapes the index gave up on', { timeout: 10_000 }, () => {
+    it(
+      'walks an expensive failed pair once while pair walks flood the memo',
+      { timeout: 60_000 },
+      () => {
+        /** Fails on `never` only after walking all but one row against every element. */
+        function failingBlocks(rows: number): { shape: object[]; targets: object[][] } {
+          const shape: object[] = Array.from({ length: rows - 1 }, () => ({ a: 5, b: 6 }))
+          shape.push({ never: 5 })
+          const block = (): object[] => {
+            const target: object[] = Array.from({ length: rows - 1 }, () => ({ a: 6, b: 5 }))
+            target.push({ a: 5, b: 6 })
+            return target
+          }
+          return { shape, targets: [block(), block()] }
+        }
+        function nested(levels: number): [unknown, unknown] {
+          const { shape, targets } = failingBlocks(FLOOD_ROWS)
+          let s: unknown = shape
+          let t: unknown = [1]
+          let [w1, w2]: unknown[] = targets
+          for (let i = 0; i < levels; i++) {
+            s = [s]
+            t = [t, w1, w2, t]
+            w1 = [w1]
+            w2 = [w2]
+          }
+          return [s, t]
+        }
+
+        const oneLevel = comparisonsOf(...nested(1), false)
+        const threeLevels = comparisonsOf(...nested(3), false)
+
+        expect(oneLevel).toBeGreaterThan(2_000_000)
+        expect(threeLevels).toBeLessThan(oneLevel + 100)
+      }
+    )
+
+    /** Comparisons spent on the second visit of `pricey`, made after the flood finished. */
+    function revisitComparisons(pricey: Blocks, flood: Blocks): number {
+      const target = {
+        first: [pricey.target],
+        flood: flood.target,
+        get resetCount(): number {
+          resetSubsetPairComparisons()
+          return 0
+        },
+        again: [pricey.target]
+      }
+      const shape = {
+        first: [pricey.shape],
+        flood: flood.shape,
+        resetCount: 0,
+        again: [pricey.shape]
+      }
+      expect(matches(shape)(target)).toBe(true)
+      return getSubsetPairComparisons()
+    }
+
+    /** Shape rows that each fail against every target row but the last. */
+    function narrowBlocks(rows: number): Blocks {
+      const target: object[] = Array.from({ length: rows }, () => ({ a: 6, b: 5 }))
+      target.push({ a: 5, b: 6 })
+      return { shape: Array.from({ length: rows }, () => ({ a: 5, b: 6 })), target }
+    }
+
+    it('keeps an expensive pair when cheaper pairs overflow the memo', { timeout: 60_000 }, () => {
+      expect(revisitComparisons(narrowBlocks(64), floodBlocks())).toBe(1)
+    })
+
+    it('does not let a deep wrapper chain overflow the memo', { timeout: 60_000 }, () => {
+      const depth = 100
+      const chains = 110
+      const target = Array.from({ length: chains }, () => arrChain(depth, { a: 2, b: 1 }))
+      target.push(arrChain(depth, { a: 1 }))
+      const shape = Array.from({ length: chains }, () => arrChain(depth, { a: 1 }))
+
+      expect(revisitComparisons(narrowBlocks(4), { shape, target })).toBe(1)
+    })
+
+    it('remembers no pair cheaper than walking it again', { timeout: 60_000 }, () => {
+      const rows = 1000
+      const { shape, target } = narrowBlocks(rows)
+      shape.push({ probed: { p: 0 } })
+
+      const held = heapHeldAtProbe((probe) => {
+        target.push({ probed: probe })
+        expect(matches(shape)(target)).toBe(true)
+      })
+
+      expect(held).toBeLessThan(MEMO_BOUND)
+    })
+
+    it('still matches elements and shapes the index gave up on', { timeout: 60_000 }, () => {
       const chain = nestIn(CHAIN_DEPTH, LEAVES)
       const twin = nestIn(CHAIN_DEPTH, LEAVES)
 

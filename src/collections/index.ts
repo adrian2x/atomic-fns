@@ -240,13 +240,25 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
   return arr
 }
 
+/** A remembered pair and the walk work that remembering it saves. */
+interface KeptPair {
+  readonly shape: object
+  readonly obj: object
+  readonly work: number
+}
+
 /** State of one matches call. */
 interface MatchSession extends CanonicalKeySession {
   /** Pairs on the active match path, with the depth each was entered at (cycle handling). */
   readonly pending: WeakMap<object, Map<object, number>>
-  /** Settled `(shape, value)` results. */
-  settled: WeakMap<object, WeakMap<object, boolean>>
-  settledCount: number
+  /** Remembered `(shape, value)` results. */
+  readonly settled: WeakMap<object, WeakMap<object, boolean>>
+  /** Eviction index over `settled`. */
+  kept: KeptPair[]
+  /** Walk work a finished pair must have cost to be remembered. */
+  keepWork: number
+  /** Pair visits so far, minus the work of pairs already remembered for good. */
+  walkWork: number
   /** Settled successes still resting on a pending pair. */
   readonly tentative: [shape: object, obj: object][]
   /** Shallowest pending pair assumed true since the last final success. */
@@ -255,8 +267,11 @@ interface MatchSession extends CanonicalKeySession {
   leafKeyRoom: number
 }
 
-/** The settled memo is only a cache: past this many pairs it restarts, which bounds its memory. */
-const MAX_SETTLED_PAIRS = 2 ** 20
+/** Below this many visits, walking a pair again costs less than remembering it. */
+const MIN_KEPT_WORK = 8
+
+/** Most pairs one matches call remembers. */
+const MAX_KEPT_PAIRS = 2 ** 20
 
 /**
  * Average entries the leaf-key index may copy per parent-child edge. Every parent copies its
@@ -269,19 +284,36 @@ function createMatchSession(): MatchSession {
     ...createCanonicalKeySession(),
     pending: new WeakMap(),
     settled: new WeakMap(),
-    settledCount: 0,
+    kept: [],
+    keepWork: MIN_KEPT_WORK,
+    walkWork: 0,
     tentative: [],
     assumedDepth: Infinity,
     leafKeyRoom: 0
   }
 }
 
-function rememberMatch(session: MatchSession, shape: object, obj: object, ok: boolean): void {
-  if (session.settledCount === MAX_SETTLED_PAIRS) {
-    session.settled = new WeakMap()
-    session.settledCount = 0
-  }
-  session.settledCount++
+/** Evict the cheapest remembered pairs until half the memo is free. */
+function forgetCheapPairs(session: MatchSession): void {
+  do {
+    session.keepWork *= 2
+    session.kept = session.kept.filter((pair) => {
+      if (pair.work >= session.keepWork) return true
+      session.settled.get(pair.shape)?.delete(pair.obj)
+      return false
+    })
+  } while (session.kept.length > MAX_KEPT_PAIRS / 2)
+}
+
+function rememberMatch(
+  session: MatchSession,
+  shape: object,
+  obj: object,
+  ok: boolean,
+  work: number
+): void {
+  if (session.kept.length === MAX_KEPT_PAIRS) forgetCheapPairs(session)
+  session.kept.push({ shape, obj, work })
   let results = session.settled.get(shape)
   if (results === undefined) {
     results = new WeakMap()
@@ -294,6 +326,10 @@ function rememberMatch(session: MatchSession, shape: object, obj: object, ok: bo
  * Record a finished pair. A failure is final: pending pairs only ever answer true, so no
  * assumption can have caused it. A success is final once no pending pair above `depth` backs it;
  * until then it stays tentative, and any enclosing failure undoes it.
+ *
+ * Only pairs that cost `keepWork` visits are remembered, so a flood of cheap pairs takes no memo
+ * room. A final pair's work leaves its ancestors' count: walking them again stops at this pair,
+ * and a deep wrapper above one expensive pair cannot mint many expensive pairs.
  */
 function settleMatch(
   session: MatchSession,
@@ -301,19 +337,23 @@ function settleMatch(
   obj: object,
   ok: boolean,
   depth: number,
-  tentativeMark: number
+  tentativeMark: number,
+  workBefore: number
 ): void {
+  const tentative = ok && session.assumedDepth < depth
   if (!ok) {
     for (const [tentativeShape, tentativeObj] of session.tentative.splice(tentativeMark)) {
       session.settled.get(tentativeShape)?.delete(tentativeObj)
     }
-  } else if (session.assumedDepth < depth) {
-    session.tentative.push([shape, obj])
-  } else {
+  } else if (!tentative) {
     session.assumedDepth = Infinity
     session.tentative.length = tentativeMark
   }
-  rememberMatch(session, shape, obj, ok)
+  const work = session.walkWork - workBefore
+  if (work < session.keepWork) return
+  if (tentative) session.tentative.push([shape, obj])
+  else session.walkWork = workBefore
+  rememberMatch(session, shape, obj, ok, work)
 }
 
 /**
@@ -662,10 +702,12 @@ function matchDeep(
   depth: number,
   session: MatchSession
 ): boolean {
+  session.walkWork++
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
   enterNesting()
   const value = obj !== null && typeof obj === 'object' ? obj : undefined
   const tentativeMark = session.tentative.length
+  const workBefore = session.walkWork
   let partners: Map<object, number> | undefined
   try {
     assertNestingDepth(depth)
@@ -704,6 +746,7 @@ function matchDeep(
           if (ev.kind === 'value') valueEls.push(ev.value)
           else hasHole = true
         })
+        session.walkWork += valueEls.length
         const byKey = new Map<string, number[]>()
         const sigs: MatchTargetSig[] = []
         // Target array indices that contain each pure leaf key (for nested array shapes).
@@ -894,7 +937,9 @@ function matchDeep(
     } else {
       ok = deepEqual(shape, obj)
     }
-    if (value !== undefined) settleMatch(session, shape, value, ok, depth, tentativeMark)
+    if (value !== undefined) {
+      settleMatch(session, shape, value, ok, depth, tentativeMark, workBefore)
+    }
     return ok
   } finally {
     if (value !== undefined && partners?.get(value) === depth) partners.delete(value)
