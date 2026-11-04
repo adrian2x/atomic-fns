@@ -16,6 +16,12 @@ import { protocol, unitOf } from '../operators/protocol.js'
 const DECIMAL_BRAND = Symbol.for('atomic-fns.decimal')
 
 /**
+ * Method a rank-1 class exposes for numeric-only comparison. `Symbol.for` so one library copy can
+ * compare another copy's values whatever modules it happened to load.
+ */
+export const NUMERIC_COMPARE: unique symbol = Symbol.for('atomic-fns.numericCompare')
+
+/**
  * True for number (non-NaN), bigint, Decimal/Currency (rank 1, brand, or unit hook), and any
  * value that carries a string `protocol.unit`.
  */

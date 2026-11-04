@@ -7,7 +7,17 @@ import { ValueError } from '../src/globals/errors.js'
 import { Currency } from '../src/i18n/index.js'
 import { contains, sorted } from '../src/itertools/index.js'
 import { max, min } from '../src/math/index.js'
-import { adaptProtocol, compare, eq, gt, gte, lt, lte, unitOf } from '../src/operators/index.js'
+import {
+  adaptProtocol,
+  compare,
+  eq,
+  gt,
+  gte,
+  lt,
+  lte,
+  protocol,
+  unitOf
+} from '../src/operators/index.js'
 
 /** Deterministic PRNG so failures reproduce. */
 function mulberry32(seed: number): () => number {
@@ -413,5 +423,41 @@ describe('R12-A rank-1 relational checks are numeric', () => {
         expect(a.gte(b as never)).toBe(gte(a, b))
       }
     }
+  })
+})
+
+describe('rank-1 relational checks through protocol symbols', () => {
+  class Money {
+    constructor(readonly amount: number) {}
+    readonly [protocol.rank] = 1 as const;
+    [protocol.compare](other: unknown): number {
+      const value = other instanceof Money ? other.amount : Number(other)
+      return this.amount - value
+    }
+  }
+
+  it('compares a user rank-1 class numerically on either side', () => {
+    expect(lte(new Money(5), 5)).toBe(true)
+    expect(gte(new Money(5), 5)).toBe(true)
+    expect(lte(5, new Money(5))).toBe(true)
+    expect(gte(5, new Money(5))).toBe(true)
+    expect(lt(new Money(4), 5)).toBe(true)
+    expect(gt(5, new Money(4))).toBe(true)
+  })
+
+  it('needs no module registration to compare a Decimal from another library copy', () => {
+    const foreign = {
+      [Symbol.for('atomic-fns.decimal')]: () => '1',
+      [Symbol.for('atomic-fns.numericCompare')]: (other: unknown) =>
+        decimal(1).numericCompare(other)
+    }
+    expect(lte(foreign, 1)).toBe(true)
+    expect(gte(1, foreign)).toBe(true)
+  })
+
+  it('pins eq between primitives to SameValueZero', () => {
+    expect(eq(1, 1n)).toBe(false)
+    expect(lte(1, 1n)).toBe(true)
+    expect(gte(1, 1n)).toBe(true)
   })
 })

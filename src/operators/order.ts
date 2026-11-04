@@ -2,20 +2,8 @@
  * Total-order compare and derived relations.
  */
 
-import { assertSameCurrency, isRank1 } from '../internal/rank1.js'
+import { assertSameCurrency, isRank1, NUMERIC_COMPARE } from '../internal/rank1.js'
 import { hasMethod, protocol } from './protocol.js'
-
-type Rank1NumericCompare = (x: unknown, y: unknown) => -1 | 0 | 1 | undefined
-
-let rank1NumericCompare: Rank1NumericCompare | undefined
-
-/**
- * Wired by the Decimal module so rank-1 relational ops stay numeric without `order` importing
- * `decimal` (that import cycle costs nesting headroom in deepEqual).
- */
-export function registerRank1NumericCompare(fn: Rank1NumericCompare): void {
-  rank1NumericCompare = fn
-}
 
 /** User comparator; `compare` itself always returns `-1 | 0 | 1`. */
 export type Comparer<T = unknown> = (x: T, y: T) => number
@@ -210,23 +198,35 @@ export function eq(x: unknown, y: unknown): boolean {
   return sameValueZero(x, y)
 }
 
+function isNumericPrimitive(v: unknown): v is number | bigint {
+  return typeof v === 'number' || typeof v === 'bigint'
+}
+
+/** Numeric order of two rank-1 values with no kind or unit tie-break, when they have one. */
+function rank1Compare(x: unknown, y: unknown): -1 | 0 | 1 | undefined {
+  if (isNumericPrimitive(x) && isNumericPrimitive(y)) return cmp3(x, y)
+  for (const method of [NUMERIC_COMPARE, protocol.compare]) {
+    let r: unknown
+    if (hasMethod(x, method)) r = x[method](y)
+    else if (hasMethod(y, method)) {
+      const flipped = y[method](x)
+      assertCompareResult(flipped)
+      r = flipped === undefined ? undefined : -flipped
+    } else continue
+    assertCompareResult(r)
+    return r === undefined ? undefined : cmp3(r, 0)
+  }
+  return undefined
+}
+
 /**
  * Relational compare: numeric-only for rank-1 values; otherwise the total-order `compare`.
  * @throws {ValueError} when both operands carry different unit codes.
  */
 function relationalCompare(x: unknown, y: unknown): -1 | 0 | 1 {
   assertSameCurrency(x, y)
-  if (isRank1(x) && isRank1(y)) {
-    const n = rank1NumericCompare?.(x, y)
-    if (n !== undefined) return n
-    if (
-      (typeof x === 'number' || typeof x === 'bigint') &&
-      (typeof y === 'number' || typeof y === 'bigint')
-    ) {
-      return x < y ? -1 : x > y ? 1 : 0
-    }
-  }
-  return compare(x, y)
+  const numeric = isRank1(x) && isRank1(y) ? rank1Compare(x, y) : undefined
+  return numeric ?? compare(x, y)
 }
 
 /**

@@ -5,9 +5,8 @@
  */
 
 import { ValueError, ZeroDivisionError } from '../globals/errors.js'
-import { assertSameCurrency, compareValueThenUnit } from '../internal/rank1.js'
+import { assertSameCurrency, compareValueThenUnit, NUMERIC_COMPARE } from '../internal/rank1.js'
 import { truncateForError } from '../internal/truncate.js'
-import { registerRank1NumericCompare } from '../operators/order.js'
 import { protocol, unitOf, type Rank } from '../operators/protocol.js'
 import { isqrtRoot } from './isqrt.js'
 import { pow10, pow10Squares } from './pow10.js'
@@ -34,35 +33,6 @@ function decimalBrandString(v: unknown): string {
     throw new TypeError('Decimal brand method missing')
   }
   return String((fn as (this: object) => unknown).call(v))
-}
-
-/**
- * Numeric-only rank-1 compare (no unit or kind tie-break).
- * Returns `undefined` when either side is not a comparable rank-1 numeric.
- */
-function asCmp3(n: number): -1 | 0 | 1 {
-  return n < 0 ? -1 : n > 0 ? 1 : 0
-}
-
-export function compareRank1Numeric(x: unknown, y: unknown): -1 | 0 | 1 | undefined {
-  if (isDecimalBrand(x) || x instanceof Decimal) {
-    const r = coerceDecimal(x).numericCompare(y)
-    return r === undefined ? undefined : asCmp3(r)
-  }
-  if (isDecimalBrand(y) || y instanceof Decimal) {
-    const r = coerceDecimal(y).numericCompare(x)
-    if (r === undefined) return undefined
-    return asCmp3(-r)
-  }
-  if (
-    (typeof x === 'number' || typeof x === 'bigint') &&
-    (typeof y === 'number' || typeof y === 'bigint')
-  ) {
-    if (typeof x === 'number' && Number.isNaN(x)) return undefined
-    if (typeof y === 'number' && Number.isNaN(y)) return undefined
-    return x < y ? -1 : x > y ? 1 : 0
-  }
-  return undefined
 }
 
 function coerceDecimal(v: unknown): Decimal {
@@ -994,6 +964,10 @@ export class Decimal {
     return this.protocolCompare(o)
   }
 
+  [NUMERIC_COMPARE](o: unknown): number | undefined {
+    return this.numericCompare(o)
+  }
+
   [protocol.equals](o: unknown): boolean {
     return this.protocolEquals(o)
   }
@@ -1033,5 +1007,3 @@ Object.defineProperty(Decimal.prototype, DECIMAL_BRAND, {
   configurable: false,
   writable: false
 })
-
-registerRank1NumericCompare(compareRank1Numeric)
