@@ -15,18 +15,18 @@
   "excludePrivate": true,
   "treatWarningsAsErrors": true,
   "intentionallyNotExported": [
-    "compare",
-    "equals",
-    "rank",
-    "clone",
-    "add",
-    "sub",
-    "mul",
-    "div",
-    "mod",
-    "pow",
-    "abs",
-    "boolKey",
-    "unit"
+    "src/operators/protocol.ts:compare",
+    "src/operators/protocol.ts:equals",
+    "src/operators/protocol.ts:rank",
+    "src/operators/protocol.ts:clone",
+    "src/operators/protocol.ts:add",
+    "src/operators/protocol.ts:sub",
+    "src/operators/protocol.ts:mul",
+    "src/operators/protocol.ts:div",
+    "src/operators/protocol.ts:mod",
+    "src/operators/protocol.ts:pow",
+    "src/operators/protocol.ts:abs",
+    "src/operators/protocol.ts:boolKey",
+    "src/operators/protocol.ts:unit"
   ]
 }
