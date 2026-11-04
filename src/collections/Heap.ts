@@ -41,10 +41,10 @@ export class Heap<T> extends ValueCollection<T> {
 
   /**
    * Multiset equality under `deepEqual`, independent of the heap comparator and of iteration order.
-   * Shared references cancel without a comparison, items pair within groups of a bounded structural
-   * hash, and a hook that is not transitive still gets an exact answer. The comparisons share the
-   * walk's `deepEqual` session and its limit, which throws `RangeError`: only items that no bounded
-   * hash can tell apart get near it, because they pair all-to-all.
+   * Shared references cancel without a comparison and items pair within groups of a bounded
+   * structural hash. The comparisons share the walk's `deepEqual` session and its limit, which
+   * throws `RangeError`: only items that no bounded hash can tell apart get near it, because they
+   * pair all-to-all.
    */
   override [protocol.equals](other: unknown): boolean {
     return withHookNesting(() => {
