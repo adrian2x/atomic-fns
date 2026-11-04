@@ -13,5 +13,20 @@
   ],
   "out": "docs",
   "excludePrivate": true,
-  "treatWarningsAsErrors": true
+  "treatWarningsAsErrors": true,
+  "intentionallyNotExported": [
+    "compare",
+    "equals",
+    "rank",
+    "clone",
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "mod",
+    "pow",
+    "abs",
+    "boolKey",
+    "unit"
+  ]
 }

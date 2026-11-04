@@ -2,32 +2,19 @@
  * Symbol protocol and truth helpers.
  */
 
-/** Protocol key: total order. Prefer {@link protocol.compare}. */
-export const compare: unique symbol = Symbol.for('atomic-fns.compare')
-/** Protocol key: semantic equality. Prefer {@link protocol.equals}. */
-export const equals: unique symbol = Symbol.for('atomic-fns.equals')
-/** Protocol key: type rank. Prefer {@link protocol.rank}. */
-export const rank: unique symbol = Symbol.for('atomic-fns.rank')
-/** Protocol key: clone. Prefer {@link protocol.clone}. */
-export const clone: unique symbol = Symbol.for('atomic-fns.clone')
-/** Protocol key: addition. Prefer {@link protocol.add}. */
-export const add: unique symbol = Symbol.for('atomic-fns.add')
-/** Protocol key: subtraction. Prefer {@link protocol.sub}. */
-export const sub: unique symbol = Symbol.for('atomic-fns.sub')
-/** Protocol key: multiplication. Prefer {@link protocol.mul}. */
-export const mul: unique symbol = Symbol.for('atomic-fns.mul')
-/** Protocol key: division. Prefer {@link protocol.div}. */
-export const div: unique symbol = Symbol.for('atomic-fns.div')
-/** Protocol key: modulo. Prefer {@link protocol.mod}. */
-export const mod: unique symbol = Symbol.for('atomic-fns.mod')
-/** Protocol key: exponentiation. Prefer {@link protocol.pow}. */
-export const pow: unique symbol = Symbol.for('atomic-fns.pow')
-/** Protocol key: absolute value. Prefer {@link protocol.abs}. */
-export const abs: unique symbol = Symbol.for('atomic-fns.abs')
-/** Protocol key: truthiness. Prefer {@link protocol.bool}. */
-export const boolKey: unique symbol = Symbol.for('atomic-fns.bool')
-/** Protocol key: unit tag (e.g. currency code). Prefer {@link protocol.unit}. */
-export const unit: unique symbol = Symbol.for('atomic-fns.unit')
+const compare: unique symbol = Symbol.for('atomic-fns.compare')
+const equals: unique symbol = Symbol.for('atomic-fns.equals')
+const rank: unique symbol = Symbol.for('atomic-fns.rank')
+const clone: unique symbol = Symbol.for('atomic-fns.clone')
+const add: unique symbol = Symbol.for('atomic-fns.add')
+const sub: unique symbol = Symbol.for('atomic-fns.sub')
+const mul: unique symbol = Symbol.for('atomic-fns.mul')
+const div: unique symbol = Symbol.for('atomic-fns.div')
+const mod: unique symbol = Symbol.for('atomic-fns.mod')
+const pow: unique symbol = Symbol.for('atomic-fns.pow')
+const abs: unique symbol = Symbol.for('atomic-fns.abs')
+const boolKey: unique symbol = Symbol.for('atomic-fns.bool')
+const unit: unique symbol = Symbol.for('atomic-fns.unit')
 
 /** Shared protocol symbols for operator dispatch. */
 export const protocol: {
