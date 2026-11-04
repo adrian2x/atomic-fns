@@ -28,8 +28,8 @@ type Settled = WeakMap<object, WeakSet<object>>
  * candidate, so proofs that may rest on the assumption are retracted (see `deepEqualInSession`).
  * Unequal answers are never retracted: every comparison is monotone in its parts, so a false
  * reached under an assumption also holds without it (Heap matching keeps this by leaving its
- * greedy pass once a pair was assumed). A pair that walked far can therefore fail only once,
- * which bounds the retractions and keeps cyclic input polynomial.
+ * greedy pass once a pair was assumed). While the memos have room, a pair that walked far can
+ * therefore fail only once, which bounds the retractions and keeps cyclic input polynomial.
  */
 export interface DeepEqualSession {
   readonly pending: Pending
@@ -42,15 +42,30 @@ export interface DeepEqualSession {
   assumptions: number
   /** Pairs put on the active path so far. */
   visits: number
+  /** Proofs the session may still store. */
+  proofRoom: number
+  /** Failures the session may still store. */
+  failureRoom: number
 }
 
 /**
  * Pairs a failed comparison must have walked before it is remembered. A wide Heap fails most of
- * its k^2 candidate pairs: remembering the shallow ones costs quadratic memory and saves nothing,
- * while the walks that multiply per level all pass this quickly.
- * shortcut: deep items in a wide Heap still store k^2 failures, a cap needs a per-walk budget.
+ * its k^2 candidate pairs: remembering the shallow ones saves nothing, while the walks that
+ * multiply per level all pass this quickly.
  */
 const MIN_VISITS_TO_REMEMBER_FAILURE = 32
+
+/**
+ * Bounds on what one session stores, so a walk's memory stays fixed however many pairs it meets.
+ * A full memo keeps what it holds and stops adding: earlier pairs may be expensive, and a pair
+ * that finds no room is only compared again, so answers do not change. Failures get their own
+ * bound so that a flood of failed Heap candidates cannot take the room proofs need to keep shared
+ * references linear.
+ * shortcut: past a bound repeated work is recomputed and can multiply per level again; refusing
+ * the walk instead would be a new RangeError for input that succeeds today.
+ */
+const MAX_REMEMBERED_PROOFS = 2 ** 21
+const MAX_REMEMBERED_FAILURES = 2 ** 20
 
 /** Create an empty session (no pairs pending or settled). */
 export function createDeepEqualSession(): DeepEqualSession {
@@ -59,7 +74,9 @@ export function createDeepEqualSession(): DeepEqualSession {
     proven: new WeakMap(),
     provenLog: [],
     assumptions: 0,
-    visits: 0
+    visits: 0,
+    proofRoom: MAX_REMEMBERED_PROOFS,
+    failureRoom: MAX_REMEMBERED_FAILURES
   }
 }
 
@@ -141,9 +158,16 @@ function settle(
   visitsBefore: number
 ): boolean {
   if (equal) {
-    remember(session.proven, a, b)
-    if (session.assumptions !== 0) session.provenLog.push([a, b])
-  } else if (session.visits - visitsBefore >= MIN_VISITS_TO_REMEMBER_FAILURE) {
+    if (session.proofRoom > 0) {
+      session.proofRoom--
+      remember(session.proven, a, b)
+      if (session.assumptions !== 0) session.provenLog.push([a, b])
+    }
+  } else if (
+    session.failureRoom > 0 &&
+    session.visits - visitsBefore >= MIN_VISITS_TO_REMEMBER_FAILURE
+  ) {
+    session.failureRoom--
     session.disproven ??= new WeakMap()
     remember(session.disproven, a, b)
   }
@@ -297,7 +321,9 @@ export function deepEqualInSession(a: unknown, b: unknown, session: DeepEqualSes
   const assumptionsBefore = session.assumptions
   const equal = guardNesting(() => deepEqualInner(a, b, session))
   if (!equal && session.assumptions !== assumptionsBefore) {
-    for (const [x, y] of session.provenLog.splice(proofsBefore)) session.proven.get(x)?.delete(y)
+    const retracted = session.provenLog.splice(proofsBefore)
+    for (const [x, y] of retracted) session.proven.get(x)?.delete(y)
+    session.proofRoom += retracted.length
   }
   return equal
 }

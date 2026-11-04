@@ -13,6 +13,7 @@ import {
 } from '../src/collections/index.js'
 import { decimal } from '../src/decimal/index.js'
 import { IntlDate } from '../src/i18n/date/index.js'
+import { walkSession } from '../src/internal/nesting.js'
 import { createDeepEqualSession, deepEqualInSession } from '../src/operators/equality.js'
 import { deepEqual, eq, protocol } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
@@ -571,7 +572,94 @@ function loop(tail: unknown): { outer: Deque<unknown>; inner: Deque<unknown> } {
   return { outer, inner }
 }
 
+/** How many pairs of `left` x `right` a memo holds, in either order. */
+function storedPairs(
+  memo: WeakMap<object, WeakSet<object>> | undefined,
+  left: object[],
+  right: object[]
+): number {
+  const held = (a: object, b: object): boolean => memo?.get(a)?.has(b) === true
+  return left.flatMap((a) => right.filter((b) => held(a, b) || held(b, a))).length
+}
+
 describe('session memory', () => {
+  /** Equal Heaps whose items only match across kinds, in opposite order. */
+  function wideCrossKindItems(): { numbers: object[]; decimals: object[] } {
+    const width = 30
+    const chain = (leaf: unknown): object => stack((x) => ({ x }), 40, leaf) as object
+    return {
+      numbers: Array.from({ length: width }, (_, i) => chain(i)),
+      decimals: Array.from({ length: width }, (_, i) => chain(decimal(width - 1 - i)))
+    }
+  }
+
+  it('a wide Heap of deep items fills the failure memo up to the bound and no further', () => {
+    const { numbers, decimals } = wideCrossKindItems()
+    const session = walkSession(createDeepEqualSession)
+    session.failureRoom = 100
+
+    const equal = deepEqual(new Heap(numbers, tied), new Heap(decimals, tied))
+
+    expect(equal).toBe(true)
+    expect(storedPairs(session.disproven, numbers, decimals)).toBeLessThanOrEqual(100)
+    // the first failure is still held at the end
+    expect(storedPairs(session.disproven, numbers.slice(0, 1), decimals.slice(0, 1))).toBe(1)
+  })
+
+  it(
+    'failed candidates leave proofs the room that keeps shared references linear',
+    DOS_TIMEOUT,
+    () => {
+      const { numbers, decimals } = wideCrossKindItems()
+      const level = (x: unknown): unknown => new Deque([x, x])
+      const left = [new Heap(numbers, tied), stack(level, LEVELS)]
+      const right = [new Heap(decimals, tied), stack(level, LEVELS)]
+      const session = walkSession(createDeepEqualSession)
+      session.failureRoom = 100
+      session.proofRoom = 2000
+      const calls = hookCalls(Deque.prototype, protocol.equals)
+
+      expect(deepEqual(left, right)).toBe(true)
+
+      expect(calls.mock.calls.length).toBe(LEVELS)
+    }
+  )
+
+  it('a wide cyclic Heap stops remembering proofs at the bound', () => {
+    const items = (): Deque<unknown>[] => Array.from({ length: 40 }, () => containsItself(1))
+    const left = items()
+    const right = items()
+    const session = walkSession(createDeepEqualSession)
+    session.proofRoom = 10
+
+    const equal = deepEqual(new Heap(left, tied), new Heap(right, tied))
+
+    expect(equal).toBe(true)
+    expect(storedPairs(session.proven, left, right)).toBeLessThanOrEqual(10)
+  })
+
+  it('a retracted proof frees its room', () => {
+    const session = walkSession(createDeepEqualSession)
+    const room = session.proofRoom
+
+    deepEqual(loop(1).outer, loop(2).outer)
+
+    expect(session.proofRoom).toBe(room)
+  })
+
+  it('a proof that found no room frees none when it fails', () => {
+    const session = walkSession(createDeepEqualSession)
+    session.proofRoom = 0
+
+    deepEqual(loop(1).outer, loop(2).outer)
+
+    expect(session.proofRoom).toBe(0)
+  })
+
+  it('a session bounds what it stores by default', () => {
+    expect(createDeepEqualSession()).toMatchObject({ proofRoom: 2 ** 21, failureRoom: 2 ** 20 })
+  })
+
   it('an acyclic walk logs no proofs', () => {
     const session = createDeepEqualSession()
 
