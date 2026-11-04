@@ -280,6 +280,12 @@ function toDecimalInput(o: unknown): DecimalInput {
   throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
 }
 
+/** Module-level bounds so static field initializers never reference the class (ES2023 TDZ). */
+const MAX_EXPONENT = 10_000
+const MAX_PRECISION = 10_000
+const MAX_DIGITS = 10_000
+const MAX_INPUT_LENGTH = 2 * MAX_EXPONENT + MAX_DIGITS + 32
+
 /**
  * Exact decimal arithmetic with per-operation precision and rounding.
  * Near {@link Decimal.MAX_DIGITS}, each arithmetic operation costs on the order of 0.2 ms, so
@@ -297,10 +303,10 @@ export class Decimal {
   }
 
   /** Maximum absolute stored exponent; larger values throw {@link ValueError}. */
-  static readonly MAX_EXPONENT = 10_000
+  static readonly MAX_EXPONENT = MAX_EXPONENT
 
   /** Maximum fractional precision for {@link Decimal.div}, {@link Decimal.sqrt}, and {@link Decimal.round}. */
-  static readonly MAX_PRECISION = 10_000
+  static readonly MAX_PRECISION = MAX_PRECISION
 
   /**
    * Maximum normalized coefficient decimal digit count (significant digits after stripping leading
@@ -309,7 +315,7 @@ export class Decimal {
    * perfect-square results may still use any allowed exponent when their significant digit count
    * fits.
    */
-  static readonly MAX_DIGITS = 10_000
+  static readonly MAX_DIGITS = MAX_DIGITS
 
   /**
    * Maximum raw decimal string length accepted by the parser. Sized for any value within
@@ -317,7 +323,7 @@ export class Decimal {
    * plain notation (`2 * MAX_EXPONENT + MAX_DIGITS + 32`). Longer inputs throw {@link ValueError}
    * before scanning so parsing stays linear in the allowed length.
    */
-  static readonly MAX_INPUT_LENGTH = 2 * Decimal.MAX_EXPONENT + Decimal.MAX_DIGITS + 32
+  static readonly MAX_INPUT_LENGTH = MAX_INPUT_LENGTH
 
   #i = 0n
   #e = 0
