@@ -13,6 +13,11 @@ import {
   walkArray,
   type ArrayWalkEvent
 } from '../internal/arrayKeys.js'
+import {
+  canonicalKeyInfo,
+  createCanonicalKeySession,
+  type CanonicalKeySession
+} from '../internal/canonicalKey.js'
 import { isCompactEmpty } from '../internal/compactEmpty.js'
 import { arrayElements, arrayFromIterable, setFromIterable } from '../internal/iterable.js'
 import {
@@ -239,8 +244,10 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
  * (each shape element must match some target element). Shape keys whose value is `undefined`
  * require that own key on the target. Non-plain shape values (Date, RegExp, Map, Set, typed arrays)
  * compare with {@link deepEqual}. Nesting deeper than 1000 levels throws `RangeError`.
- * Array subset matching costs O(shape size x value size); untrusted shapes should be
- * size-limited by the caller.
+ * Array subset matching buckets target elements by canonical key for primitives and other
+ * deepEqual-equivalent leaves, and filters partial array/object shape elements by a cheap
+ * structural signature (type tag; object key set; array length), then runs the deep walk only
+ * on candidates - O((shape + target) + candidates). Untrusted shapes should be size-limited.
  * @example
 ```js
 const objects = [
@@ -284,8 +291,216 @@ export function matches(shape: unknown): (obj: unknown) => boolean {
     return () => false
   }
   return function (obj) {
-    return guardNesting(() => matchDeep(shape, obj, true, 1, new WeakMap(), new WeakMap()))
+    return guardNesting(() =>
+      matchDeep(shape, obj, true, 1, new WeakMap(), new WeakMap(), createCanonicalKeySession())
+    )
   }
+}
+
+/** True when partial match of `v` equals deepEqual (primitives and non-plain leaves). */
+function isKeyableMatchLeaf(v: unknown): boolean {
+  if (v === null || typeof v !== 'object') return true
+  if (Array.isArray(v) || isPlainObject(v)) return false
+  return true
+}
+
+type MatchTargetSig =
+  | { kind: 'prim' }
+  | { kind: 'array'; length: number }
+  | { kind: 'object'; keys: Set<string> }
+  | { kind: 'other' }
+
+function matchTargetSig(v: unknown): MatchTargetSig {
+  if (v === null || typeof v !== 'object') return { kind: 'prim' }
+  if (Array.isArray(v)) return { kind: 'array', length: v.length }
+  if (isPlainObject(v)) return { kind: 'object', keys: new Set(Object.keys(v)) }
+  return { kind: 'other' }
+}
+
+/** Whether a target signature can possibly satisfy partial shape `item`. */
+function matchSigCompatible(item: unknown, sig: MatchTargetSig): boolean {
+  if (item === null || typeof item !== 'object') return true
+  if (Array.isArray(item)) {
+    return sig.kind === 'array' && sig.length >= item.length
+  }
+  if (isPlainObject(item)) {
+    if (sig.kind !== 'object') return false
+    for (const key of Object.keys(item)) {
+      if (!sig.keys.has(key)) return false
+    }
+    return true
+  }
+  return sig.kind === 'other' || sig.kind === 'prim'
+}
+
+/**
+ * Pure keyable leaf keys of an array shape, or `undefined` when any element is partial
+ * (nested array/object) or unkeyed - callers then fall back to signature filtering.
+ */
+function pushPureLeafKey(
+  v: unknown,
+  keys: CanonicalKeySession,
+  out: string[],
+  state: { failed: boolean }
+): void {
+  if (!isKeyableMatchLeaf(v)) {
+    state.failed = true
+    return
+  }
+  const info = canonicalKeyInfo(v, keys)
+  if (info === undefined || !info.pure || info.hashed) {
+    state.failed = true
+    return
+  }
+  out.push(info.key)
+}
+
+/**
+ * Descendant pure leaf keys of a partial shape array/object, or `undefined` when any node is
+ * an impure / non-plain leaf (cannot index). Empty containers yield `[]`.
+ */
+function shapeDescendantPureLeafKeys(
+  item: unknown,
+  keys: CanonicalKeySession
+): string[] | undefined {
+  if (item === null || typeof item !== 'object') {
+    const out: string[] = []
+    const state = { failed: false }
+    pushPureLeafKey(item, keys, out, state)
+    return state.failed ? undefined : out
+  }
+  if (Array.isArray(item)) {
+    const out: string[] = []
+    const state = { failed: false }
+    walkArray(item, (ev) => {
+      const nested = shapeDescendantPureLeafKeys(ev.kind === 'value' ? ev.value : undefined, keys)
+      if (nested === undefined) {
+        state.failed = true
+        return false
+      }
+      out.push(...nested)
+    })
+    if (state.failed) return undefined
+    return out
+  }
+  if (isPlainObject(item)) {
+    const out: string[] = []
+    for (const key of Object.keys(item)) {
+      const nested = shapeDescendantPureLeafKeys(item[key], keys)
+      if (nested === undefined) return undefined
+      out.push(...nested)
+    }
+    return out
+  }
+  // Date/RegExp/etc: treat as a single keyable leaf when possible.
+  const out: string[] = []
+  const state = { failed: false }
+  pushPureLeafKey(item, keys, out, state)
+  return state.failed ? undefined : out
+}
+
+/** Collect pure leaf keys under a target element for posting-list indexing. */
+function collectTargetLeafKeys(el: unknown, keys: CanonicalKeySession, into: string[]): void {
+  if (el === null || typeof el !== 'object') {
+    const info = canonicalKeyInfo(el, keys)
+    if (info !== undefined && info.pure && !info.hashed) into.push(info.key)
+    return
+  }
+  if (Array.isArray(el)) {
+    walkArray(el, (ev) => {
+      if (ev.kind !== 'value') return
+      collectTargetLeafKeys(ev.value, keys, into)
+    })
+    return
+  }
+  if (isPlainObject(el)) {
+    for (const key of Object.keys(el)) {
+      collectTargetLeafKeys(el[key], keys, into)
+    }
+  }
+}
+
+function hasPlainObjectDescendant(el: unknown): boolean {
+  if (el === null || typeof el !== 'object') return false
+  if (isPlainObject(el)) return true
+  if (Array.isArray(el)) {
+    let found = false
+    walkArray(el, (ev) => {
+      if (ev.kind === 'value' && hasPlainObjectDescendant(ev.value)) {
+        found = true
+        return false
+      }
+    })
+    return found
+  }
+  return false
+}
+
+/** True when `el` contains a nested array (not counting `el` itself when it is an array). */
+function hasNestedArrayDescendant(el: unknown): boolean {
+  if (el === null || typeof el !== 'object') return false
+  if (Array.isArray(el)) {
+    let found = false
+    walkArray(el, (ev) => {
+      if (ev.kind !== 'value') return
+      if (Array.isArray(ev.value) || hasNestedArrayDescendant(ev.value)) {
+        found = true
+        return false
+      }
+    })
+    return found
+  }
+  if (isPlainObject(el)) {
+    for (const key of Object.keys(el)) {
+      if (Array.isArray(el[key]) || hasNestedArrayDescendant(el[key])) return true
+    }
+  }
+  return false
+}
+
+/** True when `item` is an empty plain object or contains one nested somewhere. */
+function shapeHasEmptyObject(item: unknown): boolean {
+  if (item === null || typeof item !== 'object') return false
+  if (isPlainObject(item)) {
+    if (Object.keys(item).length === 0) return true
+    for (const key of Object.keys(item)) {
+      if (shapeHasEmptyObject(item[key])) return true
+    }
+    return false
+  }
+  if (Array.isArray(item)) {
+    let found = false
+    walkArray(item, (ev) => {
+      if (ev.kind === 'value' && shapeHasEmptyObject(ev.value)) {
+        found = true
+        return false
+      }
+    })
+    return found
+  }
+  return false
+}
+
+/** True when `item` is an empty array or contains one nested somewhere. */
+function shapeHasEmptyArray(item: unknown): boolean {
+  if (item === null || typeof item !== 'object') return false
+  if (Array.isArray(item)) {
+    if (item.length === 0) return true
+    let found = false
+    walkArray(item, (ev) => {
+      if (ev.kind === 'value' && shapeHasEmptyArray(ev.value)) {
+        found = true
+        return false
+      }
+    })
+    return found
+  }
+  if (isPlainObject(item)) {
+    for (const key of Object.keys(item)) {
+      if (shapeHasEmptyArray(item[key])) return true
+    }
+  }
+  return false
 }
 
 function matchDeep(
@@ -294,7 +509,8 @@ function matchDeep(
   top: boolean,
   depth: number,
   pending: MatchPending,
-  proven: MatchProven
+  proven: MatchProven,
+  keys: CanonicalKeySession
 ): boolean {
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
   enterNesting()
@@ -325,17 +541,133 @@ function matchDeep(
           if (ev.kind === 'value') valueEls.push(ev.value)
           else hasHole = true
         })
+        const byKey = new Map<string, unknown[]>()
+        const sigs: MatchTargetSig[] = []
+        // Target array indices that contain each pure leaf key (for nested array shapes).
+        const leafPostings = new Map<string, number[]>()
+        const arrayCandidates: number[] = []
+        const objectCandidates: number[] = []
+        const otherCandidates: number[] = []
+        const withObjectDescendant: number[] = []
+        const withArrayDescendant: number[] = []
+        for (let i = 0; i < valueEls.length; i++) {
+          const el = valueEls[i]
+          const sig = matchTargetSig(el)
+          sigs.push(sig)
+          if (sig.kind === 'array') arrayCandidates.push(i)
+          else if (sig.kind === 'object') objectCandidates.push(i)
+          else if (sig.kind === 'other') otherCandidates.push(i)
+          if (hasPlainObjectDescendant(el)) withObjectDescendant.push(i)
+          if (hasNestedArrayDescendant(el)) withArrayDescendant.push(i)
+          const info = canonicalKeyInfo(el, keys)
+          if (info !== undefined) {
+            let bucket = byKey.get(info.key)
+            if (bucket === undefined) {
+              bucket = []
+              byKey.set(info.key, bucket)
+            }
+            bucket.push(el)
+          }
+          const leafKeys: string[] = []
+          collectTargetLeafKeys(el, keys, leafKeys)
+          for (const leafKey of leafKeys) {
+            let posting = leafPostings.get(leafKey)
+            if (posting === undefined) {
+              posting = []
+              leafPostings.set(leafKey, posting)
+            }
+            if (posting.length === 0 || posting[posting.length - 1] !== i) posting.push(i)
+          }
+        }
         ok = true
         walkArray(shape, (sev) => {
           const item = sev.kind === 'value' ? sev.value : undefined
           let found = false
-          for (const candidate of valueEls) {
-            if (matchDeep(item, candidate, false, depth + 1, pending, proven)) {
-              found = true
-              break
+          if (isKeyableMatchLeaf(item)) {
+            const info = canonicalKeyInfo(item, keys)
+            if (info !== undefined && info.pure && !info.hashed) {
+              found = byKey.has(info.key)
+            } else if (info !== undefined) {
+              const bucket = byKey.get(info.key)
+              if (bucket !== undefined) {
+                for (const candidate of bucket) {
+                  if (matchDeep(item, candidate, false, depth + 1, pending, proven, keys)) {
+                    found = true
+                    break
+                  }
+                }
+              }
+            } else {
+              for (const candidate of valueEls) {
+                if (matchDeep(item, candidate, false, depth + 1, pending, proven, keys)) {
+                  found = true
+                  break
+                }
+              }
+            }
+          } else {
+            const leafKeys =
+              Array.isArray(item) || isPlainObject(item)
+                ? shapeDescendantPureLeafKeys(item, keys)
+                : undefined
+            let candidateIdxs: number[] | undefined
+            if (leafKeys !== undefined && leafKeys.length > 0) {
+              const first = leafPostings.get(leafKeys[0])
+              candidateIdxs = first === undefined ? [] : first.slice()
+              for (let k = 1; k < leafKeys.length; k++) {
+                const posting = leafPostings.get(leafKeys[k])
+                if (posting === undefined) {
+                  candidateIdxs = []
+                  break
+                }
+                const set = new Set(posting)
+                candidateIdxs = candidateIdxs.filter((idx) => set.has(idx))
+              }
+            } else if (leafKeys !== undefined) {
+              // Empty / nested-empty shapes: kind buckets, narrowed by required descendants.
+              const topEmptyArray = Array.isArray(item) && item.length === 0
+              const topEmptyObject = isPlainObject(item) && Object.keys(item).length === 0
+              if (topEmptyArray) candidateIdxs = arrayCandidates
+              else if (topEmptyObject) candidateIdxs = objectCandidates
+              else {
+                let pool = Array.isArray(item)
+                  ? arrayCandidates
+                  : isPlainObject(item)
+                    ? objectCandidates
+                    : otherCandidates
+                if (shapeHasEmptyObject(item)) {
+                  const set = new Set(withObjectDescendant)
+                  pool = pool.filter((idx) => set.has(idx))
+                }
+                if (shapeHasEmptyArray(item)) {
+                  const set = new Set(withArrayDescendant)
+                  pool = pool.filter((idx) => set.has(idx))
+                }
+                candidateIdxs = pool
+              }
+            }
+            if (candidateIdxs !== undefined) {
+              for (const i of candidateIdxs) {
+                if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
+                  found = true
+                  break
+                }
+              }
+            } else {
+              for (let i = 0; i < valueEls.length; i++) {
+                if (!matchSigCompatible(item, sigs[i])) continue
+                if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
+                  found = true
+                  break
+                }
+              }
             }
           }
-          if (!found && hasHole && matchDeep(item, undefined, false, depth + 1, pending, proven)) {
+          if (
+            !found &&
+            hasHole &&
+            matchDeep(item, undefined, false, depth + 1, pending, proven, keys)
+          ) {
             found = true
           }
           if (!found) {
@@ -361,7 +693,7 @@ function matchDeep(
               break
             }
           }
-          if (!matchDeep(expected, record[key], false, depth + 1, pending, proven)) {
+          if (!matchDeep(expected, record[key], false, depth + 1, pending, proven, keys)) {
             ok = false
             break
           }

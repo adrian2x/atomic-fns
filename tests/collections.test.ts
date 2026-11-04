@@ -171,6 +171,25 @@ describe('collections', () => {
     expect(matches({ a: [] })({ a: [1] })).toBe(true)
   })
 
+  it('R15-E2: matches probe cases finish within budget', { timeout: 2000 }, () => {
+    const cases: [unknown, unknown, number][] = [
+      [[[0]], [[1]], 1600],
+      [[[0]], [[1]], 800],
+      [[{}], [1], 1400],
+      [[[]], [{}], 1400],
+      [['x'], ['y'], 1500],
+      [{ a: [0] }, { a: [1] }, 1000]
+    ]
+    for (const [se, te, n] of cases) {
+      const s = Array.from({ length: n }, () => structuredClone(se))
+      const t = Array.from({ length: n }, () => structuredClone(te))
+      t[n - 1] = structuredClone(se)
+      expectFast(() => {
+        expect(matches({ a: s })({ a: t })).toBe(true)
+      }, 50)
+    }
+  })
+
   it('indexOf rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":1e15}') as never
     expectFast(() => {
