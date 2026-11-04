@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process'
+import { runInNewContext } from 'node:vm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { daysInMonth, IntlDate } from '../src/i18n/date/index.js'
 import { asDate, formatDate, strftime } from '../src/i18n/format.js'
@@ -268,7 +270,7 @@ describe('SPEC-R86 strftime', () => {
     expect(strftime('%b', date, locale)).toBe('Feb')
     expect(strftime('%bb', date, locale)).toBe('2')
     expect(strftime('%N', date, locale)).toBe('Anno Domini')
-    expect(strftime('%n', date, locale)).toBe('AD')
+    expect(strftime('%n', date, locale)).toBe('\n')
     expect(strftime('%I', date, locale)).toMatch(/\d{2}/)
     expect(strftime('%-I', date, locale)).toMatch(/\d+/)
     expect(strftime('%H', date, locale)).toMatch(/\d{2}/)
@@ -282,7 +284,6 @@ describe('SPEC-R86 strftime', () => {
     expect(strftime('%A, %d/%m/%Y', date, locale)).toBe('Saturday, 01/02/2020')
     expect(strftime('%Y-%m-%d, %A', date, locale)).toBe('2020-02-01, Saturday')
     expect(strftime('%Y %B %d %A', date, locale)).toBe('2020 February 01 Saturday')
-    expect(strftime('%a, %b %d, %Y %n', date, locale)).toBe('Sat, Feb 01, 2020 AD')
     expect(strftime('%a, %b %d, %Y %N', date, locale)).toBe('Sat, Feb 01, 2020 Anno Domini')
     expect(strftime('%I:%M:%S', date, locale)).toMatch(/\d{2}:\d{2}:\d{2}$/)
     expect(strftime('%I:%M:%S %p', date, locale)).toMatch(/\d{2}:\d{2}:\d{2}\s*AM|PM$/)
@@ -375,12 +376,12 @@ describe('SPEC-R85 tokenizer', () => {
         formatDate('MMM', d, 'en-x-k' + String(i))
       }
       formatDate('MMM', d, 'en-x-k0')
-      expect(spy.mock.calls.filter((c) => c[0] === 'en-x-k0')).toHaveLength(2)
+      expect(spy.mock.calls.filter((c) => String(c[0]) === 'en-x-k0')).toHaveLength(2)
 
       spy.mockClear()
       formatDate('MMM', d, 'en-x-k1')
       formatDate('MMM', d, 'en-x-k1')
-      expect(spy.mock.calls.filter((c) => c[0] === 'en-x-k1')).toHaveLength(1)
+      expect(spy.mock.calls.filter((c) => String(c[0]) === 'en-x-k1')).toHaveLength(1)
     } finally {
       spy.mockRestore()
     }
@@ -488,5 +489,221 @@ describe('asDate grammar', () => {
     expect(asDate('March 7, 2020').getFullYear()).toBe(2020)
     expect(Number.isNaN(asDate('x'.repeat(129)).getTime())).toBe(true)
     expect(Number.isNaN(asDate('2021-01-01junk').getTime())).toBe(true)
+  })
+})
+
+describe('formatDate and strftime across locales', () => {
+  const instant = new Date(Date.UTC(2022, 9, 31, 13, 5, 9))
+  const midnight = new Date(Date.UTC(2022, 9, 31, 0, 5, 9))
+  const view = (locale: string) => ({ locale, utc: true })
+  const gregorian = (locale: string, options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(`${locale}-u-ca-gregory`, { ...options, timeZone: 'UTC' })
+  const era = (locale: string, style: 'short' | 'long') =>
+    gregorian(locale, { era: style })
+      .formatToParts(instant)
+      .find((part) => part.type === 'era')?.value
+
+  it('month and era names stay Gregorian, like the numeric tokens', () => {
+    const october = gregorian('fa', { month: 'long' }).format(instant)
+    expect(formatDate('D MMMM YYYY', instant, view('fa'))).toBe(`31 ${october} 2022`)
+    expect(strftime('%d %B %Y', instant, view('fa'))).toBe(`31 ${october} 2022`)
+    expect(formatDate('MMM', instant, view('fa'))).toBe(
+      gregorian('fa', { month: 'short' }).format(instant)
+    )
+    expect(formatDate('YYYY N', instant, view('th'))).toBe(`2022 ${String(era('th', 'short'))}`)
+    expect(formatDate('NNNN', instant, view('th'))).toBe(era('th', 'long'))
+    expect(strftime('%Y %N', instant, view('th'))).toBe(`2022 ${String(era('th', 'long'))}`)
+    expect(formatDate('N', instant, view('en-u-ca-iso8601'))).toBe('AD')
+    expect(formatDate('N', instant, view('zh-u-ca-chinese'))).toBe(era('zh', 'short'))
+  })
+
+  it('month names keep what the locale puts after the number', () => {
+    expect(formatDate('MMMM', instant, view('ja'))).toBe('10月')
+    expect(formatDate('MMM', instant, view('ja'))).toBe('10月')
+    expect(strftime('%B', instant, view('ja'))).toBe('10月')
+    expect(strftime('%b', instant, view('ja'))).toBe('10月')
+    expect(formatDate('D MMMM', instant, view('ja'))).toBe('31 10月')
+  })
+
+  it('MMMM takes the format form next to a day token, standalone otherwise', () => {
+    expect(formatDate('D MMMM', instant, view('ru'))).toBe('31 октября')
+    expect(formatDate('DD MMMM', instant, view('ru'))).toBe('31 октября')
+    expect(formatDate('Do MMMM', instant, view('ru'))).toBe('31 октября')
+    expect(formatDate('MMMM D', instant, view('pl'))).toBe('października 31')
+    expect(formatDate('MMMM', instant, view('ru'))).toBe('октябрь')
+    expect(formatDate('[D] MMMM', instant, view('ru'))).toBe('D октябрь')
+    expect(formatDate('DDD MMMM', instant, view('ru'))).toBe('DDD октябрь')
+  })
+
+  it('LLL presets follow the locale hour cycle', () => {
+    const clock = { hour: 'numeric', minute: 'numeric', timeZone: 'UTC' } as const
+    const preset = { year: 'numeric', month: 'long', day: 'numeric', ...clock } as const
+    expect(formatDate('LLL', instant, view('de'))).toBe(
+      new Intl.DateTimeFormat('de', preset).format(instant)
+    )
+    expect(formatDate('LLL', instant, view('en-u-hc-h23'))).toContain('13:05')
+    expect(formatDate('lll', instant, view('de'))).toContain('13:05')
+    expect(formatDate('LLLL', instant, view('de'))).toContain('13:05')
+    expect(formatDate('llll', instant, view('de'))).toContain('13:05')
+    expect(formatDate('LLL|LLLL', instant, view('en-US'))).toBe(
+      'October 31, 2022 at 1:05 PM|Monday, October 31, 2022 at 1:05 PM'
+    )
+    expect(formatDate('lll|llll', instant, view('en-US'))).toBe(
+      'Oct 31, 2022, 1:05 PM|Mon, Oct 31, 2022, 1:05 PM'
+    )
+  })
+
+  it('time and meridiem tokens localize, en-US unchanged', () => {
+    expect(formatDate('LT|LTS|A|a', instant, view('en-US'))).toBe('1:05 PM|1:05:09 PM|PM|pm')
+    expect(formatDate('LT|LTS|A|a', midnight, view('en-US'))).toBe('12:05 AM|12:05:09 AM|AM|am')
+    expect(strftime('%p|%P', instant, view('en-US'))).toBe('PM|pm')
+    expect(formatDate('LT|LTS', instant, view('de'))).toBe('13:05|13:05:09')
+    expect(formatDate('LT|A', instant, view('ko'))).toBe('오후 1:05|오후')
+    expect(strftime('%p', instant, view('ko'))).toBe('오후')
+    expect(formatDate('A|a', instant, view('en-GB'))).toBe('PM|pm')
+    expect(formatDate('A|a', instant, view('tr'))).toBe('ÖS|ös')
+    expect(strftime('%p|%P', instant, view('tr'))).toBe('ÖS|ös')
+  })
+
+  it('%k is space-padded 0-23 and %n is a newline', () => {
+    expect(strftime('%k', midnight, { utc: true })).toBe(' 0')
+    expect(strftime('%k', new Date(Date.UTC(2022, 0, 1, 9)), { utc: true })).toBe(' 9')
+    expect(strftime('%k', instant, { utc: true })).toBe('13')
+    expect(strftime('%Y%n%m', instant, { utc: true })).toBe('2022\n10')
+  })
+})
+
+describe('zone offsets with seconds', () => {
+  const prev = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'America/New_York'
+  })
+  afterAll(() => {
+    process.env.TZ = prev
+  })
+
+  it('Z, ZZ, and %z print the seconds of a local mean time offset', () => {
+    const lmt = new Date(1800, 0, 1, 12)
+    expect(formatDate('Z|ZZ', lmt)).toBe('-04:56:02|-045602')
+    expect(strftime('%z', lmt)).toBe('-045602')
+    expect(formatDate(undefined, lmt)).toBe('1800-01-01T12:00:00-04:56:02')
+    expect(formatDate('Z|ZZ', new Date(2022, 0, 1))).toBe('-05:00|-0500')
+    expect(formatDate('Z|ZZ', lmt, { utc: true })).toBe('+00:00|+0000')
+  })
+})
+
+describe('default pattern outside years 0-9999', () => {
+  it('uses signed 6-digit years that asDate reads back', () => {
+    for (const [ms, text] of [
+      [8.64e15, '+275760-09-13T00:00:00+00:00'],
+      [253402300800000, '+010000-01-01T00:00:00+00:00'],
+      [-62198755200000, '-000001-01-01T00:00:00+00:00'],
+      [-8.64e15, '-271821-04-20T00:00:00+00:00']
+    ] as const) {
+      expect(formatDate(undefined, new Date(ms), { utc: true })).toBe(text)
+      expect(formatDate('', new Date(ms), { utc: true })).toBe(text)
+      expect(asDate(text).getTime()).toBe(ms)
+    }
+  })
+
+  it('keeps 4-digit years inside the range and YYYY everywhere', () => {
+    const utc = { utc: true }
+    expect(formatDate(undefined, new Date(253402300799000), utc)).toBe('9999-12-31T23:59:59+00:00')
+    expect(formatDate(undefined, new Date(-62167219200000), utc)).toBe('0000-01-01T00:00:00+00:00')
+    expect(formatDate('YYYY', new Date(8.64e15), utc)).toBe('275760')
+    expect(strftime('%Y', new Date(-62198755200000), utc)).toBe('-0001')
+  })
+})
+
+describe('locale arguments', () => {
+  const local = new Date(2022, 9, 15)
+
+  it('takes what Intl takes', () => {
+    expect(formatDate('MMMM', local, ['de'])).toBe('Oktober')
+    expect(formatDate('MMMM', local, new Intl.Locale('de'))).toBe('Oktober')
+    expect(formatDate('MMMM', local, { locale: new Intl.Locale('de') })).toBe('Oktober')
+    expect(formatDate('MMMM', local, { locale: ['de', 'en'] })).toBe('Oktober')
+    expect(strftime('%B', local, ['de'])).toBe('Oktober')
+    expect(formatDate('Do', local, ['en-GB'])).toBe('15th')
+    expect(formatDate('Do', local, ['de'])).toBe('15')
+    expect(formatDate('MMMM', local, { utc: false })).toBe(formatDate('MMMM', local))
+    expect(formatDate('MMMM', local, runInNewContext("({ locale: 'de' })") as object)).toBe(
+      'Oktober'
+    )
+  })
+
+  it('rejects a bad tag whatever the tokens, and whatever the cache holds', () => {
+    for (const pattern of ['YYYY', 'Do', 'MMMM', '[text]']) {
+      expect(() => formatDate(pattern, local, 'not a locale')).toThrow(RangeError)
+      expect(() => formatDate(pattern, local, { locale: 'not a locale' })).toThrow(RangeError)
+    }
+    expect(() => strftime('%Y', local, 'not a locale')).toThrow(RangeError)
+    expect(() => formatDate('YYYY', local, null as never)).toThrow(RangeError)
+    formatDate('MMMM', local)
+    expect(() => formatDate('MMMM', local, 'undefined')).toThrow(RangeError)
+  })
+
+  it('bounds a locale at 255 characters', () => {
+    const longest = `en-x-${'abcdefgh-'.repeat(27)}abcdefg`
+    expect(longest).toHaveLength(255)
+    expect(formatDate('MMMM', local, longest)).toBe(formatDate('MMMM', local, 'en'))
+    expect(() => formatDate('MMMM', local, `${longest}h`)).toThrow(/255/)
+    expect(() => formatDate('YYYY', local, { locale: `${longest}h` })).toThrow(/255/)
+    expect(() => strftime('%Y', local, [`${longest}h`])).toThrow(/255/)
+  })
+})
+
+describe('formatter cache and the host zone', () => {
+  it('follows a host zone change', () => {
+    const prev = process.env.TZ
+    const d = new Date(Date.UTC(2022, 6, 1, 12))
+    try {
+      process.env.TZ = 'America/New_York'
+      expect(formatDate('HH z', d, 'en-US')).toBe('08 EDT')
+      process.env.TZ = 'Asia/Tokyo'
+      expect(formatDate('HH z', d, 'en-US')).toBe('21 GMT+9')
+      expect(formatDate('zzz', d, 'en-US')).toBe('Japan Standard Time')
+      expect(strftime('%H %Z', d, 'en-US')).toBe('21 GMT+9')
+    } finally {
+      process.env.TZ = prev
+    }
+  })
+})
+
+describe('huge patterns', () => {
+  it('run in a heap far smaller than one slot per token', () => {
+    const format = new URL('../src/i18n/format.ts', import.meta.url).href
+    const script = `
+      import { registerHooks } from 'node:module'
+      registerHooks({
+        resolve: (specifier, context, nextResolve) =>
+          nextResolve(specifier.startsWith('.') ? specifier.replace(/\\.js$/, '.ts') : specifier, context)
+      })
+      const { formatDate, strftime } = await import(${JSON.stringify(format)})
+      const date = new Date(0)
+      const options = { locale: 'en-US', utc: true }
+      console.log([
+        formatDate('q '.repeat(6e6), date, options).length,
+        strftime('%Q '.repeat(4e6), date, options).length
+      ].join())
+    `
+    const run = spawnSync(
+      process.execPath,
+      ['--max-old-space-size=64', '--input-type=module', '--eval', script],
+      { encoding: 'utf8' }
+    )
+    expect(run.stdout.trim()).toBe(`${String(12e6)},${String(12e6)}`)
+    expect(run.status).toBe(0)
+  }, 120_000)
+
+  it('read each distinct token once', () => {
+    const spy = vi.spyOn(Intl.DateTimeFormat.prototype, 'formatToParts')
+    try {
+      formatDate('ddd ddd ddd', new Date(0), { locale: 'en-US', utc: true })
+      strftime('%a %a %a', new Date(0), { locale: 'en-US', utc: true })
+      expect(spy).toHaveBeenCalledTimes(2)
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

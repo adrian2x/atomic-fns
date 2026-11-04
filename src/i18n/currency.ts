@@ -3,9 +3,12 @@
  */
 
 import { Decimal } from '../decimal/index.js'
-import type { DecimalInput, DivOptions } from '../decimal/index.js'
+import type { DecimalInput, DivOptions, RoundingMode } from '../decimal/index.js'
 import { assertSameCurrency } from '../internal/rank1.js'
 import { protocol } from '../operators/protocol.js'
+import { canonicalLocales } from './format.js'
+
+const EXACT_FRACTION_DIGITS = 20
 
 /** Runtime accepts decimal strings via ToIntlMathematicalValue (ECMA-402). */
 function formatExact(fmt: Intl.NumberFormat, decimalStr: string): string {
@@ -18,8 +21,44 @@ function assertFormattable(amount: Decimal): void {
   }
 }
 
+/** True unless `options` already say how much of the amount to show. */
+function showsExactDigits(options: Intl.NumberFormatOptions): boolean {
+  return (
+    !('maximumFractionDigits' in options) &&
+    options.minimumSignificantDigits === undefined &&
+    options.maximumSignificantDigits === undefined &&
+    (options.roundingIncrement ?? 1) === 1 &&
+    (options.notation ?? 'standard') === 'standard'
+  )
+}
+
+function numberFormatOptions(options: Intl.NumberFormatOptions): Intl.NumberFormatOptions {
+  if (!showsExactDigits(options)) return options
+  const least = options.minimumFractionDigits ?? 0
+  return { ...options, maximumFractionDigits: Math.max(EXACT_FRACTION_DIGITS, least) }
+}
+
+/** `stored` under `overrides`, where one fraction bound replaces the stored other bound. */
+function overriddenOptions(
+  stored: Intl.NumberFormatOptions,
+  overrides: Intl.NumberFormatOptions
+): Intl.NumberFormatOptions {
+  const options = { ...stored, ...overrides }
+  if (!('minimumFractionDigits' in overrides) && 'maximumFractionDigits' in overrides) {
+    delete options.minimumFractionDigits
+  }
+  if (!('maximumFractionDigits' in overrides) && 'minimumFractionDigits' in overrides) {
+    delete options.maximumFractionDigits
+  }
+  return options
+}
+
 /**
  * Currency represents a local currency amount formatted with `Intl.NumberFormat`.
+ * Display keeps the amount's own digits, up to 20 fraction digits, instead of rounding to the
+ * currency's minor unit: `new Currency(1.5, 'JPY')` shows `¥1.5` and `0.1 + 0.2` dollars show
+ * `$0.30000000000000004`. Digits past the 20th round away (`1e-21` dollars show `$0.00`, though
+ * the amount stays exact). Use {@link Currency.precision} or {@link Currency.round} for minor units.
  */
 export class Currency extends Decimal {
   readonly currency: string
@@ -41,18 +80,12 @@ export class Currency extends Decimal {
   ) {
     super(amount)
     const loc = typeof locale === 'string' ? locale : undefined
+    canonicalLocales(loc)
     const userOpts = typeof locale === 'string' || locale === undefined ? opts : locale
-    const options: Intl.NumberFormatOptions = {
-      style: 'currency',
-      currencyDisplay: 'symbol',
-      maximumFractionDigits: 20,
-      ...userOpts,
-      currency
-    }
-    this.#options = { ...options }
-    this.#numberFormat = new Intl.NumberFormat(loc, options)
+    this.#options = { style: 'currency', currencyDisplay: 'symbol', ...userOpts, currency }
+    this.#numberFormat = new Intl.NumberFormat(loc, numberFormatOptions(this.#options))
     const resolved = this.#numberFormat.resolvedOptions()
-    this.currency = resolved.currency ?? currency
+    this.currency = resolved.currency ?? currency.toUpperCase()
     this.locale = resolved.locale
   }
 
@@ -102,6 +135,21 @@ export class Currency extends Decimal {
     return this.clone(super.div(x, opts))
   }
 
+  /**
+   * Rounds the amount and keeps the unit. The mode defaults to half-even, unlike the half-expand
+   * display rounding of {@link Currency.precision}: `0.125` rounds to `0.12` here and shows as
+   * `$0.13` there.
+   * @param precision Fractional digits (may be negative).
+   * @param rounding Rounding mode (default halfEven).
+   */
+  override round(precision: number, rounding?: RoundingMode): Currency {
+    return this.clone(super.round(precision, rounding))
+  }
+
+  override sqrt(opts?: DivOptions): Currency {
+    return this.clone(super.sqrt(opts))
+  }
+
   override compare(x: DecimalInput): -1 | 0 | 1 {
     this.#assertSameCurrency(x)
     return super.compare(x)
@@ -128,12 +176,18 @@ export class Currency extends Decimal {
   }
 
   /**
-   * Formats the exact decimal string with the instance NumberFormat.
+   * Formats the decimal string with the instance NumberFormat, which shows up to 20 fraction
+   * digits by default.
    * @throws {RangeError} when `|amount| > Number.MAX_VALUE`.
    */
   override toString(): string {
     assertFormattable(this)
     return formatExact(this.#numberFormat, super.toString())
+  }
+
+  /** Logging never throws: amounts past the formattable range print as digits and code. */
+  [Symbol.for('nodejs.util.inspect.custom')](): string {
+    return this.greaterThanMaxValue() ? `${super.toString()} ${this.currency}` : this.toString()
   }
 
   /** Numeric value from the exact decimal string (not the formatted display). */
@@ -146,15 +200,20 @@ export class Currency extends Decimal {
   }
 
   /**
-   * Formats with optional overrides. The instance currency always wins over `opts.currency`.
+   * Formats with optional overrides. The instance currency always wins over `opts.currency`, and
+   * overriding one of `minimumFractionDigits` / `maximumFractionDigits` drops the instance's other.
    * @param opts NumberFormat options (not mutated).
    * @param locale Override locale.
    * @throws {RangeError} when `|amount| > Number.MAX_VALUE`.
    */
   format(opts: Intl.NumberFormatOptions = {}, locale?: string): string {
     assertFormattable(this)
-    const options: Intl.NumberFormatOptions = { ...this.#options, ...opts, currency: this.currency }
-    return formatExact(new Intl.NumberFormat(locale ?? this.locale, options), super.toString())
+    canonicalLocales(locale)
+    const options = overriddenOptions(this.#options, { ...opts, currency: this.currency })
+    return formatExact(
+      new Intl.NumberFormat(locale ?? this.locale, numberFormatOptions(options)),
+      super.toString()
+    )
   }
 
   /** Formats with `currencyDisplay: 'name'`. */

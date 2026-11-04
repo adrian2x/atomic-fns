@@ -1,5 +1,7 @@
+import { inspect } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { decimal } from '../src/decimal/index.js'
+import { ValueError } from '../src/globals/index.js'
 import { Currency } from '../src/i18n/index.js'
 import { compare, eq } from '../src/operators/index.js'
 import { protocol } from '../src/operators/protocol.js'
@@ -38,8 +40,7 @@ describe('SPEC-R71 Currency', () => {
     expect(() => huge.toString()).toThrow(RangeError)
     expect(() => huge.format()).toThrow('amount is outside the formattable range')
     const neg = new Currency('-1e400', 'USD', 'en-US')
-    expect(neg.toJSON().startsWith('-')).toBe(true)
-    expect(neg.toJSON().length).toBeGreaterThan(100)
+    expect(neg.toJSON()).toMatch(/^-1(?:0{400}|e\+?400)$/i)
     expect(() => neg.toString()).toThrow(RangeError)
     expect(() => neg.format()).toThrow(RangeError)
 
@@ -189,5 +190,112 @@ describe('SPEC-R71 Currency', () => {
     expect(oeq(usd, foreignJpy)).toBe(false)
     expect(() => min([usd, foreignJpy as never])).toThrow(msg)
     expect(() => max([usd, foreignJpy as never])).toThrow(msg)
+  })
+})
+
+describe('Currency display options', () => {
+  const intl = (currency: string, options: Intl.NumberFormatOptions, value: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency, ...options }).format(value)
+
+  it('takes rounding options the 20-digit default would reject', () => {
+    const swiss = { roundingIncrement: 5 } as const
+    expect(new Currency(1.03, 'CHF', 'de-CH', swiss).toString()).toBe(
+      new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF', ...swiss }).format(1.03)
+    )
+    expect(new Currency(1.03, 'CHF', 'de-CH').format(swiss)).toBe(
+      new Currency(1.03, 'CHF', 'de-CH', swiss).toString()
+    )
+    const wide = { minimumFractionDigits: 25 }
+    expect(new Currency(1, 'USD', 'en-US', wide).toString()).toBe(intl('USD', wide, 1))
+    expect(new Currency(1, 'USD', 'en-US').format(wide)).toBe(intl('USD', wide, 1))
+  })
+
+  it('lets notation pick its own precision', () => {
+    for (const notation of ['compact', 'scientific', 'engineering'] as const) {
+      expect(new Currency(1234567, 'USD', 'en-US').format({ notation })).toBe(
+        intl('USD', { notation }, 1234567)
+      )
+      expect(new Currency(1234567, 'USD', 'en-US', { notation }).toString()).toBe(
+        intl('USD', { notation }, 1234567)
+      )
+    }
+    expect(new Currency('1.23456', 'USD', 'en-US').format({ notation: 'standard' })).toBe(
+      '$1.23456'
+    )
+  })
+
+  it('leaves significant digits to Intl', () => {
+    for (const options of [
+      { maximumSignificantDigits: 3, roundingPriority: 'morePrecision' },
+      { minimumSignificantDigits: 2, roundingPriority: 'lessPrecision' }
+    ] as const) {
+      expect(new Currency(1234.5678, 'USD', 'en-US', options).toString()).toBe(
+        intl('USD', options, 1234.5678)
+      )
+    }
+  })
+
+  it('keeps the exact default next to a minimum', () => {
+    expect(new Currency('1.23456', 'USD', 'en-US', { minimumFractionDigits: 3 }).toString()).toBe(
+      '$1.23456'
+    )
+    expect(new Currency('1.5', 'USD', 'en-US', { minimumFractionDigits: 3 }).toString()).toBe(
+      '$1.500'
+    )
+  })
+
+  it('an override of one fraction bound replaces the stored other bound', () => {
+    expect(new Currency(1.5, 'USD', 'en-US', { minimumFractionDigits: 2 }).precision(0)).toBe('$2')
+    expect(
+      new Currency(1.5, 'USD', 'en-US', { maximumFractionDigits: 2 }).format({
+        minimumFractionDigits: 3
+      })
+    ).toBe('$1.500')
+    expect(new Currency('1.23456', 'USD', 'en-US').precision()).toBe('$1.23')
+  })
+
+  it('normalizes the code under any style', () => {
+    const decimalStyle = new Currency(1, 'usd', 'en-US', { style: 'decimal' })
+    expect(decimalStyle.currency).toBe('USD')
+    expect(decimalStyle.add(new Currency(1, 'USD')).toNumber()).toBe(2)
+  })
+
+  it('bounds the locale tag', () => {
+    const long = 'a'.repeat(256)
+    expect(() => new Currency(1, 'USD', long)).toThrow(/255/)
+    expect(() => new Currency(1, 'USD').format({}, long)).toThrow(/255/)
+  })
+})
+
+describe('Currency logging', () => {
+  it('inspects amounts past the formattable range', () => {
+    const huge = new Currency('1e309', 'USD', 'en-US')
+    expect(inspect(huge)).toBe(`${huge.toJSON()} USD`)
+    expect(inspect({ price: huge })).toContain(' USD')
+    expect(inspect(new Currency(5, 'USD', 'en-US'))).toBe('$5.00')
+  })
+})
+
+describe('Currency rounding keeps the unit', () => {
+  const price = new Currency('10.555', 'USD', 'en-US')
+
+  it('round returns a Currency', () => {
+    const rounded = price.round(2)
+    expect(rounded).toBeInstanceOf(Currency)
+    expect(rounded.toString()).toBe('$10.56')
+    expect(price.round(1, 'down').format()).toBe('$10.50')
+    expect(() => price.round(2).add(new Currency(1, 'JPY'))).toThrow(ValueError)
+  })
+
+  it('sqrt returns a Currency', () => {
+    const root = new Currency(16, 'USD', 'en-US').sqrt()
+    expect(root).toBeInstanceOf(Currency)
+    expect(root.toString()).toBe('$4.00')
+  })
+
+  it('round defaults to half-even while precision displays half-expand', () => {
+    const tie = new Currency('0.125', 'USD', 'en-US')
+    expect(tie.round(2).toString()).toBe('$0.12')
+    expect(tie.precision(2)).toBe('$0.13')
   })
 })

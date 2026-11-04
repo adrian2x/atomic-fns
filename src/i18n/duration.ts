@@ -1,5 +1,7 @@
 import { ValueError } from '../globals/index.js'
 import { truncateForError } from '../internal/truncate.js'
+import { protocol, type Comparable, type Equatable } from '../operators/protocol.js'
+import { canonicalLocales, hasPlainPrototype } from './format.js'
 
 export type DurationField =
   | 'years'
@@ -87,6 +89,28 @@ const ISO_TIME_ORDER: ReadonlyMap<string, { ord: number; field: DurationField }>
 
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER)
 
+/** Reads as the exact flag; `Symbol.for`, so every copy of the library recognizes a Duration. */
+const DURATION_BRAND: unique symbol = Symbol.for('atomic-fns.duration')
+
+function isDuration(v: unknown): v is Duration {
+  return typeof v === 'object' && v !== null && DURATION_BRAND in v
+}
+
+/** Temporal rounding modes as directions for [positive, negative] amounts. */
+const ROUNDING_MODES = {
+  ceil: ['infinity', 'zero'],
+  floor: ['zero', 'infinity'],
+  expand: ['infinity', 'infinity'],
+  trunc: ['zero', 'zero'],
+  halfCeil: ['halfInfinity', 'halfZero'],
+  halfFloor: ['halfZero', 'halfInfinity'],
+  halfExpand: ['halfInfinity', 'halfInfinity'],
+  halfTrunc: ['halfZero', 'halfZero'],
+  halfEven: ['halfEven', 'halfEven']
+} as const
+
+type RoundingMode = keyof typeof ROUNDING_MODES
+
 interface DurationFormatLike {
   format(fields: Record<string, number>): string
 }
@@ -128,19 +152,49 @@ function unitNanos(field: DurationField | 'microseconds' | 'nanoseconds', exact:
   }
 }
 
-function snap(v: number): number {
-  const r = Math.round(v)
-  const tol = Math.max(5e-10, Math.abs(v) * 4 * Number.EPSILON)
-  return Math.abs(v - r) < tol ? r : v
+function magnitude(n: bigint): bigint {
+  return n < 0n ? -n : n
+}
+
+function roundsAway(
+  direction: (typeof ROUNDING_MODES)[RoundingMode][number],
+  doubledRest: bigint,
+  unit: bigint,
+  odd: boolean
+): boolean {
+  if (direction === 'zero' || direction === 'infinity') return direction === 'infinity'
+  if (doubledRest !== unit) return doubledRest > unit
+  return direction === 'halfInfinity' || (direction === 'halfEven' && odd)
+}
+
+function roundedCount(ns: bigint, unit: bigint, mode: RoundingMode): bigint {
+  const negative = ns < 0n
+  const count = ns / unit
+  const rest = magnitude(ns % unit)
+  if (rest === 0n) return count
+  const direction = ROUNDING_MODES[mode][negative ? 1 : 0]
+  if (!roundsAway(direction, 2n * rest, unit, count % 2n !== 0n)) return count
+  return negative ? count - 1n : count + 1n
+}
+
+/** Nanoseconds of the shortest decimal that reads as `v`: `1.1` is 1.1, not its binary tail. */
+function decimalNanos(v: number, unit: bigint): bigint {
+  const [mantissa, exponent] = v.toExponential().split('e')
+  const [whole, fraction = ''] = mantissa.split('.')
+  const scaled = BigInt(whole + fraction) * unit
+  const shift = Number(exponent) - fraction.length
+  if (shift >= 0) return scaled * 10n ** BigInt(shift)
+  return roundedCount(scaled, 10n ** BigInt(-shift), 'halfExpand')
 }
 
 function fieldNanos(v: number, field: DurationField, exact: boolean): bigint {
-  const s = snap(v)
-  const whole = Math.trunc(s)
-  const frac = s - whole
-  const u = unitNanos(field, exact)
-  const fracNs = Math.sign(frac) * Math.round(Math.abs(frac) * Number(u))
-  return BigInt(whole) * u + BigInt(fracNs)
+  const unit = unitNanos(field, exact)
+  const nanos = decimalNanos(v, unit)
+  if (Number.isInteger(v)) return nanos
+  // A double cannot tell a third of a year from 4 months less 1 ns, so prefer the rounder count.
+  const step = 10n ** BigInt(String(magnitude(nanos) >> 52n).length)
+  const rounder = roundedCount(nanos, step, 'halfExpand') * step
+  return ratio(rounder, unit) === v ? rounder : nanos
 }
 
 function totalNanos(values: Readonly<DurationObject>, exact: boolean): bigint {
@@ -153,14 +207,39 @@ function totalNanos(values: Readonly<DurationObject>, exact: boolean): bigint {
 }
 
 function ratio(numerator: bigint, denominator: bigint): number {
-  if (BigInt(Number(numerator)) === numerator && BigInt(Number(denominator)) === denominator) {
-    const r = Number(numerator) / Number(denominator)
+  const n = Number(numerator)
+  if (Number.isFinite(n) && BigInt(n) === numerator) {
+    const r = n / Number(denominator)
     return r === 0 ? 0 : r
   }
   const q = numerator / denominator
   const r = numerator % denominator
   const out = Number(q) + Number(r) / Number(denominator)
   return out === 0 ? 0 : out
+}
+
+/** Whole counts down `fields`; the last rounds, and a count reaching the unit above carries up. */
+function roundedSpread(
+  ns: bigint,
+  fields: readonly DurationField[],
+  exact: boolean,
+  mode: RoundingMode
+): DurationObject {
+  const units = fields.map((f) => unitNanos(f, exact))
+  const counts: bigint[] = []
+  let rem = ns
+  for (const unit of units.slice(0, -1)) {
+    const count = rem / unit
+    counts.push(count)
+    rem -= count * unit
+  }
+  counts.push(roundedCount(rem, units[units.length - 1], mode))
+  for (let i = counts.length - 1; i > 0; i--) {
+    if (magnitude(counts[i] * units[i]) < units[i - 1]) break
+    counts[i - 1] += ns < 0n ? -1n : 1n
+    counts[i] = 0n
+  }
+  return Object.fromEntries(fields.map((f, i) => [f, Number(counts[i])]))
 }
 
 function spread(ns: bigint, fields: readonly DurationField[], exact: boolean): DurationObject {
@@ -240,25 +319,26 @@ export function durationField(unit: string): DurationField {
   throw new ValueError(`unknown duration unit ${truncateForError(unit)}`)
 }
 
-function roundingFields(largestUnit: DurationUnit, smallestUnit?: DurationUnit): DurationField[] {
-  const largest = durationField(largestUnit)
-  const smallest = durationField(smallestUnit ?? 'milliseconds')
+/** Temporal's default: the largest non-zero field, or `smallest` when that is larger. */
+function defaultLargestUnit(
+  values: Readonly<DurationObject>,
+  smallest: DurationField
+): DurationField {
+  const present = FIELD_ORDER.find((f) => (values[f] ?? 0) !== 0) ?? smallest
+  const largest = present === 'quarters' ? 'months' : present
+  return FIELD_ORDER.indexOf(largest) < FIELD_ORDER.indexOf(smallest) ? largest : smallest
+}
+
+function roundingFields(largest: DurationField, smallest: DurationField): DurationField[] {
   if (largest === 'quarters' || smallest === 'quarters') {
     throw new RangeError('quarters cannot be a rounding unit')
   }
-  // Temporal: weeks are on the ladder only when largestUnit is 'weeks'. For every
-  // other largestUnit, weeks are skipped and their time folds into days.
-  let ladder: readonly DurationField[]
-  if (largest === 'weeks') {
-    ladder = ['weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds']
-  } else {
-    ladder = ROUND_LADDER.filter((f) => f !== 'weeks')
-  }
+  // Temporal: weeks join only when an end of the slice names them; else they fold into days.
+  const keepWeeks = largest === 'weeks' || smallest === 'weeks'
+  const ladder = keepWeeks ? ROUND_LADDER : ROUND_LADDER.filter((f) => f !== 'weeks')
   const li = ladder.indexOf(largest)
   const si = ladder.indexOf(smallest)
-  if (li === -1 || si === -1 || li > si) {
-    throw new RangeError('largestUnit must not be smaller than smallestUnit')
-  }
+  if (li > si) throw new RangeError('largestUnit must not be smaller than smallestUnit')
   return ladder.slice(li, si + 1)
 }
 
@@ -268,6 +348,10 @@ function isoError(text: string): ValueError {
 
 function isDigit(c: string): boolean {
   return c >= '0' && c <= '9'
+}
+
+function asciiUpper(c: string): string {
+  return c >= 'a' && c <= 'z' ? c.toUpperCase() : c
 }
 
 type AccKey =
@@ -282,87 +366,60 @@ type AccKey =
   | 'microseconds'
   | 'nanoseconds'
 
-function carryChain(start: DurationField, forFormat: boolean): readonly AccKey[] {
-  if (start === 'seconds' || start === 'milliseconds') {
-    if (!forFormat) return []
+const CARRY_LADDER: readonly AccKey[] = [
+  'years',
+  'months',
+  'days',
+  'hours',
+  'minutes',
+  'seconds',
+  'milliseconds',
+  'microseconds',
+  'nanoseconds'
+]
+
+/** Each field's magnitude carried down, never up: 1.5 hours is 1 h 30 min, 25 hours stays. */
+function carriedParts(values: Readonly<DurationObject>, exact: boolean): Record<AccKey, bigint> {
+  const parts: Record<AccKey, bigint> = {
+    years: 0n,
+    months: 0n,
+    weeks: 0n,
+    days: 0n,
+    hours: 0n,
+    minutes: 0n,
+    seconds: 0n,
+    milliseconds: 0n,
+    microseconds: 0n,
+    nanoseconds: 0n
   }
-  switch (start) {
-    case 'years':
-      return forFormat
-        ? [
-            'years',
-            'months',
-            'days',
-            'hours',
-            'minutes',
-            'seconds',
-            'milliseconds',
-            'microseconds',
-            'nanoseconds'
-          ]
-        : ['years', 'months', 'days', 'hours', 'minutes']
-    case 'quarters':
-      return forFormat
-        ? [
-            'months',
-            'days',
-            'hours',
-            'minutes',
-            'seconds',
-            'milliseconds',
-            'microseconds',
-            'nanoseconds'
-          ]
-        : ['months', 'days', 'hours', 'minutes']
-    case 'months':
-      return forFormat
-        ? [
-            'months',
-            'days',
-            'hours',
-            'minutes',
-            'seconds',
-            'milliseconds',
-            'microseconds',
-            'nanoseconds'
-          ]
-        : ['months', 'days', 'hours', 'minutes']
-    case 'weeks':
-      return forFormat
-        ? [
-            'weeks',
-            'days',
-            'hours',
-            'minutes',
-            'seconds',
-            'milliseconds',
-            'microseconds',
-            'nanoseconds'
-          ]
-        : ['weeks', 'days', 'hours', 'minutes']
-    case 'days':
-      return forFormat
-        ? ['days', 'hours', 'minutes', 'seconds', 'milliseconds', 'microseconds', 'nanoseconds']
-        : ['days', 'hours', 'minutes']
-    case 'hours':
-      return forFormat
-        ? ['hours', 'minutes', 'seconds', 'milliseconds', 'microseconds', 'nanoseconds']
-        : ['hours', 'minutes']
-    case 'minutes':
-      return forFormat
-        ? ['minutes', 'seconds', 'milliseconds', 'microseconds', 'nanoseconds']
-        : ['minutes']
-    case 'seconds':
-      return ['seconds', 'milliseconds', 'microseconds', 'nanoseconds']
-    case 'milliseconds':
-      return ['milliseconds', 'microseconds', 'nanoseconds']
+  const nanosOf = (field: DurationField): bigint => {
+    const v = values[field]
+    return v === undefined ? 0n : fieldNanos(v, field, exact)
   }
+  const carry = (ladder: readonly AccKey[], nanos: bigint) => {
+    let rest = magnitude(nanos)
+    for (const unit of ladder) {
+      const size = unitNanos(unit, exact)
+      parts[unit] += rest / size
+      rest %= size
+    }
+  }
+  const from = (unit: AccKey) => CARRY_LADDER.slice(CARRY_LADDER.indexOf(unit))
+  carry(from('years'), nanosOf('years'))
+  carry(from('months'), nanosOf('quarters') + nanosOf('months'))
+  carry(['weeks', ...from('days')], nanosOf('weeks'))
+  for (const field of ['days', 'hours', 'minutes', 'seconds', 'milliseconds'] as const) {
+    carry(from(field), nanosOf(field))
+  }
+  return parts
 }
 
 /**
  * An immutable length of time with optional exact (mean Gregorian) calendar conversion.
+ * The protocol operators (`eq`, `compare`, `lt`, `deepEqual`, ...) compare total length, each
+ * side in its own mode.
  */
-export class Duration {
+export class Duration implements Comparable, Equatable {
   readonly #fields: Readonly<DurationObject>
   readonly #exact: boolean
 
@@ -381,12 +438,12 @@ export class Duration {
       }
       this.#fields = freezeValues({ milliseconds: nz(dur) })
       this.#exact = exact === true
-    } else if (dur instanceof Duration) {
-      this.#fields = freezeValues(copyValues(dur.#fields))
-      this.#exact = exact ?? dur.#exact
+    } else if (isDuration(dur)) {
+      this.#fields = freezeValues(dur.toObject())
+      this.#exact = exact ?? dur[DURATION_BRAND]
     } else if (typeof dur === 'string') {
       throw new ValueError('use Duration.from to parse ISO 8601 strings')
-    } else if (dur !== null && typeof dur === 'object' && !Array.isArray(dur)) {
+    } else if (dur !== null && typeof dur === 'object' && hasPlainPrototype(dur)) {
       const out: DurationObject = {}
       for (const key of Object.keys(dur)) {
         if (!isDurationField(key)) {
@@ -405,6 +462,15 @@ export class Duration {
       throw new ValueError('expected a number, Duration, or DurationObject')
     }
     Object.freeze(this)
+  }
+
+  static #operand(d?: number | DurationObject | Duration): Duration {
+    if (d === undefined) throw new ValueError('expected a number, Duration, or DurationObject')
+    return new Duration(d)
+  }
+
+  get [DURATION_BRAND](): boolean {
+    return this.#exact
   }
 
   get years(): number {
@@ -460,7 +526,7 @@ new Duration({ years: 2, days: 3 }).get('days') // 3
    * @param d Addend
    */
   add(d: number | DurationObject | Duration): Duration {
-    const other = new Duration(d)
+    const other = Duration.#operand(d)
     const out: DurationObject = {}
     for (const f of FIELD_ORDER) {
       const a = this.#fields[f]
@@ -476,7 +542,7 @@ new Duration({ years: 2, days: 3 }).get('days') // 3
    * @param d Subtrahend
    */
   subtract(d: number | DurationObject | Duration): Duration {
-    return this.add(new Duration(d).negated())
+    return this.add(Duration.#operand(d).negated())
   }
 
   /**
@@ -498,17 +564,18 @@ new Duration({ hours: 1, seconds: 30 }).negated().toObject()
   }
 
   /**
-   * Absolute value of every field.
+   * Same length with no negative field; mixed signs balance first, as in {@link normalize}.
    * @example
 ```js
 new Duration({ hours: 1, seconds: -30 }).abs().toObject()
-// { hours: 1, seconds: 30 }
+// { hours: 0, seconds: 3570 }
 ```
    */
   abs(): Duration {
+    const source = this.#balanced()
     const out: DurationObject = {}
     for (const f of FIELD_ORDER) {
-      const v = this.#fields[f]
+      const v = source.#fields[f]
       if (v === undefined) continue
       out[f] = Math.abs(v)
     }
@@ -554,14 +621,55 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   }
 
   /**
-   * Redistributes the exact total across the unit slice from `largestUnit` down to
-   * `smallestUnit` (default milliseconds). Weeks are included only when
-   * `largestUnit` is `'weeks'` (Temporal); otherwise week-sized time folds into days.
-   * Drops zero fields; keeps a fractional remainder on the smallest unit.
+   * Rounds to `smallestUnit` and balances across the unit slice from `largestUnit` down
+   * (Temporal, with fixed unit lengths in place of `relativeTo`). A string means `smallestUnit`:
+   * `new Duration({ minutes: 90 }).round('hours')` is `{ hours: 2 }`.
+   * `largestUnit` defaults to the largest non-zero field, or `smallestUnit` when that is larger.
+   * Without `smallestUnit` nothing rounds and the slice ends at milliseconds, which keep any
+   * fraction. `roundingMode` defaults to `halfExpand`. Weeks join the slice only when
+   * `largestUnit` or `smallestUnit` names them; otherwise week-sized time folds into days.
+   * Drops zero fields.
+   * @throws {RangeError} without either unit, with `quarters`, when `largestUnit` is smaller
+   * than `smallestUnit`, or for an unknown `roundingMode`.
    */
-  round(options: { largestUnit: DurationUnit; smallestUnit?: DurationUnit }): Duration {
-    const fields = roundingFields(options.largestUnit, options.smallestUnit)
-    const spreadOut = spread(totalNanos(this.#fields, this.#exact), fields, this.#exact)
+  round(
+    options:
+      | DurationUnit
+      | {
+          largestUnit?: DurationUnit
+          smallestUnit?: DurationUnit
+          roundingMode?:
+            | 'ceil'
+            | 'floor'
+            | 'expand'
+            | 'trunc'
+            | 'halfCeil'
+            | 'halfFloor'
+            | 'halfExpand'
+            | 'halfTrunc'
+            | 'halfEven'
+        }
+  ): Duration {
+    const units: Exclude<typeof options, string> =
+      typeof options === 'string' ? { smallestUnit: options } : options
+    const { largestUnit, smallestUnit, roundingMode = 'halfExpand' } = units
+    if (!Object.hasOwn(ROUNDING_MODES, roundingMode)) {
+      throw new RangeError(`unknown rounding mode ${truncateForError(roundingMode)}`)
+    }
+    if (largestUnit === undefined && smallestUnit === undefined) {
+      throw new RangeError('round needs smallestUnit or largestUnit')
+    }
+    const smallest = smallestUnit === undefined ? 'milliseconds' : durationField(smallestUnit)
+    const largest =
+      largestUnit === undefined
+        ? defaultLargestUnit(this.#fields, smallest)
+        : durationField(largestUnit)
+    const fields = roundingFields(largest, smallest)
+    const total = totalNanos(this.#fields, this.#exact)
+    const spreadOut =
+      smallestUnit === undefined
+        ? spread(total, fields, this.#exact)
+        : roundedSpread(total, fields, this.#exact, roundingMode)
     const out: DurationObject = {}
     for (const f of fields) {
       const v = spreadOut[f]
@@ -570,62 +678,21 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
     return new Duration(out, this.#exact)
   }
 
+  #balanced(): Duration {
+    return hasMixedSigns(this.#fields) ? this.normalize() : this
+  }
+
   /** ISO 8601 duration string (Temporal-style grammar). */
   toISOString(): string {
-    const source = hasMixedSigns(this.#fields) ? this.normalize() : this
-    const exact = source.#exact
+    const source = this.#balanced()
     const negative = isNegativeDuration(source.#fields)
-
-    const monthsCombined = (source.#fields.months ?? 0) + 3 * (source.#fields.quarters ?? 0)
-    const monthsPresent =
-      source.#fields.months !== undefined || source.#fields.quarters !== undefined
-
-    let Y = 0n
-    let M = 0n
-    let W = 0n
-    let D = 0n
-    let H = 0n
-    let MIN = 0n
-    let secNs = 0n
-
-    const addCarry = (start: DurationField, absVal: number) => {
-      let ns = fieldNanos(absVal, start === 'months' ? 'months' : start, exact)
-      if (start === 'seconds' || start === 'milliseconds') {
-        secNs += ns
-        return
-      }
-      const chain = carryChain(start, false)
-      for (const c of chain) {
-        const u = unitNanos(c, exact)
-        const q = ns / u
-        if (c === 'years') Y += q
-        else if (c === 'months') M += q
-        else if (c === 'weeks') W += q
-        else if (c === 'days') D += q
-        else if (c === 'hours') H += q
-        else if (c === 'minutes') MIN += q
-        ns -= q * u
-      }
-      secNs += ns
-    }
-
-    const years = source.#fields.years
-    if (years !== undefined && years !== 0) addCarry('years', Math.abs(years))
-    if (monthsPresent && monthsCombined !== 0) addCarry('months', Math.abs(monthsCombined))
-    const weeks = source.#fields.weeks
-    if (weeks !== undefined && weeks !== 0) addCarry('weeks', Math.abs(weeks))
-    const days = source.#fields.days
-    if (days !== undefined && days !== 0) addCarry('days', Math.abs(days))
-    const hours = source.#fields.hours
-    if (hours !== undefined && hours !== 0) addCarry('hours', Math.abs(hours))
-    const minutes = source.#fields.minutes
-    if (minutes !== undefined && minutes !== 0) addCarry('minutes', Math.abs(minutes))
-    const seconds = source.#fields.seconds
-    if (seconds !== undefined && seconds !== 0) addCarry('seconds', Math.abs(seconds))
-    const milliseconds = source.#fields.milliseconds
-    if (milliseconds !== undefined && milliseconds !== 0) {
-      addCarry('milliseconds', Math.abs(milliseconds))
-    }
+    const parts = carriedParts(source.#fields, source.#exact)
+    const { years: Y, months: M, weeks: W, days: D, hours: H, minutes: MIN } = parts
+    const secNs =
+      parts.seconds * NS_PER_SECOND +
+      parts.milliseconds * 1_000_000n +
+      parts.microseconds * 1_000n +
+      parts.nanoseconds
 
     if (Y === 0n && M === 0n && W === 0n && D === 0n && H === 0n && MIN === 0n && secNs === 0n) {
       return 'PT0S'
@@ -680,87 +747,43 @@ new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
     return this.toISOString()
   }
 
+  /** Same as {@link toISOString}, so `JSON.stringify` keeps the value. */
+  toJSON(): string {
+    return this.toISOString()
+  }
+
+  /** Implicit conversion is not allowed: `<` and `+` would act on the ISO text. */
+  valueOf(): never {
+    throw new TypeError('Duration cannot be converted implicitly; use total()')
+  }
+
   /**
-   * Locale string via `Intl.DurationFormat`, or ISO when unavailable.
+   * Same as {@link format}.
    * @param locale BCP 47 tag
    * @param options DurationFormat options
    */
+  toLocaleString(locale?: string, options?: Record<string, unknown>): string {
+    return this.format(locale, options)
+  }
+
+  /**
+   * Locale string via `Intl.DurationFormat`. Mixed signs balance first, as in {@link normalize}.
+   * Where the API is missing, or a value is past its range (2^32 calendar units, 2^53 seconds
+   * of time), the result is {@link toISOString}.
+   * @param locale BCP 47 tag
+   * @param options DurationFormat options
+   * @throws {RangeError} for an invalid tag, or one past 255 characters.
+   */
   format(locale?: string, options?: Record<string, unknown>): string {
+    canonicalLocales(locale)
     const Ctor = Reflect.get(Intl, 'DurationFormat')
     if (!isDurationFormatCtor(Ctor)) return this.toISOString()
 
-    if (hasMixedSigns(this.#fields)) {
-      throw new RangeError('cannot format a duration with mixed signs')
-    }
-
-    const exact = this.#exact
-    const monthsCombined = (this.#fields.months ?? 0) + 3 * (this.#fields.quarters ?? 0)
-    const monthsPresent = this.#fields.months !== undefined || this.#fields.quarters !== undefined
-    const weeksPresent = this.#fields.weeks !== undefined
-
-    const acc: Record<AccKey, bigint> = {
-      years: 0n,
-      months: 0n,
-      weeks: 0n,
-      days: 0n,
-      hours: 0n,
-      minutes: 0n,
-      seconds: 0n,
-      milliseconds: 0n,
-      microseconds: 0n,
-      nanoseconds: 0n
-    }
-
-    const feed = (start: DurationField, absVal: number) => {
-      let ns = fieldNanos(absVal, start === 'months' ? 'months' : start, exact)
-      const chain = carryChain(start, true)
-      for (const c of chain) {
-        const u = unitNanos(c, exact)
-        const q = ns / u
-        acc[c] += q
-        ns -= q * u
-      }
-    }
-
-    const sign = isNegativeDuration(this.#fields) ? -1 : 1
-
-    const years = this.#fields.years
-    if (years !== undefined && years !== 0) feed('years', Math.abs(years))
-    if (monthsPresent && monthsCombined !== 0) feed('months', Math.abs(monthsCombined))
-    const weeks = this.#fields.weeks
-    if (weeks !== undefined && weeks !== 0) feed('weeks', Math.abs(weeks))
-    const days = this.#fields.days
-    if (days !== undefined && days !== 0) feed('days', Math.abs(days))
-    const hours = this.#fields.hours
-    if (hours !== undefined && hours !== 0) feed('hours', Math.abs(hours))
-    const minutes = this.#fields.minutes
-    if (minutes !== undefined && minutes !== 0) feed('minutes', Math.abs(minutes))
-    const seconds = this.#fields.seconds
-    if (seconds !== undefined && seconds !== 0) feed('seconds', Math.abs(seconds))
-    const milliseconds = this.#fields.milliseconds
-    if (milliseconds !== undefined && milliseconds !== 0) {
-      feed('milliseconds', Math.abs(milliseconds))
-    }
-
-    if (!weeksPresent) acc.weeks = 0n
-
+    const source = this.#balanced()
+    const sign = isNegativeDuration(source.#fields) ? -1 : 1
     const record: Record<string, number> = {}
-    const keys: AccKey[] = [
-      'years',
-      'months',
-      'weeks',
-      'days',
-      'hours',
-      'minutes',
-      'seconds',
-      'milliseconds',
-      'microseconds',
-      'nanoseconds'
-    ]
-    for (const k of keys) {
-      if (acc[k] === 0n) continue
-      if (k === 'weeks' && !weeksPresent) continue
-      record[k] = sign * Number(acc[k])
+    for (const [unit, amount] of Object.entries(carriedParts(source.#fields, source.#exact))) {
+      if (amount !== 0n) record[unit] = sign * Number(amount)
     }
 
     const opts = options ?? {}
@@ -772,12 +795,31 @@ new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
       return new Ctor(locale, formatOpts).format({ seconds: 0 })
     }
 
-    return new Ctor(locale, opts).format(record)
+    const formatter = new Ctor(locale, opts)
+    try {
+      return formatter.format(record)
+    } catch (error) {
+      if (error instanceof RangeError) return this.toISOString()
+      throw error
+    }
+  }
+
+  [protocol.compare](o: unknown): number | undefined {
+    if (!isDuration(o)) return undefined
+    const mine = totalNanos(this.#fields, this.#exact)
+    const theirs = totalNanos(o.toObject(), o[DURATION_BRAND])
+    return mine < theirs ? -1 : mine > theirs ? 1 : 0
+  }
+
+  [protocol.equals](o: unknown): boolean {
+    return this[protocol.compare](o) === 0
   }
 
   /**
-   * Build a Duration from an ISO 8601 string, milliseconds, field object, or Duration
-   * (Temporal.Duration.from shape).
+   * Build a Duration from an ISO 8601 string, milliseconds, field object, or Duration.
+   * ISO components stay as written, unlike Temporal's balancing: `PT1.5H` is `{ hours: 1.5 }`,
+   * not 1 hour 30 minutes. A fraction a double cannot carry to 1 ns keeps its whole part in the
+   * field and spills the rest into `milliseconds`.
    * @param input Source value
    * @example
 ```js
@@ -788,7 +830,7 @@ Duration.from('P5Y3M').toObject() // { years: 5, months: 3 }
 ```
    */
   static from(input: string | number | DurationObject | Duration): Duration {
-    if (typeof input !== 'string') return new Duration(input)
+    if (typeof input !== 'string') return Duration.#operand(input)
     const text = input
 
     const fail = (): never => {
@@ -801,7 +843,7 @@ Duration.from('P5Y3M').toObject() // { years: 5, months: 3 }
       negative = text[i] === '-'
       i++
     }
-    if (i >= text.length || text[i].toUpperCase() !== 'P') fail()
+    if (i >= text.length || asciiUpper(text[i]) !== 'P') fail()
     i++
 
     const values: DurationObject = {}
@@ -812,23 +854,27 @@ Duration.from('P5Y3M').toObject() // { years: 5, months: 3 }
       componentCount += 1
     }
 
+    const readWhole = (): string => {
+      while (text[i] === '0') i++
+      const start = i
+      while (i < text.length && isDigit(text[i])) {
+        if (i - start >= 16) fail()
+        i++
+      }
+      return text.slice(start, i) || '0'
+    }
+
     let prevDate = -1
     while (i < text.length) {
       const ch = text[i]
-      if (ch.toUpperCase() === 'T') break
+      if (asciiUpper(ch) === 'T') break
       if (!isDigit(ch)) fail()
 
-      const intStart = i
-      while (i < text.length && isDigit(text[i])) {
-        if (i - intStart >= 16) fail()
-        i++
-      }
-      const intDigits = text.slice(intStart, i)
-      if (intDigits.length === 0) fail()
+      const intDigits = readWhole()
       if (i >= text.length) fail()
       if (text[i] === '.' || text[i] === ',') fail()
 
-      const des = text[i].toUpperCase()
+      const des = asciiUpper(text[i])
       i++
       const dateMeta = ISO_DATE_ORDER.get(des)
       if (dateMeta === undefined) fail()
@@ -841,7 +887,7 @@ Duration.from('P5Y3M').toObject() // { years: 5, months: 3 }
       }
     }
 
-    if (i < text.length && text[i].toUpperCase() === 'T') {
+    if (i < text.length && asciiUpper(text[i]) === 'T') {
       i++
       let prevTime = -1
       let sawTime = false
@@ -849,13 +895,7 @@ Duration.from('P5Y3M').toObject() // { years: 5, months: 3 }
       while (i < text.length) {
         if (!isDigit(text[i])) fail()
 
-        const intStart = i
-        while (i < text.length && isDigit(text[i])) {
-          if (i - intStart >= 16) fail()
-          i++
-        }
-        const intDigits = text.slice(intStart, i)
-        if (intDigits.length === 0) fail()
+        const intDigits = readWhole()
 
         let fracDigits: string | undefined
         if (i < text.length && (text[i] === '.' || text[i] === ',')) {
@@ -870,7 +910,7 @@ Duration.from('P5Y3M').toObject() // { years: 5, months: 3 }
         }
 
         if (i >= text.length) fail()
-        const des = text[i].toUpperCase()
+        const des = asciiUpper(text[i])
         i++
         const timeMeta = ISO_TIME_ORDER.get(des)
         if (timeMeta === undefined) fail()
@@ -880,18 +920,20 @@ Duration.from('P5Y3M').toObject() // { years: 5, months: 3 }
 
           if (fracDigits !== undefined && i !== text.length) fail()
 
+          const n = BigInt(intDigits)
+          if (n > MAX_SAFE) fail()
           if (fracDigits === undefined) {
-            const n = BigInt(intDigits)
-            if (n > MAX_SAFE) fail()
             store(timeMeta.field, Number(n))
           } else {
             const value = Number(`${intDigits}.${fracDigits}`)
-            if (!(value <= Number.MAX_SAFE_INTEGER)) fail()
             const u = unitNanos(timeMeta.field, false)
-            const exactNs =
-              BigInt(intDigits) * u + BigInt(fracDigits.padEnd(9, '0')) * (u / NS_PER_SECOND)
-            if (exactNs !== fieldNanos(value, timeMeta.field, false)) fail()
-            store(timeMeta.field, value)
+            const fractionNs = BigInt(fracDigits.padEnd(9, '0')) * (u / NS_PER_SECOND)
+            if (n * u + fractionNs === fieldNanos(value, timeMeta.field, false)) {
+              store(timeMeta.field, value)
+            } else {
+              store(timeMeta.field, Number(n))
+              store('milliseconds', ratio(fractionNs, unitNanos('milliseconds', false)))
+            }
           }
           sawTime = true
         }
