@@ -8,7 +8,7 @@ import {
   type DurationObject,
   type DurationUnit
 } from '../duration.js'
-import { asDate, formatDate, strftime } from '../format.js'
+import { asDate, formatDate, strftime, type FormatOptions } from '../format.js'
 import { addDuration, lastDayOfMonth, subDuration } from './arith.js'
 import {
   civilFromDayNumber,
@@ -51,12 +51,14 @@ export {
   weekOfYear,
   weeksInYear
 }
+export type { FormatOptions }
 
 export { addDuration, lastDayOfMonth, subDuration }
 export type { DurationObject, DateObject }
 export type DateLike = number | string | Date | IntlDate | DateObject | null
 
-interface DateCtorOpts {
+/** Options for {@link IntlDate} construction. */
+export interface DateCtorOpts {
   locale?: string
   utc?: boolean
 }

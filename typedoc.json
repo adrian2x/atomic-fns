@@ -12,5 +12,6 @@
     "src/string/index.ts"
   ],
   "out": "docs",
-  "excludePrivate": true
+  "excludePrivate": true,
+  "treatWarningsAsErrors": true
 }

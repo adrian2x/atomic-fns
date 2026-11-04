@@ -10,6 +10,8 @@ import { arrayFromIterableMap, forEachArrayElement, isTypedArray } from '../inte
 import { gt, hasMethod, identity, lt, protocol } from '../operators/index.js'
 import type { Predicate } from '../types.js'
 
+export type { Predicate } from '../types.js'
+
 /**
  * Returns the absolute value. Dispatches on `protocol.abs`, else `Math.abs`.
  * @param x The value.
@@ -107,12 +109,14 @@ function extreme<T>(
 /**
  * Returns the smallest element in an iterable. Among ties, returns the first.
  * The optional `key` transforms elements before comparing. Empty -> `undefined`.
- * @param iterable The iterable to inspect.
- * @param key Optional key function (default `identity`).
  * @returns The smallest element, or `undefined` if empty.
  */
 export function min(iterable: number[]): number | undefined
 export function min<T>(iterable: Iterable<T>, key?: (x: T) => unknown): T | undefined
+/**
+ * @param iterable The iterable to inspect.
+ * @param key Optional key function (default `identity`).
+ */
 export function min<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity): T | undefined {
   return extreme(iterable, key, lt)
 }
@@ -120,21 +124,20 @@ export function min<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity)
 /**
  * Returns the largest element in an iterable. Among ties, returns the first.
  * The optional `key` transforms elements before comparing. Empty -> `undefined`.
- * @param iterable The iterable to inspect.
- * @param key Optional key function (default `identity`).
  * @returns The largest element, or `undefined` if empty.
  */
 export function max(iterable: number[]): number | undefined
 export function max<T>(iterable: Iterable<T>, key?: (x: T) => unknown): T | undefined
+/**
+ * @param iterable The iterable to inspect.
+ * @param key Optional key function (default `identity`).
+ */
 export function max<T>(iterable: Iterable<T>, key: (x: T) => unknown = identity): T | undefined {
   return extreme(iterable, key, gt)
 }
 
 /**
  * Computes the mean of the values in `iterable` and accepts an optional `key` function which is invoked for each element to generate the values to be averaged.
- * @param iterable Values to average.
- * @param key Optional iteratee invoked per element.
- * @returns The mean value or `NaN` if no elements.
  * @example
 ```js
 const objects = [{ 'n': 4 }, { 'n': 2 }, { 'n': 8 }, { 'n': 6 }]
@@ -142,9 +145,14 @@ const objects = [{ 'n': 4 }, { 'n': 2 }, { 'n': 8 }, { 'n': 6 }]
 mean(objects, o => o.n)
 // 5
 ```
+ * @returns The mean value or `NaN` if no elements.
  */
 export function mean(iterable: number[]): number
 export function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): number
+/**
+ * @param iterable Values to average.
+ * @param key Optional iteratee invoked per element.
+ */
 export function mean<T>(iterable: Iterable<T>, key: Predicate<T> = identity): number {
   if (Array.isArray(iterable)) assertNotHugeSparse(iterable)
   const values = arrayFromIterableMap(iterable, (x) => Number(key(x as T)))
@@ -153,9 +161,6 @@ export function mean<T>(iterable: Iterable<T>, key: Predicate<T> = identity): nu
 
 /**
  * Sums the items of an iterable and returns the total.
- * @param args The elements to sum.
- * @param key Optional key function.
- * @returns The total sum.
  * @example
 ```js
 sum([1, 2, 3, 4])
@@ -164,9 +169,14 @@ sum([1, 2, 3, 4])
 sum([{n: 1}, {n: 2}], o => o.n)
 // 3
 ```
+ * @returns The total sum.
  */
 export function sum(args: number[]): number
 export function sum<T>(args: Iterable<T>, key?: Predicate<T, number>): number
+/**
+ * @param args The elements to sum.
+ * @param key Optional key function.
+ */
 export function sum<T>(args: Iterable<T>, key: Predicate<T, number> = (x) => x as number): number {
   let initial = 0
   if (isTypedArray<T>(args)) {

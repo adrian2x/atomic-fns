@@ -1,13 +1,12 @@
 import { arrayFromIterableMap } from '../internal/iterable.js'
 import { withHookNesting } from '../internal/nesting.js'
-import type { Comparer } from '../operators/index.js'
-import { protocol } from '../operators/index.js'
+import { protocol, type Comparer } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
 import { BTree } from './BTree.js'
 import { clone } from './object.js'
 
 /**
- * Set whose values stay ordered by {@link compare} (or a supplied comparator).
+ * Set whose values stay ordered by the library total-order `compare` (or a supplied comparator).
  * Backed by {@link BTree}. `add` of an existing value is a no-op.
  *
  * @template T
@@ -18,7 +17,7 @@ export class SortedSet<T> extends ValueCollection<T> {
 
   /**
    * @param values Initial values.
-   * @param compareFn Value comparator. Defaults to {@link compare}.
+   * @param compareFn Value comparator. Defaults to the library total-order `compare`.
    */
   constructor(values?: Iterable<T>, compareFn?: Comparer<T>) {
     super()

@@ -48,8 +48,9 @@ export * from './SortedSet.js'
 export * from './SplayTree.js'
 
 export * from './Trie.js'
-export { defineData, isPlainObject, merge, pick, omit, clone } from './object.js'
+export { defineData, isPlainObject, merge, pick, omit, clone, type PropertyPath } from './object.js'
 export { bisect, bisectLeft, binarySearch, insort, insortLeft } from './bisect.js'
+export type { Iteratee } from '../types.js'
 
 function toIteratee<T>(fn: Iteratee<T> | object | PropertyKey): Iteratee<T> {
   if (typeof fn === 'function') return fn as Iteratee<T>
@@ -92,8 +93,8 @@ export function compact<T>(arr: T | T[]): T[] | Partial<T> {
 
 /**
  * Creates an object composed of keys from the results of running elements of `collection` thru `iteratee`. The corresponding value of each key is the number of times the key was returned by `iteratee`.
- * @param iterable
- * @param func
+ * @param obj Collection to count.
+ * @param func Iteratee producing the group key.
  * @returns {Object} Returns an Object with the frequency values
  * @example
 ```js
@@ -1605,7 +1606,7 @@ export function union<T>(...its: Iterable<T>[]): IteratorObject<T> {
 /**
  * Creates an object composed of keys generated from the results of running each element of `arr` thru `func`. The order of grouped values is determined by the order they occur in `arr`. The corresponding value of each key is an array of elements responsible for generating the key.
  *
- * @param arr The collection to iterate over.
+ * @param coll The collection to iterate over.
  * @param fn The iteratee to transform keys (required).
  * @returns Returns the aggregated object.
  *
@@ -1631,7 +1632,7 @@ export function groupBy<T, K extends PropertyKey>(
 /**
  * Similar to {@link groupBy} but it returns a {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map Map} object with the results.
  *
- * @param arr The collection to iterate over.
+ * @param coll The collection to iterate over.
  * @param fn The iteratee to transform keys (required).
  * @returns {Map} Returns the aggregated map object.
  * @template K, V

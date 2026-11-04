@@ -16,6 +16,8 @@ import {
 import { add, bool, compare, eq, identity, type Comparer } from '../operators/index.js'
 import type { Iteratee, Predicate } from '../types.js'
 
+export type { Iteratee, Predicate } from '../types.js'
+
 export interface SortOptions<T = unknown, K = unknown> {
   key?: (x: T) => K
   reverse?: boolean
@@ -233,7 +235,7 @@ export function first<T>(iterable: Iterable<T>): T | undefined {
 /**
  * Creates a new generator that filters all falsy and empty values from iterable (SPEC-R40).
  * Shares `isCompactEmpty` with `compact`; does not change `isEmpty`.
- * @param arr The array to compact
+ * @param iterable The iterable to compact.
  * @returns A new array with the filtered values.
  * @example
 ```js
@@ -373,11 +375,7 @@ export function range(...args: number[]): IteratorObject<number> {
 }
 
 /**
- * Applies a `reducer` function on each element of the iterable, in order, passing the return value from the operation on the previous element. The final result of running the reducer across all elements of the iterable is a single value.
- * @param iterable The collection to reduce.
- * @param reducer A reducer function that will be called per item.
- * @param initial Optional initial value (defaults to the first element in the iterable).
- * @returns The result of calling reducer on each item.
+ * Applies a reducer function on each element of the iterable, in order, passing the return value from the operation on the previous element. The final result of running the reducer across all elements of the iterable is a single value.
  * @example
 ```js
 reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0)
@@ -391,6 +389,12 @@ export function reduce<T, A>(
   fn: (acc: A, v: T, i: number) => A,
   initial: A
 ): A
+/**
+ * @param iterable The collection to reduce.
+ * @param fn A reducer function that will be called per item.
+ * @param initial Optional initial value (defaults to the first element in the iterable).
+ * @returns The result of calling the reducer on each item.
+ */
 export function reduce(
   iterable: Iterable<unknown>,
   fn: (acc: unknown, v: unknown, i: number) => unknown,
@@ -501,14 +505,14 @@ export function sorted<T, K = T>(
  *   - sort([...], true) - reverse order
  *   - sort([...], (x, y) => number) - using custom compare
  *   - sort([...], true, (x, y) => number) - reverse and using custom compare
- *
- * @param {any[]} args
- * @param {(boolean | Comparer)} [reverse]
- * @param {Comparer} [compareFn]
- * @return
  */
 export function sort<T>(args: T[], reverse?: boolean | Comparer): T[]
 export function sort<T>(args: T[], reverse: boolean, compareFn: Comparer): T[]
+/**
+ * @param args Array to sort in place.
+ * @param reverse Reverse order, or a compare function when arity is 2.
+ * @param compareFn Compare function when `reverse` is a boolean.
+ */
 export function sort<T>(args: T[], reverse?: boolean | Comparer, compareFn?: Comparer): T[] {
   if (typeof reverse === 'function') {
     compareFn = reverse

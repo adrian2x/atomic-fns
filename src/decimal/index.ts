@@ -311,7 +311,7 @@ export class Decimal {
   /**
    * Maximum normalized coefficient decimal digit count (significant digits after stripping leading
    * and trailing zeros). Work and results of every arithmetic operation are bounded by this (not
-   * by {@link Decimal.MAX_EXPONENT}); larger results throw {@link RangeError}. Exact terminating /
+   * by {@link Decimal.MAX_EXPONENT}); larger results throw `RangeError`. Exact terminating /
    * perfect-square results may still use any allowed exponent when their significant digit count
    * fits.
    */

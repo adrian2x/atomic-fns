@@ -1,12 +1,11 @@
 import { withHookNesting } from '../internal/nesting.js'
-import type { Comparer } from '../operators/index.js'
-import { protocol } from '../operators/index.js'
+import { protocol, type Comparer } from '../operators/index.js'
 import { MapCollection, sameEntrySequence } from './abc.js'
 import { BTree } from './BTree.js'
 import { clone } from './object.js'
 
 /**
- * Map whose keys stay ordered by {@link compare} (or a supplied comparator).
+ * Map whose keys stay ordered by the library total-order `compare` (or a supplied comparator).
  * Backed by {@link BTree}. `set` on an existing key replaces the value and the stored key object.
  *
  * @template K, V
@@ -17,7 +16,7 @@ export class SortedMap<K, V> extends MapCollection<K, V> {
 
   /**
    * @param entries Initial key-value pairs.
-   * @param compareFn Key comparator. Defaults to {@link compare}.
+   * @param compareFn Key comparator. Defaults to the library total-order `compare`.
    */
   constructor(entries?: Iterable<[K, V]>, compareFn?: Comparer<K>) {
     super()

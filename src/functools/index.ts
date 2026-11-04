@@ -68,7 +68,6 @@ function pipeThrough(
 /**
  * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from left to right.
  * The first function receives all call arguments (and `this`); each later function receives the previous result.
- * @param fns The set of functions to apply.
  * @returns A new function that applies each given function on the result of the previous one.
  */
 export function flow<A extends unknown[], R>(fn: (...a: A) => R): (...a: A) => R
@@ -99,6 +98,7 @@ export function flow<A extends unknown[], B, C, D, E, F, G>(
   f5: (e: E) => F,
   f6: (f: F) => G
 ): (...a: A) => G
+/** @param fns The set of functions to apply. */
 export function flow(...fns: ((...a: never[]) => unknown)[]): (...a: never[]) => unknown {
   return function (this: unknown, ...args: never[]): unknown {
     return pipeThrough(this, fns, args)

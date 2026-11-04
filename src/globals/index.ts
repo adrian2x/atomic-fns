@@ -801,7 +801,7 @@ export function list<T>(value?: Iterable<T> | null): T[] {
 /**
  * Retrieve the next item from the iterator by calling its `next()` method.
  * When the iterator is done, returns `dflt` (the iterator return value is ignored).
- * @param iter The iterator.
+ * @param it The iterator.
  * @param dflt Default when done.
  * @returns The next value from the iterator, or `dflt`.
  */
