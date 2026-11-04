@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import {
   BTree,
@@ -14,7 +15,6 @@ import {
 import { decimal } from '../src/decimal/index.js'
 import { Currency } from '../src/i18n/currency.js'
 import { IntlDate } from '../src/i18n/date/index.js'
-import { walkSession } from '../src/internal/nesting.js'
 import {
   createDeepEqualSession,
   deepEqualInSession,
@@ -89,7 +89,7 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
     const np2: Record<string, number> = Object.create(null) as Record<string, number>
     np2.a = 1
     expect(deepEqual(new Heap([np1, { a: 1 }]), new Heap([{ a: 1 }, np2]))).toBe(true)
-    expect(deepEqual(new Heap([np1]), new Heap([{ a: 1 }]))).toBe(false)
+    expect(deepEqual(new Heap([np1]), new Heap([{ a: 1 }]))).toBe(true)
 
     const n = 10_000
     const keyed = Array.from({ length: n }, (_, i) => ({ i }))
@@ -578,11 +578,7 @@ function loop(tail: unknown): { outer: Deque<unknown>; inner: Deque<unknown> } {
 }
 
 /** How many pairs of `left` x `right` a memo holds, in either order. */
-function storedPairs(
-  memo: DeepEqualSession['proven'] | undefined,
-  left: object[],
-  right: object[]
-): number {
+function storedPairs(memo: DeepEqualSession['disproven'], left: object[], right: object[]): number {
   return left.flatMap((a) => right.filter((b) => memo?.has(a, b) === true)).length
 }
 
@@ -599,10 +595,10 @@ describe('session memory', () => {
 
   it('a wide Heap of deep items fills the failure memo up to the bound and no further', () => {
     const { numbers, decimals } = wideCrossKindItems()
-    const session = walkSession(createDeepEqualSession)
+    const session = createDeepEqualSession(false)
     session.failureRoom = 100
 
-    const equal = deepEqual(new Heap(numbers, tied), new Heap(decimals, tied))
+    const equal = deepEqualInSession(new Heap(numbers, tied), new Heap(decimals, tied), session)
 
     expect(equal).toBe(true)
     expect(storedPairs(session.disproven, numbers, decimals)).toBeLessThanOrEqual(100)
@@ -610,58 +606,60 @@ describe('session memory', () => {
     expect(storedPairs(session.disproven, numbers.slice(0, 1), decimals.slice(0, 1))).toBe(1)
   })
 
-  it(
-    'failed candidates leave proofs the room that keeps shared references linear',
-    DOS_TIMEOUT,
-    () => {
-      const { numbers, decimals } = wideCrossKindItems()
-      const level = (x: unknown): unknown => new Deque([x, x])
-      const left = [new Heap(numbers, tied), stack(level, LEVELS)]
-      const right = [new Heap(decimals, tied), stack(level, LEVELS)]
-      const session = walkSession(createDeepEqualSession)
-      session.failureRoom = 100
-      session.proofRoom = 2000
-      const calls = hookCalls(Deque.prototype, protocol.equals)
+  it('failed candidates leave shared references linear', DOS_TIMEOUT, () => {
+    const { numbers, decimals } = wideCrossKindItems()
+    const level = (x: unknown): unknown => new Deque([x, x])
+    const left = [new Heap(numbers, tied), stack(level, LEVELS)]
+    const right = [new Heap(decimals, tied), stack(level, LEVELS)]
+    const session = createDeepEqualSession(false)
+    session.failureRoom = 100
+    const calls = hookCalls(Deque.prototype, protocol.equals)
 
-      expect(deepEqual(left, right)).toBe(true)
+    expect(deepEqualInSession(left, right, session)).toBe(true)
 
-      expect(calls.mock.calls.length).toBe(LEVELS)
-    }
-  )
+    expect(calls.mock.calls.length).toBe(LEVELS)
+  })
 
-  it('a wide cyclic Heap stops remembering proofs at the bound', () => {
+  it('bare pairs past the bound go unremembered, and the answer stands', () => {
     const items = (): Deque<unknown>[] => Array.from({ length: 40 }, () => containsItself(1))
-    const left = items()
-    const right = items()
-    const session = walkSession(createDeepEqualSession)
-    session.proofRoom = 10
+    const session = createDeepEqualSession(false, 10)
 
-    const equal = deepEqual(new Heap(left, tied), new Heap(right, tied))
+    const equal = deepEqualInSession(new Heap(items(), tied), new Heap(items(), tied), session)
 
     expect(equal).toBe(true)
-    expect(storedPairs(session.proven, left, right)).toBeLessThanOrEqual(10)
+    expect(session.assumed.mark()).toBeLessThanOrEqual(10)
   })
 
-  it('a retracted proof frees its room', () => {
-    const session = walkSession(createDeepEqualSession)
-    const room = session.proofRoom
+  it('objects past the tracking bound are compared, not taken for equal', () => {
+    const rows = (last: number): object[] => [{ a: 1 }, { a: 2 }, { a: last }]
 
-    deepEqual(loop(1).outer, loop(2).outer)
-
-    expect(session.proofRoom).toBe(room)
+    expect(deepEqualInSession(rows(3), rows(3), createDeepEqualSession(true, 2))).toBe(true)
+    expect(deepEqualInSession(rows(3), rows(4), createDeepEqualSession(true, 2))).toBe(false)
   })
 
-  it('a proof that found no room frees none when it fails', () => {
-    const session = walkSession(createDeepEqualSession)
-    session.proofRoom = 0
+  it.each([
+    ['classes', true],
+    ['pairs', false]
+  ])('a failed comparison rolls back all it assumed: %s', (_, transitive) => {
+    const session = createDeepEqualSession(transitive)
 
-    deepEqual(loop(1).outer, loop(2).outer)
+    expect(deepEqualInSession(loop(1).outer, loop(2).outer, session)).toBe(false)
 
-    expect(session.proofRoom).toBe(0)
+    expect(session.assumed.mark()).toBe(0)
   })
 
-  it('a session bounds what it stores by default', () => {
-    expect(createDeepEqualSession()).toMatchObject({ proofRoom: 2 ** 21, failureRoom: 2 ** 20 })
+  it('a failed candidate keeps what the walk assumed before it', () => {
+    const session = createDeepEqualSession()
+    const left = [{ a: 1 }, new Heap([{ b: 1 }, { b: 2 }], tied)]
+    const right = [{ a: 1 }, new Heap([{ b: 2 }, { b: 1 }], tied)]
+
+    expect(deepEqualInSession(left, right, session)).toBe(true)
+
+    expect(session.assumed.mark()).toBeGreaterThanOrEqual(3)
+  })
+
+  it('a session bounds its failures by default', () => {
+    expect(createDeepEqualSession()).toMatchObject({ failureRoom: 2 ** 20 })
   })
 
   it('a walk over distinct rows holds a small fraction of what per-pair sets would', () => {
@@ -686,14 +684,6 @@ describe('session memory', () => {
     expect(held).toBeLessThan(64 * 1024 * 1024)
   })
 
-  it('an acyclic walk logs no proofs', () => {
-    const session = createDeepEqualSession()
-
-    deepEqualInSession([{ n: 1 }], [{ n: 1 }], session)
-
-    expect(session.provenLog).toEqual([])
-  })
-
   it('a scalar with an equals hook leaves no entry', () => {
     const session = createDeepEqualSession()
     const left = decimal(1)
@@ -701,7 +691,7 @@ describe('session memory', () => {
 
     deepEqualInSession(left, right, session)
 
-    expect(session.proven.has(left, right)).toBe(false)
+    expect(session.assumed.mark()).toBe(0)
   })
 
   it('a shallow failure leaves no entry, so a wide Heap stores none', () => {
@@ -890,33 +880,10 @@ describe('deepEqual work limit', () => {
     return node
   }
 
-  it('throws once a walk that can remember nothing passes its visit limit', () => {
+  it('throws once a walk passes its visit limit', () => {
     const session = createDeepEqualSession()
-    session.proofRoom = 0
-    session.failureRoom = 0
-    session.visitRoom = 10_000
+    session.visitRoom = 10
     expect(() => deepEqualInSession(tower(40), tower(40), session)).toThrow(
-      new RangeError('deepEqual exceeded 33554432 comparisons')
-    )
-  })
-
-  it('counts hook classes that are not iterable', () => {
-    class Node {
-      constructor(readonly next: Node | null) {}
-      [protocol.equals](other: unknown): boolean {
-        const peer = (other as Node).next
-        return deepEqual(this.next, peer) && deepEqual(this.next, peer)
-      }
-    }
-    let a: Node | null = null
-    let b: Node | null = null
-    for (let i = 0; i < 40; i++) {
-      a = new Node(a)
-      b = new Node(b)
-    }
-    const session = walkSession(createDeepEqualSession)
-    session.visitRoom = 10_000
-    expect(() => deepEqualInSession(a, b, session)).toThrow(
       new RangeError('deepEqual exceeded 33554432 comparisons')
     )
   })
@@ -1173,20 +1140,20 @@ describe('deep multiset equality', () => {
     const values = Array.from({ length: count }, (_, i) => (i * 7919) % count)
     const left = new Heap(values.map((value) => decimal(value)))
     const right = new Heap(values.toReversed().map((value) => decimal(value)))
-    const session = walkSession(createDeepEqualSession)
+    const session = createDeepEqualSession()
     session.visitRoom = 8 * count
 
-    expect(deepEqual(left, right)).toBe(true)
+    expect(deepEqualInSession(left, right, session)).toBe(true)
   })
 
   it('one unequal ordered hook item does not shift the rest out of alignment', () => {
     const count = 20_000
     const left = new Heap(Array.from({ length: count }, (_, i) => decimal(i)))
     const right = new Heap(Array.from({ length: count }, (_, i) => decimal(i + 1)))
-    const session = walkSession(createDeepEqualSession)
+    const session = createDeepEqualSession()
     session.visitRoom = 8 * count
 
-    expect(deepEqual(left, right)).toBe(false)
+    expect(deepEqualInSession(left, right, session)).toBe(false)
   })
 
   it('items no hash can tell apart stop at the comparison limit', () => {
@@ -1194,10 +1161,10 @@ describe('deep multiset equality', () => {
     const ids = Array.from({ length: 200 }, (_, i) => i)
     const left = new Heap(ids.map(buried), tied)
     const right = new Heap(ids.toReversed().map(buried), tied)
-    const session = walkSession(createDeepEqualSession)
+    const session = createDeepEqualSession()
     session.visitRoom = 100
 
-    expect(() => deepEqual(left, right)).toThrow(
+    expect(() => deepEqualInSession(left, right, session)).toThrow(
       new RangeError('deepEqual exceeded 33554432 comparisons')
     )
   })
@@ -1209,10 +1176,10 @@ describe('deep multiset equality', () => {
       order.map((proto) => Object.create(proto) as object)
     const left = new Heap(items(protos), tied)
     const right = new Heap(items(protos.toReversed()), tied)
-    const session = walkSession(createDeepEqualSession)
+    const session = createDeepEqualSession()
     session.visitRoom = 4 * count
 
-    expect(() => deepEqual(left, right)).toThrow(
+    expect(() => deepEqualInSession(left, right, session)).toThrow(
       new RangeError('deepEqual exceeded 33554432 comparisons')
     )
   })
@@ -1372,5 +1339,198 @@ describe('deep multiset equality', () => {
         })
       }
     })
+  })
+})
+
+describe('equivalence classes', () => {
+  function ring(size: number): object {
+    const first: { next?: object } = {}
+    let node = first
+    for (let i = 1; i < size; i++) node = { next: node }
+    first.next = node
+    return first
+  }
+
+  it('rings of coprime sizes are equal, in about as many steps as they have nodes', () => {
+    const session = createDeepEqualSession()
+
+    expect(deepEqualInSession(ring(31), ring(37), session)).toBe(true)
+
+    expect(session.visits).toBeLessThanOrEqual(31 + 37)
+  })
+
+  it('rings with a difference stay different', () => {
+    const marked = (size: number, index: number): object => {
+      const nodes = Array.from({ length: size }, (_, i): Record<string, unknown> => {
+        return { mark: i === index }
+      })
+      nodes.forEach((node, i) => (node.next = nodes[(i + 1) % size]))
+      return nodes[0]
+    }
+    expect(deepEqual(marked(6, 0), marked(3, 0))).toBe(false)
+    expect(deepEqual(marked(6, 0), marked(6, 3))).toBe(false)
+    expect(deepEqual(marked(6, 2), marked(6, 2))).toBe(true)
+  })
+
+  it('a shared child stops doubling under a hook that is not iterable', () => {
+    class Link {
+      constructor(readonly next: Link | null) {}
+      [protocol.equals](other: unknown): boolean {
+        const peer = (other as Link).next
+        return deepEqual(this.next, peer) && deepEqual(this.next, peer)
+      }
+    }
+    const chain = (): Link | null => {
+      let link: Link | null = null
+      for (let i = 0; i < 40; i++) link = new Link(link)
+      return link
+    }
+    const session = createDeepEqualSession()
+    session.visitRoom = 1000
+
+    expect(deepEqualInSession(chain(), chain(), session)).toBe(true)
+  })
+
+  it('equality that is not transitive never spreads through a shared partner', () => {
+    const usd = [new Currency(5, 'USD')]
+    const bare = [5]
+    const jpy = [new Currency(5, 'JPY')]
+    expect(deepEqual(usd, bare)).toBe(true)
+    expect(deepEqual(bare, jpy)).toBe(true)
+    expect(deepEqual(usd, jpy)).toBe(false)
+    expect(deepEqual([usd, bare, usd], [bare, jpy, jpy])).toBe(false)
+    const mid = [decimal(5)]
+    expect(deepEqual([usd, mid, usd], [mid, jpy, jpy])).toBe(false)
+
+    class Money {
+      readonly [protocol.rank] = 1
+      constructor(readonly code: string) {}
+      get [protocol.unit](): string {
+        return this.code
+      }
+      [protocol.equals](other: unknown): boolean {
+        if (!(other instanceof Money)) return false
+        return this.code === other.code || this.code === '' || other.code === ''
+      }
+    }
+    const [dollars, plain, yen] = [[new Money('USD')], [new Money('')], [new Money('JPY')]]
+    expect(deepEqual(dollars, plain)).toBe(true)
+    expect(deepEqual([dollars, plain, dollars], [plain, yen, yen])).toBe(false)
+
+    class Near {
+      constructor(readonly value: number) {}
+      [protocol.equals](other: unknown): boolean {
+        return other instanceof Near && Math.abs(this.value - other.value) <= 1
+      }
+    }
+    const [one, two, three] = [[new Near(1)], [new Near(2)], [new Near(3)]]
+    expect(deepEqual([one, two, one], [two, three, three])).toBe(false)
+    expect(deepEqual([one, two], [two, three])).toBe(true)
+  })
+
+  it('a walk stops at the first opaque answer, then starts again', () => {
+    let calls = 0
+    class Opaque {
+      [protocol.equals](): boolean {
+        calls++
+        return true
+      }
+    }
+    const row = (): Opaque[] => Array.from({ length: 100 }, () => new Opaque())
+
+    expect(deepEqual(row(), row())).toBe(true)
+
+    expect(calls).toBe(1 + 100)
+  })
+
+  it('shuffled rows that carry a Decimal bucket by value', () => {
+    const count = 20_000
+    const values = Array.from({ length: count }, (_, i) => (i * 7919) % count)
+    const rows = (order: number[]): object[] => order.map((value) => ({ p: decimal(value) }))
+    const session = createDeepEqualSession()
+    session.visitRoom = 8 * count
+
+    const left = new Heap(rows(values), tied)
+    const right = new Heap(rows(values.toReversed()), tied)
+    expect(deepEqualInSession(left, right, session)).toBe(true)
+  })
+
+  it('a foreign Date lands in the bucket of its local twin', () => {
+    const foreign = runInNewContext('new Date(7)') as Date
+    expect(deepEqual(new Heap([foreign], tied), new Heap([new Date(7)], tied))).toBe(true)
+    expect(deepEqual(new Set([{ at: foreign }]), new Set([{ at: new Date(7) }]))).toBe(true)
+  })
+})
+
+describe('session lifetime', () => {
+  it('a deepEqual inside a clone starts its own session', () => {
+    let result: boolean | undefined
+    clone(
+      {
+        get g(): number {
+          const a = { x: 1 }
+          const b = { x: 1 }
+          deepEqual(a, b)
+          b.x = 2
+          result = deepEqual(a, b)
+          return 1
+        }
+      },
+      true
+    )
+    expect(result).toBe(false)
+  })
+
+  it('a deepEqual in a getter of a running walk starts its own session', () => {
+    let result: boolean | undefined
+    const a = { x: 1 }
+    const b = { x: 1 }
+    const reader = {
+      get g(): number {
+        deepEqual(a, b)
+        b.x = 2
+        result = deepEqual(a, b)
+        return 1
+      }
+    }
+    expect(deepEqual([reader], [{ g: 1 }])).toBe(true)
+    expect(result).toBe(false)
+  })
+
+  it('a deepEqual in a getter under a hook starts its own session too', () => {
+    let result: boolean | undefined
+    const a = { x: 1 }
+    const b = { x: 1 }
+    const reader = {
+      get g(): number {
+        deepEqual(a, b)
+        b.x = 2
+        result = deepEqual(a, b)
+        return 1
+      }
+    }
+    class Wrapper {
+      constructor(readonly inner: unknown) {}
+      [protocol.equals](other: unknown): boolean {
+        return deepEqual(this.inner, (other as Wrapper).inner)
+      }
+    }
+    expect(deepEqual(new Wrapper([reader]), new Wrapper([{ g: 1 }]))).toBe(true)
+    expect(result).toBe(false)
+  })
+
+  it('a hook that walks back to its owner shares the session of that walk', () => {
+    class Back {
+      constructor(readonly owner: { back?: Back }) {}
+      [protocol.equals](other: unknown): boolean {
+        return deepEqual(this.owner, (other as Back).owner)
+      }
+    }
+    const owner = (): object => {
+      const node: { back?: Back } = {}
+      node.back = new Back(node)
+      return node
+    }
+    expect(deepEqual(owner(), owner())).toBe(true)
   })
 })

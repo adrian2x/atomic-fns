@@ -30,8 +30,8 @@ const walkSessions = new Map<() => object, object>()
 
 /**
  * The session `create` built for the running walk, built on first use. Collection hooks re-enter
- * `clone` and `deepEqual` mid-walk, so every hop of one top-level call sees the same session. It
- * is dropped when the nesting count returns to 0.
+ * `clone` mid-walk, so every hop of one top-level call sees the same session. It is dropped when
+ * the nesting count returns to 0.
  */
 export function walkSession<T extends object>(create: () => T): T {
   let session = walkSessions.get(create) as T | undefined

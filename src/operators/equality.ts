@@ -2,17 +2,12 @@
  * Structural equality helpers.
  */
 
+import { unbox } from '../globals/brand.js'
 import { isHugeSparse, walkArray } from '../internal/arrayKeys.js'
-import {
-  enterNesting,
-  exitNesting,
-  guardNesting,
-  walkSession,
-  withHookNesting
-} from '../internal/nesting.js'
-import { multisetEqual } from './multiset.js'
+import { enterNesting, exitNesting, guardNesting, withHookNesting } from '../internal/nesting.js'
+import { bytesOf, kindOf, multisetEqual, type Kind } from './multiset.js'
 import { eq, sameValueZero } from './order.js'
-import { hasMethod, protocol } from './protocol.js'
+import { hasMethod, protocol, unitOf } from './protocol.js'
 
 /**
  * Unordered object pairs. Most objects meet one partner, so those cost a single `Map` entry; a
@@ -50,37 +45,148 @@ class PairSet {
   }
 }
 
+/** What a walk takes to be equal so far. */
+interface Assumptions {
+  /** Whether equality of `a` and `b` may be inferred through a third object. */
+  readonly transitive: boolean
+  /** Take `a` and `b` to be equal. Returns `false` when they already are. */
+  assume(a: object, b: object): boolean
+  /** A point to return to with {@link rollback}. */
+  mark(): number
+  rollback(mark: number): void
+  /** The pair entered at `mark` is settled: drop what has no room to stay. */
+  leave(mark: number): void
+}
+
+/** A `Map` holds at most 2^24 entries; objects past that go unremembered, which only costs time. */
+const MAX_TRACKED_OBJECTS = 2 ** 24 - 2
+
 /**
- * Internal state shared by every comparison of one top-level call, collection hooks and Heap
- * matching included, so shared-reference subtrees are compared once. Not exported from any barrel.
+ * Hopcroft-Karp: a union-find over the objects met, so a walk stops at any pair already in one
+ * class and makes at most one union per object. Union by rank without path compression, so a
+ * failed candidate undoes each union in O(1).
+ */
+class EqualClasses implements Assumptions {
+  readonly transitive = true
+  readonly #ids = new Map<object, number>()
+  readonly #parent: number[] = []
+  readonly #rank: number[] = []
+  /** Attached roots, oldest first, as `~root` when that union also raised a rank. */
+  readonly #unions: number[] = []
+  readonly #room: number
+
+  constructor(room: number) {
+    this.#room = room
+  }
+
+  assume(a: object, b: object): boolean {
+    const [x, y] = [this.#root(a), this.#root(b)]
+    if (x === undefined || y === undefined) return true
+    if (x === y) return false
+    const [low, high] = this.#rank[x] < this.#rank[y] ? [x, y] : [y, x]
+    this.#parent[low] = high
+    if (this.#rank[low] < this.#rank[high]) {
+      this.#unions.push(low)
+    } else {
+      this.#rank[high]++
+      this.#unions.push(~low)
+    }
+    return true
+  }
+
+  mark(): number {
+    return this.#unions.length
+  }
+
+  rollback(mark: number): void {
+    for (const union of this.#unions.splice(mark).reverse()) {
+      const low = union < 0 ? ~union : union
+      if (union < 0) this.#rank[this.#parent[low]]--
+      this.#parent[low] = low
+    }
+  }
+
+  leave(): void {
+    // A class costs one slot per object, however many pairs built it.
+  }
+
+  #root(value: object): number | undefined {
+    let id = this.#ids.get(value)
+    if (id === undefined) {
+      if (this.#ids.size >= this.#room) return undefined
+      id = this.#parent.length
+      this.#ids.set(value, id)
+      this.#parent.push(id)
+      this.#rank.push(0)
+    }
+    while (this.#parent[id] !== id) id = this.#parent[id]
+    return id
+  }
+}
+
+/** Settled pairs past this go unremembered, which only costs time. */
+const MAX_REMEMBERED_PAIRS = 2 ** 21
+
+/** The pairs themselves and nothing inferred from them, for a walk with an opaque hook. */
+class EqualPairs implements Assumptions {
+  readonly transitive = false
+  readonly #pairs = new PairSet()
+  readonly #added: [object, object][] = []
+  readonly #room: number
+
+  constructor(room: number) {
+    this.#room = room
+  }
+
+  assume(a: object, b: object): boolean {
+    if (this.#pairs.has(a, b)) return false
+    this.#pairs.add(a, b)
+    this.#added.push([a, b])
+    return true
+  }
+
+  mark(): number {
+    return this.#added.length
+  }
+
+  rollback(mark: number): void {
+    for (const [a, b] of this.#added.splice(mark)) this.#pairs.delete(a, b)
+  }
+
+  leave(mark: number): void {
+    if (mark >= this.#room) this.rollback(mark)
+  }
+}
+
+/**
+ * Internal state shared by every comparison of one outermost call, hooks and multiset matching
+ * included, so shared references are compared once. Not exported from any barrel.
  *
- * A pair on the active path is assumed equal, which a later failure of that pair can disprove.
- * In a plain walk that failure ends the call, but multiset matching catches it and tries the next
- * candidate, so proofs that may rest on the assumption are retracted (see `deepEqualInSession`).
- * Unequal answers are never retracted: every comparison is monotone in its parts, so a false
- * reached under an assumption also holds without it (multiset matching keeps this by answering
- * false only after an exact search). While the memos have room, a pair that walked far can
- * therefore fail only once, which bounds the retractions and keeps cyclic input polynomial.
+ * Equality is the greatest bisimulation: a pair holds unless a difference can be reached from it.
+ * A walk takes each pair it enters to be equal and looks for that difference. A difference ends a
+ * plain walk, while multiset matching catches it and tries the next candidate, so a failed candidate
+ * rolls back all it assumed. Unequal answers are never rolled back: taking more pairs to be equal
+ * can only skip a difference, never add one, so a false reached under assumptions also holds without
+ * them (multiset matching keeps this by answering false only after an exact search).
+ *
+ * Inferring a pair through a third object needs equality to be transitive. That holds for structure
+ * and for scalars of one kind and unit, but not for what an opaque hook says or across units
+ * (`USD 5 = 5 = JPY 5`), so such an answer abandons the walk, which then runs again on bare pairs.
  */
 export interface DeepEqualSession {
-  /** Pairs on the active path. */
-  readonly pending: PairSet
-  /** Pairs known equal. */
-  readonly proven: PairSet
+  readonly assumed: Assumptions
   /** Pairs known unequal. Created by the first remembered failure; most walks have none. */
   disproven?: PairSet
-  /** Pairs proven since the first assumption: the only proofs that can rest on one. */
-  readonly provenLog: [object, object][]
-  /** Times a pair on the active path was assumed equal. */
-  assumptions: number
-  /** Pairs put on the active path so far. */
+  /** Pairs walked so far. */
   visits: number
   /** Comparisons the walk may still make before it gives up. */
   visitRoom: number
-  /** Proofs the session may still store. */
-  proofRoom: number
   /** Failures the session may still store. */
   failureRoom: number
+  /** Calls hooks made back into this session. */
+  reentries: number
+  /** The answer no longer counts, because {@link Assumptions.transitive} proved false. */
+  abandoned: boolean
 }
 
 /**
@@ -90,91 +196,114 @@ export interface DeepEqualSession {
  */
 const MIN_VISITS_TO_REMEMBER_FAILURE = 32
 
-/**
- * Bounds on what one session stores, so a walk's memory stays fixed however many pairs it meets.
- * A full memo keeps what it holds and stops adding: earlier pairs may be expensive, and a pair
- * that finds no room is only compared again, so answers do not change. Failures get their own
- * bound so that a flood of failed Heap candidates cannot take the room proofs need to keep shared
- * references linear.
- */
-const MAX_REMEMBERED_PROOFS = 2 ** 21
+/** A full memo stops adding: a pair that finds no room is only compared again. */
 const MAX_REMEMBERED_FAILURES = 2 ** 20
 
 /**
- * Comparisons one call may make. Past the memo bounds repeated work can multiply per level, so
- * this turns a hang into a catchable error. Distinct pairs alone cannot reach it: 2^25 pairs
- * would need more objects than a default heap holds.
+ * Comparisons one call may make, so candidates that pair all-to-all end in a catchable error.
+ * Distinct pairs alone cannot reach it: 2^25 pairs would need more objects than a default heap holds.
  */
 const MAX_COMPARISONS = 2 ** 25
 const COMPARISONS_ERROR = `deepEqual exceeded ${String(MAX_COMPARISONS)} comparisons`
 
-/** Create an empty session (no pairs pending or settled). */
-export function createDeepEqualSession(): DeepEqualSession {
+/** Create an empty session (nothing assumed or settled), inferring pairs when `transitive`. */
+export function createDeepEqualSession(transitive = true, room?: number): DeepEqualSession {
   return {
-    pending: new PairSet(),
-    proven: new PairSet(),
-    provenLog: [],
-    assumptions: 0,
+    assumed: transitive
+      ? new EqualClasses(room ?? MAX_TRACKED_OBJECTS)
+      : new EqualPairs(room ?? MAX_REMEMBERED_PAIRS),
     visits: 0,
     visitRoom: MAX_COMPARISONS,
-    proofRoom: MAX_REMEMBERED_PROOFS,
-    failureRoom: MAX_REMEMBERED_FAILURES
+    failureRoom: MAX_REMEMBERED_FAILURES,
+    reentries: 0,
+    abandoned: false
   }
 }
 
-const BOXED_PRIMITIVES = [Number, String, Boolean, BigInt, Symbol] as const
-const NOT_BOXED = Symbol('not boxed')
+/** The session of the walk whose hook is running. Getters and other user code see none. */
+let hookSession: DeepEqualSession | undefined
 
-/** Primitive wrapped by a boxed primitive, or `NOT_BOXED` for anything else. */
-function unboxed(v: object): unknown {
-  for (const Ctor of BOXED_PRIMITIVES) {
-    if (v instanceof Ctor) {
-      try {
-        return (Ctor.prototype.valueOf as (this: unknown) => unknown).call(v)
-      } catch {
-        return NOT_BOXED
-      }
+/**
+ * Run `walk` in the session of the calling hook, or else in a new one, and again on bare pairs if
+ * that one is abandoned.
+ */
+function inSession(walk: (session: DeepEqualSession) => boolean): boolean {
+  const caller = hookSession
+  if (caller !== undefined) {
+    caller.reentries++
+    hookSession = undefined
+    try {
+      return walk(caller)
+    } finally {
+      hookSession = caller
     }
   }
-  return NOT_BOXED
+  const session = createDeepEqualSession()
+  const equal = walk(session)
+  return session.abandoned ? walk(createDeepEqualSession(false)) : equal
 }
 
-function tagOf(v: object): string {
-  return Object.prototype.toString.call(v)
+function isObject(v: unknown): v is object {
+  return (typeof v === 'object' && v !== null) || typeof v === 'function'
 }
 
-function bytes(v: ArrayBuffer | ArrayBufferView): Uint8Array {
-  return v instanceof ArrayBuffer
-    ? new Uint8Array(v)
-    : new Uint8Array(v.buffer, v.byteOffset, v.byteLength)
+function prototypeOf(v: object): object | null {
+  return Object.getPrototypeOf(v) as object | null
 }
 
-function bytesEqual(a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBufferView): boolean {
-  const ua = bytes(a)
-  const ub = bytes(b)
-  return ua.length === ub.length && ua.every((byte, i) => byte === ub[i])
+function classNameOf(prototype: object): string | undefined {
+  const name = (prototype as { constructor?: { name?: unknown } }).constructor?.name
+  return typeof name === 'string' ? name : undefined
 }
 
-/** The session's settled answer for a pair, or `undefined` when it has none. */
-function knownAnswer(a: object, b: object, session: DeepEqualSession): boolean | undefined {
-  if (session.disproven?.has(a, b) === true) return false
-  return session.proven.has(a, b) ? true : undefined
+function isPlainPrototype(prototype: object | null): boolean {
+  if (prototype === null) return true
+  return prototypeOf(prototype) === null && classNameOf(prototype) === 'Object'
+}
+
+function areTwins(x: object, y: object): boolean {
+  const name = classNameOf(x)
+  return x !== y && name !== undefined && name === classNameOf(y)
+}
+
+/** One class, or its twin from another realm: two realms share no prototype, even at the root. */
+function sameClass(a: object, b: object): boolean {
+  let x = prototypeOf(a)
+  let y = prototypeOf(b)
+  if (x === y) return true
+  if (isPlainPrototype(x) && isPlainPrototype(y)) return true
+  while (x !== null && y !== null && areTwins(x, y)) {
+    x = prototypeOf(x)
+    y = prototypeOf(y)
+  }
+  return x === null && y === null
+}
+
+const FLOAT_ARRAY_TAGS = ['[object Float16Array]', '[object Float32Array]', '[object Float64Array]']
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, i) => byte === b[i])
+}
+
+function viewsEqual(a: ArrayBufferView, b: ArrayBufferView): boolean {
+  if (!FLOAT_ARRAY_TAGS.includes(Object.prototype.toString.call(a))) {
+    return bytesEqual(bytesOf(a), bytesOf(b))
+  }
+  const [x, y] = [a as Float64Array, b as Float64Array]
+  return x.length === y.length && x.every((value, i) => sameValueZero(value, y[i]))
 }
 
 function countComparison(session: DeepEqualSession): void {
   if (session.visitRoom-- <= 0) throw new RangeError(COMPARISONS_ERROR)
 }
 
-/** Put a pair on the active path, or return `false` and assume it equal when it is already there. */
-function enterPair(a: object, b: object, session: DeepEqualSession): boolean {
-  if (session.pending.has(a, b)) {
-    session.assumptions++
-    return false
-  }
+/** The answer a pair already has, or `undefined` once it is entered as a new one. */
+function enterPair(a: object, b: object, session: DeepEqualSession): boolean | undefined {
+  if (session.disproven?.has(a, b) === true) return false
+  if (!session.assumed.assume(a, b)) return true
   countComparison(session)
-  session.pending.add(a, b)
   session.visits++
-  return true
+  return undefined
 }
 
 function settle(
@@ -182,15 +311,12 @@ function settle(
   b: object,
   session: DeepEqualSession,
   equal: boolean,
-  visitsBefore: number
+  visitsBefore: number,
+  mark: number
 ): boolean {
-  if (equal) {
-    if (session.proofRoom > 0) {
-      session.proofRoom--
-      session.proven.add(a, b)
-      if (session.assumptions !== 0) session.provenLog.push([a, b])
-    }
-  } else if (
+  session.assumed.leave(mark)
+  if (
+    !equal &&
     session.failureRoom > 0 &&
     session.visits - visitsBefore >= MIN_VISITS_TO_REMEMBER_FAILURE
   ) {
@@ -201,110 +327,147 @@ function settle(
   return equal
 }
 
-/** Only iterables can share work: a hook on a scalar (Decimal, IntlDate) has nothing to walk. */
-function hasItems(v: unknown): v is object {
-  return typeof v === 'object' && v !== null && Symbol.iterator in v
+/** A value with `protocol.rank` 1 or 5 has no children to share and no cycle to close. */
+function isScalar(v: unknown): boolean {
+  const rank = (v as { [protocol.rank]?: unknown } | null | undefined)?.[protocol.rank]
+  return rank === 1 || rank === 5
 }
 
-// The two pair walks below stay inline: a shared wrapper adds stack frames per nesting level.
-function deepEqualInner(a: unknown, b: unknown, session: DeepEqualSession): boolean {
-  if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) {
+function hookAnswer(a: unknown, b: unknown, session: DeepEqualSession): boolean {
+  const { reentries } = session
+  hookSession = session
+  try {
     // Half of HOOK_NESTING_COST at dispatch; collection hooks charge the other half in-method.
-    if (!hasItems(a) || !hasItems(b)) {
-      countComparison(session)
-      return withHookNesting(() => eq(a, b))
-    }
-    const known = knownAnswer(a, b, session)
-    if (known !== undefined) return known
-    if (!enterPair(a, b, session)) return true
-    const visitsBefore = session.visits
-    try {
-      const equal = withHookNesting(() => eq(a, b))
-      return settle(a, b, session, equal, visitsBefore)
-    } finally {
-      session.pending.delete(a, b)
-    }
+    const equal = withHookNesting(() => eq(a, b))
+    const opaque = equal && a !== b && session.reentries === reentries
+    if (opaque && session.assumed.transitive && !isSameScalar(a, b)) session.abandoned = true
+    return equal
+  } finally {
+    hookSession = undefined
+  }
+}
+
+function isSameScalar(a: unknown, b: unknown): boolean {
+  if (!isScalar(a) || !isScalar(b)) return false
+  return prototypeOf(a as object) === prototypeOf(b as object) && unitOf(a) === unitOf(b)
+}
+
+function hookEqual(a: unknown, b: unknown, session: DeepEqualSession): boolean {
+  if (a === b || !isObject(a) || !isObject(b) || (isScalar(a) && isScalar(b))) {
+    countComparison(session)
+    return hookAnswer(a, b, session)
+  }
+  const mark = session.assumed.mark()
+  const known = enterPair(a, b, session)
+  if (known !== undefined) return known
+  const visitsBefore = session.visits
+  return settle(a, b, session, hookAnswer(a, b, session), visitsBefore, mark)
+}
+
+// The pair walk below stays inline: a shared wrapper adds stack frames per nesting level.
+function deepEqualInner(a: unknown, b: unknown, session: DeepEqualSession): boolean {
+  if (session.abandoned) return false
+  if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) {
+    return hookEqual(a, b, session)
   }
   if (eq(a, b)) return true
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
 
   enterNesting()
   try {
-    if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false
-    if (tagOf(a) !== tagOf(b)) return false
-
-    const boxed = unboxed(a)
-    if (boxed !== NOT_BOXED) return Object.is(boxed, unboxed(b))
-
-    // A pair on the current path is treated as equal. The pair is removed again after its
-    // children are compared, so a shared sub-object may be paired with different partners.
-    const known = knownAnswer(a, b, session)
-    if (known !== undefined) return known
-    if (!enterPair(a, b, session)) return true
-    const visitsBefore = session.visits
-    try {
-      const equal = deepEqualChildren(a, b, session)
-      return settle(a, b, session, equal, visitsBefore)
-    } finally {
-      session.pending.delete(a, b)
+    const kind = kindOf(a)
+    if (kind !== kindOf(b) || !sameClass(a, b)) return false
+    switch (kind) {
+      case 'opaque':
+        return false
+      case 'boxed':
+        return Object.is(unbox(a), unbox(b))
+      case 'date':
+        return sameValueZero((a as Date).getTime(), (b as Date).getTime())
+      case 'regexp':
+        return (
+          (a as RegExp).source === (b as RegExp).source &&
+          (a as RegExp).flags === (b as RegExp).flags
+        )
+      case 'error':
+        return (
+          (a as Error).name === (b as Error).name && (a as Error).message === (b as Error).message
+        )
     }
+    const mark = session.assumed.mark()
+    const known = enterPair(a, b, session)
+    if (known !== undefined) return known
+    const visitsBefore = session.visits
+    return settle(a, b, session, deepEqualChildren(a, b, kind, session), visitsBefore, mark)
   } finally {
     exitNesting()
   }
 }
 
-function deepEqualChildren(a: object, b: object, session: DeepEqualSession): boolean {
-  if (a instanceof Date) {
-    return a.getTime() === (b as Date).getTime()
-  }
-  if (a instanceof RegExp) {
-    return a.source === (b as RegExp).source && a.flags === (b as RegExp).flags
-  }
-  if (a instanceof ArrayBuffer || ArrayBuffer.isView(a)) {
-    return bytesEqual(a, b as ArrayBuffer | ArrayBufferView)
-  }
-  if (a instanceof Map) return deepMapEqual(a, b as Map<unknown, unknown>, session)
-  if (a instanceof Set) return deepSetEqual(a, b as Set<unknown>, session)
-  if (Array.isArray(a)) {
-    const bb = b as unknown[]
-    if (a.length !== bb.length) return false
-    const len = a.length
-    let i = 0
-    for (; i < len && i in a && i in bb; i++) {
-      if (!deepEqualInner(a[i], bb[i], session)) return false
-    }
-    if (i < len && (isHugeSparse(a) || isHugeSparse(bb))) {
-      const keysA: number[] = []
-      const keysB: number[] = []
-      walkArray(a, (ev) => {
-        if (ev.kind === 'value' && ev.index >= i) keysA.push(ev.index)
-      })
-      walkArray(bb, (ev) => {
-        if (ev.kind === 'value' && ev.index >= i) keysB.push(ev.index)
-      })
-      if (keysA.length !== keysB.length) return false
-      for (let k = 0; k < keysA.length; k++) {
-        if (keysA[k] !== keysB[k]) return false
-        if (!deepEqualInner(a[keysA[k]], bb[keysB[k]], session)) return false
-      }
-      return true
-    }
-    for (; i < len; i++) {
-      if (!deepEqualInner(a[i], bb[i], session)) return false
-    }
-    return true
-  }
+function enumerableKeys(v: object): (string | symbol)[] {
+  const symbols = Object.getOwnPropertySymbols(v)
+  if (symbols.length === 0) return Object.keys(v)
+  return [...Object.keys(v), ...symbols.filter((key) => isEnumerableKey(v, key))]
+}
 
-  const keysA = Object.keys(a)
-  const keysB = Object.keys(b)
-  if (keysA.length !== keysB.length) return false
-  for (const k of keysA) {
-    if (!Object.hasOwn(b, k)) return false
-    if (
-      !deepEqualInner((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], session)
-    ) {
-      return false
-    }
+function isEnumerableKey(v: object, key: PropertyKey): boolean {
+  return Object.prototype.propertyIsEnumerable.call(v, key)
+}
+
+/** Reads own indices from `from` on, so holes cost nothing and read as `undefined`. */
+function sparseArraysEqual(
+  a: unknown[],
+  b: unknown[],
+  from: number,
+  session: DeepEqualSession
+): boolean {
+  const ownEqual = (array: unknown[], skip?: unknown[]): boolean => {
+    let equal = true
+    walkArray(array, (ev) => {
+      if (ev.kind !== 'value' || ev.index < from || (skip !== undefined && ev.index in skip)) return
+      equal = deepEqualInner(a[ev.index], b[ev.index], session)
+      return equal ? undefined : false
+    })
+    return equal
+  }
+  return ownEqual(a) && ownEqual(b, a)
+}
+
+function arraysEqual(a: unknown[], b: unknown[], session: DeepEqualSession): boolean {
+  if (a.length !== b.length) return false
+  const len = a.length
+  let i = 0
+  for (; i < len && i in a && i in b; i++) {
+    if (!deepEqualInner(a[i], b[i], session)) return false
+  }
+  if (i < len && (isHugeSparse(a) || isHugeSparse(b))) {
+    return sparseArraysEqual(a, b, i, session)
+  }
+  for (; i < len; i++) {
+    if (!deepEqualInner(a[i], b[i], session)) return false
+  }
+  return true
+}
+
+function deepEqualChildren(a: object, b: object, kind: Kind, session: DeepEqualSession): boolean {
+  switch (kind) {
+    case 'view':
+      return viewsEqual(a as ArrayBufferView, b as ArrayBufferView)
+    case 'buffer':
+      return bytesEqual(bytesOf(a as ArrayBuffer), bytesOf(b as ArrayBuffer))
+    case 'map':
+      return mapsEqual(a as Map<unknown, unknown>, b as Map<unknown, unknown>, session)
+    case 'set':
+      return setsEqual(a as Set<unknown>, b as Set<unknown>, session)
+    case 'array':
+      return arraysEqual(a as unknown[], b as unknown[], session)
+  }
+  const keys = enumerableKeys(a)
+  if (keys.length !== enumerableKeys(b).length) return false
+  for (const key of keys) {
+    if (!isEnumerableKey(b, key)) return false
+    const [x, y] = [a as Record<PropertyKey, unknown>, b as Record<PropertyKey, unknown>]
+    if (!deepEqualInner(x[key], y[key], session)) return false
   }
   return true
 }
@@ -313,15 +476,10 @@ function isPrimitive(value: unknown): boolean {
   return value === null || (typeof value !== 'object' && typeof value !== 'function')
 }
 
-/**
- * Multiset equality under `deepEqual` in the walk's session; every candidate counts towards its
- * limit. A caller that is not a collection hook charges {@link withHookNesting} for the extra stack.
- * Internal: not exported from the public barrels.
- */
-export function deepMultisetEqual(
+function membersEqual(
   a: readonly unknown[],
   b: readonly unknown[],
-  session: DeepEqualSession = walkSession(createDeepEqualSession)
+  session: DeepEqualSession
 ): boolean {
   return multisetEqual(a, b, (x, y) => {
     countComparison(session)
@@ -329,20 +487,19 @@ export function deepMultisetEqual(
   })
 }
 
-function deepSetEqual(a: Set<unknown>, b: Set<unknown>, session: DeepEqualSession): boolean {
+function setsEqual(a: Set<unknown>, b: Set<unknown>, session: DeepEqualSession): boolean {
   if (a.size !== b.size) return false
-  return a.isSubsetOf(b) || withHookNesting(() => deepMultisetEqual([...a], [...b], session))
+  return a.isSubsetOf(b) || withHookNesting(() => membersEqual([...a], [...b], session))
 }
 
-/** Same entries under `deepEqual`, in any order. Internal: not exported from the public barrels. */
-export function deepMapEqual(
+function mapsEqual(
   a: Map<unknown, unknown>,
   b: Map<unknown, unknown>,
-  session: DeepEqualSession = walkSession(createDeepEqualSession)
+  session: DeepEqualSession
 ): boolean {
   if (a.size !== b.size) return false
   if (!a.keys().every(isPrimitive) || !b.keys().every(isPrimitive)) {
-    return withHookNesting(() => deepMultisetEqual([...a], [...b], session))
+    return withHookNesting(() => membersEqual([...a], [...b], session))
   }
   for (const [k, v] of a) {
     if (!b.has(k)) return false
@@ -352,59 +509,67 @@ export function deepMapEqual(
 }
 
 /**
- * Deep structural equality with cycle handling.
- * Dispatches to `protocol.equals` when either side defines it. Boxed primitives compare by
- * `Object.is` on their primitive value. Set members and the entries of a Map with an object key
- * compare as multisets, also by `deepEqual`. Nesting past 1000 levels throws `RangeError` (the cap
- * is a security bound, not an implementation limit). A pair already under comparison on the
- * current path is treated as equal. Settled pairs are memoized for the rest of the top-level
- * call so shared-reference DAGs stay linear up to the memo bounds (2^20 failures, 2^21 proofs);
- * past them repeated work is recomputed, and a call that makes 2^25 comparisons throws
- * `RangeError`. Collection equality hooks re-enter this function,
- * continue the same nesting count and share that memo. Nesting is counted only for object pairs
- * (after primitive checks), so a 1000-deep structure ending in a primitive is accepted.
+ * Multiset equality under `deepEqual`, for a collection hook: every candidate counts towards the
+ * session's limit. Internal: not exported from the public barrels.
  */
-export function deepEqual(a: unknown, b: unknown): boolean {
-  return deepEqualInSession(a, b, walkSession(createDeepEqualSession))
+export function deepMultisetEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return inSession((session) => membersEqual(a, b, session))
+}
+
+/** Same entries under `deepEqual`, in any order. Internal: not exported from the public barrels. */
+export function deepMapEqual(a: Map<unknown, unknown>, b: Map<unknown, unknown>): boolean {
+  return inSession((session) => mapsEqual(a, b, session))
 }
 
 /**
- * `deepEqual` over a given session. Pairs settled by earlier calls on the same session are
- * reused, and nesting is counted through the shared nesting guard exactly as in `deepEqual`. A
- * comparison that fails after assuming a pair retracts what it proved, because those proofs may
- * rest on the assumption that just failed. Internal: not exported from the public barrels.
+ * Deep structural equality with cycle handling, the greatest bisimulation over the values' kinds.
+ * Dispatches to `protocol.equals` when either side defines it. Arrays, plain objects and class
+ * instances compare by their own enumerable keys, symbols included; an explicit `undefined` equals
+ * an array hole. Boxed primitives compare by `Object.is` on their primitive value, Dates by time
+ * (invalid ones are equal), RegExps by source and flags, Errors by name and message, buffers and
+ * views by bytes, and float typed arrays by element under SameValueZero. Set members and the entries
+ * of a Map with an object key compare as multisets, also by `deepEqual`. A value of any other kind
+ * (URL, Promise, WeakMap, Blob, generators, ...) equals only itself, as in Lodash `isEqual`.
+ *
+ * Both sides must be of one class, or that class's twin from another realm. Null-prototype and
+ * `Object.prototype` objects are one plain kind.
+ *
+ * Each shared object is compared once, so memory and time stay proportional to the distinct objects
+ * however they share, and two cycles of different lengths are compared in the sum of their lengths.
+ * Hooks share that work; a hook that returns without calling back into `deepEqual` makes the call
+ * run again without inferring pairs through a third object, since such an equality need not be
+ * transitive, and a `protocol.equals` that does call back must be an equivalence. Nesting past 1000
+ * levels throws `RangeError` (the cap is a security bound, not an implementation limit), counted only
+ * for object pairs (after primitive checks), so a 1000-deep structure ending in a primitive is
+ * accepted. Candidates that pair all-to-all stop at 2^25 comparisons with a `RangeError`.
+ */
+export function deepEqual(a: unknown, b: unknown): boolean {
+  return inSession((session) => deepEqualInSession(a, b, session))
+}
+
+/**
+ * `deepEqual` over a given session, undoing what a failed comparison assumed. Nesting is counted
+ * through the shared nesting guard exactly as in `deepEqual`. Internal: not exported from the public
+ * barrels.
  */
 export function deepEqualInSession(a: unknown, b: unknown, session: DeepEqualSession): boolean {
-  const proofsBefore = session.provenLog.length
-  const assumptionsBefore = session.assumptions
+  const mark = session.assumed.mark()
   const equal = guardNesting(() => deepEqualInner(a, b, session))
-  if (!equal && session.assumptions !== assumptionsBefore) {
-    const retracted = session.provenLog.splice(proofsBefore)
-    for (const [x, y] of retracted) session.proven.delete(x, y)
-    session.proofRoom += retracted.length
-  }
+  if (!equal) session.assumed.rollback(mark)
   return equal
 }
 
 /**
- * Shallow equality of own enumerable string keys via SameValueZero.
- * Returns false when exactly one argument is an array or prototypes differ.
+ * Shallow equality of own enumerable string keys via SameValueZero, for arrays, plain objects and
+ * class instances of one class. Any other object equals only itself.
  */
 export function shallowEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true
+  if (sameValueZero(a, b)) return true
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
-  const aArr = Array.isArray(a)
-  const bArr = Array.isArray(b)
-  if (aArr !== bArr) return false
-  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false
-  const keysA = Object.keys(a)
-  const keysB = Object.keys(b)
-  if (keysA.length !== keysB.length) return false
-  for (const k of keysA) {
-    if (!Object.hasOwn(b, k)) return false
-    if (!sameValueZero((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) {
-      return false
-    }
-  }
-  return true
+  const kind = kindOf(a)
+  if ((kind !== 'keyed' && kind !== 'array') || kind !== kindOf(b) || !sameClass(a, b)) return false
+  const keys = Object.keys(a)
+  if (keys.length !== Object.keys(b).length) return false
+  const [x, y] = [a as Record<string, unknown>, b as Record<string, unknown>]
+  return keys.every((key) => isEnumerableKey(b, key) && sameValueZero(x[key], y[key]))
 }

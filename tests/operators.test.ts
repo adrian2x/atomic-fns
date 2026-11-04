@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import { describe, it, expect } from 'vitest'
 import {
   bool,
@@ -449,11 +450,232 @@ describe('SPEC-R17 deepEqual', () => {
   })
 })
 
+describe('deepEqual kinds', () => {
+  const foreign = (code: string): unknown => runInNewContext(code)
+
+  it('equal values from another realm are equal', () => {
+    expect(deepEqual(foreign('[1, { a: 2 }]'), [1, { a: 2 }])).toBe(true)
+    expect(deepEqual({ a: 1 }, foreign('({ a: 1 })'))).toBe(true)
+    expect(deepEqual(foreign('new Date(5)'), new Date(5))).toBe(true)
+    expect(deepEqual(foreign('/a/g'), /a/g)).toBe(true)
+    expect(deepEqual(foreign('new Map([[1, { a: 2 }]])'), new Map([[1, { a: 2 }]]))).toBe(true)
+    expect(deepEqual(foreign('new Set([1, { a: 2 }])'), new Set([1, { a: 2 }]))).toBe(true)
+    expect(deepEqual(foreign('new Uint8Array([1])'), new Uint8Array([1]))).toBe(true)
+    expect(deepEqual(foreign('new Uint8Array([1]).buffer'), new Uint8Array([1]).buffer)).toBe(true)
+    expect(deepEqual(foreign('new Number(1)'), new Number(1))).toBe(true)
+    expect(deepEqual(foreign('new TypeError("x")'), new TypeError('x'))).toBe(true)
+  })
+
+  it('different values from another realm stay different', () => {
+    expect(deepEqual(foreign('new Date(5)'), foreign('new Date(6)'))).toBe(false)
+    expect(deepEqual(foreign('new Date(5)'), new Date(6))).toBe(false)
+    expect(deepEqual(foreign('new TypeError("x")'), new RangeError('x'))).toBe(false)
+    expect(deepEqual(foreign('[1]'), { 0: 1 })).toBe(false)
+    expect(deepEqual(foreign('new Int8Array(1)'), new Uint8Array(1))).toBe(false)
+  })
+
+  it('in one realm a subclass instance never equals a base instance', () => {
+    class SubDate extends Date {}
+    class SubArray extends Array<number> {}
+    class SubMap extends Map<number, number> {}
+    class SubError extends Error {}
+    class SubBytes extends Uint8Array {}
+    const twin = (): object =>
+      new (class Twin {
+        readonly twin = true
+      })()
+    expect(deepEqual(new SubDate(0), new Date(0))).toBe(false)
+    expect(deepEqual(new SubArray(), [])).toBe(false)
+    expect(deepEqual(new SubMap(), new Map())).toBe(false)
+    expect(deepEqual(new SubError('x'), new Error('x'))).toBe(false)
+    expect(deepEqual(new SubBytes(1), new Uint8Array(1))).toBe(false)
+    expect(deepEqual(twin(), twin())).toBe(false)
+    const unrooted = (): object => Object.create(Object.create(null) as object) as object
+    expect(deepEqual(unrooted(), unrooted())).toBe(false)
+    expect(deepEqual(new SubDate(0), new SubDate(0))).toBe(true)
+  })
+
+  it('tags it does not know compare by reference, as Lodash isEqual does', () => {
+    function* numbers(): Generator<number> {
+      yield 1
+    }
+    const pairs: (() => object)[] = [
+      () => new URL('https://a.example/'),
+      () => new URLSearchParams('a=1'),
+      () => new Headers({ a: '1' }),
+      () => new Blob(['a']),
+      () => Promise.resolve(1),
+      () => new WeakMap(),
+      () => new WeakSet(),
+      () => new WeakRef({}),
+      () => numbers(),
+      () => [1].values(),
+      () => new Map([[1, 2]]).keys(),
+      () => ({ [Symbol.toStringTag]: 'Tagged', a: 1 })
+    ]
+    for (const make of pairs) {
+      const value = make()
+      expect(deepEqual(value, make())).toBe(false)
+      expect(deepEqual(value, value)).toBe(true)
+    }
+  })
+
+  it('an Error compares by name and message', () => {
+    expect(deepEqual(new Error('a'), new Error('a'))).toBe(true)
+    expect(deepEqual(new Error('a'), new Error('b'))).toBe(false)
+    expect(deepEqual(new TypeError('a'), new RangeError('a'))).toBe(false)
+    const renamed = new Error('a')
+    renamed.name = 'Renamed'
+    expect(deepEqual(renamed, new Error('a'))).toBe(false)
+  })
+
+  it('a SharedArrayBuffer compares by bytes', () => {
+    const shared = (byte: number): SharedArrayBuffer => {
+      const buffer = new SharedArrayBuffer(2)
+      new Uint8Array(buffer)[1] = byte
+      return buffer
+    }
+    expect(deepEqual(shared(1), shared(1))).toBe(true)
+    expect(deepEqual(shared(1), shared(2))).toBe(false)
+    expect(deepEqual(new SharedArrayBuffer(1), new SharedArrayBuffer(2))).toBe(false)
+    expect(deepEqual(new SharedArrayBuffer(1), new ArrayBuffer(1))).toBe(false)
+  })
+
+  it('invalid Dates are equal to each other', () => {
+    expect(deepEqual(new Date(NaN), new Date(NaN))).toBe(true)
+    expect(deepEqual(new Date(NaN), new Date(0))).toBe(false)
+  })
+
+  it('own enumerable symbol keys count, non-enumerable keys do not', () => {
+    const key = Symbol('key')
+    expect(deepEqual({ [key]: 1 }, { [key]: 1 })).toBe(true)
+    expect(deepEqual({ [key]: 1 }, { [key]: 2 })).toBe(false)
+    expect(deepEqual({ [key]: 1 }, {})).toBe(false)
+    const hidden = Object.defineProperty({ b: 1 }, 'a', { value: 1, enumerable: false })
+    expect(deepEqual({ a: 1 }, hidden)).toBe(false)
+    expect(deepEqual(hidden, { a: 1 })).toBe(false)
+    expect(deepEqual({ b: 1 }, hidden)).toBe(true)
+    const hiddenSymbol = Object.defineProperty({}, key, { value: 1, enumerable: false })
+    expect(deepEqual({}, hiddenSymbol)).toBe(true)
+  })
+
+  it('arguments compare like a plain object, as in Lodash isEqual', () => {
+    const collect = (): unknown => foreign('(function () { return arguments })(1, 2)')
+    expect(deepEqual(collect(), collect())).toBe(true)
+    expect(deepEqual(collect(), { 0: 1, 1: 2 })).toBe(true)
+    expect(deepEqual(collect(), [1, 2])).toBe(false)
+  })
+
+  it('null-prototype and Object.prototype objects are one plain kind', () => {
+    const bare = (): Record<string, number> =>
+      Object.assign(Object.create(null) as object, { a: 1 })
+    expect(deepEqual(bare(), { a: 1 })).toBe(true)
+    expect(deepEqual({ a: 1 }, bare())).toBe(true)
+    expect(deepEqual(bare(), foreign('({ a: 1 })'))).toBe(true)
+    expect(deepEqual(bare(), bare())).toBe(true)
+  })
+
+  it('prototype-only objects and detached views do not throw', () => {
+    const prototypes = [
+      Date.prototype,
+      RegExp.prototype,
+      Map.prototype,
+      Set.prototype,
+      ArrayBuffer.prototype,
+      DataView.prototype,
+      Uint8Array.prototype,
+      Error.prototype,
+      Number.prototype,
+      Promise.prototype
+    ]
+    for (const prototype of prototypes) {
+      const fake = (): object => Object.create(prototype) as object
+      expect(() => deepEqual(fake(), fake())).not.toThrow()
+      expect(() => deepEqual(fake(), {})).not.toThrow()
+    }
+    const fakeDate = (): object => Object.create(Date.prototype) as object
+    expect(deepEqual(fakeDate(), new Date(0))).toBe(false)
+    expect(deepEqual(new Date(0), fakeDate())).toBe(false)
+    const detach = (buffer: ArrayBuffer): void => {
+      structuredClone(buffer, { transfer: [buffer] })
+    }
+    const view = new DataView(new ArrayBuffer(2))
+    const bytes = new Uint8Array(2)
+    detach(view.buffer)
+    detach(bytes.buffer)
+    expect(deepEqual(view, new DataView(new ArrayBuffer(0)))).toBe(true)
+    expect(deepEqual(bytes, new Uint8Array(0))).toBe(true)
+    expect(deepEqual(bytes.buffer, new ArrayBuffer(0))).toBe(true)
+  })
+
+  it('an explicit undefined equals a hole at every size', () => {
+    const size = 2 ** 25
+    const sparse = (index: number, value: unknown): unknown[] => {
+      const array = new Array<unknown>(size)
+      array[index] = value
+      return array
+    }
+    expect(deepEqual(new Array(1), [undefined])).toBe(true)
+    expect(deepEqual(sparse(5, undefined), new Array<unknown>(size))).toBe(true)
+    expect(deepEqual(new Array<unknown>(size), sparse(5, undefined))).toBe(true)
+    expect(deepEqual(sparse(5, 1), new Array<unknown>(size))).toBe(false)
+    expect(deepEqual(sparse(5, 1), sparse(6, 1))).toBe(false)
+    expect(deepEqual(sparse(5, 1), sparse(5, 1))).toBe(true)
+    expect(deepEqual(new Array<unknown>(size), new Array<unknown>(size).fill(undefined))).toBe(true)
+  })
+
+  it('float typed arrays compare elements by SameValueZero', () => {
+    expect(deepEqual(new Float64Array([0]), new Float64Array([-0]))).toBe(true)
+    expect(deepEqual(new Float64Array([NaN]), new Float64Array([NaN]))).toBe(true)
+    const payload = new Float64Array(1)
+    new Uint32Array(payload.buffer)[1] = 0x7ff80001
+    expect(deepEqual(payload, new Float64Array([NaN]))).toBe(true)
+    expect(deepEqual(new Float32Array([0]), new Float32Array([-0]))).toBe(true)
+    expect(deepEqual(new Float32Array([1]), new Float32Array([2]))).toBe(false)
+    expect(deepEqual(new Float32Array(1), new Float32Array(2))).toBe(false)
+    expect(deepEqual(new Float32Array(1), new Float64Array(1))).toBe(false)
+  })
+})
+
 describe('SPEC-R18 shallowEqual', () => {
   it('SPEC-R18 object vs array is false; matching keys true', () => {
     expect(shallowEqual({}, [])).toBe(false)
     expect(shallowEqual({ a: 1 }, { a: 1 })).toBe(true)
     expect(shallowEqual([], [])).toBe(true)
+  })
+
+  it('NaN equals NaN, at the top and in a slot', () => {
+    expect(shallowEqual(NaN, NaN)).toBe(true)
+    expect(shallowEqual({ a: NaN }, { a: NaN })).toBe(true)
+    expect(shallowEqual(0, -0)).toBe(true)
+  })
+
+  it('non-plain builtins are identity-only', () => {
+    const makers: (() => object)[] = [
+      () => new Date(0),
+      () => /a/,
+      () => new Map(),
+      () => new Set(),
+      () => new Error('a'),
+      () => new Number(1),
+      () => new ArrayBuffer(1),
+      () => new Uint8Array(1),
+      () => Promise.resolve()
+    ]
+    for (const make of makers) {
+      const value = make()
+      expect(shallowEqual(value, make())).toBe(false)
+      expect(shallowEqual(value, value)).toBe(true)
+    }
+  })
+
+  it('keeps comparing class instances and plain kinds by their keys', () => {
+    class Point {
+      constructor(readonly x: number) {}
+    }
+    expect(shallowEqual(new Point(1), new Point(1))).toBe(true)
+    expect(shallowEqual(new Point(1), new Point(2))).toBe(false)
+    expect(shallowEqual(Object.create(null) as object, {})).toBe(true)
   })
 })
 
@@ -548,7 +770,6 @@ describe('SPEC-R17 deepEqual branch coverage', () => {
     expect(shallowEqual({ a: 1 }, { b: 1 })).toBe(false)
     expect(shallowEqual(null, {})).toBe(false)
     expect(shallowEqual(1, 1)).toBe(true)
-    expect(shallowEqual(Object.create(null), {})).toBe(false)
   })
 })
 
