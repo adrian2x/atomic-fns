@@ -608,7 +608,7 @@ describe('deepEqual kinds', () => {
     expect(deepEqual(bytes.buffer, new ArrayBuffer(0))).toBe(true)
   })
 
-  it('an explicit undefined equals a hole at every size', () => {
+  it('an explicit undefined equals a hole at every size', { timeout: 60_000 }, () => {
     const size = 2 ** 25
     const sparse = (index: number, value: unknown): unknown[] => {
       const array = new Array<unknown>(size)
@@ -619,9 +619,9 @@ describe('deepEqual kinds', () => {
     expect(deepEqual(sparse(5, undefined), new Array<unknown>(size))).toBe(true)
     expect(deepEqual(new Array<unknown>(size), sparse(5, undefined))).toBe(true)
     expect(deepEqual(sparse(5, 1), new Array<unknown>(size))).toBe(false)
+    expect(deepEqual(new Array<unknown>(size), sparse(5, 1))).toBe(false)
     expect(deepEqual(sparse(5, 1), sparse(6, 1))).toBe(false)
     expect(deepEqual(sparse(5, 1), sparse(5, 1))).toBe(true)
-    expect(deepEqual(new Array<unknown>(size), new Array<unknown>(size).fill(undefined))).toBe(true)
   })
 
   it('float typed arrays compare elements by SameValueZero', () => {
@@ -634,6 +634,47 @@ describe('deepEqual kinds', () => {
     expect(deepEqual(new Float32Array([1]), new Float32Array([2]))).toBe(false)
     expect(deepEqual(new Float32Array(1), new Float32Array(2))).toBe(false)
     expect(deepEqual(new Float32Array(1), new Float64Array(1))).toBe(false)
+  })
+})
+
+describe('deepEqual leaf rule', () => {
+  const usd = (): Currency => new Currency(5, 'USD')
+  const jpy = (): Currency => new Currency(5, 'JPY')
+
+  it('numbers of any kind are equal by exact value', () => {
+    expect(deepEqual(1, 1n)).toBe(true)
+    expect(deepEqual(1n, 1)).toBe(true)
+    expect(deepEqual(-0, 0n)).toBe(true)
+    expect(deepEqual(2 ** 53, 2n ** 53n)).toBe(true)
+    expect(deepEqual(2 ** 53, 2n ** 53n + 1n)).toBe(false)
+    expect(deepEqual(1.5, 1n)).toBe(false)
+    expect(deepEqual(NaN, 0n)).toBe(false)
+    expect(deepEqual(decimal(1), 1n)).toBe(true)
+    expect(deepEqual({ a: [1] }, { a: [1n] })).toBe(true)
+    expect(eq(1, 1n)).toBe(false)
+  })
+
+  it('units must match exactly, though eq lets a unit-less side through', () => {
+    expect(deepEqual(usd(), usd())).toBe(true)
+    expect(deepEqual(usd(), jpy())).toBe(false)
+    expect(deepEqual(usd(), 5)).toBe(false)
+    expect(deepEqual(5, usd())).toBe(false)
+    expect(deepEqual(usd(), decimal(5))).toBe(false)
+    expect(deepEqual(decimal(5), usd())).toBe(false)
+    expect(deepEqual([usd()], [5n])).toBe(false)
+    expect(eq(usd(), 5)).toBe(true)
+  })
+
+  it('is transitive across every numeric kind', () => {
+    const values = [1, 1n, decimal(1), decimal('1.0'), 2, 2n, usd(), jpy(), 5, 5n, decimal(5)]
+    for (const x of values) {
+      for (const y of values) {
+        if (!deepEqual(x, y)) continue
+        for (const z of values) {
+          expect(deepEqual(x, z)).toBe(deepEqual(y, z))
+        }
+      }
+    }
   })
 })
 

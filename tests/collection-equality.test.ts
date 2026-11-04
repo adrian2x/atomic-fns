@@ -15,11 +15,7 @@ import {
 import { decimal } from '../src/decimal/index.js'
 import { Currency } from '../src/i18n/currency.js'
 import { IntlDate } from '../src/i18n/date/index.js'
-import {
-  createDeepEqualSession,
-  deepEqualInSession,
-  type DeepEqualSession
-} from '../src/operators/equality.js'
+import { DeepEqualSession, deepEqualInSession } from '../src/operators/equality.js'
 import { deepEqual, eq, protocol } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
@@ -577,9 +573,9 @@ function loop(tail: unknown): { outer: Deque<unknown>; inner: Deque<unknown> } {
   return { outer, inner }
 }
 
-/** How many pairs of `left` x `right` a memo holds, in either order. */
-function storedPairs(memo: DeepEqualSession['disproven'], left: object[], right: object[]): number {
-  return left.flatMap((a) => right.filter((b) => memo?.has(a, b) === true)).length
+/** How many pairs of `left` x `right` a session remembers as unequal. */
+function storedPairs(session: DeepEqualSession, left: object[], right: object[]): number {
+  return left.flatMap((a) => right.filter((b) => session.enter(a, b) === false)).length
 }
 
 describe('session memory', () => {
@@ -595,15 +591,15 @@ describe('session memory', () => {
 
   it('a wide Heap of deep items fills the failure memo up to the bound and no further', () => {
     const { numbers, decimals } = wideCrossKindItems()
-    const session = createDeepEqualSession(false)
+    const session = new DeepEqualSession()
     session.failureRoom = 100
 
     const equal = deepEqualInSession(new Heap(numbers, tied), new Heap(decimals, tied), session)
 
     expect(equal).toBe(true)
-    expect(storedPairs(session.disproven, numbers, decimals)).toBeLessThanOrEqual(100)
+    expect(storedPairs(session, numbers, decimals)).toBeLessThanOrEqual(100)
     // the first failure is still held at the end
-    expect(storedPairs(session.disproven, numbers.slice(0, 1), decimals.slice(0, 1))).toBe(1)
+    expect(storedPairs(session, numbers.slice(0, 1), decimals.slice(0, 1))).toBe(1)
   })
 
   it('failed candidates leave shared references linear', DOS_TIMEOUT, () => {
@@ -611,7 +607,7 @@ describe('session memory', () => {
     const level = (x: unknown): unknown => new Deque([x, x])
     const left = [new Heap(numbers, tied), stack(level, LEVELS)]
     const right = [new Heap(decimals, tied), stack(level, LEVELS)]
-    const session = createDeepEqualSession(false)
+    const session = new DeepEqualSession()
     session.failureRoom = 100
     const calls = hookCalls(Deque.prototype, protocol.equals)
 
@@ -620,46 +616,34 @@ describe('session memory', () => {
     expect(calls.mock.calls.length).toBe(LEVELS)
   })
 
-  it('bare pairs past the bound go unremembered, and the answer stands', () => {
-    const items = (): Deque<unknown>[] => Array.from({ length: 40 }, () => containsItself(1))
-    const session = createDeepEqualSession(false, 10)
-
-    const equal = deepEqualInSession(new Heap(items(), tied), new Heap(items(), tied), session)
-
-    expect(equal).toBe(true)
-    expect(session.assumed.mark()).toBeLessThanOrEqual(10)
-  })
-
   it('objects past the tracking bound are compared, not taken for equal', () => {
     const rows = (last: number): object[] => [{ a: 1 }, { a: 2 }, { a: last }]
 
-    expect(deepEqualInSession(rows(3), rows(3), createDeepEqualSession(true, 2))).toBe(true)
-    expect(deepEqualInSession(rows(3), rows(4), createDeepEqualSession(true, 2))).toBe(false)
+    const tight = (): DeepEqualSession => Object.assign(new DeepEqualSession(), { trackingRoom: 2 })
+    expect(deepEqualInSession(rows(3), rows(3), tight())).toBe(true)
+    expect(deepEqualInSession(rows(3), rows(4), tight())).toBe(false)
   })
 
-  it.each([
-    ['classes', true],
-    ['pairs', false]
-  ])('a failed comparison rolls back all it assumed: %s', (_, transitive) => {
-    const session = createDeepEqualSession(transitive)
+  it('a failed comparison rolls back all it assumed', () => {
+    const session = new DeepEqualSession()
 
     expect(deepEqualInSession(loop(1).outer, loop(2).outer, session)).toBe(false)
 
-    expect(session.assumed.mark()).toBe(0)
+    expect(session.mark()).toBe(0)
   })
 
   it('a failed candidate keeps what the walk assumed before it', () => {
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     const left = [{ a: 1 }, new Heap([{ b: 1 }, { b: 2 }], tied)]
     const right = [{ a: 1 }, new Heap([{ b: 2 }, { b: 1 }], tied)]
 
     expect(deepEqualInSession(left, right, session)).toBe(true)
 
-    expect(session.assumed.mark()).toBeGreaterThanOrEqual(3)
+    expect(session.mark()).toBeGreaterThanOrEqual(3)
   })
 
   it('a session bounds its failures by default', () => {
-    expect(createDeepEqualSession()).toMatchObject({ failureRoom: 2 ** 20 })
+    expect(new DeepEqualSession().failureRoom).toBe(2 ** 20)
   })
 
   it('a walk over distinct rows holds a small fraction of what per-pair sets would', () => {
@@ -671,48 +655,48 @@ describe('session memory', () => {
     gc()
     const before = process.memoryUsage().heapUsed
     let held = Infinity
-    const probe = {
+    const probe = (): object => ({
       [protocol.equals](): boolean {
         gc()
         held = process.memoryUsage().heapUsed - before
         return true
       }
-    }
+    })
 
-    expect(deepEqual([...left, probe], [...right, probe])).toBe(true)
+    expect(deepEqual([...left, probe()], [...right, probe()])).toBe(true)
 
     expect(held).toBeLessThan(64 * 1024 * 1024)
   })
 
   it('a scalar with an equals hook leaves no entry', () => {
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     const left = decimal(1)
     const right = decimal(1)
 
     deepEqualInSession(left, right, session)
 
-    expect(session.assumed.mark()).toBe(0)
+    expect(session.mark()).toBe(0)
   })
 
   it('a shallow failure leaves no entry, so a wide Heap stores none', () => {
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     const left = { n: 1 }
     const right = { n: 2 }
 
     deepEqualInSession(left, right, session)
 
-    expect(session.disproven?.has(left, right)).toBeFalsy()
+    expect(session.enter(left, right)).not.toBe(false)
   })
 
   it('a failure that walked far is remembered', () => {
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     const rows = (last: number): object[] => [...Array.from({ length: 40 }, () => ({})), { last }]
     const left = rows(1)
     const right = rows(2)
 
     deepEqualInSession(left, right, session)
 
-    expect(session.disproven?.has(left, right)).toBe(true)
+    expect(session.enter(left, right)).toBe(false)
   })
 })
 
@@ -881,7 +865,7 @@ describe('deepEqual work limit', () => {
   }
 
   it('throws once a walk passes its visit limit', () => {
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     session.visitRoom = 10
     expect(() => deepEqualInSession(tower(40), tower(40), session)).toThrow(
       new RangeError('deepEqual exceeded 33554432 comparisons')
@@ -1035,21 +1019,33 @@ describe('deep multiset equality', () => {
     }
   })
 
-  it('does not depend on order when equality is not transitive', () => {
+  it('numeric members match across kinds, in any container', () => {
     const heap = (items: unknown[]): Heap<unknown> => new Heap(items, tied)
-    expect(deepEqual(heap([five(), usd()]), heap([usd(), jpy()]))).toBe(true)
-    expect(deepEqual(heap([usd(), five()]), heap([usd(), jpy()]))).toBe(true)
-    expect(deepEqual(heap([usd(), jpy()]), heap([five(), usd()]))).toBe(true)
-    expect(deepEqual(heap([usd(), usd()]), heap([jpy(), jpy()]))).toBe(false)
-    expect(deepEqual(new Set([five(), usd()]), new Set([usd(), jpy()]))).toBe(true)
+    expect(deepEqual(heap([1, 2n, decimal(3)]), heap([3n, decimal(2), 1]))).toBe(true)
+    expect(deepEqual(new Set([1, 2]), new Set([2n, 1n]))).toBe(true)
+    expect(deepEqual(new Map([[1, 'x']]), new Map([[1n, 'x']]))).toBe(true)
+    expect(
+      deepEqual(
+        new Map<unknown, string>([
+          [1, 'x'],
+          [1n, 'y']
+        ]),
+        new Map<unknown, string>([
+          [1n, 'x'],
+          [1, 'y']
+        ])
+      )
+    ).toBe(true)
+    expect(deepEqual(new Map([[1, 'x']]), new Map([[1n, 'y']]))).toBe(false)
   })
 
-  it('a canceled pair gives up its partner when a hook needs it', () => {
-    const shared = usd()
+  it('a unit never matches a unit-less member or another unit', () => {
     const heap = (items: unknown[]): Heap<unknown> => new Heap(items, tied)
-    expect(deepEqual(heap([usd(), 5]), heap([5, jpy()]))).toBe(true)
-    expect(deepEqual(heap([shared, 5]), heap([shared, jpy()]))).toBe(true)
-    expect(deepEqual(heap([5, 5, usd()]), heap([5, jpy(), 6]))).toBe(false)
+    expect(deepEqual(heap([usd(), 5]), heap([5, jpy()]))).toBe(false)
+    expect(deepEqual(heap([five(), usd()]), heap([usd(), jpy()]))).toBe(false)
+    expect(deepEqual(heap([usd(), 5]), heap([5, usd()]))).toBe(true)
+    expect(deepEqual(new Set([usd()]), new Set([jpy()]))).toBe(false)
+    expect(deepEqual(new Set([usd()]), new Set([usd()]))).toBe(true)
   })
 
   it('compares Set members deeply, as a multiset', () => {
@@ -1140,7 +1136,7 @@ describe('deep multiset equality', () => {
     const values = Array.from({ length: count }, (_, i) => (i * 7919) % count)
     const left = new Heap(values.map((value) => decimal(value)))
     const right = new Heap(values.toReversed().map((value) => decimal(value)))
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     session.visitRoom = 8 * count
 
     expect(deepEqualInSession(left, right, session)).toBe(true)
@@ -1150,7 +1146,7 @@ describe('deep multiset equality', () => {
     const count = 20_000
     const left = new Heap(Array.from({ length: count }, (_, i) => decimal(i)))
     const right = new Heap(Array.from({ length: count }, (_, i) => decimal(i + 1)))
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     session.visitRoom = 8 * count
 
     expect(deepEqualInSession(left, right, session)).toBe(false)
@@ -1161,7 +1157,7 @@ describe('deep multiset equality', () => {
     const ids = Array.from({ length: 200 }, (_, i) => i)
     const left = new Heap(ids.map(buried), tied)
     const right = new Heap(ids.toReversed().map(buried), tied)
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     session.visitRoom = 100
 
     expect(() => deepEqualInSession(left, right, session)).toThrow(
@@ -1176,7 +1172,7 @@ describe('deep multiset equality', () => {
       order.map((proto) => Object.create(proto) as object)
     const left = new Heap(items(protos), tied)
     const right = new Heap(items(protos.toReversed()), tied)
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     session.visitRoom = 4 * count
 
     expect(() => deepEqualInSession(left, right, session)).toThrow(
@@ -1352,11 +1348,12 @@ describe('equivalence classes', () => {
   }
 
   it('rings of coprime sizes are equal, in about as many steps as they have nodes', () => {
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
+    const room = session.visitRoom
 
     expect(deepEqualInSession(ring(31), ring(37), session)).toBe(true)
 
-    expect(session.visits).toBeLessThanOrEqual(31 + 37)
+    expect(room - session.visitRoom).toBeLessThanOrEqual(31 + 37)
   })
 
   it('rings with a difference stay different', () => {
@@ -1385,73 +1382,48 @@ describe('equivalence classes', () => {
       for (let i = 0; i < 40; i++) link = new Link(link)
       return link
     }
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     session.visitRoom = 1000
 
     expect(deepEqualInSession(chain(), chain(), session)).toBe(true)
   })
 
-  it('equality that is not transitive never spreads through a shared partner', () => {
-    const usd = [new Currency(5, 'USD')]
-    const bare = [5]
-    const jpy = [new Currency(5, 'JPY')]
-    expect(deepEqual(usd, bare)).toBe(true)
-    expect(deepEqual(bare, jpy)).toBe(true)
-    expect(deepEqual(usd, jpy)).toBe(false)
-    expect(deepEqual([usd, bare, usd], [bare, jpy, jpy])).toBe(false)
-    const mid = [decimal(5)]
-    expect(deepEqual([usd, mid, usd], [mid, jpy, jpy])).toBe(false)
-
-    class Money {
-      readonly [protocol.rank] = 1
-      constructor(readonly code: string) {}
-      get [protocol.unit](): string {
-        return this.code
-      }
-      [protocol.equals](other: unknown): boolean {
-        if (!(other instanceof Money)) return false
-        return this.code === other.code || this.code === '' || other.code === ''
-      }
-    }
-    const [dollars, plain, yen] = [[new Money('USD')], [new Money('')], [new Money('JPY')]]
-    expect(deepEqual(dollars, plain)).toBe(true)
-    expect(deepEqual([dollars, plain, dollars], [plain, yen, yen])).toBe(false)
-
-    class Near {
-      constructor(readonly value: number) {}
-      [protocol.equals](other: unknown): boolean {
-        return other instanceof Near && Math.abs(this.value - other.value) <= 1
-      }
-    }
-    const [one, two, three] = [[new Near(1)], [new Near(2)], [new Near(3)]]
-    expect(deepEqual([one, two, one], [two, three, three])).toBe(false)
-    expect(deepEqual([one, two], [two, three])).toBe(true)
-  })
-
-  it('a walk stops at the first opaque answer, then starts again', () => {
+  it('a hook runs once per pair', () => {
     let calls = 0
-    class Opaque {
+    class Counted {
       [protocol.equals](): boolean {
         calls++
         return true
       }
     }
-    const row = (): Opaque[] => Array.from({ length: 100 }, () => new Opaque())
+    const row = (): Counted[] => Array.from({ length: 100 }, () => new Counted())
 
     expect(deepEqual(row(), row())).toBe(true)
 
-    expect(calls).toBe(1 + 100)
+    expect(calls).toBe(100)
   })
 
   it('shuffled rows that carry a Decimal bucket by value', () => {
     const count = 20_000
     const values = Array.from({ length: count }, (_, i) => (i * 7919) % count)
     const rows = (order: number[]): object[] => order.map((value) => ({ p: decimal(value) }))
-    const session = createDeepEqualSession()
+    const session = new DeepEqualSession()
     session.visitRoom = 8 * count
 
     const left = new Heap(rows(values), tied)
     const right = new Heap(rows(values.toReversed()), tied)
+    expect(deepEqualInSession(left, right, session)).toBe(true)
+  })
+
+  it('shuffled date-like hooks bucket by time', () => {
+    const count = 20_000
+    const values = Array.from({ length: count }, (_, i) => (i * 7919) % count)
+    const dates = (order: number[]): IntlDate[] => order.map((value) => new IntlDate(value))
+    const session = new DeepEqualSession()
+    session.visitRoom = 8 * count
+
+    const left = new Heap(dates(values), tied)
+    const right = new Heap(dates(values.toReversed()), tied)
     expect(deepEqualInSession(left, right, session)).toBe(true)
   })
 
