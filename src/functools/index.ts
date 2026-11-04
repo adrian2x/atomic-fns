@@ -293,19 +293,22 @@ export function debounce<F extends AnyFunction>(
 }
 
 /**
+ * A throttled function with `cancel` and `flush` (same shape as {@link Debounced}).
+ */
+export type Throttled<F extends AnyFunction> = Debounced<F>
+
+/**
  * Creates a throttled function that invokes `fn` at most once per `wait` milliseconds on the
  * leading edge, and once more on the trailing edge with the latest arguments when calls arrived
  * during the window (Lodash defaults: leading + trailing). `wait` of 0 still batches via
  * `setTimeout(0)`: one leading invoke plus at most one trailing per macrotask. Negative finite
- * `wait` clamps to 0; NaN and values above 2147483647 throw `RangeError`.
+ * `wait` clamps to 0; NaN and values above 2147483647 throw `RangeError`. `cancel` clears a
+ * pending trailing timer; `flush` invokes the pending trailing call once (Lodash semantics).
  * @param fn The function to throttle.
  * @param wait The number of milliseconds to throttle invocations to.
- * @returns The new throttled function.
+ * @returns The new throttled function with `cancel` and `flush`.
  */
-export function throttle<F extends AnyFunction>(
-  fn: F,
-  wait: number
-): (...args: Parameters<F>) => ReturnType<F> | undefined {
+export function throttle<F extends AnyFunction>(fn: F, wait: number): Throttled<F> {
   wait = assertTimerWait(wait)
   let cooling = false
   let lastResult: ReturnType<F> | undefined
@@ -325,18 +328,43 @@ export function throttle<F extends AnyFunction>(
     }, wait)
   }
 
-  return function (this: unknown, ...args: Parameters<F>): ReturnType<F> | undefined {
+  function clearTimer(): void {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+  }
+
+  function throttled(this: unknown, ...args: Parameters<F>): ReturnType<F> | undefined {
     if (!cooling) {
       lastResult = fn.apply(this, args) as ReturnType<F>
       cooling = true
       pending = undefined
-      if (timer !== undefined) clearTimeout(timer)
+      clearTimer()
       schedule()
       return lastResult
     }
     pending = { thisArg: this, args }
     return lastResult
   }
+
+  throttled.cancel = (): void => {
+    clearTimer()
+    pending = undefined
+    cooling = false
+  }
+
+  throttled.flush = (): ReturnType<F> | undefined => {
+    if (pending === undefined) return lastResult
+    clearTimer()
+    const call = pending
+    pending = undefined
+    cooling = false
+    lastResult = fn.apply(call.thisArg, call.args) as ReturnType<F>
+    return lastResult
+  }
+
+  return throttled
 }
 
 /**

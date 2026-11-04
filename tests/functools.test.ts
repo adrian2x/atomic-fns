@@ -351,6 +351,39 @@ describe('functools', () => {
       vi.advanceTimersByTime(0)
       assert.deepEqual(seen, [1, 3])
     })
+
+    it('R15-E3: throttle cancel clears pending trailing call', () => {
+      const seen: number[] = []
+      const t = throttle((x: number) => {
+        seen.push(x)
+        return x
+      }, 40)
+      t(1)
+      t(2)
+      assert.deepEqual(seen, [1])
+      t.cancel()
+      vi.advanceTimersByTime(100)
+      assert.deepEqual(seen, [1])
+      t(3)
+      assert.deepEqual(seen, [1, 3])
+    })
+
+    it('R15-E3: throttle flush invokes pending trailing once', () => {
+      const seen: number[] = []
+      const t = throttle((x: number) => {
+        seen.push(x)
+        return x * 10
+      }, 40)
+      assert.equal(t(1), 10)
+      t(2)
+      t(3)
+      assert.deepEqual(seen, [1])
+      assert.equal(t.flush(), 30)
+      assert.deepEqual(seen, [1, 3])
+      assert.equal(t.flush(), 30)
+      vi.advanceTimersByTime(100)
+      assert.deepEqual(seen, [1, 3])
+    })
   })
 
   describe('once / result / resultAsync / promisify', () => {
