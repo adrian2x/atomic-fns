@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import { merge } from '../src/collections/index.js'
 
 describe('merge', () => {
@@ -119,6 +119,32 @@ describe('merge', () => {
     expect(merge([], JSON.parse('{"0":1}') as object)).toEqual([1])
   })
 
+  it.each([
+    ['number', { length: 2 ** 32 - 1 }],
+    ['numeric string', { length: '4294967295' }],
+    ['array', { length: [2 ** 32 - 1] }],
+    ['object with valueOf', { length: { valueOf: () => 2 ** 32 - 1 } }],
+    ['object coercing in range', { length: [0] }],
+    ['one past the end', { length: 1 }]
+  ])(
+    'merge refuses a source length that could grow an array target: %s',
+    { timeout: 1000 },
+    (_kind, source) => {
+      const target: unknown[] = []
+
+      expect(() => merge(target, source)).toThrow(new RangeError('array index beyond length'))
+      expect(target.length).toBe(0)
+    }
+  )
+
+  it.each([
+    ['matching the indices just written', [], { 0: 'a', 1: 'b', length: 2 }, ['a', 'b']],
+    ['shrinking the target', ['a', 'b', 'c'], { length: 1 }, ['a']],
+    ['shrinking the target by numeric string', ['a', 'b', 'c'], { length: '1' }, ['a']]
+  ])('merge applies a source length %s', (_case, target, source, expected) => {
+    expect(merge(target, source)).toEqual(expected)
+  })
+
   it('POL-26: merge copies holey source arrays without throwing', () => {
     const holey = [1]
     holey.length = 3
@@ -178,5 +204,28 @@ describe('merge', () => {
     expect(1 in out.a).toBe(false)
     expect(out.a[0]).toBe(1)
     expect(out.a[2]).toBe(3)
+  })
+
+  describe('prototype targets', () => {
+    afterEach(() => {
+      Reflect.deleteProperty(Object.prototype, 'polluted')
+      Reflect.deleteProperty(Function.prototype, 'polluted')
+    })
+
+    it.each([
+      ['as the target', Object.prototype, { polluted: 1 }],
+      ['through a target property', { nested: Object.prototype }, { nested: { polluted: 1 } }]
+    ])('merge never writes to Object.prototype reached %s', (_how, target, source) => {
+      merge(target, source)
+
+      expect(Object.hasOwn(Object.prototype, 'polluted')).toBe(false)
+    })
+
+    it('merge refuses Function.prototype as the target', () => {
+      expect(() => merge(Function.prototype, { polluted: 1 })).toThrow(
+        new TypeError('merge target must be an object')
+      )
+      expect(Object.hasOwn(Function.prototype, 'polluted')).toBe(false)
+    })
   })
 })

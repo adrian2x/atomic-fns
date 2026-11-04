@@ -73,10 +73,12 @@ function isSliceableView(v: unknown): v is ArrayBufferView & { slice(): unknown 
 /** Pairs (source, target) already merged within one top-level source argument. */
 type MergedPairs = WeakMap<object, WeakSet<object>>
 
-function assertArrayIndexInRange(t: object, key: PropertyKey): void {
-  if (!Array.isArray(t) || typeof key !== 'string' || !isCanonicalArrayIndex(key)) return
-  const idx = Number(key)
-  if (idx > t.length) throw new RangeError('array index beyond length')
+function assertArrayWriteInRange(t: object, key: PropertyKey, sv: unknown): void {
+  if (!Array.isArray(t) || typeof key !== 'string') return
+  // Coercing an object to a length could run its valueOf or join a huge array, so objects are out.
+  const growsLength = key === 'length' && (Object(sv) === sv || Number(sv) > t.length)
+  const skipsIndices = isCanonicalArrayIndex(key) && Number(key) > t.length
+  if (growsLength || skipsIndices) throw new RangeError('array index beyond length')
 }
 
 function mergeKey(
@@ -88,7 +90,7 @@ function mergeKey(
   depth: number,
   prepaid: boolean
 ): void {
-  assertArrayIndexInRange(t, key)
+  assertArrayWriteInRange(t, key, sv)
   const tv = Object.hasOwn(t, key) ? (t as Record<PropertyKey, unknown>)[key] : undefined
   if (key === 'constructor' && typeof tv === 'function') return
   if (sv === undefined && tv !== undefined) return
@@ -195,7 +197,9 @@ function mergeInto(
  * (`length > 2^24` and `length > 2 * filled + 1024`) throws
  * `RangeError('sparse array too large')` before any extension, leaving the target unchanged for
  * that key. Non-array sources that write a canonical array-index key beyond the target array's
- * length throw `RangeError('array index beyond length')` (same rule as `set` / `defaults`).
+ * length throw `RangeError('array index beyond length')` (same rule as `set` / `defaults`). A
+ * source `length` key on an array target may keep or shrink the array; one that would grow it, or
+ * any object value, throws the same error.
  * Nesting deeper than 1000 levels throws `RangeError`. Each key gets its own fresh copy of a
  * shared source (the seen map is path-scoped for cycle protection only). Within one top-level
  * source argument, (source, target) pairs already merged are skipped (merging the same source
@@ -301,6 +305,7 @@ function setPickedPath(
     if (next === undefined) {
       next = Array.isArray(srcNext) ? [] : {}
     } else if (Array.isArray(next)) {
+      assertNotHugeSparse(next)
       next = next.slice()
     } else if (isPlainObject(next)) {
       next = copyOwnEnumerable(next)
@@ -314,6 +319,7 @@ function setPickedPath(
   }
   let leaf = value
   if (Array.isArray(value)) {
+    assertNotHugeSparse(value)
     leaf = value.slice()
     created.add(leaf as object)
   } else if (isPlainObject(value)) {
@@ -405,7 +411,9 @@ function omitFromObject(
  * Create an object with only the selected paths or predicate matches from `obj`.
  * String paths split on `.`; an array of segments addresses literal keys (including dots).
  * Intermediate containers mirror the source (array stays array). Keys are written with
- * defineProperty. Never mutates `obj` or any object reachable from it.
+ * defineProperty. Never mutates `obj` or any object reachable from it. A path that copies a huge
+ * sparse array (`length > 2^24` and `length > 2 * filled + 1024`) throws
+ * `RangeError('sparse array too large')`.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
@@ -523,7 +531,9 @@ const BOXED_TAGS = new Set([
  * `groups`. Class instances stay by reference. Symbol `protocol.clone` is honored and
  * receives the `deep` flag; a string-named `clone` method is ignored. Collection classes
  * deep-clone their values when `deep` is true (map-like keys stay by reference).
- * Deep nesting deeper than 1000 levels throws `RangeError`.
+ * Deep nesting deeper than 1000 levels throws `RangeError`. A shallow clone of a huge sparse array
+ * (`length > 2^24` and `length > 2 * filled + 1024`) throws
+ * `RangeError('sparse array too large')`; a deep clone walks own elements only and returns.
  * @param value Value to clone.
  * @param deep Deep clone when true.
  */
@@ -615,6 +625,7 @@ function cloneShallow(v: object, map: WeakMap<object, unknown>): unknown {
   }
 
   if (Array.isArray(v)) {
+    assertNotHugeSparse(v)
     const out = v.slice() as unknown[] & { index?: number; input?: string; groups?: unknown }
     map.set(v, out)
     const arr = v as unknown[] & { index?: number; input?: string; groups?: unknown }
