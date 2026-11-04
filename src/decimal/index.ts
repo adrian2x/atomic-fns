@@ -10,6 +10,7 @@ import { truncateForError } from '../internal/truncate.js'
 import { registerRank1NumericCompare } from '../operators/order.js'
 import { protocol, unitOf } from '../operators/protocol.js'
 import { isqrtRoot } from './isqrt.js'
+import { pow10, pow10Squares } from './pow10.js'
 
 /** Cross-realm Decimal brand (`Symbol.for` so every copy of the library shares it). */
 export const DECIMAL_BRAND: unique symbol = Symbol.for('atomic-fns.decimal')
@@ -97,22 +98,6 @@ export function decimal(x: DecimalInput): Decimal {
   return new Decimal(x)
 }
 
-/** Cached `10^k` for k in `0..MAX_DIGITS+2` (digit-count bounds and arithmetic). */
-const POW10_TABLE: bigint[] = (() => {
-  const t: bigint[] = [1n]
-  let p = 1n
-  for (let k = 1; k <= 10_002; k++) {
-    p *= 10n
-    t.push(p)
-  }
-  return t
-})()
-
-function pow10(k: number): bigint {
-  if (k >= 0 && k < POW10_TABLE.length) return POW10_TABLE[k]
-  return 10n ** BigInt(k)
-}
-
 /** Bit length of a positive bigint (no decimal strings). */
 function bitLengthAbs(a: bigint): number {
   let n = a
@@ -138,11 +123,7 @@ function normalizeIE(i: bigint, e: number): { i: bigint; e: number } {
   let x = i
   let zeros = 0
   // powers: 10^(2^k) for k = 0..13 (10^8192); enough for MAX_DIGITS trailing zeros
-  const powers: bigint[] = [10n]
-  for (let k = 0; k < 13; k++) {
-    const last = powers[powers.length - 1]
-    powers.push(last * last)
-  }
+  const powers = pow10Squares()
   for (let k = powers.length - 1; k >= 0; k--) {
     const pk = powers[k]
     const step = 1 << k
@@ -196,7 +177,7 @@ function digitLengthAbs(a: bigint): number {
   let digits = Math.floor(bits * Math.LOG10E * Math.LN2) + 1
   if (digits < 1) digits = 1
   if (digits > 10_002) digits = 10_002
-  const bound = POW10_TABLE[digits - 1]
+  const bound = pow10(digits - 1)
   if (a >= bound * 10n) return digits + 1
   if (a < bound) return digits - 1
   return digits
