@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SplayTree } from '../src/collections/SplayTree.js'
+import { deepEqual } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
 describe('SplayTree', () => {
@@ -212,7 +213,7 @@ describe('SplayTree', () => {
     }).not.toThrow()
   })
 
-  it('SPEC-R77 lower higher during open iterator use plain walk', () => {
+  it('SPEC-R77 lower and higher during an open iterator keep it on track', () => {
     const tree = new SplayTree<number, number>(undefined, 1)
     for (let i = 1; i <= 9; i++) tree.set(i, i)
     const keys: number[] = []
@@ -281,6 +282,67 @@ describe('SplayTree', () => {
     expect(seen).toHaveLength(n)
     expect(seen).toEqual(Array.from({ length: n }, (_, i) => i))
     expect(calls).toBeLessThan(40 * n * Math.log2(n))
+  })
+
+  it('a comparator that throws in the middle of a splay loses no entry', () => {
+    const keys = Array.from({ length: 20 }, (_, i) => i)
+    for (let failAt = 0; failAt < 12; failAt++) {
+      let room = Infinity
+      const tree = new SplayTree<number, number>((a, b) => {
+        if (room-- <= 0) throw new Error('boom')
+        return a - b
+      }, 1)
+      for (const key of keys) tree.set(key, key)
+      room = failAt
+      expect(() => tree.get(0)).toThrow('boom')
+      room = Infinity
+      expect([...tree.keys()]).toEqual(keys)
+      expect(tree.size).toBe(keys.length)
+      expect(tree.get(3)).toBe(3)
+    }
+  })
+
+  it('reading a hot key while iterating a sequential tree stays near log n per step', () => {
+    const n = 4000
+    let calls = 0
+    const tree = new SplayTree<number, number>((a, b) => {
+      calls++
+      return a - b
+    }, 1)
+    for (let i = 0; i < n; i++) tree.set(i, i)
+    calls = 0
+
+    let steps = 0
+    for (const _ of tree.keys()) {
+      steps++
+      tree.has(n - 1)
+    }
+
+    expect(steps).toBe(n)
+    expect(calls).toBeLessThan(n * 64)
+  })
+
+  it('lower and higher splay the neighbor they walk to', () => {
+    const n = 1000
+    const ascending = new SplayTree<number, number>()
+    for (let i = 0; i < n; i++) ascending.set(i, i)
+    expect(ascending.higher(0)).toBe(1)
+    expect(ascending.height).toBeLessThan(n / 3)
+
+    const descending = new SplayTree<number, number>()
+    for (let i = n; i > 0; i--) descending.set(i, i)
+    expect(descending.lower(n)).toBe(n - 1)
+    expect(descending.height).toBeLessThan(n / 3)
+  })
+
+  it('self-nested trees reach the documented 125 levels', () => {
+    const nest = (levels: number): unknown => {
+      let x: unknown = 0
+      for (let i = 0; i < levels; i++) x = new SplayTree<string, unknown>().set('k', x)
+      return x
+    }
+    expect(deepEqual(nest(125), nest(125))).toBe(true)
+    expect(() => deepEqual(nest(126), nest(126))).toThrow(RangeError)
   })
 
   it('R10-D3 iterator survives inserts and deletes between yields', () => {

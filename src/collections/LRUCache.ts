@@ -1,13 +1,26 @@
 import { MapCollection } from './abc.js'
 
+interface Entry<K, V> {
+  readonly key: K
+  value: V
+  older?: Entry<K, V>
+  newer?: Entry<K, V>
+}
+
 /**
- * Fixed-capacity Least Recently Used cache. `get` refreshes recency; `has` does not.
+ * Fixed-capacity Least Recently Used cache. `get` refreshes recency; `has` does not. Iterators and
+ * `forEach` walk a snapshot taken when they start, so `get` and `set` inside a loop are safe.
+ *
+ * Recency lives in a linked list. Keeping it in a Map's insertion order would need a delete and a
+ * set per hit, and V8 scans the slots those leave behind, so hot keys and evictions cost O(capacity).
  *
  * @template K, V
  */
 export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
-  readonly #items = new Map<K, V>()
+  readonly #items = new Map<K, Entry<K, V>>()
   readonly #capacity: number
+  #oldest?: Entry<K, V>
+  #newest?: Entry<K, V>
 
   /**
    * @param capacity Maximum number of entries; must be an integer >= 1.
@@ -26,12 +39,20 @@ export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
    * capacity evicts the least recently used entry.
    */
   set(key: K, value: V): this {
-    this.#items.delete(key)
-    if (this.#items.size >= this.#capacity) {
-      const oldest = this.#items.keys().next()
-      if (!oldest.done) this.#items.delete(oldest.value)
+    const entry = this.#items.get(key)
+    if (entry !== undefined) {
+      entry.value = value
+      this.#refresh(entry)
+      return this
     }
-    this.#items.set(key, value)
+    const oldest = this.#oldest
+    if (oldest !== undefined && this.#items.size >= this.#capacity) {
+      this.#unlink(oldest)
+      this.#items.delete(oldest.key)
+    }
+    const added: Entry<K, V> = { key, value }
+    this.#items.set(key, added)
+    this.#append(added)
     return this
   }
 
@@ -43,18 +64,22 @@ export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
    * Return the value for `key`, refreshing its recency. Missing keys return `undefined`.
    */
   get(key: K): V | undefined {
-    if (!this.#items.has(key)) return undefined
-    const value = this.#items.get(key) as V
-    this.#items.delete(key)
-    this.#items.set(key, value)
-    return value
+    const entry = this.#items.get(key)
+    if (entry === undefined) return undefined
+    this.#refresh(entry)
+    return entry.value
   }
 
   clear(): void {
     this.#items.clear()
+    this.#oldest = undefined
+    this.#newest = undefined
   }
 
   delete(key: K): boolean {
+    const entry = this.#items.get(key)
+    if (entry === undefined) return false
+    this.#unlink(entry)
     return this.#items.delete(key)
   }
 
@@ -63,9 +88,9 @@ export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
   }
 
   protected override cloneFrom(entries: Iterable<[K, V]>): this {
-    const copy = new LRUCache<K, V>(this.#capacity)
+    const copy = Reflect.construct(this.constructor, [this.#capacity]) as this
     for (const [k, v] of entries) copy.set(k, v)
-    return copy as this
+    return copy
   }
 
   /** Maximum number of entries. */
@@ -76,14 +101,49 @@ export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
   readonly [Symbol.toStringTag] = 'LRUCache'
 
   keys(): IteratorObject<K> {
-    return this.#items.keys()
+    return this.#snapshot()
+      .map((entry) => entry.key)
+      .values()
   }
 
   values(): IteratorObject<V> {
-    return this.#items.values()
+    return this.#snapshot()
+      .map((entry) => entry.value)
+      .values()
   }
 
   entries(): IteratorObject<[K, V]> {
-    return this.#items.entries()
+    return this.#snapshot()
+      .map((entry): [K, V] => [entry.key, entry.value])
+      .values()
+  }
+
+  #snapshot(): Entry<K, V>[] {
+    const entries: Entry<K, V>[] = []
+    for (let entry = this.#oldest; entry !== undefined; entry = entry.newer) entries.push(entry)
+    return entries
+  }
+
+  #refresh(entry: Entry<K, V>): void {
+    if (entry === this.#newest) return
+    this.#unlink(entry)
+    this.#append(entry)
+  }
+
+  #unlink(entry: Entry<K, V>): void {
+    const { older, newer } = entry
+    if (older === undefined) this.#oldest = newer
+    else older.newer = newer
+    if (newer === undefined) this.#newest = older
+    else newer.older = older
+    entry.older = undefined
+    entry.newer = undefined
+  }
+
+  #append(entry: Entry<K, V>): void {
+    entry.older = this.#newest
+    if (this.#newest === undefined) this.#oldest = entry
+    else this.#newest.newer = entry
+    this.#newest = entry
   }
 }

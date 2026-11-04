@@ -10,6 +10,7 @@ import {
   walkSession,
   withHookNesting
 } from '../internal/nesting.js'
+import { multisetEqual } from './multiset.js'
 import { eq, sameValueZero } from './order.js'
 import { hasMethod, protocol } from './protocol.js'
 
@@ -54,11 +55,11 @@ class PairSet {
  * matching included, so shared-reference subtrees are compared once. Not exported from any barrel.
  *
  * A pair on the active path is assumed equal, which a later failure of that pair can disprove.
- * In a plain walk that failure ends the call, but Heap matching catches it and tries the next
+ * In a plain walk that failure ends the call, but multiset matching catches it and tries the next
  * candidate, so proofs that may rest on the assumption are retracted (see `deepEqualInSession`).
  * Unequal answers are never retracted: every comparison is monotone in its parts, so a false
- * reached under an assumption also holds without it (Heap matching keeps this by leaving its
- * greedy pass once a pair was assumed). While the memos have room, a pair that walked far can
+ * reached under an assumption also holds without it (multiset matching keeps this by answering
+ * false only after an exact search). While the memos have room, a pair that walked far can
  * therefore fail only once, which bounds the retractions and keeps cyclic input polynomial.
  */
 export interface DeepEqualSession {
@@ -262,23 +263,8 @@ function deepEqualChildren(a: object, b: object, session: DeepEqualSession): boo
   if (a instanceof ArrayBuffer || ArrayBuffer.isView(a)) {
     return bytesEqual(a, b as ArrayBuffer | ArrayBufferView)
   }
-  if (a instanceof Map) {
-    const mb = b as Map<unknown, unknown>
-    if (a.size !== mb.size) return false
-    for (const [k, v] of a) {
-      if (!mb.has(k)) return false
-      if (!deepEqualInner(v, mb.get(k), session)) return false
-    }
-    return true
-  }
-  if (a instanceof Set) {
-    const sb = b as Set<unknown>
-    if (a.size !== sb.size) return false
-    for (const v of a) {
-      if (!sb.has(v)) return false
-    }
-    return true
-  }
+  if (a instanceof Map) return deepMapEqual(a, b as Map<unknown, unknown>, session)
+  if (a instanceof Set) return deepSetEqual(a, b as Set<unknown>, session)
   if (Array.isArray(a)) {
     const bb = b as unknown[]
     if (a.length !== bb.length) return false
@@ -323,10 +309,53 @@ function deepEqualChildren(a: object, b: object, session: DeepEqualSession): boo
   return true
 }
 
+function isPrimitive(value: unknown): boolean {
+  return value === null || (typeof value !== 'object' && typeof value !== 'function')
+}
+
+/**
+ * Multiset equality under `deepEqual` in the walk's session; every candidate counts towards its
+ * limit. A caller that is not a collection hook charges {@link withHookNesting} for the extra stack.
+ * Internal: not exported from the public barrels.
+ */
+export function deepMultisetEqual(
+  a: readonly unknown[],
+  b: readonly unknown[],
+  session: DeepEqualSession = walkSession(createDeepEqualSession)
+): boolean {
+  return multisetEqual(a, b, (x, y) => {
+    countComparison(session)
+    return deepEqualInSession(x, y, session)
+  })
+}
+
+function deepSetEqual(a: Set<unknown>, b: Set<unknown>, session: DeepEqualSession): boolean {
+  if (a.size !== b.size) return false
+  return a.isSubsetOf(b) || withHookNesting(() => deepMultisetEqual([...a], [...b], session))
+}
+
+/** Same entries under `deepEqual`, in any order. Internal: not exported from the public barrels. */
+export function deepMapEqual(
+  a: Map<unknown, unknown>,
+  b: Map<unknown, unknown>,
+  session: DeepEqualSession = walkSession(createDeepEqualSession)
+): boolean {
+  if (a.size !== b.size) return false
+  if (!a.keys().every(isPrimitive) || !b.keys().every(isPrimitive)) {
+    return withHookNesting(() => deepMultisetEqual([...a], [...b], session))
+  }
+  for (const [k, v] of a) {
+    if (!b.has(k)) return false
+    if (!deepEqualInner(v, b.get(k), session)) return false
+  }
+  return true
+}
+
 /**
  * Deep structural equality with cycle handling.
  * Dispatches to `protocol.equals` when either side defines it. Boxed primitives compare by
- * `Object.is` on their primitive value. Nesting past 1000 levels throws `RangeError` (the cap
+ * `Object.is` on their primitive value. Set members and the entries of a Map with an object key
+ * compare as multisets, also by `deepEqual`. Nesting past 1000 levels throws `RangeError` (the cap
  * is a security bound, not an implementation limit). A pair already under comparison on the
  * current path is treated as equal. Settled pairs are memoized for the rest of the top-level
  * call so shared-reference DAGs stay linear up to the memo bounds (2^20 failures, 2^21 proofs);

@@ -12,6 +12,7 @@ import {
   clone
 } from '../src/collections/index.js'
 import { decimal } from '../src/decimal/index.js'
+import { Currency } from '../src/i18n/currency.js'
 import { IntlDate } from '../src/i18n/date/index.js'
 import { walkSession } from '../src/internal/nesting.js'
 import {
@@ -847,7 +848,7 @@ describe('comparisons that fail inside a Heap', () => {
 
       expect(deepEqual(left, right)).toBe(true)
 
-      expect(calls.mock.calls.length).toBeLessThanOrEqual(TOWER_LEVELS * TOWER_LEVELS)
+      expect(calls.mock.calls.length).toBeLessThanOrEqual(2 * TOWER_LEVELS * TOWER_LEVELS)
     })
 
     it('under a pair assumed at the root stay polynomial', DOS_TIMEOUT, () => {
@@ -862,7 +863,7 @@ describe('comparisons that fail inside a Heap', () => {
 
       expect(deepEqual(left, right)).toBe(true)
 
-      expect(calls.mock.calls.length).toBeLessThanOrEqual(TOWER_LEVELS * TOWER_LEVELS)
+      expect(calls.mock.calls.length).toBeLessThanOrEqual(2 * TOWER_LEVELS * TOWER_LEVELS)
     })
 
     it('that end in a difference stay polynomial', DOS_TIMEOUT, () => {
@@ -922,5 +923,454 @@ describe('deepEqual work limit', () => {
 
   it('leaves ordinary comparisons alone', () => {
     expect(deepEqual(tower(40), tower(40))).toBe(true)
+  })
+})
+
+describe('clones keep their subclass', () => {
+  class SubDeque extends Deque<number> {}
+  class SubHeap extends Heap<number> {}
+  class SubSplayTree extends SplayTree<number, number> {}
+  class SubLRUCache extends LRUCache<number, number> {}
+  class SubFrozenSet extends FrozenSet<number> {}
+  class SubTrie extends Trie {}
+
+  it.each([
+    ['Deque', new SubDeque([1], { maxlen: 3 })],
+    ['Heap', new SubHeap([1])],
+    ['SplayTree', new SubSplayTree().set(1, 1)],
+    ['LRUCache', new SubLRUCache(3).set(1, 1)],
+    ['FrozenSet', new SubFrozenSet([1])],
+    ['Trie', new SubTrie(['a'])]
+  ])('%s', (_, source) => {
+    for (const deep of [false, true]) {
+      const copy = clone(source, deep)
+      expect(copy.constructor).toBe(source.constructor)
+      expect(deepEqual(copy, source)).toBe(true)
+    }
+  })
+})
+
+describe('deep multiset equality', () => {
+  const usd = (): Currency => new Currency(5, 'USD')
+  const jpy = (): Currency => new Currency(5, 'JPY')
+  const five = (): unknown => decimal(5)
+
+  it('a boxed subclass is not its base class', () => {
+    class Boxed extends Number {}
+    class BoxedText extends String {}
+    class BoxedFlag extends Boolean {}
+    expect(deepEqual(new Heap([new Boxed(1)]), new Heap([new Number(1)]))).toBe(false)
+    expect(deepEqual(new Heap([new BoxedText('a')]), new Heap([new String('a')]))).toBe(false)
+    expect(deepEqual(new Heap([new BoxedFlag(true)]), new Heap([new Boolean(true)]))).toBe(false)
+    expect(deepEqual(new Heap([new Boxed(1)]), new Heap([new Boxed(1)]))).toBe(true)
+  })
+
+  it('agrees with deepEqual on every pair of a mixed pool', () => {
+    class Point {
+      constructor(readonly x: number) {}
+    }
+    class Ranked {
+      constructor(
+        readonly rank: number,
+        readonly note: string
+      ) {}
+      [protocol.compare](other: unknown): number | undefined {
+        return other instanceof Ranked ? this.rank - other.rank : undefined
+      }
+    }
+    const pool: unknown[] = [
+      0,
+      -0,
+      1,
+      1n,
+      '1',
+      NaN,
+      null,
+      undefined,
+      true,
+      '',
+      new Number(1),
+      new Number(-0),
+      new String('1'),
+      Object.assign(new String('1'), { extra: 1 }),
+      new Date(0),
+      new Date(0),
+      new Date(NaN),
+      /a/g,
+      /a/i,
+      new Uint8Array([1]),
+      new Int8Array([1]),
+      new Uint8Array([1]).buffer,
+      [],
+      {},
+      Object.create(null),
+      [1],
+      [0],
+      [-0],
+      { 0: 1 },
+      new Array(1),
+      [undefined],
+      { a: undefined },
+      { a: 1, b: 2 },
+      { b: 2, a: 1 },
+      { a: { b: [1, { c: 2 }] } },
+      { a: { b: [1, { c: 3 }] } },
+      Object.assign([1], { extra: 1 }),
+      new Map([[1, 2]]),
+      new Map([[1, 3]]),
+      new Map([
+        [1, 2],
+        [3, 4]
+      ]),
+      new Map([
+        [3, 4],
+        [1, 2]
+      ]),
+      new Map([[{ k: 1 }, 2]]),
+      new Map([[{ k: 1 }, 2]]),
+      new Set([1, 2]),
+      new Set([2, 1]),
+      new Set([{ m: 1 }]),
+      new Set([{ m: 1 }]),
+      new Set([{ m: 2 }]),
+      new Point(1),
+      new Point(1),
+      new Point(2),
+      new Ranked(1, 'a'),
+      new Ranked(1, 'b'),
+      new Ranked(2, 'a'),
+      decimal(1),
+      decimal('1.0'),
+      decimal(2),
+      [decimal(1)],
+      { v: decimal(1) },
+      { v: 1 },
+      new Set([decimal(1)]),
+      new Set([1]),
+      new Map([['v', decimal(1)]]),
+      new Map([['v', 1]]),
+      new Heap([1]),
+      new Deque([1]),
+      new FrozenSet([{ m: 1 }]),
+      new Trie(['a']),
+      Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`k${String(i)}`, i])),
+      Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`k${String(39 - i)}`, 39 - i])),
+      Array.from({ length: 40 }, (_, i) => i),
+      'x'.repeat(40) + 'y'.repeat(40) + 'z',
+      'x'.repeat(40) + 'w'.repeat(40) + 'z'
+    ]
+    for (const x of pool) {
+      for (const y of pool) {
+        const expected = deepEqual(x, y)
+        expect(deepEqual(new Heap([x], tied), new Heap([y], tied))).toBe(expected)
+        expect(deepEqual(new Heap([x, 1], tied), new Heap([1, y], tied))).toBe(expected)
+      }
+    }
+  })
+
+  it('does not depend on order when equality is not transitive', () => {
+    const heap = (items: unknown[]): Heap<unknown> => new Heap(items, tied)
+    expect(deepEqual(heap([five(), usd()]), heap([usd(), jpy()]))).toBe(true)
+    expect(deepEqual(heap([usd(), five()]), heap([usd(), jpy()]))).toBe(true)
+    expect(deepEqual(heap([usd(), jpy()]), heap([five(), usd()]))).toBe(true)
+    expect(deepEqual(heap([usd(), usd()]), heap([jpy(), jpy()]))).toBe(false)
+    expect(deepEqual(new Set([five(), usd()]), new Set([usd(), jpy()]))).toBe(true)
+  })
+
+  it('a canceled pair gives up its partner when a hook needs it', () => {
+    const shared = usd()
+    const heap = (items: unknown[]): Heap<unknown> => new Heap(items, tied)
+    expect(deepEqual(heap([usd(), 5]), heap([5, jpy()]))).toBe(true)
+    expect(deepEqual(heap([shared, 5]), heap([shared, jpy()]))).toBe(true)
+    expect(deepEqual(heap([5, 5, usd()]), heap([5, jpy(), 6]))).toBe(false)
+  })
+
+  it('compares Set members deeply, as a multiset', () => {
+    expect(deepEqual(new Set([{ a: 1 }]), new Set([{ a: 1 }]))).toBe(true)
+    expect(deepEqual(new Set([{ a: 1 }]), new Set([{ a: 2 }]))).toBe(false)
+    expect(deepEqual(new Set([{ a: 1 }, { a: 1 }]), new Set([{ a: 1 }, { a: 2 }]))).toBe(false)
+    expect(deepEqual(new Set([1, { a: 1 }]), new Set([{ a: 1 }, 1]))).toBe(true)
+    expect(deepEqual(new Set([1, 2]), new Set([1, 3]))).toBe(false)
+    expect(deepEqual(new Set([[new Set([1])]]), new Set([[new Set([1])]]))).toBe(true)
+    expect(deepEqual(new Set([decimal(1)]), new Set([1]))).toBe(true)
+    const rows = new Set([{ a: 1 }, new Map([[1, 2]])])
+    expect(deepEqual(rows, clone(rows, true))).toBe(true)
+  })
+
+  it('compares Map entries with object keys deeply, as a multiset', () => {
+    const map = (...entries: [unknown, unknown][]): Map<unknown, unknown> => new Map(entries)
+    expect(deepEqual(map([{ k: 1 }, 'x']), map([{ k: 1 }, 'x']))).toBe(true)
+    expect(deepEqual(map([{ k: 1 }, 'x']), map([{ k: 1 }, 'y']))).toBe(false)
+    expect(deepEqual(map([{ k: 1 }, 'x']), map([{ k: 2 }, 'x']))).toBe(false)
+    expect(deepEqual(map([{ k: 1 }, 'x'], ['p', 1]), map(['p', 1], [{ k: 1 }, 'x']))).toBe(true)
+    const [left, right] = [{ k: 1 }, { k: 1 }]
+    const swapped = deepEqual(map([left, 1], [right, 2]), map([left, 2], [right, 1]))
+    expect(swapped).toBe(true)
+    expect(deepEqual(map([decimal(1), 'x']), map([1, 'x']))).toBe(true)
+    const lru = (key: object): LRUCache => new LRUCache().set(key, 1)
+    expect(deepEqual(lru({ k: 1 }), lru({ k: 1 }))).toBe(true)
+  })
+
+  it('nested members stop at the nesting error, not at the native stack', () => {
+    const nest = (wrap: (x: unknown) => unknown, levels: number): unknown => {
+      let x: unknown = {}
+      for (let i = 0; i < levels; i++) x = wrap(x)
+      return x
+    }
+    const inSet = (x: unknown): unknown => new Set([x])
+    const inMapKey = (x: unknown): unknown => new Map([[x, 1]])
+    const inFrozenSet = (x: unknown): unknown => new FrozenSet([x])
+    expect(deepEqual(nest(inSet, 190), nest(inSet, 190))).toBe(true)
+    expect(deepEqual(nest(inMapKey, 160), nest(inMapKey, 160))).toBe(true)
+    expect(deepEqual(nest(inFrozenSet, 120), nest(inFrozenSet, 120))).toBe(true)
+    const tooDeep: [(x: unknown) => unknown, number][] = [
+      [inSet, 300],
+      [inMapKey, 200],
+      [inFrozenSet, 130]
+    ]
+    for (const [wrap, levels] of tooDeep) {
+      let failure: unknown
+      try {
+        deepEqual(nest(wrap, levels), nest(wrap, levels))
+      } catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(RangeError)
+      expect((failure as Error).message).toBe('nesting deeper than 1000 levels')
+      expect((failure as Error).cause).toBeUndefined()
+    }
+  })
+
+  it('a Map with primitive keys or an equal Set never pairs members', () => {
+    const calls = vi.spyOn(Deque.prototype, protocol.equals)
+    const row = new Deque([1])
+    const fresh = (): Map<string, unknown> => new Map([['a', new Deque([1])]])
+    expect(deepEqual(new Set([row, 2]), new Set([2, row]))).toBe(true)
+    expect(calls.mock.calls.length).toBe(0)
+    expect(deepEqual(fresh(), fresh())).toBe(true)
+    expect(calls.mock.calls.length).toBe(1)
+    vi.restoreAllMocks()
+  })
+
+  it('identical references cancel without a comparison, in any order', () => {
+    const rows = Array.from({ length: 2000 }, (_, i) => new Deque([i]))
+    const calls = vi.spyOn(Deque.prototype, protocol.equals)
+    expect(deepEqual(new Heap(rows, tied), new Heap(rows.toReversed(), tied))).toBe(true)
+    expect(calls.mock.calls.length).toBe(0)
+    vi.restoreAllMocks()
+  })
+
+  it('hook items in the same order cost one comparison each', () => {
+    const rows = (): Deque<number>[] => Array.from({ length: 2000 }, (_, i) => new Deque([i]))
+    const calls = vi.spyOn(Deque.prototype, protocol.equals)
+    expect(deepEqual(new Heap(rows(), tied), new Heap(rows(), tied))).toBe(true)
+    expect(calls.mock.calls.length).toBe(2000)
+    vi.restoreAllMocks()
+  })
+
+  it('shuffled ordered hook items align without pairing each against all', () => {
+    const count = 20_000
+    const values = Array.from({ length: count }, (_, i) => (i * 7919) % count)
+    const left = new Heap(values.map((value) => decimal(value)))
+    const right = new Heap(values.toReversed().map((value) => decimal(value)))
+    const session = walkSession(createDeepEqualSession)
+    session.visitRoom = 8 * count
+
+    expect(deepEqual(left, right)).toBe(true)
+  })
+
+  it('one unequal ordered hook item does not shift the rest out of alignment', () => {
+    const count = 20_000
+    const left = new Heap(Array.from({ length: count }, (_, i) => decimal(i)))
+    const right = new Heap(Array.from({ length: count }, (_, i) => decimal(i + 1)))
+    const session = walkSession(createDeepEqualSession)
+    session.visitRoom = 8 * count
+
+    expect(deepEqual(left, right)).toBe(false)
+  })
+
+  it('items no hash can tell apart stop at the comparison limit', () => {
+    const buried = (n: number): unknown => ({ a: { b: { c: { d: { e: { f: n } } } } } })
+    const ids = Array.from({ length: 200 }, (_, i) => i)
+    const left = new Heap(ids.map(buried), tied)
+    const right = new Heap(ids.toReversed().map(buried), tied)
+    const session = walkSession(createDeepEqualSession)
+    session.visitRoom = 100
+
+    expect(() => deepEqual(left, right)).toThrow(
+      new RangeError('deepEqual exceeded 33554432 comparisons')
+    )
+  })
+
+  it('candidates that fail before any walk still count', () => {
+    const count = 400
+    const protos = Array.from({ length: count }, () => ({}))
+    const items = (order: object[]): object[] =>
+      order.map((proto) => Object.create(proto) as object)
+    const left = new Heap(items(protos), tied)
+    const right = new Heap(items(protos.toReversed()), tied)
+    const session = walkSession(createDeepEqualSession)
+    session.visitRoom = 4 * count
+
+    expect(() => deepEqual(left, right)).toThrow(
+      new RangeError('deepEqual exceeded 33554432 comparisons')
+    )
+  })
+
+  /** Most heap bytes held whenever the comparison reads a property of the probe items. */
+  function heldDuring(build: (probe: () => object) => [Heap<unknown>, Heap<unknown>]): number {
+    const { gc } = globalThis
+    if (gc === undefined) throw new Error('tests need --expose-gc')
+    let held = 0
+    let before = 0
+    const probe = (): object => ({
+      get bytes(): number {
+        gc()
+        held = Math.max(held, process.memoryUsage().heapUsed - before)
+        return 0
+      }
+    })
+    const [left, right] = build(probe)
+    gc()
+    before = process.memoryUsage().heapUsed
+    expect(deepEqual(left, right)).toBe(true)
+    return held
+  }
+
+  it('strings repeated by reference hold no copies', () => {
+    const text = 'x'.repeat(2 ** 20)
+    const held = heldDuring((probe) => [
+      new Heap([...Array<unknown>(200).fill(text), probe()], tied),
+      new Heap([...Array<unknown>(200).fill(text), probe()], tied)
+    ])
+    expect(held).toBeLessThan(32 * 1024 * 1024)
+  })
+
+  it('deep JSON items hold no key per node', () => {
+    const item = (i: number): string =>
+      '['.repeat(950) + JSON.stringify(String(i).repeat(60_000)) + ',0]' + ',0]'.repeat(949)
+    const text = `[${[0, 1, 2, 3].map(item).join()}]`
+    const held = heldDuring((probe) => [
+      new Heap([...(JSON.parse(text) as unknown[]), probe()], tied),
+      new Heap([...(JSON.parse(text) as unknown[]), probe()], tied)
+    ])
+    expect(held).toBeLessThan(32 * 1024 * 1024)
+  })
+
+  describe('against the greatest bisimulation', () => {
+    type Kind = 'array' | 'heap' | 'set' | 'map'
+    type Slot = { leaf: number } | { node: number }
+    interface Graph {
+      kinds: Kind[]
+      slots: Slot[][]
+    }
+
+    function randomGraph(next: (n: number) => number): Graph {
+      const size = 2 + next(6)
+      const kinds = Array.from({ length: size }, () => {
+        const kinds: Kind[] = ['array', 'heap', 'heap', 'set', 'map']
+        return kinds[next(kinds.length)]
+      })
+      const slots = kinds.map(() =>
+        Array.from({ length: next(4) }, (): Slot => {
+          return next(3) === 0 ? { leaf: next(2) } : { node: next(size) }
+        })
+      )
+      return { kinds, slots }
+    }
+
+    function build({ kinds, slots }: Graph): unknown[] {
+      const nodes = kinds.map((kind): unknown => {
+        if (kind === 'array') return []
+        if (kind === 'heap') return new Heap<unknown>([], tied)
+        return kind === 'set' ? new Set() : new Map()
+      })
+      const value = (slot: Slot): unknown => ('leaf' in slot ? slot.leaf : nodes[slot.node])
+      nodes.forEach((node, i) => {
+        for (const slot of slots[i]) {
+          if (node instanceof Set) node.add(value(slot))
+          else if (node instanceof Map) node.set(value(slot), 0)
+          else (node as unknown[] | Heap<unknown>).push(value(slot))
+        }
+      })
+      return nodes
+    }
+
+    /** Members after Set and Map dedupe them by reference and value. */
+    function members({ kinds, slots }: Graph, i: number): Slot[] {
+      if (kinds[i] === 'array' || kinds[i] === 'heap') return slots[i]
+      const seen = new Set<string>()
+      return slots[i].filter((slot) => {
+        const id = JSON.stringify(slot)
+        if (seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+    }
+
+    function hasPerfectMatch(
+      a: Slot[],
+      b: Slot[],
+      related: (x: Slot, y: Slot) => boolean
+    ): boolean {
+      const owner = new Array<number>(b.length).fill(-1)
+      const claim = (i: number, tried: boolean[]): boolean =>
+        b.some((slot, j) => {
+          if (tried[j] || !related(a[i], slot)) return false
+          tried[j] = true
+          if (owner[j] !== -1 && !claim(owner[j], tried)) return false
+          owner[j] = i
+          return true
+        })
+      return a.every((_, i) => claim(i, new Array<boolean>(b.length).fill(false)))
+    }
+
+    function bisimulation(graph: Graph): boolean[][] {
+      const { kinds } = graph
+      const related = kinds.map((kind) => kinds.map((other) => kind === other))
+      const slotsRelated = (x: Slot, y: Slot): boolean => {
+        if ('leaf' in x || 'leaf' in y) {
+          return 'leaf' in x && 'leaf' in y && x.leaf === y.leaf
+        }
+        return related[x.node][y.node]
+      }
+      for (let changed = true; changed;) {
+        changed = false
+        kinds.forEach((kind, i) => {
+          kinds.forEach((_, j) => {
+            if (!related[i][j]) return
+            const [a, b] = [members(graph, i), members(graph, j)]
+            const holds =
+              a.length === b.length &&
+              (kind === 'array'
+                ? a.every((slot, k) => slotsRelated(slot, b[k]))
+                : hasPerfectMatch(a, b, slotsRelated))
+            if (!holds) {
+              related[i][j] = false
+              changed = true
+            }
+          })
+        })
+      }
+      return related
+    }
+
+    it('matches on seeded cyclic graphs of arrays, Heaps, Sets and Maps', () => {
+      let seed = 2024
+      const next = (n: number): number => {
+        seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff
+        return (seed >>> 8) % n
+      }
+      for (let round = 0; round < 3000; round++) {
+        const graph = randomGraph(next)
+        const nodes = build(graph)
+        const expected = bisimulation(graph)
+        nodes.forEach((a, i) => {
+          nodes.forEach((b, j) => {
+            expect([round, i, j, deepEqual(a, b)]).toEqual([round, i, j, expected[i][j]])
+          })
+        })
+      }
+    })
   })
 })

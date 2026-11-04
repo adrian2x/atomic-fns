@@ -155,6 +155,39 @@ describe('Heap', () => {
     expect([...h]).toEqual(snap)
   })
 
+  it('throwing comparator on delete leaves heap unchanged', () => {
+    let armed = false
+    const cmp = (a: number, b: number) => {
+      if (armed) throw new Error('delete boom')
+      return a - b
+    }
+    const h = new Heap([1, 2, 3, 4, 5, 6, 7], cmp)
+    const snap = [...h]
+    armed = true
+    expect(() => h.delete(2)).toThrow('delete boom')
+    expect([...h]).toEqual(snap)
+  })
+
+  it('push takes several items, like Array and Deque', () => {
+    const h = new Heap<number>()
+    expect(h.push(3, 1, 2)).toBe(3)
+    expect(h.push()).toBe(3)
+    expect(sorted(h)).toEqual([1, 2, 3])
+    expect(h.peek()).toBe(1)
+  })
+
+  it('null items and a null comparator mean omitted', () => {
+    expect(new Heap(null).size).toBe(0)
+    expect([...new Heap([2, 1], null)]).toEqual([1, 2])
+  })
+
+  it('heapify refuses huge sparse arrays, as the constructor does', () => {
+    const sparse = new Array<number>(2 ** 24 + 2048)
+    expect(() => {
+      heapify(sparse)
+    }).toThrow(new RangeError('sparse array too large'))
+  })
+
   it('SPEC-R83 clear empties the heap', () => {
     const h = new Heap([1, 2, 3])
     h.clear()

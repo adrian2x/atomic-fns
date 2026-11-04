@@ -286,6 +286,75 @@ describe('Deque', () => {
     expect(deque.toArray()).toEqual([1, 2, 9])
   })
 
+  it('BigInt storage clears vacated slots with its own zero', () => {
+    const deque = new Deque([1n, 2n, 3n], { arrType: BigInt64Array, maxlen: 3 })
+    expect(deque.pop()).toBe(3n)
+    expect(deque.shift()).toBe(1n)
+    deque.push(4n, 5n, 6n)
+    expect(deque.toArray()).toEqual([4n, 5n, 6n])
+    const over = new Deque([1n, 2n, 3n], { arrType: BigUint64Array, maxlen: 2 })
+    expect(over.toArray()).toEqual([2n, 3n])
+  })
+
+  it('at and set coerce an index as Array.prototype.at does', () => {
+    const values = [10, 20, 30]
+    const deque = new Deque(values)
+    const indices = [undefined, null, 'x', '1', {}, [], true, NaN, -0, 0.5, -0.5, -1.5] as number[]
+    for (const index of indices) expect(deque.at(index)).toBe(values.at(index))
+    const unset = [undefined, 'x', {}] as number[]
+    for (const index of unset) {
+      expect(new Deque([1, 2]).set(index, 9).toArray()).toEqual([9, 2])
+    }
+  })
+
+  it('a set out of range names the index the caller passed', () => {
+    expect(() => new Deque([1, 2, 3]).set(-10, 0)).toThrow(new RangeError('index -10 out of range'))
+  })
+
+  it('maxlen null means unbounded', () => {
+    const deque = new Deque([1, 2], { maxlen: null })
+    expect(deque.maxlen).toBeUndefined()
+    expect(deque.push(3)).toBe(3)
+  })
+
+  it('reads an iterable one item at a time, so maxlen bounds its memory', () => {
+    const log: string[] = []
+    function* rows(): Generator<number> {
+      for (const n of [1, 2]) {
+        log.push(`yield ${String(n)}`)
+        const row = {
+          valueOf(): number {
+            log.push(`store ${String(n)}`)
+            return n
+          }
+        }
+        yield row as unknown as number
+      }
+    }
+    const deque = new Deque(rows(), { arrType: Float64Array, maxlen: 1 })
+    expect(log).toEqual(['yield 1', 'store 1', 'yield 2', 'store 2'])
+    expect(deque.toArray()).toEqual([2])
+  })
+
+  it('clear gives back the capacity of a burst', () => {
+    const allocated: number[] = []
+    class Recording extends Array<number> {
+      constructor(length: number) {
+        super(length)
+        allocated.push(length)
+      }
+    }
+    const deque = new Deque<number>([], { arrType: Recording })
+    for (let i = 0; i < 1000; i++) deque.push(i)
+    allocated.length = 0
+
+    deque.clear()
+
+    expect(allocated).toEqual([8])
+    for (let i = 0; i < 20; i++) deque.push(i)
+    expect(deque.toArray()).toEqual(Array.from({ length: 20 }, (_, i) => i))
+  })
+
   it('SPEC-R80 differential vs Array model over 5000 random ops', () => {
     const deque = new Deque<number>()
     const model: number[] = []

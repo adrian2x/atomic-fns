@@ -1,217 +1,11 @@
-import {
-  canonicalKeyInfo,
-  createCanonicalKeySession,
-  type CanonicalKeySession
-} from '../internal/canonicalKey.js'
+import { assertNotHugeSparse } from '../internal/arrayKeys.js'
 import { arrayFromIterable } from '../internal/iterable.js'
-import { walkSession, withHookNesting } from '../internal/nesting.js'
-import { createDeepEqualSession, deepEqualInSession } from '../operators/equality.js'
-import type { DeepEqualSession } from '../operators/equality.js'
+import { withHookNesting } from '../internal/nesting.js'
+import { deepMultisetEqual } from '../operators/equality.js'
 import type { Comparer } from '../operators/index.js'
 import { compare, protocol, sameValueZero } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
 import { clone } from './object.js'
-
-interface HeapEqItem<T> {
-  item: T
-  key: string | undefined
-  /** Key is a structural hash: equal keys only mean "candidates for deepEqual". */
-  hashed: boolean
-  pure: boolean
-}
-
-function classifyHeapItem<T>(item: T, keys: CanonicalKeySession): HeapEqItem<T> {
-  const info = canonicalKeyInfo(item, keys)
-  if (info === undefined) return { item, key: undefined, hashed: false, pure: false }
-  return { item, key: info.key, hashed: info.hashed, pure: info.pure }
-}
-
-interface Buckets<T> {
-  /** Exact keys: equal key iff deepEqual. */
-  exact: Map<string, HeapEqItem<T>[]>
-  /** Hashed keys: equal hash is only a candidate match. */
-  hashed: Map<string, HeapEqItem<T>[]>
-  unkeyed: HeapEqItem<T>[]
-}
-
-function bucketize<T>(side: HeapEqItem<T>[]): Buckets<T> {
-  const exact = new Map<string, HeapEqItem<T>[]>()
-  const hashed = new Map<string, HeapEqItem<T>[]>()
-  const unkeyed: HeapEqItem<T>[] = []
-  for (const entry of side) {
-    if (entry.key === undefined) {
-      unkeyed.push(entry)
-      continue
-    }
-    const target = entry.hashed ? hashed : exact
-    const list = target.get(entry.key)
-    if (list === undefined) target.set(entry.key, [entry])
-    else list.push(entry)
-  }
-  return { exact, hashed, unkeyed }
-}
-
-/**
- * Multiset equality leftovers after exact-key cancellation and hashed-group matching, then
- * pairwise matching for every leftover impure item (O(leftover_impure × leftovers)). Pure
- * leftovers may only be consumed by those matches. JSON-only heaps cancel entirely by key and
- * never take the pairwise path. Every pairwise comparison shares the walk's deepEqual session,
- * so subtrees already settled are not compared again, across nested Heaps too. A failed greedy
- * pass is final only if nothing was assumed equal yet; otherwise exact matching decides.
- */
-function heapMultisetEqual<T>(aItems: Iterable<T>, bItems: Iterable<T>): boolean {
-  const keys = createCanonicalKeySession()
-  const session = walkSession(createDeepEqualSession)
-  const sideA = bucketize([...aItems].map((item) => classifyHeapItem(item, keys)))
-  const sideB = bucketize([...bItems].map((item) => classifyHeapItem(item, keys)))
-
-  const leftoverA: HeapEqItem<T>[] = [...sideA.unkeyed]
-  const leftoverB: HeapEqItem<T>[] = [...sideB.unkeyed]
-
-  for (const key of new Set([...sideA.exact.keys(), ...sideB.exact.keys()])) {
-    const listA = sideA.exact.get(key) ?? []
-    const listB = sideB.exact.get(key) ?? []
-    const matched = Math.min(listA.length, listB.length)
-    for (let i = matched; i < listA.length; i++) leftoverA.push(listA[i])
-    for (let i = matched; i < listB.length; i++) leftoverB.push(listB[i])
-  }
-
-  for (const key of new Set([...sideA.hashed.keys(), ...sideB.hashed.keys()])) {
-    matchHashedGroup(
-      sideA.hashed.get(key) ?? [],
-      sideB.hashed.get(key) ?? [],
-      session,
-      leftoverA,
-      leftoverB
-    )
-  }
-
-  if (leftoverA.length === 0 && leftoverB.length === 0) return true
-  if (leftoverA.length !== leftoverB.length) return false
-
-  if (matchLeftovers(leftoverA, leftoverB, session)) return true
-  return session.assumptions !== 0 && hasPerfectMatching(leftoverA, leftoverB, session)
-}
-
-/** Greedy pairwise matching: exact when `deepEqual` is an equivalence on the items. */
-function matchLeftovers<T>(
-  leftoverA: HeapEqItem<T>[],
-  leftoverB: HeapEqItem<T>[],
-  session: DeepEqualSession
-): boolean {
-  const usedA = new Array<boolean>(leftoverA.length).fill(false)
-  const usedB = new Array<boolean>(leftoverB.length).fill(false)
-
-  const matchImpure = (fromA: boolean, index: number): boolean => {
-    const mine = fromA ? leftoverA : leftoverB
-    const theirs = fromA ? leftoverB : leftoverA
-    const usedMine = fromA ? usedA : usedB
-    const usedTheirs = fromA ? usedB : usedA
-    if (usedMine[index]) return true
-    const entry = mine[index]
-    for (let j = 0; j < theirs.length; j++) {
-      if (usedTheirs[j]) continue
-      if (deepEqualInSession(entry.item, theirs[j].item, session)) {
-        usedMine[index] = true
-        usedTheirs[j] = true
-        return true
-      }
-    }
-    return false
-  }
-
-  for (let i = 0; i < leftoverA.length; i++) {
-    if (leftoverA[i].pure) continue
-    if (!matchImpure(true, i)) return false
-  }
-  for (let i = 0; i < leftoverB.length; i++) {
-    if (leftoverB[i].pure) continue
-    if (!matchImpure(false, i)) return false
-  }
-
-  for (let i = 0; i < leftoverA.length; i++) {
-    if (!usedA[i]) return false
-  }
-  for (let i = 0; i < leftoverB.length; i++) {
-    if (!usedB[i]) return false
-  }
-  return true
-}
-
-const NONE = -1
-
-/**
- * Whether every item of `a` can take its own `deepEqual` partner in `b`, by augmenting paths. A
- * pair assumed equal on a cycle may turn out unequal, so it is not an equivalence: a greedy match
- * can spend the partner another item needs, and memoizing that false would poison later matches.
- * Breadth-first so a wide Heap cannot overflow the stack.
- */
-function hasPerfectMatching<T>(
-  a: HeapEqItem<T>[],
-  b: HeapEqItem<T>[],
-  session: DeepEqualSession
-): boolean {
-  const partnerOfA = new Array<number>(a.length).fill(NONE)
-  const partnerOfB = new Array<number>(b.length).fill(NONE)
-  const matches = (i: number, j: number): boolean =>
-    !(a[i].pure && b[j].pure) && deepEqualInSession(a[i].item, b[j].item, session)
-  for (let start = 0; start < a.length; start++) {
-    const reachedFrom = new Array<number>(b.length).fill(NONE)
-    const queue = [start]
-    let free = NONE
-    for (let head = 0; head < queue.length && free === NONE; head++) {
-      const i = queue[head]
-      // Free partners first, so an all-equal class never compares against taken ones.
-      free = partnerOfB.findIndex((partner, j) => partner === NONE && matches(i, j))
-      if (free !== NONE) {
-        reachedFrom[free] = i
-        break
-      }
-      for (let j = 0; j < b.length; j++) {
-        if (partnerOfB[j] === NONE || reachedFrom[j] !== NONE || !matches(i, j)) continue
-        reachedFrom[j] = i
-        queue.push(partnerOfB[j])
-      }
-    }
-    if (free === NONE) return false
-    while (free !== NONE) {
-      const i = reachedFrom[free]
-      const displaced = partnerOfA[i]
-      partnerOfA[i] = free
-      partnerOfB[free] = i
-      free = displaced
-    }
-  }
-  return true
-}
-
-/**
- * Match items of one hash group pairwise in the shared session. A hash collision only costs
- * extra comparisons. Items left unmatched go to the leftover lists: a hashed item may still be
- * deepEqual to an unkeyed or impure item of the other side (cross-kind equality).
- */
-function matchHashedGroup<T>(
-  listA: HeapEqItem<T>[],
-  listB: HeapEqItem<T>[],
-  session: DeepEqualSession,
-  leftoverA: HeapEqItem<T>[],
-  leftoverB: HeapEqItem<T>[]
-): void {
-  const remainingB = [...listB]
-  for (const entry of listA) {
-    let matched = false
-    for (let j = 0; j < remainingB.length; j++) {
-      if (!deepEqualInSession(entry.item, remainingB[j].item, session)) continue
-      // Swap-remove keeps equal-item groups O(1) per match.
-      const last = remainingB.pop()
-      if (last !== undefined && j < remainingB.length) remainingB[j] = last
-      matched = true
-      break
-    }
-    if (!matched) leftoverA.push(entry)
-  }
-  for (const entry of remainingB) leftoverB.push(entry)
-}
 
 /**
  * Binary min-heap (or max-heap with a custom comparator).
@@ -224,13 +18,13 @@ export class Heap<T> extends ValueCollection<T> {
   readonly #compare: Comparer<T>
 
   /**
-   * @param items Initial values (copied; the source array is not aliased).
-   * @param compareFn Compare function. Defaults to smaller values first.
+   * @param items Initial values (copied; the source array is not aliased). `null` means none.
+   * @param compareFn Compare function. Defaults to smaller values first, also for `null`.
    */
-  constructor(items: Iterable<T> = [], compareFn: Comparer<T> = compare) {
+  constructor(items?: Iterable<T> | null, compareFn?: Comparer<T> | null) {
     super()
-    this.#compare = compareFn
-    this.#heap = arrayFromIterable<T>(items)
+    this.#compare = compareFn ?? compare
+    this.#heap = arrayFromIterable<T>(items ?? [])
     heapify(this.#heap, this.#compare)
   }
 
@@ -239,30 +33,21 @@ export class Heap<T> extends ValueCollection<T> {
   }
 
   protected override cloneFrom(values: Iterable<T>): this {
-    return new Heap(values, this.#compare) as this
+    return Reflect.construct(this.constructor, [values, this.#compare]) as this
   }
 
   /**
-   * Multiset equality under `deepEqual`, independent of the heap comparator. Same size.
-   * Items with an exact canonical key cancel by key counts. Items are pure when their key is
-   * built only from JSON-shaped data plus exact built-in Date/RegExp; otherwise impure (unkeyed,
-   * hashed, or keyed with boxed primitives / typed arrays / Map / Set). Two pure items are
-   * deepEqual iff their keys are equal, so cross-kind matches always involve an impure leftover.
-   * Items whose exact key would exceed 64 KB carry a structural hash instead; they group by hash
-   * and match pairwise within the group (a collision only costs time). After that, every
-   * leftover impure item is matched pairwise by `deepEqual` against an unmatched leftover of the
-   * other side (leftover pures may only be consumed by those matches); any unmatched leftover
-   * yields false. All pairwise comparisons share the walk's deepEqual session (settled pairs and
-   * nesting counters), so shared-reference DAGs stay linear up to its memo bounds. JSON-only heaps never take the pairwise
-   * path. Iteration / heap order is not part of equality.
+   * Multiset equality under `deepEqual`, independent of the heap comparator and of iteration order.
+   * Shared references cancel without a comparison, items pair within groups of a bounded structural
+   * hash, and a hook that is not transitive still gets an exact answer. The comparisons share the
+   * walk's `deepEqual` session and its limit, which throws `RangeError`: only items that no bounded
+   * hash can tell apart get near it, because they pair all-to-all.
    */
   override [protocol.equals](other: unknown): boolean {
     return withHookNesting(() => {
       if (this === other) return true
       if (typeof other !== 'object' || other?.constructor !== this.constructor) return false
-      const o = other as Heap<T>
-      if (this.size !== o.size) return false
-      return heapMultisetEqual(this.values(), o.values())
+      return deepMultisetEqual([...this.values()], [...(other as Heap<T>).values()])
     })
   }
 
@@ -280,11 +65,11 @@ export class Heap<T> extends ValueCollection<T> {
   }
 
   /**
-   * Push an element onto the heap.
+   * Push one or more elements onto the heap.
    * @returns The new size.
    */
-  push(item: T): number {
-    heappush(this.#heap, item, this.#compare)
+  push(...items: T[]): number {
+    for (const item of items) heappush(this.#heap, item, this.#compare)
     return this.#heap.length
   }
 
@@ -320,14 +105,17 @@ export class Heap<T> extends ValueCollection<T> {
       this.pop()
       return true
     }
-    const last = heap.pop() as T
-    if (index === heap.length) return true
-    const parent = (index - 1) >> 1
-    if (index > 0 && this.#compare(heap[parent], last) > 0) {
-      siftUp(heap, index, last, this.#compare)
-    } else {
-      siftDown(heap, index, heap.length, last, this.#compare)
+    const end = heap.length - 1
+    if (index < end) {
+      const last = heap[end]
+      const parent = (index - 1) >> 1
+      if (this.#compare(heap[parent], last) > 0) {
+        siftUp(heap, index, last, this.#compare)
+      } else {
+        siftDown(heap, index, end, last, this.#compare)
+      }
     }
+    heap.pop()
     return true
   }
 
@@ -383,8 +171,10 @@ function siftDown<T>(heap: T[], start: number, end: number, item: T, compareFn: 
 
 /**
  * Transform any array into a heap, in-place, in linear time.
+ * @throws {RangeError} when `heap` is a huge sparse array.
  */
 export function heapify<T>(heap: T[], compareFn: Comparer<T> = compare): void {
+  assertNotHugeSparse(heap)
   const size = heap.length
   for (let parent = (size - 1) >> 1; parent >= 0; --parent) {
     siftDown(heap, parent, size, heap[parent], compareFn)

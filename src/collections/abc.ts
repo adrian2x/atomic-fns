@@ -1,4 +1,5 @@
 import { withHookNesting } from '../internal/nesting.js'
+import { deepMapEqual } from '../operators/equality.js'
 import { deepEqual, protocol } from '../operators/index.js'
 import { clone } from './object.js'
 
@@ -31,7 +32,8 @@ function sameItems<C extends object & { readonly size: number }>(
 }
 
 /**
- * Set equality: same constructor, same size, every value of one is `has` in the other.
+ * Set equality: same constructor, same size, every value of one is `has` in the other. For values
+ * that `has` can compare exactly, such as strings.
  */
 export function sameSetMembers<
   C extends object & { readonly size: number; has(value: unknown): boolean }
@@ -47,7 +49,7 @@ export function sameSetMembers<
 }
 
 /**
- * Map equality: same constructor, same size, every key present, values `deepEqual`.
+ * Map equality: same constructor and the same entries under `deepEqual`, as for a native Map.
  * Built from `entries` so side-effecting `get` (e.g. LRUCache recency) is not invoked.
  */
 function sameMapEntries<C extends object & { readonly size: number }>(
@@ -57,14 +59,7 @@ function sameMapEntries<C extends object & { readonly size: number }>(
 ): boolean {
   if (a === b) return true
   if (typeof b !== 'object' || b?.constructor !== a.constructor) return false
-  const other = b as C
-  if (a.size !== other.size) return false
-  const otherMap = new Map(entries(other))
-  for (const [k, v] of entries(a)) {
-    if (!otherMap.has(k)) return false
-    if (!deepEqual(v, otherMap.get(k))) return false
-  }
-  return true
+  return deepMapEqual(new Map(entries(a)), new Map(entries(b as C)))
 }
 
 /** Sequence equality helper for ordered collections (Deque, SortedMap, SortedSet, BTree). */
@@ -198,7 +193,7 @@ export abstract class MapCollection<K, V> extends BaseCollection implements Iter
   }
 
   /**
-   * Same constructor, same size, every key present, values `deepEqual` (order-independent).
+   * Same constructor and the same entries under `deepEqual` (order-independent).
    * Ordered map subclasses whose iteration order is part of equality override this.
    * Constructor arguments such as comparators are not compared.
    */

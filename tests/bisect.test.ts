@@ -91,4 +91,73 @@ describe('bisect', () => {
     expect(i).toBeLessThan(0)
     expect(-i - 1).toBe(bisectLeft(arr, 4))
   })
+
+  /** A comparator that stops a search that would never end. */
+  function bounded(result: (x: number, y: number) => number): (x: number, y: number) => number {
+    let calls = 0
+    return (x, y) => {
+      calls++
+      if (calls > 64) throw new Error('the search did not end')
+      return result(x, y)
+    }
+  }
+  const ascending = (x: number, y: number): number => x - y
+
+  it('rejects bounds that are not integers, as Python does', () => {
+    const arr = [1, 2, 3, 4, 5]
+    const notIntegers = ['1', NaN, 1.5, null, {}, Infinity] as number[]
+    for (const lo of notIntegers) {
+      const message = new TypeError('lo must be an integer')
+      expect(() => bisect(arr, 3, lo, undefined, bounded(ascending))).toThrow(message)
+      expect(() => bisectLeft(arr, 3, lo, undefined, bounded(ascending))).toThrow(message)
+      expect(() => binarySearch(arr, 3, lo, undefined, bounded(ascending))).toThrow(message)
+      expect(() => insort(arr.slice(), 3, lo, undefined, bounded(ascending))).toThrow(message)
+      expect(() => insortLeft(arr.slice(), 3, lo, undefined, bounded(ascending))).toThrow(message)
+    }
+    const badHi = ['3', NaN, 2.5, {}] as number[]
+    for (const hi of badHi) {
+      const message = new TypeError('hi must be an integer')
+      expect(() => bisect(arr, 3, 0, hi)).toThrow(message)
+      expect(() => binarySearch(arr, 3, 0, hi)).toThrow(message)
+      expect(() => insort(arr.slice(), 3, 0, hi)).toThrow(message)
+    }
+  })
+
+  it('null and undefined hi mean the length, Infinity clamps to it', () => {
+    const arr = [1, 2, 3]
+    expect(bisect(arr, 2, 0, null)).toBe(2)
+    expect(bisectLeft(arr, 2, 0, undefined)).toBe(1)
+    expect(binarySearch(arr, 2, 0, null)).toBe(1)
+    expect(insort([1, 2, 3], 9, 0, null)).toEqual([1, 2, 3, 9])
+    expect(bisect(arr, 2, 0, Infinity)).toBe(2)
+    expect(bisect(arr, 2, 0, -Infinity)).toBe(0)
+  })
+
+  it('finds the midpoint of arrays past 2^31 elements', () => {
+    const huge = new Array<number>(2 ** 32 - 1)
+    const end = bisectLeft(
+      huge,
+      5,
+      0,
+      undefined,
+      bounded(() => -1)
+    )
+    expect(end).toBe(2 ** 32 - 1)
+    expect(
+      bisect(
+        huge,
+        5,
+        0,
+        undefined,
+        bounded(() => 1)
+      )
+    ).toBe(2 ** 32 - 1)
+  })
+
+  it('both insorts refuse huge sparse arrays', () => {
+    const sparse = (): number[] => new Array<number>(2 ** 24 + 2048)
+    const tooLarge = new RangeError('sparse array too large')
+    expect(() => insort(sparse(), 1)).toThrow(tooLarge)
+    expect(() => insortLeft(sparse(), 1)).toThrow(tooLarge)
+  })
 })

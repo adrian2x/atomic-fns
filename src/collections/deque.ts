@@ -1,10 +1,13 @@
-import { arrayFromIterable } from '../internal/iterable.js'
+import { assertNotHugeSparse } from '../internal/arrayKeys.js'
+import { isTypedArray, requireIterable } from '../internal/iterable.js'
 import { truncateForError } from '../internal/truncate.js'
 import { sameValueZero } from '../operators/index.js'
 import { SetCollection } from './abc.js'
 
+const MIN_CAPACITY = 8
+
 /**
- * Double-ended queue backed by a power-of-two ring buffer.
+ * Double-ended queue backed by a ring buffer.
  * Grows by doubling when unbounded; with `maxlen`, evicts from the opposite end (Python deque).
  *
  * @template T
@@ -19,17 +22,23 @@ export class Deque<T> extends SetCollection<T, number> {
   readonly #empty: T
 
   /**
-   * @param items Initial elements. When longer than `maxlen`, only the last `maxlen` remain.
-   * @param options.maxlen Maximum size; overflow evicts from the opposite end. `0` makes push/unshift no-ops.
+   * @param items Initial elements, read one at a time. When longer than `maxlen`, only the last
+   * `maxlen` remain.
+   * @param options.maxlen Maximum size; overflow evicts from the opposite end. `0` makes push/unshift
+   * no-ops. `null`, `undefined` and `Infinity` mean unbounded.
    * @param options.arrType Typed-array (or similar) constructor used for storage.
-   * @throws {RangeError} when `maxlen` is negative or not an integer.
+   * @throws {RangeError} when `maxlen` is negative, not an integer, or above
+   * `Number.MAX_SAFE_INTEGER`.
    */
   constructor(
     items?: Iterable<T> | null,
-    options?: { maxlen?: number; arrType?: new (n: number) => { [i: number]: T; length: number } }
+    options?: {
+      maxlen?: number | null
+      arrType?: new (n: number) => { [i: number]: T; length: number }
+    }
   ) {
     super()
-    const maxlen = options?.maxlen
+    const maxlen = options?.maxlen ?? undefined
     if (
       maxlen !== undefined &&
       maxlen !== Infinity &&
@@ -41,15 +50,17 @@ export class Deque<T> extends SetCollection<T, number> {
     }
     this.#maxlen = maxlen
     this.#arrType = options?.arrType
-    this.#empty = (this.#arrType ? 0 : undefined) as T
+    this.#empty = this.#alloc(1)[0]
 
-    const list = items == null ? [] : arrayFromIterable<T>(items)
-    const bound =
-      maxlen === undefined || maxlen === Infinity ? list.length : Math.min(list.length, maxlen)
-    this.#cap = Math.max(8, capacityFor(bound, maxlen))
+    const source = requireIterable<T>(items ?? [])
+    const isArray = isTypedArray(source)
+    if (isArray) assertNotHugeSparse(source)
+    const known = isArray ? source.length : 0
+    const bound = maxlen === undefined || maxlen === Infinity ? known : Math.min(known, maxlen)
+    this.#cap = Math.max(MIN_CAPACITY, capacityFor(bound, maxlen))
     this.#buf = this.#alloc(this.#cap)
 
-    for (const x of list) {
+    for (const x of source) {
       this.#pushOne(x)
     }
   }
@@ -59,7 +70,8 @@ export class Deque<T> extends SetCollection<T, number> {
   }
 
   protected override cloneFrom(values: Iterable<T>): this {
-    return new Deque(values, { maxlen: this.#maxlen, arrType: this.#arrType }) as this
+    const options = { maxlen: this.#maxlen, arrType: this.#arrType }
+    return Reflect.construct(this.constructor, [values, options]) as this
   }
 
   /**
@@ -72,6 +84,7 @@ export class Deque<T> extends SetCollection<T, number> {
   readonly [Symbol.toStringTag] = 'Deque'
 
   clear(): void {
+    this.#cap = MIN_CAPACITY
     this.#buf = this.#alloc(this.#cap)
     this.#head = 0
     this.#size = 0
@@ -121,25 +134,23 @@ export class Deque<T> extends SetCollection<T, number> {
 
   /**
    * Element at index `i` (negative from the end). Out of range or empty -> `undefined`.
-   * `NaN` is treated as `0`.
+   * The index coerces as in `Array.prototype.at`, so `NaN` and non-numbers mean `0`.
    */
   at(i: number): T | undefined {
-    let idx = Number.isNaN(i) ? 0 : Math.trunc(i)
-    if (idx < 0) idx += this.#size
+    const idx = this.#fromEnd(i)
     if (idx < 0 || idx >= this.#size) return undefined
     return this.#buf[this.#phys(idx)]
   }
 
   /**
-   * Replace the element at index `i` (negative from the end).
+   * Replace the element at index `i` (negative from the end). The index coerces as in {@link at}.
    * @returns `this`
    * @throws {RangeError} when the index is out of range.
    */
   set(i: number, v: T): this {
-    let idx = Number.isNaN(i) ? 0 : Math.trunc(i)
-    if (idx < 0) idx += this.#size
+    const idx = this.#fromEnd(i)
     if (idx < 0 || idx >= this.#size) {
-      throw new RangeError(`index ${truncateForError(idx)} out of range`)
+      throw new RangeError(`index ${truncateForError(i)} out of range`)
     }
     this.#buf[this.#phys(idx)] = v
     return this
@@ -205,6 +216,12 @@ export class Deque<T> extends SetCollection<T, number> {
 
   *#entries(): Generator<[number, T]> {
     for (let i = 0; i < this.#size; i++) yield [i, this.#buf[this.#phys(i)]]
+  }
+
+  /** Index `i` as `Array.prototype.at` reads it: truncated, `NaN` as `0`, negative from the end. */
+  #fromEnd(i: number): number {
+    const idx = Math.trunc(i) || 0
+    return idx < 0 ? idx + this.#size : idx
   }
 
   #phys(i: number): number {

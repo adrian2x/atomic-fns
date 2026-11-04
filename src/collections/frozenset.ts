@@ -1,12 +1,13 @@
 import { forEachArrayElement, isTypedArray } from '../internal/iterable.js'
 import { withHookNesting } from '../internal/nesting.js'
+import { deepMultisetEqual } from '../operators/equality.js'
 import { protocol } from '../operators/index.js'
-import { sameSetMembers } from './abc.js'
 import { clone } from './object.js'
 
 /**
  * An immutable Set. Contents cannot change after construction.
- * `Set.prototype.add.call(fs, x)` still mutates (inherent Set subclass limit).
+ * `Set.prototype.add.call(fs, x)`, and likewise `delete` and `clear`, still mutate (inherent Set
+ * subclass limit). Inherited methods such as `union` return a plain, mutable `Set`.
  *
  * @class FrozenSet
  * @extends {Set<T>}
@@ -16,7 +17,7 @@ export class FrozenSet<T = unknown> extends Set<T> {
   constructor(iterable?: Iterable<T> | null) {
     super()
     if (iterable == null) return
-    if (isTypedArray<T>(iterable)) {
+    if (isTypedArray<T>(iterable) && iterable[Symbol.iterator] === Array.prototype.values) {
       forEachArrayElement(iterable, (x) => {
         super.add(x)
         return undefined
@@ -52,16 +53,22 @@ export class FrozenSet<T = unknown> extends Set<T> {
     throw new TypeError('FrozenSet is immutable')
   }
 
-  /** Set membership: same members regardless of insertion order. */
+  /** Same members under `deepEqual`, regardless of insertion order. */
   [protocol.equals](other: unknown): boolean {
-    return withHookNesting(() => sameSetMembers(this, other, (c) => c.values()))
+    return withHookNesting(() => {
+      if (this === other) return true
+      if (typeof other !== 'object' || other?.constructor !== this.constructor) return false
+      const peer = other as FrozenSet<T>
+      if (this.size !== peer.size) return false
+      return this.isSubsetOf(peer) || deepMultisetEqual([...this], [...peer])
+    })
   }
 
   /** A distinct `FrozenSet` with the same members (deep-clones values when `deep`). */
   [protocol.clone](deep = false): this {
     return withHookNesting(() => {
-      if (!deep) return new FrozenSet(this) as this
-      return new FrozenSet([...this].map((v) => clone(v, true))) as this
+      const values = deep ? [...this].map((v) => clone(v, true)) : this
+      return Reflect.construct(this.constructor, [values]) as this
     })
   }
 

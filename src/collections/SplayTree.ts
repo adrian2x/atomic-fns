@@ -1,7 +1,7 @@
 import { withHookNesting } from '../internal/nesting.js'
 import type { Comparer } from '../operators/index.js'
 import { compare, protocol } from '../operators/index.js'
-import { MapCollection, sameSequenceItems } from './abc.js'
+import { MapCollection, sameEntrySequence } from './abc.js'
 
 class Node<K, V> {
   key: K
@@ -20,9 +20,9 @@ class Node<K, V> {
  * accessed elements are quick to access again. Insertion, look-up and removal in O(log n)
  * amortized time.
  *
- * Iterators capture a structural version; splaying bumps it. A stale iterator re-seeks from its
- * last yielded key with one BST descent to its successor (O(log n) for a balanced tree), so an
- * abandoned iterator can never disable splaying.
+ * Iterators capture a structural version; splaying bumps it. A stale iterator re-seeks by splaying
+ * its last yielded key's successor (O(log n) amortized), so an abandoned iterator can never disable
+ * splaying.
  *
  * @see {@link https://en.wikipedia.org/wiki/Splay_tree Splay tree}
  * @see {@link https://web.archive.org/web/20220930173835/http://www14.in.tum.de/personen/albers/papers/ipl02.pdf Randomized Splay Trees}
@@ -37,7 +37,8 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
 
   /**
    * @param compareFn Key comparator. Defaults to {@link compare}.
-   * @param p Probability of splaying on a read. Must be in `[0, 1]`.
+   * @param p Probability of splaying on a read. Must be in `[0, 1]`. With `0`, reads never reshape
+   * the tree, so they lose the amortized bound: on a tree built from sorted keys each read is O(n).
    * @throws {RangeError} when `p` is outside `[0, 1]`.
    */
   constructor(compareFn?: Comparer<K>, p = 0.5) {
@@ -54,14 +55,14 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
   }
 
   protected override cloneFrom(entries: Iterable<[K, V]>): this {
-    const copy = new SplayTree<K, V>(this.#cmp, this.#p)
+    const copy = Reflect.construct(this.constructor, [this.#cmp, this.#p]) as this
     for (const [k, v] of entries) copy.set(k, v)
-    return copy as this
+    return copy
   }
 
   /** Sequence equality: key order is part of meaning (like SortedMap). */
   override [protocol.equals](other: unknown): boolean {
-    return withHookNesting(() => sameSequenceItems(this, other, (c) => c.entries()))
+    return withHookNesting(() => sameEntrySequence(this, other, (c) => c.entries()))
   }
 
   readonly [Symbol.toStringTag] = 'SplayTree'
@@ -178,7 +179,7 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
   }
 
   /**
-   * Greatest key strictly less than `key`, or `undefined`.
+   * Greatest key strictly less than `key`, or `undefined`. Splays the found node.
    */
   lower(key: K): K | undefined {
     if (!this.#root) return undefined
@@ -187,11 +188,12 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     let n = this.#root.left
     if (!n) return undefined
     while (n.right) n = n.right
+    this.splay(n.key)
     return n.key
   }
 
   /**
-   * Least key strictly greater than `key`, or `undefined`.
+   * Least key strictly greater than `key`, or `undefined`. Splays the found node.
    */
   higher(key: K): K | undefined {
     if (!this.#root) return undefined
@@ -200,12 +202,13 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     let n = this.#root.right
     if (!n) return undefined
     while (n.left) n = n.left
+    this.splay(n.key)
     return n.key
   }
 
   /**
    * Top-down splay of `key` (Sleator and Tarjan). Bumps the structural version so open
-   * iterators re-seek from their last key.
+   * iterators re-seek from their last key. A comparator that throws leaves every entry in place.
    * @see {@link https://doi.org/10.1145%2F3828.3835 Self-Adjusting Binary Search Trees}
    */
   splay(key: K): void {
@@ -217,43 +220,45 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
 
     let root = this.#root
 
-    for (;;) {
-      const rank = this.#cmp(key, root.key)
-      if (rank < 0) {
-        if (!root.left) break
-        if (this.#cmp(key, root.left.key) < 0) {
-          const tmp = root.left
-          root.left = tmp.right
-          tmp.right = root
-          root = tmp
+    try {
+      for (;;) {
+        const rank = this.#cmp(key, root.key)
+        if (rank < 0) {
           if (!root.left) break
-        }
-        right.left = root
-        right = root
-        root = root.left
-      } else if (rank > 0) {
-        if (!root.right) break
-        if (this.#cmp(key, root.right.key) > 0) {
-          const tmp = root.right
-          root.right = tmp.left
-          tmp.left = root
-          root = tmp
+          if (this.#cmp(key, root.left.key) < 0) {
+            const tmp = root.left
+            root.left = tmp.right
+            tmp.right = root
+            root = tmp
+            if (!root.left) break
+          }
+          right.left = root
+          right = root
+          root = root.left
+        } else if (rank > 0) {
           if (!root.right) break
+          if (this.#cmp(key, root.right.key) > 0) {
+            const tmp = root.right
+            root.right = tmp.left
+            tmp.left = root
+            root = tmp
+            if (!root.right) break
+          }
+          left.right = root
+          left = root
+          root = root.right
+        } else {
+          break
         }
-        left.right = root
-        left = root
-        root = root.right
-      } else {
-        break
       }
+    } finally {
+      left.right = root.left
+      right.left = root.right
+      root.left = stub.right
+      root.right = stub.left
+      this.#root = root
+      this.#version++
     }
-
-    left.right = root.left
-    right.left = root.right
-    root.left = stub.right
-    root.right = stub.left
-    this.#root = root
-    this.#version++
   }
 
   keys(): IteratorObject<K> {
@@ -275,25 +280,17 @@ export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
     const stack: Node<K, V>[] = []
     let n: Node<K, V> | undefined = this.#root
 
-    // Splaying or mutating restructures the tree, so the stack is stale. Rebuild it with one
-    // BST descent to the successor of the last yielded key: O(height), not O(n).
+    // Splaying or mutating restructures the tree, so the stack is stale. Splay the successor of
+    // the last yielded key to the root: a plain descent would pay O(height) at every step.
     const reseek = (): void => {
       stack.length = 0
+      n = haveLast ? undefined : this.#root
+      if (haveLast) {
+        this.higher(lastKey as K)
+        const root = this.#root
+        if (root && this.#cmp(root.key, lastKey as K) > 0) stack.push(root)
+      }
       version = this.#version
-      if (!haveLast) {
-        n = this.#root
-        return
-      }
-      n = undefined
-      let node = this.#root
-      while (node) {
-        if (this.#cmp(node.key, lastKey as K) > 0) {
-          stack.push(node)
-          node = node.left
-        } else {
-          node = node.right
-        }
-      }
     }
 
     for (;;) {
