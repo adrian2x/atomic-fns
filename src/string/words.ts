@@ -4,6 +4,8 @@
  * @module
  */
 
+import { notNull } from '../globals/index.js'
+
 /** Lazy: Intl.Segmenter at module load fails where Intl is incomplete. */
 let wordSegmenter: Intl.Segmenter | undefined
 
@@ -17,8 +19,10 @@ const IS_LOWER = /^\p{Ll}$/u
 const IS_OTHER_LETTER = /^[\p{Lo}\p{Lm}]$/u
 const IS_NUMBER = /^\p{N}$/u
 const IS_MARK_OR_FORMAT = /^[\p{M}\p{Cf}]$/u
+const HAS_LETTER_OR_NUMBER = /[\p{L}\p{N}]/u
+const ZWJ_EMOJI = /\u200D\p{ExtPict}/u
 // RegExp constructor: the `v` flag needs a runtime engine; TS target is ES2023.
-const IS_RGI_EMOJI = new RegExp('^\\p{RGI_Emoji}+$', 'v')
+const RGI_EMOJI_AT = new RegExp('\\p{RGI_Emoji}', 'vy')
 
 const ORDINAL_LOWER = new Set(['st', 'nd', 'rd', 'th'])
 const ORDINAL_UPPER = new Set(['ST', 'ND', 'RD', 'TH'])
@@ -31,7 +35,12 @@ interface CpRef {
   readonly end: number
 }
 
-function isAsciiString(s: string): boolean {
+/** Lodash `toString`: `null` and `undefined` become `''`, anything else goes through `String`. */
+export function toText(value: unknown): string {
+  return notNull(value) ? String(value) : ''
+}
+
+export function isAsciiString(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
     if (s.charCodeAt(i) > 0x7f) return false
   }
@@ -103,6 +112,12 @@ function isOrdinalSuffix(s: string, start: number, cache: Map<number, CharClass>
   return afterCls === 'U' && lower
 }
 
+/** A camel boundary right after a mid-word apostrophe strands it; it belongs to neither word. */
+function endBeforeApostrophe(s: string, end: number): number {
+  const last = s[end - 1]
+  return last === "'" || last === '\u2019' ? end - 1 : end
+}
+
 /** ASCII-only splitter: charCodeAt + slice, no codePointAt / Map. */
 function splitRunAscii(s: string): string[] {
   const out: string[] = []
@@ -172,7 +187,7 @@ function splitRunAscii(s: string): string[] {
       }
     }
 
-    if (boundary) flush(i)
+    if (boundary) flush(endBeforeApostrophe(s, i))
     if (wordStart < 0) wordStart = i
     prev = cls
   }
@@ -243,7 +258,7 @@ function splitRun(s: string, cache: Map<number, CharClass>): string[] {
       }
     }
 
-    if (boundary) flush(i)
+    if (boundary) flush(endBeforeApostrophe(s, i))
     if (wordStart < 0) wordStart = i
     prev = cls
     i = cur.end
@@ -252,73 +267,80 @@ function splitRun(s: string, cache: Map<number, CharClass>): string[] {
   return out
 }
 
+/** Steps one emoji at a time: `\p{RGI_Emoji}+` overflows the regexp stack on a long segment. */
+function isRgiEmojiRun(s: string): boolean {
+  RGI_EMOJI_AT.lastIndex = 0
+  while (RGI_EMOJI_AT.lastIndex < s.length) {
+    if (!RGI_EMOJI_AT.test(s)) return false
+  }
+  return true
+}
+
 function fromSegments(s: string): string[] {
   const out: string[] = []
   const cache = new Map<number, CharClass>()
-  for (const { segment, isWordLike } of getWordSegmenter().segment(s)) {
-    if (isWordLike) {
-      const parts = isAsciiString(segment) ? splitRunAscii(segment) : splitRun(segment, cache)
-      for (const part of parts) out.push(part)
-    } else if (
-      segment.length > 0 &&
-      (segment.length > 1 || segment.charCodeAt(0) > 0x7f) &&
-      IS_RGI_EMOJI.test(segment)
-    ) {
-      out.push(segment)
+
+  const pushWords = (run: string): void => {
+    const parts = isAsciiString(run) ? splitRunAscii(run) : splitRun(run, cache)
+    for (const part of parts) out.push(part)
+  }
+
+  const pushEmoji = (run: string): void => {
+    if (isRgiEmojiRun(run)) out.push(run)
+  }
+
+  const pushNonWord = (segment: string): void => {
+    if (!HAS_LETTER_OR_NUMBER.test(segment)) {
+      pushEmoji(segment)
+      return
     }
+    // ICU glues `word ZWJ emoji` into one segment and calls it non-word-like.
+    const glue = segment.search(ZWJ_EMOJI)
+    pushWords(glue < 0 ? segment : segment.slice(0, glue))
+    if (glue >= 0) pushEmoji(segment.slice(glue + 1))
+  }
+
+  for (const { segment, isWordLike } of getWordSegmenter().segment(s)) {
+    if (isWordLike) pushWords(segment)
+    else if (segment.length > 1 || segment.charCodeAt(0) > 0x7f) pushNonWord(segment)
   }
   return out
 }
 
-/**
- * Word extraction forced through Intl.Segmenter (no ASCII fast path).
- * Exported for path-equivalence tests only; not part of the public string API.
- */
-export function segmenterWords(s: string): string[] {
-  if (typeof s !== 'string') {
-    throw new TypeError('words expects a string')
-  }
-  return fromSegments(s)
-}
+/** Word extraction forced through Intl.Segmenter, for path-equivalence tests. */
+export { fromSegments as segmenterWords }
 
 /**
- * Split a string into words.
+ * Split a value into words; non-strings convert through {@link toText}.
  * Without `pattern`, uses Unicode word segmentation plus identifier-case rules.
  * With `pattern`, treats it as a separator (`String.prototype.split`); empty pieces are dropped.
  */
-export function words(s: string, pattern?: RegExp | string): string[] {
-  if (typeof s !== 'string') {
-    throw new TypeError('words expects a string')
+export function words(s: unknown, pattern?: RegExp | string | null): string[] {
+  const text = toText(s)
+  if (pattern != null) {
+    return text.split(pattern).filter((w) => w !== '')
   }
-  if (pattern !== undefined) {
-    return s.split(pattern).filter((w) => w !== '')
-  }
-  if (isAsciiString(s)) {
-    return splitRunAscii(s)
-  }
-  return fromSegments(s)
+  return isAsciiString(text) ? splitRunAscii(text) : fromSegments(text)
 }
 
-function toParts(s: string): string[] {
+function toParts(s: unknown): string[] {
   return words(s)
     .map((w) => w.replace(/['\u2019]/g, ''))
     .filter((w) => w !== '')
 }
 
 function upperFirstLowerRest(part: string): string {
-  // Callers only pass non-empty parts from toParts.
-  const first = readCp(part, 0)
-  if (first === undefined) return ''
-  return first.ch.toUpperCase() + part.slice(first.end).toLowerCase()
+  const [first = ''] = part
+  return first.toUpperCase() + part.toLowerCase().slice(first.toLowerCase().length)
 }
 
 /** Join the words of `s` with `sep`. */
-export function join(s: string, sep = ' '): string {
+export function join(s: unknown, sep = ' '): string {
   return words(s).join(sep)
 }
 
 /** Convert `s` to camelCase (apostrophes stripped; first code point uppercased with `toUpperCase`). */
-export function camelCase(s: string): string {
+export function camelCase(s: unknown): string {
   const parts = toParts(s)
   if (parts.length === 0) return ''
   let out = parts[0].toLowerCase()
@@ -329,19 +351,19 @@ export function camelCase(s: string): string {
 }
 
 /** Convert `s` to PascalCase (apostrophes stripped; `toUpperCase` on each part's first code point). */
-export function pascalCase(s: string): string {
+export function pascalCase(s: unknown): string {
   return toParts(s).map(upperFirstLowerRest).join('')
 }
 
 /** Convert `s` to snake_case (apostrophes stripped). */
-export function snakeCase(s: string): string {
+export function snakeCase(s: unknown): string {
   return toParts(s)
     .map((w) => w.toLowerCase())
     .join('_')
 }
 
 /** Convert `s` to kebab-case (apostrophes stripped). */
-export function kebabCase(s: string): string {
+export function kebabCase(s: unknown): string {
   return toParts(s)
     .map((w) => w.toLowerCase())
     .join('-')

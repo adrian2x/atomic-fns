@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as string from '../src/string/index.js'
 import { segmenterWords } from '../src/string/words.js'
 
@@ -198,7 +198,6 @@ describe('string', () => {
     expect(string.words('می\u200Cخواهم')).toHaveLength(1)
     expect(string.pascalCase('ǆemal')).toBe('Ǆemal')
     expect(string.words('東久留米市').join('')).toBe('東久留米市')
-    expect(() => string.words(1 as never)).toThrow(new TypeError('words expects a string'))
   })
 
   it('SPEC-R63 ASCII fast path matches segmenter path', () => {
@@ -233,7 +232,7 @@ describe('string', () => {
     expect(string.words('1STX')).toEqual(['1', 'STX'])
     expect(string.words('1stX')).toEqual(['1st', 'X'])
     expect(string.words('2ab')).toEqual(['2', 'ab'])
-    expect(string.words("O'Shea")).toEqual(["O'", 'Shea'])
+    expect(string.words("O'Shea")).toEqual(['O', 'Shea'])
     expect(string.words('don\u2019t')).toEqual(['don\u2019t'])
     expect(string.words('a\u2019b')).toEqual(['a\u2019b'])
     expect(string.words('foo\u00B7bar')).toEqual(['foo', 'bar'])
@@ -256,6 +255,169 @@ describe('string', () => {
     expect(string.words('می\u200Cخواهم')).toHaveLength(1)
     expect(string.camelCase('don\u2019t stop')).toBe('dontStop')
     expect(string.pascalCase('føo bar')).toBe('FøoBar')
-    expect(() => segmenterWords(1 as never)).toThrow(new TypeError('words expects a string'))
+  })
+})
+
+describe('string input policy', () => {
+  it('nullish values become empty and other values go through String', () => {
+    expect(string.sentenceCase(null)).toBe('')
+    expect(string.sentenceCase(0)).toBe('0')
+    expect(string.capitalize(undefined)).toBe('')
+    expect(string.capitalize(123)).toBe('123')
+    expect(string.titleCase(null)).toBe('')
+    expect(string.titleCase(0)).toBe('0')
+    expect(string.titleCase(123)).toBe('123')
+    expect(string.slugify(0)).toBe('0')
+    expect(string.slugify(123)).toBe('123')
+    expect(string.removeAccents(null)).toBe('')
+    expect(string.removeAccents(123)).toBe('123')
+    expect(string.asciify(undefined)).toBe('')
+    expect(string.asciify(123)).toBe('123')
+    expect(string.words(null)).toEqual([])
+    expect(string.words(123)).toEqual(['123'])
+    expect(string.join(null)).toBe('')
+    expect(string.camelCase(undefined)).toBe('')
+    expect(string.kebabCase(true)).toBe('true')
+  })
+
+  it('words treats a null pattern as no pattern', () => {
+    expect(string.words('a null b', null)).toEqual(['a', 'null', 'b'])
+  })
+
+  it('predicates are false for non-strings', () => {
+    for (const value of [null, undefined, true, 123, ['ab'], [1], {}]) {
+      expect(string.isAlpha(value)).toBe(false)
+      expect(string.isAlnum(value)).toBe(false)
+      expect(string.isNumeric(value)).toBe(false)
+    }
+    expect(string.isAlpha('')).toBe(false)
+    expect(string.isAlnum('')).toBe(false)
+    expect(string.isNumeric('')).toBe(false)
+  })
+})
+
+describe('string helpers on long runs', () => {
+  it('removeAccents cuts a mark run to 30, so normalize stays linear', () => {
+    const marks = (n: number): string => '́'.repeat(n)
+    expect(string.removeAccents(`ก${marks(100)}`)).toBe(`ก${marks(30)}`)
+    expect(string.removeAccents(`ก${marks(30)}x`)).toBe(`ก${marks(30)}x`)
+    expect(string.removeAccents(`a${'̖́'.repeat(50)}b`)).toBe('ab')
+    expect(string.slugify(`ก${marks(100)}`)).toBe(`ก${marks(30)}`)
+  })
+
+  it('predicates and slugify take two-byte runs past the regexp backtrack stack', () => {
+    const han = '中'.repeat(5e6)
+    expect(string.isAlpha(han)).toBe(true)
+    expect(string.isAlnum(han)).toBe(true)
+    expect(string.isNumeric('٣'.repeat(5e6))).toBe(true)
+    expect(string.slugify('\u2014'.repeat(5e6))).toBe('')
+    expect(string.slugify(`a${'\u2014'.repeat(5e6)}b`)).toBe('a-b')
+  })
+
+  it('words takes a modifier run past the regexp backtrack stack', { timeout: 60_000 }, () => {
+    const modifiers = '\u{1F3FB}'.repeat(9e6)
+    const result = string.words(modifiers)
+    expect(result.length).toBe(1)
+    expect(result[0] === modifiers).toBe(true)
+  })
+
+  it('asciify and removeAccents hold no per-character rope', () => {
+    const n = 5e6
+    const ascii = 'a'.repeat(n)
+    const mostlyAscii = `é${ascii}`
+    ascii.charCodeAt(0)
+    mostlyAscii.charCodeAt(0)
+    const retained = (run: () => string): number => {
+      globalThis.gc?.()
+      const before = process.memoryUsage().heapUsed
+      const out = run()
+      globalThis.gc?.()
+      const grown = process.memoryUsage().heapUsed - before
+      expect(out.length).toBeGreaterThanOrEqual(n)
+      return grown
+    }
+    expect(retained(() => string.asciify(ascii))).toBeLessThan(n * 8)
+    expect(retained(() => string.removeAccents(ascii))).toBeLessThan(n * 8)
+    expect(retained(() => string.removeAccents(mostlyAscii))).toBeLessThan(n * 8)
+  })
+
+  it('removeAccents returns ASCII without normalizing', () => {
+    const normalize = vi.spyOn(String.prototype, 'normalize')
+    try {
+      expect(string.removeAccents('plain ASCII text')).toBe('plain ASCII text')
+      expect(normalize).not.toHaveBeenCalled()
+    } finally {
+      normalize.mockRestore()
+    }
+  })
+})
+
+describe('string Unicode edges', () => {
+  it('slugify keeps non-Latin marks inside words', () => {
+    expect(string.slugify('हिन्दी')).toBe('हिन्दी')
+    expect(string.slugify('สวัสดี ครับ')).toBe('สวัสดี-ครับ')
+    expect(string.slugify('தமிழ்')).toBe('தமிழ்')
+  })
+
+  it('slugify drops a mark that has no letter to sit on', () => {
+    expect(string.slugify('\u0301a')).toBe('a')
+    expect(string.slugify('foo: \u0301bar')).toBe('foo-bar')
+    expect(string.slugify('a: \u0301: b')).toBe('a-b')
+  })
+
+  it('capitalize applies Unicode titlecase and lowercases the rest in context', () => {
+    expect(string.capitalize('ǳ')).toBe('ǲ')
+    expect(string.capitalize('Ǳ')).toBe('ǲ')
+    expect(string.capitalize('ǲ')).toBe('ǲ')
+    expect(string.capitalize('ǅemal')).toBe('ǅemal')
+    expect(string.capitalize('ǈ')).toBe('ǈ')
+    expect(string.capitalize('ǋ')).toBe('ǋ')
+    expect(string.capitalize('საქართველო')).toBe('საქართველო')
+    expect(string.capitalize('ᾳb')).toBe('ᾼb')
+    expect(string.capitalize('ᾀ')).toBe('ᾈ')
+    expect(string.capitalize('ᾲ')).toBe('Ὰͅ')
+    expect(string.capitalize('ŉb')).toBe('ʼNb')
+    expect(string.capitalize('ᾈ')).toBe('ᾈ')
+    expect(string.capitalize('ΑΣ')).toBe('Ας')
+    expect(string.capitalize('ßa')).toBe('Ssa')
+    expect(string.capitalize('\u0130stanbul')).toBe('\u0130stanbul')
+  })
+
+  it('case converters lowercase a part before splitting off its first code point', () => {
+    expect(string.pascalCase('ΑΣ')).toBe('Ας')
+    expect(string.camelCase('foo ΑΣ')).toBe('fooΑς')
+    expect(string.pascalCase('\u0130zmir')).toBe('\u0130zmir')
+  })
+
+  it('titleCase uses the titlecase mapping on the first letter only', () => {
+    expect(string.titleCase('ǆemal ßa')).toBe('ǅemal Ssa')
+    expect(string.titleCase('Ǆemal')).toBe('ǅemal')
+    expect(string.titleCase('საქართველო')).toBe('საქართველო')
+    expect(string.titleCase('nASA')).toBe('NASA')
+  })
+
+  it('words drops an apostrophe stranded by a camel boundary', () => {
+    expect(string.words("O'Neil")).toEqual(['O', 'Neil'])
+    expect(string.words("D'Artagnan")).toEqual(['D', 'Artagnan'])
+    expect(string.words("don'T")).toEqual(['don', 'T'])
+    expect(string.words('O’Neil')).toEqual(['O', 'Neil'])
+    expect(string.words("O'Neilé")).toEqual(['O', 'Neilé'])
+    expect(string.words("don't")).toEqual(["don't"])
+    expect(string.join("O'Neil")).toBe('O Neil')
+  })
+
+  it('words keeps letters and numbers the segmenter calls non-word-like', () => {
+    expect(string.words('CO₂')).toEqual(['CO', '₂'])
+    expect(string.words('H₂O')).toEqual(['H', '₂', 'O'])
+    expect(string.words('①②')).toEqual(['①', '②'])
+    expect(string.words('½ cup')).toEqual(['½', 'cup'])
+    expect(string.words('a 々')).toEqual(['a', '々'])
+  })
+
+  it('words splits a word from an emoji glued on by ZWJ', () => {
+    expect(string.words('hello‍😀 world')).toEqual(['hello', '😀', 'world'])
+    expect(string.words('42‍😀')).toEqual(['42', '😀'])
+    expect(string.words('foo‍🎉bar baz')).toEqual(['foo', '🎉', 'bar', 'baz'])
+    expect(string.titleCase('hello‍😀 world')).toBe('Hello‍😀 World')
   })
 })

@@ -1,23 +1,25 @@
 /**
  * This module includes utilities for working with strings.
  *
+ * Input follows Lodash: `null` and `undefined` become `''`, and other values go through `String`.
+ * The predicates {@link isAlnum}, {@link isAlpha} and {@link isNumeric} are `false` for non-strings.
+ *
  * @module string
  */
 
 import {
   camelCase as camelCaseWords,
+  isAsciiString,
   join as joinWords,
   kebabCase as kebabCaseWords,
   pascalCase as pascalCaseWords,
   snakeCase as snakeCaseWords,
+  toText,
   words as splitWords
 } from './words.js'
 
 function firstCodePoint(s: string): { first: string; rest: string } {
-  if (!s) return { first: '', rest: '' }
-  const cp = s.codePointAt(0)
-  if (cp === undefined) return { first: '', rest: '' }
-  const first = String.fromCodePoint(cp)
+  const [first = ''] = s
   return { first, rest: s.slice(first.length) }
 }
 
@@ -35,27 +37,65 @@ sentenceCase('TEST')
 ```
  * @see {@link capitalize}
  */
-export function sentenceCase(s: string): string {
-  const { first, rest } = firstCodePoint(s)
+export function sentenceCase(s: unknown): string {
+  const { first, rest } = firstCodePoint(toText(s))
   return `${first.toLocaleUpperCase()}${rest}`
 }
 
-/** Unicode titlecase forms that differ from uppercase (Latin digraphs). */
-const TITLECASE_FIRST: Record<string, string> = {
-  ǆ: 'ǅ',
-  Ǆ: 'ǅ',
-  ǉ: 'ǈ',
-  Ǉ: 'ǈ',
-  ǌ: 'ǋ',
-  Ǌ: 'ǋ'
-}
+/** Unicode titlecase forms, keyed by lowercase, that no uppercase rule can derive. */
+const TITLECASE_FIRST: Readonly<Record<string, string>> = Object.freeze({
+  '\u0149': '\u02BCN',
+  '\u01C6': '\u01C5',
+  '\u01C9': '\u01C8',
+  '\u01CC': '\u01CB',
+  '\u01F3': '\u01F2',
+  '\u1F80': '\u1F88',
+  '\u1F81': '\u1F89',
+  '\u1F82': '\u1F8A',
+  '\u1F83': '\u1F8B',
+  '\u1F84': '\u1F8C',
+  '\u1F85': '\u1F8D',
+  '\u1F86': '\u1F8E',
+  '\u1F87': '\u1F8F',
+  '\u1F90': '\u1F98',
+  '\u1F91': '\u1F99',
+  '\u1F92': '\u1F9A',
+  '\u1F93': '\u1F9B',
+  '\u1F94': '\u1F9C',
+  '\u1F95': '\u1F9D',
+  '\u1F96': '\u1F9E',
+  '\u1F97': '\u1F9F',
+  '\u1FA0': '\u1FA8',
+  '\u1FA1': '\u1FA9',
+  '\u1FA2': '\u1FAA',
+  '\u1FA3': '\u1FAB',
+  '\u1FA4': '\u1FAC',
+  '\u1FA5': '\u1FAD',
+  '\u1FA6': '\u1FAE',
+  '\u1FA7': '\u1FAF',
+  '\u1FB2': '\u1FBA\u0345',
+  '\u1FB3': '\u1FBC',
+  '\u1FB4': '\u0386\u0345',
+  '\u1FB7': '\u0391\u0342\u0345',
+  '\u1FC2': '\u1FCA\u0345',
+  '\u1FC3': '\u1FCC',
+  '\u1FC4': '\u0389\u0345',
+  '\u1FC7': '\u0397\u0342\u0345',
+  '\u1FF2': '\u1FFA\u0345',
+  '\u1FF3': '\u1FFC',
+  '\u1FF4': '\u038F\u0345',
+  '\u1FF7': '\u03A9\u0342\u0345'
+})
+
+/** Georgian Mkhedruli has an uppercase (Mtavruli), but a letter's titlecase is itself. */
+const IS_MKHEDRULI = /^[\u10D0-\u10FF]$/
 
 function titleCaseFirstChar(ch: string): string {
-  if (Object.hasOwn(TITLECASE_FIRST, ch)) return TITLECASE_FIRST[ch]
+  if (IS_MKHEDRULI.test(ch)) return ch
   const upper = ch.toLocaleUpperCase()
   // Multi-char uppercase (e.g. ß -> SS): titlecase is first upper + rest lower.
-  if (upper.length > 1) return upper[0] + upper.slice(1).toLocaleLowerCase()
-  return upper
+  const derived = upper.length > 1 ? upper[0] + upper.slice(1).toLocaleLowerCase() : upper
+  return TITLECASE_FIRST[ch.toLocaleLowerCase()] ?? derived
 }
 
 /**
@@ -70,9 +110,12 @@ capitalize('TEST')
 ```
  * @see {@link titleCase}
  */
-export function capitalize(s: string): string {
-  const { first, rest } = firstCodePoint(s)
-  return `${titleCaseFirstChar(first)}${rest.toLocaleLowerCase()}`
+export function capitalize(s: unknown): string {
+  const text = toText(s)
+  const { first } = firstCodePoint(text)
+  // Lowercasing the whole string lets a final sigma see the letter before it.
+  const rest = text.toLocaleLowerCase().slice(first.toLocaleLowerCase().length)
+  return `${titleCaseFirstChar(first)}${rest}`
 }
 
 /**
@@ -81,7 +124,7 @@ export function capitalize(s: string): string {
  * ordinal (`11th`), plural-acronym (`IDs`), and RGI emoji rules. Format characters
  * (ZWNJ, soft hyphen) stay inside words. With `pattern`, treats it as a separator
  * (`String.prototype.split`); empty pieces are dropped. A user `RegExp` is the caller's
- * responsibility (capture groups appear in the output per `split`).
+ * responsibility (capture groups appear in the output per `split`). A `null` pattern is no pattern.
  * @param s The string to split
  * @param pattern Optional separator (`string` or `RegExp`)
  * @returns The words array.
@@ -97,7 +140,7 @@ words('equipment0class0name', '0')
 // ['equipment', 'class', 'name']
 ```
  */
-export function words(s: string, pattern?: RegExp | string): string[] {
+export function words(s: unknown, pattern?: RegExp | string | null): string[] {
   return splitWords(s, pattern)
 }
 
@@ -112,8 +155,13 @@ join('Lord Of The Rings', '-')
 // 'Lord-Of-The-Rings'
 ```
  */
-export function join(s: string, sep = ' '): string {
+export function join(s: unknown, sep = ' '): string {
   return joinWords(s, sep)
+}
+
+/** Searches for a disallowed character: `^[...]+$` overflows the regexp stack on long input. */
+function hasOnly(s: unknown, disallowed: RegExp): boolean {
+  return typeof s === 'string' && s !== '' && !disallowed.test(s)
 }
 
 /**
@@ -129,8 +177,8 @@ isAlnum('oops!')
 // false
 ```
  */
-export function isAlnum(s: string): boolean {
-  return /^[\p{L}\p{N}]+$/gu.test(s)
+export function isAlnum(s: unknown): boolean {
+  return hasOnly(s, /[^\p{L}\p{N}]/u)
 }
 
 /**
@@ -146,14 +194,14 @@ isAlpha('letters')
 // true
 ```
  */
-export function isAlpha(s: string): boolean {
-  return /^[\p{L}]+$/gu.test(s)
+export function isAlpha(s: unknown): boolean {
+  return hasOnly(s, /\P{L}/u)
 }
 
 /**
- * Unicode numeric check (Python `str.isnumeric` / Unicode `Numeric_Type`): every character
- * has a numeric type (`\p{N}`), so `'²'`, `'½'`, fullwidth and Arabic-Indic digits are
- * numeric. This is not a guard for `Number()` / `parseFloat` parsing.
+ * Unicode number check: every character is in `\p{N}`, so `'²'`, `'½'`, fullwidth and
+ * Arabic-Indic digits are numeric. CJK numerals such as `'一'` are letters here, unlike Python
+ * `str.isnumeric`. This is not a guard for `Number()` / `parseFloat` parsing.
  * @param s The string
  * @returns `true` if the string contains only Unicode numeric characters.
  * @example
@@ -165,8 +213,8 @@ isNumeric('1234')
 // true
 ```
  */
-export function isNumeric(s: string): boolean {
-  return /^[\p{N}]+$/gu.test(s)
+export function isNumeric(s: unknown): boolean {
+  return hasOnly(s, /\P{N}/u)
 }
 
 /**
@@ -179,16 +227,11 @@ asciify('äÄçÇéÉêPHP-MySQLöÖÐþúÚ')
 // 'PHP-MySQL'
 ```
  */
-export function asciify(s: string): string {
-  let out = ''
-  for (const ch of s) {
-    const cp = ch.codePointAt(0)
-    if (cp !== undefined && cp < 128) out += ch
-  }
-  return out
+export function asciify(s: unknown): string {
+  return toText(s).replace(/[\u0080-\uFFFF]+/g, '')
 }
 
-/** Letter folds from the Unicode CLDR Latin-ASCII transform. */
+/** Letter folds from a subset of the Unicode CLDR Latin-ASCII transform. */
 const CLDR_LATIN_ASCII_FOLDS: Readonly<Record<string, string>> = Object.freeze({
   '\u00C6': 'AE',
   '\u00D0': 'D',
@@ -221,12 +264,15 @@ const CLDR_LATIN_ASCII_FOLDS: Readonly<Record<string, string>> = Object.freeze({
   '\u017F': 's'
 })
 
-const IS_NONSPACING_MARK = /\p{Mn}/u
-const IS_LATIN = /\p{Script=Latin}/u
-const IS_ASCII_DIGIT = /^[0-9]$/
+/** A mark after 30 others, the UAX #15 Stream-Safe limit that keeps `normalize` linear. */
+const EXCESS_MARK = /\p{M}(?<=\p{M}{31})/gu
+const MARK_AFTER_LATIN = /\p{Mn}(?<=[\p{Script=Latin}0-9]\p{Mn}+)/gu
+const FOLDABLE_LETTER = /[\u00C6-\u017F]/g
 
 /**
- * Applies the Unicode CLDR Latin-ASCII transform (mark strip + letter folds).
+ * Applies a subset of the Unicode CLDR Latin-ASCII transform: Latin marks and the common Latin
+ * letter folds. Other CLDR rules (`ƒ`, `ǆ`, `©`, fullwidth forms) are not applied, and a run of
+ * marks is cut to 30.
  * @param s The string
  * @returns The folded string
  * @example
@@ -235,30 +281,20 @@ removeAccents('Antoine de Saint-Exupéry')
 // 'Antoine de Saint-Exupery'
 ```
  */
-export function removeAccents(s: string): string {
-  const nfd = s.normalize('NFD')
-  let stripped = ''
-  let stripNextMarks = false
-  for (const ch of nfd) {
-    if (IS_NONSPACING_MARK.test(ch)) {
-      if (stripNextMarks) continue
-      stripped += ch
-      continue
-    }
-    stripNextMarks = IS_LATIN.test(ch) || IS_ASCII_DIGIT.test(ch)
-    stripped += ch
-  }
-  const nfc = stripped.normalize('NFC')
-  let out = ''
-  for (const ch of nfc) {
-    out += CLDR_LATIN_ASCII_FOLDS[ch] ?? ch
-  }
-  return out
+export function removeAccents(s: unknown): string {
+  const text = toText(s)
+  if (isAsciiString(text)) return text
+  return text
+    .replace(EXCESS_MARK, '')
+    .normalize('NFD')
+    .replace(MARK_AFTER_LATIN, '')
+    .normalize('NFC')
+    .replace(FOLDABLE_LETTER, (ch) => CLDR_LATIN_ASCII_FOLDS[ch] ?? ch)
 }
 
 /**
- * Title-cases the first letter of every word in place, keeping the rest of each word and
- * punctuation/spacing as-is (`NASA` stays `NASA`).
+ * Applies the Unicode titlecase mapping to the first letter of every word in place, keeping the
+ * rest of each word and punctuation/spacing as-is (`NASA` stays `NASA`).
  * @param s The string to capitalize
  * @returns The title cased string.
  * @example
@@ -268,18 +304,19 @@ titleCase('lord of the rings')
 ```
 @see {@link capitalize}
  */
-export function titleCase(s: string): string {
-  if (!s) return s
-  let remaining = s
+export function titleCase(s: unknown): string {
+  const text = toText(s)
+  let remaining = text
   let out = ''
-  for (const word of words(s)) {
+  for (const word of words(text)) {
     const idx = remaining.indexOf(word)
     if (idx < 0) {
       out += remaining
       remaining = ''
       break
     }
-    out += remaining.slice(0, idx) + sentenceCase(word)
+    const { first, rest } = firstCodePoint(word)
+    out += remaining.slice(0, idx) + titleCaseFirstChar(first) + rest
     remaining = remaining.slice(idx + word.length)
   }
   return out + remaining
@@ -289,6 +326,8 @@ export function titleCase(s: string): string {
  * Converts the string to camel case. Apostrophes are removed from parts.
  * Later parts use `toUpperCase` on the first code point (not Unicode titlecase),
  * so digraphs follow the uppercase mapping (`pascalCase('ǆemal') === 'Ǆemal'`).
+ * Accents stay, unlike Lodash; call {@link removeAccents} first to drop them. The same goes for
+ * {@link pascalCase}, {@link snakeCase} and {@link kebabCase}.
  * @param s The string to convert
  * @returns The camel cased string.
  * @example
@@ -300,7 +339,7 @@ camelCase("don't stop")
 // 'dontStop'
 ```
  */
-export function camelCase(s: string): string {
+export function camelCase(s: unknown): string {
   return camelCaseWords(s)
 }
 
@@ -318,7 +357,7 @@ pascalCase('ǆemal')
 // 'Ǆemal'
 ```
  */
-export function pascalCase(s: string): string {
+export function pascalCase(s: unknown): string {
   return pascalCaseWords(s)
 }
 
@@ -332,7 +371,7 @@ snakeCase('Equipment Class Name')
 // 'equipment_class_name'
 ```
  */
-export function snakeCase(s: string): string {
+export function snakeCase(s: unknown): string {
   return snakeCaseWords(s)
 }
 
@@ -349,13 +388,18 @@ kebabCase('equipment_class_name')
 // 'equipment-class-name'
 ```
  */
-export function kebabCase(s: string): string {
+export function kebabCase(s: unknown): string {
   return kebabCaseWords(s)
 }
 
+/** Bounded so a long two-byte run cannot overflow the regexp stack; `-+` merges the chunks. */
+const SEPARATORS = /[^\p{L}\p{M}\p{N}]{1,1024}/gu
+const ORPHAN_MARKS = /(^|-)\p{M}+/gu
+
 /**
  * Returns a url-safe slug for the given string. Applies {@link removeAccents} (Latin-only),
- * then joins runs of Unicode letters and digits with `-`. Non-Latin letters are preserved.
+ * then joins runs of Unicode letters, marks and digits with `-`. Non-Latin letters and their
+ * marks are preserved.
  * @param s The string
  * @returns A slug version of the string
  * @example
@@ -364,9 +408,10 @@ slugify('Antoine de Saint-Exupéry')
 // 'Antoine-de-Saint-Exupery'
 ```
  */
-export function slugify(s: string): string {
-  if (!s) return ''
+export function slugify(s: unknown): string {
   return removeAccents(s)
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(SEPARATORS, '-')
+    .replace(ORPHAN_MARKS, '$1')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
 }

@@ -1,17 +1,26 @@
 /**
  * This module includes functions that deal with or produce iterators.
  *
+ * Arrays read like `[...arr]`, so each hole is `undefined`. The exception is {@link reduce}, which
+ * follows `Array.prototype.reduce` and skips holes. Huge sparse arrays throw
+ * `RangeError('sparse array too large')`, except in {@link all}, {@link any}, {@link contains},
+ * {@link first}, {@link icompact} and {@link reduce}, which walk own elements instead.
+ *
  * @module itertools
  */
 
 import { call, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
+import { isHugeSparse, walkArray } from '../internal/arrayKeys.js'
 import { isCompactEmpty } from '../internal/compactEmpty.js'
 import {
   arrayElements,
   arrayFromIterable,
   assertArrayNotHugeSparse,
+  closingIterator,
+  drain,
   forEachArrayElement,
-  isTypedArray
+  isTypedArray,
+  pull
 } from '../internal/iterable.js'
 import { add, bool, compare, eq, identity, type Comparer } from '../operators/index.js'
 import type { Iteratee, Predicate } from '../types.js'
@@ -24,11 +33,17 @@ export interface SortOptions<T = unknown, K = unknown> {
   compare?: Comparer<K>
 }
 
+/** `Iterator.from` for walks that visit an array index by index. */
+function iterate<T>(iterable: Iterable<T>): IteratorObject<T> {
+  assertArrayNotHugeSparse(iterable)
+  return Iterator.from(iterable)
+}
+
 /**
  * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).
  * @param iterable The iterable to accumulate
  * @param func The accumulator function (default `add`).
- * @param initial Optional initial value (defaults to the first element in iterable)
+ * @param initial Optional initial value (`undefined` means absent, so the first element seeds)
  * @returns A sequence of accumulated values
  */
 export function accumulate<T>(
@@ -36,31 +51,17 @@ export function accumulate<T>(
   func: (acc: unknown, value: T) => unknown = add,
   initial?: unknown
 ): IteratorObject<unknown> {
-  const hasInitial = arguments.length >= 3
-  const source: Iterable<T> = Array.isArray(iterable) ? arrayElements(iterable) : iterable
-  return (function* () {
-    const it = Iterator.from(source)
-    let total: unknown
-    if (hasInitial) {
-      total = initial
-    } else {
-      const head = it.next()
-      if (head.done) return
-      total = head.value
-    }
-    // The source is still open while the consumer holds the seed; close it if they stop here.
-    let seeded = false
-    try {
-      yield total
+  const source = iterate(iterable)
+  return closingIterator([source], function* (open) {
+    let total = initial
+    let seeded = initial !== undefined
+    if (seeded) yield total
+    for (const value of drain(open, source)) {
+      total = seeded ? func(total, value) : value
       seeded = true
-    } finally {
-      if (!seeded) it.return?.()
-    }
-    for (const value of it) {
-      total = func(total, value)
       yield total
     }
-  })()
+  })
 }
 
 /**
@@ -135,13 +136,22 @@ export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool): boolean 
   return false
 }
 
+/**
+ * Yields each iterable in turn. Every iterable opens at the call, and any still unfinished closes
+ * on an early exit.
+ * @param iterables The iterables to chain.
+ * @returns An iterator over all of their elements.
+ */
 export function chain<T>(...iterables: Iterable<T>[]): IteratorObject<T> {
-  for (const it of iterables) assertArrayNotHugeSparse(it)
-  return iflatten(iterables)
+  const sources = iterables.map(iterate)
+  return closingIterator(sources, function* (open) {
+    for (const source of sources) yield* drain(open, source)
+  })
 }
 
 /**
- * Checks if the `value` is in `collection`.
+ * Checks if the `value` is in `collection`. Strings check substrings, a `Map` checks keys, and a
+ * plain object checks values.
  * @param collection The collection to inspect.
  * @param value The value to search for.
  * @returns Returns `true` if value is found, else `false`.
@@ -161,7 +171,10 @@ contains('abcd', 'bc')
  */
 export function contains(collection: unknown, value: unknown): boolean {
   if (collection == null) return false
-  if (typeof collection === 'string') return collection.includes(value as string)
+  if (typeof collection === 'string') {
+    return !(value instanceof RegExp) && collection.includes(value as string)
+  }
+  if (collection instanceof Map) return collection.has(value)
   if (isIterable(collection)) return any(collection, (x) => eq(x, value))
   if (isObject(collection)) return any(Object.values(collection), (x) => eq(x, value))
   return false
@@ -175,7 +188,7 @@ export function contains(collection: unknown, value: unknown): boolean {
  */
 export function dropWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>): IteratorObject<T> {
   let dropping = true
-  return Iterator.from(iterable).filter((value) => {
+  return iterate(iterable).filter((value) => {
     if (dropping && predicate(value)) return false
     dropping = false
     return true
@@ -206,13 +219,13 @@ export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
 ```
  */
 export function enumerate<T>(iterable: Iterable<T>, start = 0): IteratorObject<[number, T]> {
-  assertArrayNotHugeSparse(iterable)
   let index = start
-  return Iterator.from(iterable).map((item) => [index++, item] as [number, T])
+  return iterate(iterable).map((item) => [index++, item] as [number, T])
 }
 
 /**
- * Returns the first element in an iterable.
+ * Returns the first element in an iterable. A passed iterator closes, as with `break` in
+ * `for...of`, so a generator is spent afterwards.
  * @param iterable The iterable to inspect.
  * @returns The first element found or undefined if iterable is empty.
  */
@@ -233,10 +246,10 @@ export function first<T>(iterable: Iterable<T>): T | undefined {
 }
 
 /**
- * Creates a new generator that filters all falsy and empty values from iterable (SPEC-R40).
+ * Creates a new iterator that filters all falsy and empty values from iterable (SPEC-R40).
  * Shares `isCompactEmpty` with `compact`; does not change `isEmpty`.
  * @param iterable The iterable to compact.
- * @returns A new array with the filtered values.
+ * @returns An iterator over the kept values.
  * @example
 ```js
 [...icompact([0, 1, false, 2, '', 3])]
@@ -244,30 +257,24 @@ export function first<T>(iterable: Iterable<T>): T | undefined {
 ```
  */
 export function icompact<T>(iterable: Iterable<T>): IteratorObject<T> {
-  if (Array.isArray(iterable)) {
-    return (function* () {
-      for (const value of arrayElements(iterable)) {
-        if (!isCompactEmpty(value)) yield value
-      }
-    })()
-  }
-  return Iterator.from(iterable).filter((value) => !isCompactEmpty(value))
+  const source =
+    isTypedArray(iterable) && isHugeSparse(iterable) ? arrayElements(iterable) : iterable
+  return Iterator.from(source).filter((value) => !isCompactEmpty(value))
 }
 
 /**
  * Iterates over elements of collection, producing only those elements where predicate returns a `truthy` value.
  */
 export function ifilter<T>(iterable: Iterable<T>, fn: (v: T) => unknown): IteratorObject<T> {
-  return Iterator.from(iterable).filter((v) => fn(v))
+  return iterate(iterable).filter((v) => fn(v))
 }
 
 export function imap<T, R>(iterable: Iterable<T>, fn: (v: T) => R): IteratorObject<R> {
-  assertArrayNotHugeSparse(iterable)
-  return Iterator.from(iterable).map((v) => fn(v))
+  return iterate(iterable).map((v) => fn(v))
 }
 
 /**
- * Returns a generator flattening one level of nesting in a list of lists.
+ * Returns an iterator flattening one level of nesting in a list of lists.
  * @param iterables The iterable to flatten
  * @example
 ```js
@@ -276,50 +283,81 @@ export function imap<T, R>(iterable: Iterable<T>, fn: (v: T) => R): IteratorObje
 ```
  */
 export function iflatten<T = unknown>(iterables: Iterable<Iterable<T>>): IteratorObject<T> {
-  return (function* () {
-    for (const iterator of iterables) {
-      for (const item of iterator) {
-        yield item
-      }
-    }
-  })()
+  return iterate(iterables).flatMap((inner) => iterate(inner))
 }
 
+/**
+ * Maps each element and flattens one level: a non-string iterable result flattens, and anything
+ * else is yielded as is, like Lodash `flatMap`.
+ * @param iterable The iterable to map.
+ * @param fn A function invoked per element.
+ * @returns An iterator over the flattened results.
+ */
 export function flatMap<T, R>(
   iterable: Iterable<T>,
-  fn: (v: T) => Iterable<R> | Iterator<R>
+  fn: (v: T) => Iterable<R> | R
 ): IteratorObject<R> {
-  return Iterator.from(iterable).flatMap((v) => fn(v))
+  return iterate(iterable).flatMap((v) => {
+    const mapped = fn(v)
+    return typeof mapped !== 'string' && isIterable(mapped) ? iterate(mapped) : [mapped]
+  })
 }
 
+function assertSliceBound(value: number, name: string, minimum: number): void {
+  if (!Number.isSafeInteger(value) || value < minimum) {
+    throw new ValueError(`islice ${name} must be an integer of at least ${String(minimum)}`)
+  }
+}
+
+/**
+ * Python `islice`: `islice(iterable, stop)` or `islice(iterable, start, stop, step)`, where `null`
+ * or `undefined` means the default (`start` 0, no `stop`, `step` 1). A `start` past `stop` is
+ * empty. Reaching `stop` closes a passed iterator, as the native `take` does.
+ * @param iterable The iterable to slice.
+ * @param startOrStop `stop` when it is the only bound, else `start`.
+ * @param stopBound The index to stop before.
+ * @param step The stride between yielded elements.
+ * @returns An iterator over the selected elements.
+ * @throws {ValueError} when a bound is not a safe integer, or is negative, or `step` is below 1.
+ */
 export function islice<T>(
   iterable: Iterable<T>,
-  start: number,
-  stop?: number,
-  step = 1
+  startOrStop: number | null | undefined,
+  stopBound?: number | null,
+  step?: number | null
 ): IteratorObject<T> {
-  if (start < 0) throw new ValueError(`start parameter can't be negative`)
-  if (stop != null && stop < 0) throw new ValueError(`stop parameter can't be negative`)
-  if (step <= 0) throw new ValueError(`step parameter must be positive`)
-  if (stop != null && start > stop) throw new ValueError(`start parameter can't be after stop`)
-  let it = Iterator.from(iterable).drop(start)
-  if (stop != null) it = it.take(stop - start)
-  return it.filter((_, i) => i % step === 0)
+  const [start, stop] = arguments.length < 3 ? [0, startOrStop] : [startOrStop ?? 0, stopBound]
+  const stride = step ?? 1
+  assertSliceBound(start, 'start', 0)
+  if (stop != null) assertSliceBound(stop, 'stop', 0)
+  assertSliceBound(stride, 'step', 1)
+  let it = iterate(iterable).drop(start)
+  if (stop != null) it = it.take(Math.max(stop - start, 0))
+  return it.filter((_, i) => i % stride === 0)
 }
 
-export function itake<T>(n: number, iterable: Iterable<T>): IteratorObject<T> {
-  return Iterator.from(iterable).take(n)
+/**
+ * Returns an iterator over the first `n` elements. `n` defaults to 1 and a negative `n` is empty.
+ * Reaching `n` closes a passed iterator, as the native `take` does, so a generator is spent.
+ * @param n The number of elements to take.
+ * @param iterable The iterable to read.
+ * @returns An iterator over at most `n` elements.
+ */
+export function itake<T>(n: number | undefined = 1, iterable: Iterable<T>): IteratorObject<T> {
+  return iterate(iterable).take(Math.max(n, 0))
 }
 
 /**
  * Returns an Iterator from the elements of a collection or the object keys.
  * @param obj The given collection to iterate over.
  * @returns An Iterator type.
+ * @throws {TypeError} when `obj` is neither iterable nor an object.
  */
 export function iter<T>(obj: unknown): Iterator<T> {
   const iterable = call(obj, Symbol.iterator)
   if (notNull(iterable)) return iterable as Iterator<T>
-  return Object.keys(obj as object)[Symbol.iterator]() as Iterator<T>
+  if (!isObject(obj)) throw new TypeError('expected an iterable or an object')
+  return Object.keys(obj)[Symbol.iterator]() as Iterator<T>
 }
 
 export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T, boolean>): [T[], T[]] {
@@ -357,16 +395,21 @@ export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T, bool
 ```
  */
 export function range(...args: number[]): IteratorObject<number> {
+  const [start, stop, step] = args.length === 1 ? [0, args[0], 1] : [args[0], args[1], args[2] ?? 1]
+  if ([start, stop, step].some((n) => typeof n !== 'number' || Number.isNaN(n))) {
+    throw new RangeError('range bounds must be numbers')
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(step)) {
+    throw new RangeError('range start and step must be finite')
+  }
+  if (step === 0) throw new RangeError('range step must not be zero')
   return (function* () {
-    const [start, stop, step] =
-      args.length === 1 ? [0, args[0], 1] : [args[0], args[1], args[2] ?? 1]
-    if ([start, stop, step].some((n) => Number.isNaN(n))) {
-      throw new RangeError('range bounds must be numbers')
-    }
-    if (step === 0) throw new RangeError('range step must not be zero')
     const n = Math.ceil((stop - start) / step)
     for (let i = 0; i < n; i++) {
-      const value = start + i * step
+      // Halves keep the offset finite when the span exceeds Number.MAX_VALUE.
+      const value = Number.isFinite(i * step)
+        ? start + i * step
+        : start + i * (step / 2) + i * (step / 2)
       // Fractional steps can accumulate error and land on or past `stop`.
       if (step > 0 ? !(value < stop) : !(value > stop)) return
       yield value
@@ -382,6 +425,8 @@ reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0)
 // 15
 ```
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce Array.reduce()}
+ *
+ * On arrays it follows `Array.prototype.reduce`: holes are skipped and the index is the real one.
  */
 export function reduce<T>(iterable: Iterable<T>, fn: (acc: T, v: T, i: number) => T): T
 export function reduce<T, A>(
@@ -403,16 +448,10 @@ export function reduce(
   if (Array.isArray(iterable)) {
     let hasAcc = arguments.length >= 3
     let acc: unknown = initial
-    let i = 0
-    forEachArrayElement(iterable, (v) => {
-      if (!hasAcc) {
-        acc = v
-        hasAcc = true
-        i++
-        return
-      }
-      acc = fn(acc, v, i)
-      i++
+    walkArray(iterable, (event) => {
+      if (event.kind === 'holeRun') return
+      acc = hasAcc ? fn(acc, event.value, event.index) : event.value
+      hasAcc = true
     })
     if (!hasAcc) {
       throw new TypeError('Reduce of empty iterable with no initial value')
@@ -425,7 +464,8 @@ export function reduce(
 }
 
 /**
- * Creates a new array with the elements from the iterable in reverse order.
+ * Creates a new array with the elements from the iterable in reverse order. An iterator is read to
+ * its end first, so an infinite one never returns.
  * @param iterable The iterable to inspect.
  * @returns A new array with the elements reversed.
  */
@@ -442,6 +482,7 @@ export function reversed<T>(iterable: Iterable<T>): T[] {
  *   - `sorted(it, key)` / `sorted(it, key, reverse)`
  *   - `sorted(it, reverse, compare)`
  *
+ * A `null` or `undefined` key means identity, so `sorted(it, null, true)` also reverses.
  * If `args` is a plain Object, returns the sorted values.
  */
 export function sorted<T, K = T>(
@@ -455,13 +496,13 @@ export function sorted<T, K = T>(
 ): T[]
 export function sorted<T, K = T>(
   args: Iterable<T> | Record<string, T>,
-  key: (x: T) => K,
+  key: ((x: T) => K) | null | undefined,
   reverse: boolean,
   compareFn?: Comparer<K>
 ): T[]
 export function sorted<T, K = T>(
   args: Iterable<T> | Record<string, T>,
-  key?: boolean | Predicate<T> | SortOptions<T, K>,
+  key?: boolean | Predicate<T> | SortOptions<T, K> | null,
   reverse?: boolean | Comparer<K>,
   compareFn?: Comparer<K>
 ): T[] {
@@ -485,8 +526,8 @@ export function sorted<T, K = T>(
     if (typeof reverse === 'function') {
       keyCmp = reverse
     }
-  } else if (typeof key === 'function') {
-    keyFn = key as (x: T) => K
+  } else {
+    if (typeof key === 'function') keyFn = key as (x: T) => K
     if (typeof reverse === 'boolean') rev = reverse
     if (typeof reverse === 'function') keyCmp = reverse
     if (typeof compareFn === 'function') keyCmp = compareFn
@@ -523,39 +564,50 @@ export function sort<T>(args: T[], reverse?: boolean | Comparer, compareFn?: Com
   return args
 }
 
-export function take<T>(n: number, iterable: Iterable<T>): T[] {
-  assertArrayNotHugeSparse(iterable)
+/**
+ * Returns an array of the first `n` elements; see {@link itake}.
+ * @param n The number of elements to take.
+ * @param iterable The iterable to read.
+ * @returns At most `n` elements.
+ */
+export function take<T>(n: number | undefined, iterable: Iterable<T>): T[] {
   return itake(n, iterable).toArray()
 }
 
 /**
- * Returns a generator that takes elements from the iterable as long as the predicate is `true`.
+ * Returns an iterator that takes elements from the iterable as long as the predicate is `true`.
  * @param iterable The iterable to inspect.
  * @param predicate A function invoked per element to check if it should be taken.
  * @returns Elements
  */
 export function takeWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>): IteratorObject<T> {
-  return (function* () {
-    for (const value of iterable) {
+  const source = iterate(iterable)
+  return closingIterator([source], function* (open) {
+    for (const value of drain(open, source)) {
       if (!predicate(value)) return
       yield value
     }
-  })()
+  })
 }
 
 /**
- * Returns a generator that produces `fn(index)` for each `index < n`.
+ * Returns a generator that produces `fn(index)` for each `index < n`. `n` truncates to an integer,
+ * and `times(Infinity)` is a lazy infinite generator.
  * @param n The number of times to invoke `fn`.
- * @param fn A function used to produce the results.
+ * @param fn A function used to produce the results (default identity).
  */
-export function times<T>(n: number, fn: (index: number) => T): IteratorObject<T> {
+export function times<T = number>(
+  n: number,
+  fn: (index: number) => T = identity as (index: number) => T
+): IteratorObject<T> {
+  const count = Math.trunc(n)
   return (function* () {
-    for (let i = 0; i < n; i++) yield fn(i)
+    for (let i = 0; i < count; i++) yield fn(i)
   })()
 }
 
 /**
- * Returns a generator that aggregates elements from the iterables producing tuples with the next element from each one.
+ * Returns an iterator that aggregates elements from the iterables producing tuples with the next element from each one.
  * @param args The iterables to zip
  * @returns Tuples with elements from each iterator
  * @example
@@ -567,55 +619,17 @@ export function times<T>(n: number, fn: (index: number) => T): IteratorObject<T>
 export function zip<T extends unknown[]>(
   ...args: { [K in keyof T]: Iterable<T[K]> }
 ): IteratorObject<T> {
-  return (function* () {
-    if (args.length === 0) return
-    const iterators: Iterator<unknown>[] = []
-    // Sources that are neither exhausted nor threw; closed on every exit path.
-    const open = new Set<Iterator<unknown>>()
-    try {
-      for (const a of args as Iterable<unknown>[]) {
-        assertArrayNotHugeSparse(a)
-        const iterator = Iterator.from(a)
-        iterators.push(iterator)
-        open.add(iterator)
+  const sources = (args as Iterable<unknown>[]).map(iterate)
+  return closingIterator(sources, function* (open) {
+    if (sources.length === 0) return
+    for (;;) {
+      const items: unknown[] = []
+      for (const source of sources) {
+        const result = pull(open, source)
+        if (result.done) return
+        items.push(result.value)
       }
-      for (;;) {
-        const items: unknown[] = []
-        for (const iterator of iterators) {
-          let result: IteratorResult<unknown>
-          try {
-            result = iterator.next()
-          } catch (error) {
-            open.delete(iterator)
-            throw error
-          }
-          if (result.done) {
-            open.delete(iterator)
-            return
-          }
-          items.push(result.value)
-        }
-        yield items as T
-      }
-    } finally {
-      closeAll(open)
+      yield items as T
     }
-  })()
-}
-
-/** Calls `return()` on each iterator; later iterators still close when an earlier one throws. */
-function closeAll(iterators: Iterable<Iterator<unknown>>): void {
-  let failed = false
-  let failure: unknown
-  for (const iterator of iterators) {
-    try {
-      iterator.return?.()
-    } catch (error) {
-      if (!failed) {
-        failed = true
-        failure = error
-      }
-    }
-  }
-  if (failed) throw failure
+  })
 }

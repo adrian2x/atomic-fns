@@ -17,6 +17,7 @@ import {
   imap,
   islice,
   itake,
+  iter,
   partition,
   range,
   reduce,
@@ -153,10 +154,6 @@ describe('itertools', () => {
     )
   })
 
-  it('SPEC-R52 flatMap string result throws TypeError', () => {
-    assert.throws(() => [...flatMap([1], () => 'ab')], TypeError)
-  })
-
   it('icompact', () => {
     const it = icompact([false, 0, '', true, '', []])
     assert.deepEqual([...it], [true])
@@ -211,8 +208,8 @@ describe('itertools', () => {
   })
 
   it('islice', () => {
-    assert.deepEqual([...islice([1, 2, 3], 1)], [2, 3])
-    assert.deepEqual([...islice([1, 2, 3, 4], 2)], [3, 4])
+    assert.deepEqual([...islice([1, 2, 3], 1)], [1])
+    assert.deepEqual([...islice([1, 2, 3, 4], 2)], [1, 2])
     assert.deepEqual([...islice([1, 2, 3, 4], 1, 3)], [2, 3])
     assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 4)], [1, 2, 3, 4])
     assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 4, 2)], [1, 3])
@@ -230,14 +227,12 @@ describe('itertools', () => {
     assert.throws(() => [...islice([1], 0, -1)], ValueError)
     assert.throws(() => [...islice([1], 0, 1, 0)], ValueError)
     assert.throws(() => [...islice([1], 0, 1, -1)], ValueError)
-    assert.throws(() => [...islice([1], 2, 1)], ValueError)
   })
 
   it('islice validates arguments eagerly at call time', () => {
     assert.throws(() => islice([1], -1), ValueError)
     assert.throws(() => islice([1], 0, -1), ValueError)
     assert.throws(() => islice([1], 0, 1, 0), ValueError)
-    assert.throws(() => islice([1], 2, 1), ValueError)
   })
 
   it('islice does not read past stop', () => {
@@ -249,12 +244,6 @@ describe('itertools', () => {
   it('itake', () => {
     const it = itake(3, [false, 0, '', true, '', []])
     assert.deepEqual([...it], [false, 0, ''])
-  })
-
-  it('SPEC-R52 itake and take RangeError on negative or NaN', () => {
-    assert.throws(() => [...itake(-1, [1])], RangeError)
-    assert.throws(() => [...itake(NaN, [1])], RangeError)
-    assert.throws(() => take(-1, [1]), RangeError)
   })
 
   it('take', () => {
@@ -534,5 +523,216 @@ describe('iforEach', () => {
       acc.push(v)
     })
     assert.deepEqual(acc, [1, 2])
+  })
+})
+
+describe('islice follows Python', () => {
+  const digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+  it('one bound is stop; two or three are start, stop, step', () => {
+    assert.deepEqual([...islice(digits, 2)], [0, 1])
+    assert.deepEqual([...islice(digits, 0)], [])
+    assert.deepEqual([...islice(digits, null)], digits)
+    assert.deepEqual([...islice(digits, 8, null)], [8, 9])
+    assert.deepEqual([...islice(digits, null, 2)], [0, 1])
+    assert.deepEqual([...islice(digits, 1, undefined, 4)], [1, 5, 9])
+    assert.deepEqual([...islice(digits, 0, 3, null)], [0, 1, 2])
+  })
+
+  it('start past stop is empty', () => {
+    assert.deepEqual([...islice(digits, 3, 1)], [])
+    assert.deepEqual([...islice(digits, 3, 1, 2)], [])
+  })
+
+  it('non-integer arguments throw ValueError at the call', () => {
+    for (const bad of [NaN, Infinity, 1.5, 2 ** 53, 'abc'] as number[]) {
+      assert.throws(() => islice(infiniteCounter(), bad), ValueError)
+      assert.throws(() => islice(infiniteCounter(), bad, 5), ValueError)
+      assert.throws(() => islice(infiniteCounter(), 0, bad), ValueError)
+      assert.throws(() => islice(infiniteCounter(), 0, 5, bad), ValueError)
+    }
+  })
+})
+
+describe('range validation', () => {
+  it('rejects bad arguments at the call', () => {
+    const invalid = [[NaN], [0, NaN], [0, 5, NaN], [0, 5, 0], [undefined], ['abc'], [{}], [null]]
+    for (const args of [...invalid, ['5'], [1, undefined], []] as number[][]) {
+      assert.throws(() => range(...args), RangeError)
+    }
+  })
+
+  it('refuses a non-finite start or step; an infinite stop stays lazy', () => {
+    for (const args of [
+      [-Infinity, 0],
+      [Infinity, 0, -1],
+      [0, 5, Infinity],
+      [5, 0, -Infinity]
+    ]) {
+      assert.throws(() => range(...args), /range start and step must be finite/)
+    }
+    assert.deepEqual(range(0, Infinity).take(2).toArray(), [0, 1])
+  })
+
+  it('keeps every value of a span past Number.MAX_VALUE', () => {
+    assert.equal([...range(-1.7e308, 1.7e308, 1e308)].length, 4)
+    assert.equal([...range(1.7e308, -1.7e308, -1e308)].length, 4)
+  })
+})
+
+describe('array holes', () => {
+  const holes = (): number[] => {
+    const sparse = [1]
+    sparse[3] = 4
+    return sparse
+  }
+
+  it('iterator helpers read each hole as undefined, as [...arr] does', () => {
+    assert.equal([...accumulate(holes(), (_acc, value) => value)].length, 4)
+    assert.deepEqual([...imap(holes(), (value) => value)], [...holes()])
+  })
+
+  it('reduce skips holes and reports real indices, as Array.prototype.reduce does', () => {
+    const seen: [number, number][] = []
+    reduce(holes(), (acc, value, index) => {
+      seen.push([value, index])
+      return acc
+    })
+    assert.deepEqual(seen, [[4, 3]])
+    assert.equal(
+      reduce(holes(), (a, b) => a + b),
+      5
+    )
+    const spaced = [1]
+    spaced[301] = 2
+    let calls = 0
+    reduce(
+      spaced,
+      (acc) => {
+        calls++
+        return acc
+      },
+      0
+    )
+    assert.equal(calls, 2)
+    assert.throws(() => reduce(new Array<number>(3), (a, b) => a + b), TypeError)
+  })
+})
+
+describe('huge sparse arrays', () => {
+  const huge = (): number[] => {
+    const sparse: number[] = []
+    sparse.length = 2 ** 32 - 1
+    sparse[5] = 1
+    return sparse
+  }
+  const refusal = { name: 'RangeError', message: 'sparse array too large' }
+
+  it('every per-index helper refuses them at the call', () => {
+    const a = huge()
+    const yes = () => true
+    for (const run of [
+      () => accumulate(a),
+      () => dropWhile(a, yes),
+      () => flatMap(a, (x) => [x]),
+      () => ifilter(a, yes),
+      () => iflatten(a as never),
+      () => islice(a, 1),
+      () => itake(1, a),
+      () => takeWhile(a, yes),
+      () => zip(a)
+    ]) {
+      assert.throws(run, refusal)
+    }
+  })
+
+  it('a huge sparse inner iterable is refused when reached', () => {
+    const a = huge()
+    assert.throws(() => iflatten([a]).next(), refusal)
+    assert.throws(() => flatMap([1], () => a).next(), refusal)
+  })
+})
+
+describe('lazy helpers on arrays', () => {
+  it('accumulate and icompact read an array as they go', () => {
+    const sums = [1, 2]
+    const folded = accumulate(sums, (_acc, value) => value)
+    folded.next()
+    sums.push(3)
+    assert.deepEqual([...folded], [2, 3])
+
+    const items = [1, 2]
+    const compacted = icompact(items)
+    compacted.next()
+    items.push(3)
+    assert.deepEqual([...compacted], [2, 3])
+  })
+
+  it('zip, accumulate, chain and takeWhile reject a non-iterable at the call', () => {
+    const number = 5 as never
+    assert.throws(() => zip(number), TypeError)
+    assert.throws(() => accumulate(number), TypeError)
+    assert.throws(() => chain(number), TypeError)
+    assert.throws(() => takeWhile(number, () => true), TypeError)
+  })
+})
+
+describe('itertools argument handling', () => {
+  it('take and itake default to 1, read a negative count as empty, refuse NaN', () => {
+    assert.deepEqual(take(undefined, [1, 2]), [1])
+    assert.deepEqual([...itake(undefined, [1, 2])], [1])
+    assert.deepEqual(take(-1, [1]), [])
+    assert.deepEqual([...itake(-1, [1])], [])
+    assert.throws(() => take(NaN, [1]), RangeError)
+  })
+
+  it('times truncates n, defaults fn to identity, stays lazy at Infinity', () => {
+    assert.deepEqual([...times(2.5, (i) => i)], [0, 1])
+    assert.deepEqual([...times(3)], [0, 1, 2])
+    assert.deepEqual(times(Infinity).take(2).toArray(), [0, 1])
+    assert.deepEqual([...times(-1)], [])
+    assert.deepEqual([...times(NaN)], [])
+  })
+
+  it('sorted still reads reverse after a nullish key', () => {
+    assert.deepEqual(sorted([1, 3, 2], undefined, true), [3, 2, 1])
+    assert.deepEqual(sorted([1, 3, 2], null, true), [3, 2, 1])
+    assert.deepEqual(
+      sorted([1, 3, 2], undefined, true, (a, b) => a - b),
+      [3, 2, 1]
+    )
+  })
+
+  it('flatMap flattens non-string iterables and yields anything else as is', () => {
+    assert.deepEqual([...flatMap(['ab'], (x) => x)], ['ab'])
+    assert.deepEqual([...flatMap([1], (x) => x)], [1])
+    assert.deepEqual([...flatMap([1], () => null)], [null])
+    assert.deepEqual([...flatMap([1, 2], (x) => new Set([x, x + 1]))], [1, 2, 2, 3])
+  })
+
+  it('contains is false for a RegExp in a string and checks Map keys', () => {
+    assert.equal(contains('abc', /b/), false)
+    const map = new Map([['a', 1]])
+    assert.equal(contains(map, 'a'), true)
+    assert.equal(contains(map, 1), false)
+    assert.equal(contains(map, ['a', 1]), false)
+  })
+
+  it('iter throws TypeError for non-iterables and keeps object keys', () => {
+    for (const value of [5, null, undefined, true, 1n]) {
+      assert.throws(() => iter(value), TypeError)
+    }
+    assert.deepEqual([...{ [Symbol.iterator]: () => iter({ a: 1 }) }], ['a'])
+    assert.equal(iter('ab').next().value, 'a')
+  })
+
+  it('iflatten iterates strings and rejects non-iterables', () => {
+    const mixed: Iterable<unknown>[] = ['ab', [1]]
+    assert.deepEqual([...iflatten(mixed)], ['a', 'b', 1])
+    assert.throws(() => [...iflatten([1 as never])], TypeError)
+  })
+
+  it('accumulate reads an undefined initial as absent', () => {
+    assert.deepEqual([...accumulate([1, 2], undefined, undefined)], [1, 3])
   })
 })

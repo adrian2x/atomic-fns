@@ -440,3 +440,329 @@ describe('functools', () => {
     })
   })
 })
+
+describe('function wrappers', () => {
+  it('reject a non-function at creation', () => {
+    const notFunction = undefined as never
+    const expected = new TypeError('Expected a function')
+    for (const wrap of [
+      () => curry(notFunction),
+      () => partial(notFunction),
+      () => memoize(notFunction),
+      () => memoize((x: number) => x, 1 as never),
+      () => cache(notFunction, {} as never),
+      () => debounce(notFunction, 10),
+      () => throttle(notFunction, 10),
+      () => once(notFunction),
+      () => result(notFunction),
+      () => resultAsync(notFunction),
+      () => promisify(notFunction),
+      () => flow(notFunction),
+      () => flow([notFunction]),
+      () => compose(notFunction)
+    ]) {
+      expect(wrap).toThrow(expected)
+    }
+  })
+
+  it('curry uses the latest this and an explicit arity', () => {
+    const curried = curry(function (this: { n: number } | undefined, a: number, b: number) {
+      return [this?.n, a, b]
+    })
+    const host = { n: 1, finish: curried(2) }
+    assert.deepEqual(host.finish(3), [1, 2, 3])
+    const variadic = curry((...args: number[]) => args, 2)
+    assert.deepEqual(variadic(1)(2), [1, 2])
+  })
+
+  it('flow and compose return the first argument when empty', () => {
+    assert.equal(flow()(1), 1)
+    assert.equal(pipe()(1), 1)
+    assert.equal(compose()(1), 1)
+  })
+
+  it('flow and compose flatten arrays one level', () => {
+    const add1 = (x: number) => x + 1
+    const mul2 = (x: number) => x * 2
+    assert.equal(flow([add1, mul2])(1), 4)
+    assert.equal(compose([add1, mul2])(1), 3)
+    assert.equal(compose([add1], mul2)(1), 3)
+  })
+
+  it('once blocks reentrant calls and does not retry after a throw', () => {
+    let calls = 0
+    const reentrant: () => unknown = once(() => {
+      calls++
+      return reentrant()
+    })
+    assert.equal(reentrant(), undefined)
+    assert.equal(calls, 1)
+
+    let throws = 0
+    const failing = once(() => {
+      throws++
+      throw new Error('boom')
+    })
+    assert.throws(failing, /boom/)
+    assert.equal(failing(), undefined)
+    assert.equal(throws, 1)
+  })
+
+  it('result and resultAsync replace a thrown undefined with an Error', async () => {
+    const thrown = result(() => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw undefined
+    })()
+    assert.ok(thrown[1] instanceof Error)
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    const rejected = await resultAsync(() => Promise.reject())()
+    assert.ok(rejected[1] instanceof Error)
+    assert.deepEqual(result(() => 0)(), [0, undefined])
+  })
+
+  it('promisify treats a falsy error as success and forwards this', async () => {
+    type Callback = (err: Error | null | undefined, value: string) => void
+    const falsyError = (err: unknown) => (cb: Callback) => {
+      cb(err as Error, 'value')
+    }
+    assert.equal(await promisify(falsyError(0))(), 'value')
+    assert.equal(await promisify(falsyError(''))(), 'value')
+    const host = {
+      prefix: 'p',
+      read: promisify(function (this: { prefix: string }, cb: Callback) {
+        cb(null, this.prefix)
+      })
+    }
+    assert.equal(await host.read(), 'p')
+  })
+})
+
+describe('memoize and cache stores', () => {
+  const withFullMaps = (run: () => void): void => {
+    const set = vi.spyOn(Map.prototype, 'set').mockImplementation(() => {
+      throw new RangeError('Map maximum size exceeded')
+    })
+    try {
+      run()
+    } finally {
+      set.mockRestore()
+    }
+  }
+
+  it('memoize calls resolver with this', () => {
+    const memoized = memoize(
+      (x: number) => x,
+      function (this: { id: number }) {
+        return this.id
+      }
+    )
+    assert.equal(memoized.call({ id: 1 }, 2), 2)
+    assert.equal(memoized.cache.has(1), true)
+  })
+
+  it('memoize reads through memoized.cache', () => {
+    const memoized = memoize((x: number) => x + 1)
+    memoized(1)
+    memoized.cache = new Map([[1, 100]])
+    assert.equal(memoized(1), 100)
+    assert.equal(memoized(2), 3)
+    assert.equal(memoized.cache.size, 2)
+    memoized.clear()
+    assert.equal(memoized.cache.size, 0)
+  })
+
+  it('memoize returns the value when the store is full', () => {
+    const memoized = memoize((x: number) => x + 1)
+    withFullMaps(() => {
+      assert.equal(memoized(1), 2)
+    })
+    assert.equal(memoized.cache.size, 0)
+  })
+
+  it('memoize still surfaces other store failures', () => {
+    const memoized = memoize((x: number) => x + 1)
+    memoized.cache = new (class extends Map<unknown, number> {
+      override set(): never {
+        throw new TypeError('bad store')
+      }
+    })()
+    assert.throws(() => memoized(1), /bad store/)
+  })
+
+  it('cache returns the value when the store is full', () => {
+    const method = cache(function (this: object, x: number) {
+      return x + 1
+    }, {} as never)
+    withFullMaps(() => {
+      assert.equal(method.call({}, 1), 2)
+    })
+  })
+
+  it('cache calls the function uncached on a non-object this', () => {
+    let calls = 0
+    const method = cache(function (this: object, x: number) {
+      calls++
+      return x + 1
+    }, {} as never)
+    assert.equal(Reflect.apply(method, undefined, [1]), 2)
+    assert.equal(Reflect.apply(method, undefined, [1]), 2)
+    assert.equal(Reflect.apply(method, 5, [1]), 2)
+    assert.equal(calls, 3)
+  })
+})
+
+describe('debounce and throttle edges', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const recorder = (): { seen: number[]; fn: (x: number) => number } => {
+    const seen: number[] = []
+    return {
+      seen,
+      fn: (x) => {
+        seen.push(x)
+        return x
+      }
+    }
+  }
+
+  it('debounce leading fires on the first call and trailing on the last of a burst', () => {
+    const { seen, fn } = recorder()
+    const d = debounce(fn, 50, { leading: true })
+    assert.equal(d(1), 1)
+    vi.advanceTimersByTime(50)
+    assert.deepEqual(seen, [1])
+    d(2)
+    d(3)
+    vi.advanceTimersByTime(50)
+    assert.deepEqual(seen, [1, 2, 3])
+  })
+
+  it('debounce trailing false drops the rest of the burst', () => {
+    const { seen, fn } = recorder()
+    const d = debounce(fn, 50, { leading: true, trailing: false })
+    d(1)
+    d(2)
+    vi.advanceTimersByTime(50)
+    assert.deepEqual(seen, [1])
+    assert.equal(d.flush(), 1)
+    d(3)
+    assert.deepEqual(seen, [1, 3])
+  })
+
+  it('debounce with neither edge never invokes', () => {
+    const { seen, fn } = recorder()
+    const d = debounce(fn, 50, { leading: false, trailing: false })
+    d(1)
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, [])
+  })
+
+  it('debounce leading does not fire again when maxWait starts a new window', () => {
+    const { seen, fn } = recorder()
+    const d = debounce(fn, 30, { leading: true, maxWait: 50 })
+    for (let t = 0; t < 100; t += 10) {
+      d(t)
+      vi.advanceTimersByTime(10)
+    }
+    assert.deepEqual(seen, [0, 40, 90])
+  })
+
+  it('debounce and throttle default wait to 0 and read null as absent', () => {
+    const { seen, fn } = recorder()
+    const d = debounce(fn)
+    d(1)
+    vi.advanceTimersByTime(0)
+    assert.deepEqual(seen, [1])
+    expect(() => debounce(fn, null)).not.toThrow()
+    expect(() => debounce(fn, 10, { maxWait: null })).not.toThrow()
+    expect(() => throttle(fn)).not.toThrow()
+    expect(() => throttle(fn, null)).not.toThrow()
+  })
+
+  it('a bad maxWait is named in the error', () => {
+    const { fn } = recorder()
+    expect(() => debounce(fn, 10, { maxWait: NaN })).toThrow(
+      new RangeError('maxWait must be between 0 and 2147483647 ms')
+    )
+  })
+
+  it('a reentrant throttled call waits for the window', () => {
+    const seen: number[] = []
+    const t = throttle((x: number): void => {
+      seen.push(x)
+      if (x < 3) t(x + 1)
+    }, 100)
+    t(1)
+    assert.deepEqual(seen, [1])
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, [1, 2])
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, [1, 2, 3])
+  })
+
+  it('a reentrant call from the trailing edge waits too', () => {
+    const seen: number[] = []
+    const t = throttle((x: number): void => {
+      seen.push(x)
+      if (x === 2 && seen.length < 4) t(2)
+    }, 100)
+    t(1)
+    t(2)
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, [1, 2])
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, [1, 2, 2])
+  })
+
+  it('throttle stays throttled when fn throws', () => {
+    let calls = 0
+    const t = throttle(() => {
+      calls++
+      throw new Error('boom')
+    }, 100)
+    assert.throws(t, /boom/)
+    t()
+    t()
+    assert.equal(calls, 1)
+    t.cancel()
+  })
+
+  it('a call right after throttle flush waits for the window', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 100)
+    t(1)
+    t(2)
+    assert.equal(t.flush(), 2)
+    t(3)
+    t(4)
+    assert.deepEqual(seen, [1, 2])
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, [1, 2, 4])
+  })
+
+  it('throttle trailing false drops calls inside the window', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 100, { trailing: false })
+    t(1)
+    t(2)
+    vi.advanceTimersByTime(300)
+    assert.deepEqual(seen, [1])
+    t(3)
+    assert.deepEqual(seen, [1, 3])
+  })
+
+  it('throttle leading false waits for the end of the window', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 100, { leading: false })
+    assert.equal(t(1), undefined)
+    t(2)
+    assert.deepEqual(seen, [])
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, [2])
+  })
+})

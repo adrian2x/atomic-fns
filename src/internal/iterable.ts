@@ -90,3 +90,70 @@ export function setFromIterable<T>(it: Iterable<T>): Set<T> {
 export function assertArrayNotHugeSparse(value: unknown): void {
   if (Array.isArray(value)) assertNotHugeSparse(value as unknown[])
 }
+
+/** Sources a lazy helper has opened and still owes a `return()`. */
+type OpenSources = Set<Iterator<unknown>>
+
+/** Calls `return()` on every source, even after one throws, and hands back what was thrown. */
+function closeAll(open: OpenSources): unknown[] {
+  const failures: unknown[] = []
+  for (const source of open) {
+    try {
+      source.return?.()
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  open.clear()
+  return failures
+}
+
+function closeOrThrow(open: OpenSources): void {
+  const failures = closeAll(open)
+  if (failures.length > 0) throw failures[0]
+}
+
+/** Advances `source`. One that finishes or throws leaves `open`, so nothing closes it again. */
+export function pull<T>(open: OpenSources, source: Iterator<T>): IteratorResult<T> {
+  open.delete(source)
+  const result = source.next()
+  if (!result.done) open.add(source)
+  return result
+}
+
+/** Yields what is left of `source`. */
+export function* drain<T>(open: OpenSources, source: Iterator<T>): Generator<T, void, undefined> {
+  for (let result = pull(open, source); !result.done; result = pull(open, source)) {
+    yield result.value
+  }
+}
+
+/**
+ * Runs `body` over `sources`, closing the unfinished ones on every exit, even the `return()` before
+ * the first `next()` that a bare generator skips. An error in flight outranks a failing `return()`.
+ */
+export function closingIterator<T>(
+  sources: Iterable<Iterator<unknown>>,
+  body: (open: OpenSources) => Generator<T, void, undefined>
+): IteratorObject<T> {
+  const open = new Set(sources)
+  const generator = body(open)
+  return Iterator.from<T>({
+    next() {
+      let result: IteratorResult<T, void>
+      try {
+        result = generator.next()
+      } catch (error) {
+        closeAll(open)
+        throw error
+      }
+      if (result.done) closeOrThrow(open)
+      return result
+    },
+    return() {
+      generator.return()
+      closeOrThrow(open)
+      return { done: true, value: undefined }
+    }
+  })
+}

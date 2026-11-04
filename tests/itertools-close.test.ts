@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accumulate, first, zip } from '../src/itertools/index.js'
+import { accumulate, chain, first, iflatten, takeWhile, zip } from '../src/itertools/index.js'
 
 /** Infinite counter whose `finally` records that the source was closed. */
 function tracked(log: string[], name: string, limit = Infinity): Generator<number> {
@@ -127,5 +127,71 @@ describe('itertools close unfinished sources', () => {
     it.next()
     it.return?.()
     expect(log).toEqual(['a'])
+  })
+
+  it('return before the first next closes every source', () => {
+    const helpers: ((source: IterableIterator<number>) => Iterator<unknown>)[] = [
+      (source) => zip(source, [1]),
+      (source) => accumulate(source),
+      (source) => accumulate(source, undefined, 0),
+      (source) => takeWhile(source, () => true),
+      (source) => chain(source),
+      (source) => iflatten(source as never)
+    ]
+    for (const helper of helpers) {
+      const log: string[] = []
+      helper(manual(log, 'a', [1, 2])).return?.()
+      expect(log).toEqual(['a'])
+    }
+  })
+
+  it('chain closes the sources it has not reached', () => {
+    const log: string[] = []
+    const it = chain(manual(log, 'a', [1, 2]), manual(log, 'b', [3]))
+    it.next()
+    it.return?.()
+    expect(log.toSorted()).toEqual(['a', 'b'])
+  })
+
+  it('takeWhile closes the source once when the predicate fails', () => {
+    const log: string[] = []
+    expect([...takeWhile(manual(log, 'a', [1, 2]), () => false)]).toEqual([])
+    expect(log).toEqual(['a'])
+  })
+
+  it('an exhausted source is not closed again', () => {
+    const log: string[] = []
+    const source = manual(log, 'a', [1])
+    const it = takeWhile(source, () => true)
+    expect([...it]).toEqual([1])
+    it.return?.()
+    expect(log).toEqual([])
+  })
+
+  it('an error in flight outranks a failing return', () => {
+    const failingClose = (log: string[]): IterableIterator<number> =>
+      manual(log, 'bad', [1, 2], () => {
+        throw new Error('close failed')
+      })
+    const brokenNext = {
+      [Symbol.iterator]: () => ({
+        next(): IteratorResult<number> {
+          throw new Error('next failed')
+        }
+      })
+    }
+    const log: string[] = []
+    expect(() => zip(failingClose(log), brokenNext).next()).toThrow('next failed')
+    expect(() => [
+      ...takeWhile(failingClose(log), () => {
+        throw new Error('predicate failed')
+      })
+    ]).toThrow('predicate failed')
+    expect(() => [
+      ...accumulate(failingClose(log), () => {
+        throw new Error('func failed')
+      })
+    ]).toThrow('func failed')
+    expect(log).toEqual(['bad', 'bad', 'bad'])
   })
 })
