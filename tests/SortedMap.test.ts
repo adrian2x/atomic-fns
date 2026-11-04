@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { clone } from '../src/collections/object.js'
 import { SortedMap } from '../src/collections/SortedMap.js'
 import { decimal } from '../src/decimal/index.js'
-import { compare } from '../src/operators/index.js'
+import { compare, deepEqual } from '../src/operators/index.js'
 
 describe('SortedMap', () => {
   it('SPEC-R78 empty size and iteration', () => {
@@ -108,20 +109,22 @@ describe('SortedMap', () => {
     for (let i = 10; i > 0; i--) m.set(i, i)
     m.freeze()
     expect(() => m.set(11, 11)).toThrow(TypeError)
-    expect(() => m.set(11, 11)).toThrow('BTree is frozen')
-    expect(() => m.delete(1)).toThrow('BTree is frozen')
+    expect(() => m.set(11, 11)).toThrow('SortedMap is frozen')
+    expect(() => m.delete(1)).toThrow('SortedMap is frozen')
     expect(() => {
       m.clear()
-    }).toThrow('BTree is frozen')
+    }).toThrow('SortedMap is frozen')
     expect(m.has(1)).toBe(true)
     expect(m.get(1)).toBe(1)
-    expect(() => m.set(11, 11)).toThrow('BTree is frozen')
+    expect(() => m.set(11, 11)).toThrow('SortedMap is frozen')
+    expect(m.isFrozen).toBe(true)
+    expect(new SortedMap().isFrozen).toBe(false)
   })
 
   it('SPEC-R78 freeze without prior sets still blocks set', () => {
     const m = new SortedMap<number, string>()
     m.freeze()
-    expect(() => m.set(1, 'a')).toThrow('BTree is frozen')
+    expect(() => m.set(1, 'a')).toThrow('SortedMap is frozen')
   })
 
   it('SPEC-R78 differential vs Map + sort over 20000 ops', () => {
@@ -174,5 +177,60 @@ describe('SortedMap', () => {
     expect(m.get(undefined)).toBe('u')
     expect(m.max()).toBeUndefined()
     expect(m.size).toBe(3)
+  })
+
+  it('clones keep the subclass and comparator', () => {
+    class Reversed extends SortedMap<number, string> {}
+    const m = new Reversed(
+      [
+        [1, 'a'],
+        [2, 'b']
+      ],
+      (a, b) => b - a
+    )
+
+    for (const copy of [clone(m), clone(m, true)]) {
+      expect(copy).toBeInstanceOf(Reversed)
+      expect(deepEqual(m, copy)).toBe(true)
+      expect([...copy.set(3, 'c').keys()]).toEqual([3, 2, 1])
+    }
+  })
+
+  it('stores -0 as +0, as native Map does', () => {
+    const viaConstructor = new SortedMap([[-0, 'a']])
+    const viaSet = new SortedMap<number, string>().set(-0, 'a')
+    const overwritten = new SortedMap([[0, 'a']]).set(-0, 'b')
+
+    for (const m of [viaConstructor, viaSet, overwritten]) {
+      expect(Object.is(m.min(), 0)).toBe(true)
+      expect(m.size).toBe(1)
+      expect(m.has(-0)).toBe(true)
+    }
+    expect(overwritten.get(0)).toBe('b')
+  })
+
+  it('treats null entries as none, as native Map does', () => {
+    expect(new SortedMap<number, number>(null).size).toBe(0)
+  })
+
+  it('accepts readonly entries, as native Map does', () => {
+    const pairs: readonly (readonly [number, string])[] = [[1, 'a']]
+
+    expect([...new SortedMap(pairs)]).toEqual([[1, 'a']])
+  })
+
+  it('rejects items that are not entries', () => {
+    const error = 'entries must be [key, value] pairs'
+
+    expect(() => new SortedMap(JSON.parse('[1,2,3]') as never)).toThrow(error)
+    expect(() => new SortedMap([null] as never)).toThrow(error)
+    expect(() => new SortedMap(new Array<[number, number]>(2 ** 32 - 1))).toThrow(error)
+  })
+
+  it('get falls back to a default like BTree.get', () => {
+    const m = new SortedMap<number, string | undefined>([[1, undefined]])
+
+    expect(m.get(2, 'd')).toBe('d')
+    expect(m.get(1, 'd')).toBeUndefined()
   })
 })

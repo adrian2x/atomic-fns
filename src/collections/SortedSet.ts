@@ -1,4 +1,4 @@
-import { arrayFromIterableMap } from '../internal/iterable.js'
+import { arrayFromIterable } from '../internal/iterable.js'
 import { withHookNesting } from '../internal/nesting.js'
 import { protocol, type Comparer } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
@@ -7,7 +7,8 @@ import { clone } from './object.js'
 
 /**
  * Set whose values stay ordered by the library total-order `compare` (or a supplied comparator).
- * Backed by {@link BTree}. `add` of an existing value is a no-op.
+ * Backed by {@link BTree}. `add` of an existing value is a no-op. Like native `Set`, it stores
+ * `-0` as `+0`.
  *
  * @template T
  */
@@ -16,27 +17,27 @@ export class SortedSet<T> extends ValueCollection<T> {
   readonly #compareFn: Comparer<T> | undefined
 
   /**
-   * @param values Initial values.
+   * @param values Initial values; `null` means none, as for native `Set`.
    * @param compareFn Value comparator. Defaults to the library total-order `compare`.
    */
-  constructor(values?: Iterable<T>, compareFn?: Comparer<T>) {
+  constructor(values?: Iterable<T> | null, compareFn?: Comparer<T>) {
     super()
     this.#compareFn = compareFn
-    // Reverse so bulk-load collapse keeps the earliest equal value (first insert wins).
-    this.#tree = values
-      ? new BTree(
-          arrayFromIterableMap(values, (v): [T, true] => [v as T, true]).reverse(),
-          compareFn
-        )
-      : new BTree<T, true>(undefined, compareFn)
+    this.#tree = new BTree<T, true>(undefined, compareFn)
+    if (values == null) return
+    for (const value of arrayFromIterable<T>(values)) this.#insert(value)
   }
 
   get size(): number {
     return this.#tree.size
   }
 
+  get isFrozen(): boolean {
+    return this.#tree.isFrozen
+  }
+
   protected override cloneFrom(values: Iterable<T>): this {
-    return new SortedSet(values, this.#compareFn) as this
+    return Reflect.construct(this.constructor, [values, this.#compareFn]) as this
   }
 
   /**
@@ -57,7 +58,8 @@ export class SortedSet<T> extends ValueCollection<T> {
    * @returns `this`
    */
   add(value: T): this {
-    if (!this.#tree.has(value)) this.#tree.set(value, true)
+    this.#assertMutable()
+    this.#insert(value)
     return this
   }
 
@@ -66,10 +68,12 @@ export class SortedSet<T> extends ValueCollection<T> {
   }
 
   delete(value: T): boolean {
+    this.#assertMutable()
     return this.#tree.delete(value)
   }
 
   clear(): void {
+    this.#assertMutable()
     this.#tree.clear()
   }
 
@@ -112,5 +116,14 @@ export class SortedSet<T> extends ValueCollection<T> {
   at(index: number): T | undefined {
     const entry = this.#tree.at(index)
     return entry === undefined ? undefined : entry[0]
+  }
+
+  #insert(value: T): void {
+    const stored = value === 0 ? (0 as T) : value
+    if (!this.#tree.has(stored)) this.#tree.set(stored, true)
+  }
+
+  #assertMutable(): void {
+    if (this.isFrozen) throw new TypeError('SortedSet is frozen')
   }
 }

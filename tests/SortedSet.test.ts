@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { clone } from '../src/collections/object.js'
 import { SortedSet } from '../src/collections/SortedSet.js'
 import { decimal } from '../src/decimal/index.js'
+import { deepEqual } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
 describe('SortedSet', () => {
@@ -115,14 +117,76 @@ describe('SortedSet', () => {
   it('SPEC-R78 freeze rejects mutators permanently', () => {
     const s = new SortedSet([1, 2])
     expect(s.freeze()).toBe(s)
-    expect(() => s.add(3)).toThrow(TypeError)
-    expect(() => s.delete(1)).toThrow(TypeError)
+    expect(() => s.add(3)).toThrow('SortedSet is frozen')
+    expect(() => s.add(2)).toThrow('SortedSet is frozen')
+    expect(() => s.delete(1)).toThrow('SortedSet is frozen')
     expect(() => {
       s.clear()
-    }).toThrow(TypeError)
+    }).toThrow('SortedSet is frozen')
     expect([...s]).toEqual([1, 2])
     expect(s.has(1)).toBe(true)
-    expect(s.add(2)).toBe(s)
-    expect(() => s.add(3)).toThrow(TypeError)
+    expect(s.isFrozen).toBe(true)
+    expect(new SortedSet().isFrozen).toBe(false)
+  })
+
+  it('keeps identity-ordered values in first-seen order, as add does', () => {
+    const [a, b] = [{ n: 1 }, { n: 2 }]
+    const added = new SortedSet<{ n: number }>()
+    added.add({ n: 1 })
+    added.add({ n: 2 })
+
+    expect([...new SortedSet([a, b])]).toEqual([a, b])
+    expect([...added]).toEqual([a, b])
+  })
+
+  it('a deep clone keeps the sequence of identity-ordered values', () => {
+    const s = new SortedSet([{ a: 1 }, { a: 2 }, { a: 3 }])
+    const nested = new SortedSet([[1], [2]])
+
+    expect([...clone(s, true)]).toEqual([{ a: 1 }, { a: 2 }, { a: 3 }])
+    expect(deepEqual(s, clone(s, true))).toBe(true)
+    expect(deepEqual(nested, clone(nested, true))).toBe(true)
+  })
+
+  it('clones keep the subclass and comparator', () => {
+    class Reversed extends SortedSet<number> {}
+    const s = new Reversed([1, 2], (a, b) => b - a)
+
+    for (const copy of [clone(s), clone(s, true)]) {
+      expect(copy).toBeInstanceOf(Reversed)
+      expect(deepEqual(s, copy)).toBe(true)
+      expect([...copy.add(3)]).toEqual([3, 2, 1])
+    }
+  })
+
+  it('stores -0 as +0, as native Set does', () => {
+    const viaConstructor = new SortedSet([-0, 0])
+    const viaAdd = new SortedSet<number>().add(-0)
+
+    for (const s of [viaConstructor, viaAdd]) {
+      expect(Object.is(s.at(0), 0)).toBe(true)
+      expect(s.size).toBe(1)
+      expect(s.has(-0)).toBe(true)
+    }
+  })
+
+  it('treats only null and undefined as no values, as native Set does', () => {
+    expect(new SortedSet<number>(null).size).toBe(0)
+    expect(new SortedSet('').size).toBe(0)
+    for (const notIterable of [0, false, 1]) {
+      expect(() => new SortedSet(notIterable as never)).toThrow('expected an iterable')
+    }
+  })
+
+  it('refuses a huge sparse array before walking its holes', () => {
+    let compares = 0
+    const counting = () => {
+      if (++compares > 1000) throw new Error('walked the holes')
+      return 0
+    }
+
+    expect(() => new SortedSet(new Array<number>(2 ** 32 - 1), counting)).toThrow(
+      'sparse array too large'
+    )
   })
 })

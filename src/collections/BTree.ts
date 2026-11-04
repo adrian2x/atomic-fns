@@ -1,7 +1,7 @@
-import { arrayFromIterableMap } from '../internal/iterable.js'
+import { arrayFromIterable, arrayFromIterableMap } from '../internal/iterable.js'
 import { withHookNesting } from '../internal/nesting.js'
 import { compare, protocol, type Comparer } from '../operators/index.js'
-import { MapCollection, sameSequenceItems } from './abc.js'
+import { MapCollection, sameEntrySequence } from './abc.js'
 import { checkInvariants } from './internal.js'
 import { clone } from './object.js'
 
@@ -68,6 +68,28 @@ function emptyLeaf<K, V>(owner: object): LeafNode<K, V> {
   return { kind: 'leaf', owner, keys: [], values: [] }
 }
 
+function isNonPrimitive(value: unknown): value is object {
+  return Object(value) === value
+}
+
+function assertOptions(options: unknown): void {
+  if (options !== undefined && !isNonPrimitive(options)) {
+    throw new TypeError('options must be an object')
+  }
+}
+
+/** Columns rather than `[key, value]` boxes: a bulk load holds every item at once. */
+function readEntries<K, V>(entries: Iterable<readonly [K, V]>): { keys: K[]; values: V[] } {
+  const values: V[] = []
+  const keys = arrayFromIterableMap(entries, (entry): K => {
+    if (!isNonPrimitive(entry)) throw new TypeError('entries must be [key, value] pairs')
+    const pair = entry as readonly [K, V]
+    values.push(pair[1])
+    return pair[0]
+  })
+  return { keys, values }
+}
+
 function resolveNodeCapacity(arg: number | undefined): number {
   if (arg === undefined) return 64
   if (!Number.isInteger(arg) || arg < 8 || arg > 1024) {
@@ -89,12 +111,18 @@ function resolveLimit(limit: number | undefined): number {
  * Keys are totally ordered by a comparator; values may be `undefined`, and so may keys when the
  * comparator orders `undefined` (the default {@link compare} does).
  *
- * A comparator must return a finite number for every pair it is asked to order. Subtracting
- * numbers fails for `Infinity` / `NaN` keys (`Infinity - x` is not finite); use {@link compare}
- * or a comparator that handles those values.
+ * A comparator must be pure, must return a finite number for every pair it is asked to order,
+ * and must return 0 for a key compared with itself; every new key is checked. A comparator that
+ * writes to its own tree corrupts it. Subtracting numbers fails for `Infinity` / `NaN` keys
+ * (`Infinity - x` is not finite) and for finite keys whose difference overflows; use
+ * {@link compare} or a comparator that handles those values.
  *
- * Mutating while iterating never repeats a key and always terminates: after a structural change
- * the cursor re-seeks to the next key after the last yielded one.
+ * Under a strict total order, mutating while iterating never repeats a key: after a structural
+ * change the cursor re-seeks to the next key after the last yielded one. The walk ends unless the
+ * loop keeps inserting keys ahead of the cursor, as with native `Map`.
+ *
+ * The constructor and `setAll` on an empty tree load entries without calling `set`, so a subclass
+ * override of `set` runs only for `setAll` on a non-empty tree.
  *
  * @template K, V
  */
@@ -107,23 +135,32 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   #token: object = {}
   #version = 0
   #frozen = false
+  #atomicDepth = 0
 
   /**
-   * @param entries Initial key-value pairs. Sorted unique input is bulk-loaded in linear time.
+   * @param entries Initial key-value pairs; `null` means none, as for native `Map`. Sorted unique
+   * input is bulk-loaded in linear time.
    * @param compareFn Key comparator. Defaults to {@link compare}.
    * @param options Construction options; see {@link BTreeOptions}.
    */
   constructor(
-    entries?: Iterable<readonly [K, V]>,
+    entries?: Iterable<readonly [K, V]> | null,
     compareFn?: Comparer<K>,
     options?: BTreeOptions
   ) {
     super()
+    assertOptions(options)
     this.#compareFn = compareFn ?? compare
+    if (typeof this.#compareFn !== 'function') {
+      throw new TypeError('comparator must be a function')
+    }
     this.#nodeCapacity = resolveNodeCapacity(options?.nodeCapacity)
     this.#minFill = Math.floor(this.#nodeCapacity / 2)
     this.#root = emptyLeaf(this.#token)
-    if (entries !== undefined) this.#bulkLoad(entries)
+    if (entries != null) {
+      const { keys, values } = readEntries(entries)
+      this.#bulkLoad(keys, values)
+    }
   }
 
   get size(): number {
@@ -162,7 +199,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   /** Sequence equality: key order is part of meaning. */
   override [protocol.equals](other: unknown): boolean {
-    return withHookNesting(() => sameSequenceItems(this, other, (c) => c.entries()))
+    return withHookNesting(() => sameEntrySequence(this, other, (c) => c.entries()))
   }
 
   /**
@@ -170,7 +207,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
    */
   override [protocol.clone](deep = false): this {
     return withHookNesting(() => {
-      if (!deep) return this.clone() as this
+      if (!deep) return this.clone()
       return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
     })
   }
@@ -195,6 +232,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   set(key: K, value: V): this {
     this.#assertMutable()
     const { path, leaf, pos, found: hit } = this.#findForSet(key)
+    if (!hit) this.#assertReflexive(key)
     const ownedLeaf = this.#ownPath(path, leaf)
     if (hit) {
       ownedLeaf.keys[pos] = key
@@ -259,21 +297,21 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   /**
    * Entries in ascending key order.
-   * @param from Optional lowest key to start at. Pass nothing to start at the minimum;
-   * an explicit `undefined` is a real key and starts at `undefined`.
+   * @param lowestKey Optional lowest key to start at. `undefined` means omitted and starts at
+   * the minimum, also in a tree with an `undefined` key.
    */
-  entries(...from: [lowestKey?: K]): IteratorObject<[K, V]> {
-    const start = from.length > 0 ? { key: from[0] as K } : undefined
+  entries(lowestKey?: K): IteratorObject<[K, V]> {
+    const start = lowestKey === undefined ? undefined : { key: lowestKey }
     return Iterator.from(this.#walk(true, start))
   }
 
   /**
    * Entries in descending key order.
-   * @param from Optional highest key to start at. Pass nothing to start at the maximum;
-   * an explicit `undefined` is a real key and starts at `undefined`.
+   * @param highestKey Optional highest key to start at. `undefined` means omitted and starts at
+   * the maximum.
    */
-  entriesDescending(...from: [from?: K]): IteratorObject<[K, V]> {
-    const start = from.length > 0 ? { key: from[0] as K } : undefined
+  entriesDescending(highestKey?: K): IteratorObject<[K, V]> {
+    const start = highestKey === undefined ? undefined : { key: highestKey }
     return Iterator.from(this.#walk(false, start))
   }
 
@@ -327,10 +365,13 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   /**
    * Entries whose keys lie in `[from, to)` (or `[from, to]` when `inclusiveEnd` is true).
+   * Under the default `compare`, an omitted `to` means up to the end: `undefined` ranks last, and
+   * an `undefined` key itself needs `inclusiveEnd`.
    * @param options.limit Cap on how many pairs to collect; default Infinity. Must be a
    * non-negative integer or Infinity.
    */
   entriesBetween(from: K, to: K, options?: RangeOptions & { limit?: number }): [K, V][] {
+    assertOptions(options)
     const limit = resolveLimit(options?.limit)
     const inclusiveEnd = options?.inclusiveEnd === true
     if (limit === 0) return []
@@ -346,21 +387,21 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   }
 
   /**
-   * Insert or overwrite every pair from `entries`.
+   * Insert or overwrite every pair from `entries`, read in full before the first write.
+   * On an empty tree this bulk-loads without calling `set`.
    * @returns Count of keys that were not already present.
    */
   setAll(entries: Iterable<readonly [K, V]>): number {
     return this.#atomic(() => {
+      const { keys, values } = readEntries(entries)
       if (this.#size === 0) {
-        this.#bulkLoad(entries)
+        this.#bulkLoad(keys, values)
         return this.#size
       }
       let added = 0
-      for (const e of entries) {
-        const key = e[0]
-        const value = e[1]
-        if (!this.has(key)) added++
-        this.set(key, value)
+      for (let i = 0; i < keys.length; i++) {
+        if (!this.has(keys[i])) added++
+        this.set(keys[i], values[i])
       }
       return added
     })
@@ -377,6 +418,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     visit: (key: K, value: V, index: number) => unknown,
     options?: RangeOptions
   ): number {
+    assertOptions(options)
     const inclusiveEnd = options?.inclusiveEnd === true
     let index = 0
     for (const [k, v] of this.#walk(true, { key: from })) {
@@ -391,15 +433,16 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   /**
    * Atomically update entries in `[from, to)` (or `[from, to]` when `inclusiveEnd` is true).
-   * The callback returns a {@link RangeUpdate}, or `undefined` to leave the entry alone.
+   * The callback returns a {@link RangeUpdate}, or `undefined` or `null` to leave the entry alone.
    * @returns Number of entries visited.
    */
   updateRange(
     from: K,
     to: K,
-    update: (key: K, value: V, index: number) => RangeUpdate<V> | undefined,
+    update: (key: K, value: V, index: number) => RangeUpdate<V> | null | undefined,
     options?: RangeOptions
   ): number {
+    assertOptions(options)
     return this.#atomic(() => {
       const inclusiveEnd = options?.inclusiveEnd === true
       let index = 0
@@ -408,11 +451,15 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
         if (inclusiveEnd ? c > 0 : c >= 0) break
         const r = update(k, v, index)
         index++
-        if (r === undefined) continue
-        if ('replace' in r && 'remove' in r) {
+        if (r == null) continue
+        if (!isNonPrimitive(r)) {
+          throw new TypeError('update must return a RangeUpdate, null or undefined')
+        }
+        const remove = 'remove' in r && r.remove
+        if (remove && 'replace' in r) {
           throw new TypeError('RangeUpdate cannot both replace and remove')
         }
-        if ('remove' in r) this.delete(k)
+        if (remove) this.delete(k)
         else if ('replace' in r) this.set(k, r.replace)
         if ('stop' in r && r.stop) break
       }
@@ -422,7 +469,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
 
   /**
    * Delete every entry whose key lies in `[from, to)` (or `[from, to]` when `inclusiveEnd`
-   * is true). Atomic: a failure leaves the tree unchanged.
+   * is true). Atomic: a failure leaves the tree unchanged. Under the default `compare`, an
+   * omitted `to` means up to the end: `undefined` ranks last, and an `undefined` key itself needs
+   * `inclusiveEnd`.
    * @returns Number of entries removed.
    */
   removeRange(from: K, to: K, options?: RangeOptions): number {
@@ -442,7 +491,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
    */
   removeAll(keys: Iterable<K>): number {
     return this.#atomic(() => {
-      const list = [...keys]
+      const list = arrayFromIterable<K>(keys)
       for (const k of list) this.has(k)
       let n = 0
       for (const k of list) {
@@ -452,11 +501,9 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     })
   }
 
-  /** O(1) copy-on-write clone sharing structure until the first write on either side. */
-  clone(): BTree<K, V> {
-    const copy = new BTree<K, V>(undefined, this.#compareFn, {
-      nodeCapacity: this.#nodeCapacity
-    })
+  /** O(1) copy-on-write clone of the same class, sharing structure until either side writes. */
+  clone(): this {
+    const copy = this.cloneFrom([])
     copy.#root = this.#root
     copy.#size = this.#size
     this.#token = {}
@@ -470,8 +517,12 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
   /**
    * Reject further mutators permanently (like `Object.freeze`).
    * @returns `this`
+   * @throws {TypeError} during an atomic update, which could still roll back
    */
   freeze(): this {
+    if (this.#atomicDepth > 0) {
+      throw new TypeError('BTree cannot freeze during an atomic update')
+    }
     this.#frozen = true
     return this
   }
@@ -544,6 +595,12 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
       throw new TypeError('comparator must return a finite number')
     }
     return r
+  }
+
+  #assertReflexive(key: K): void {
+    if (this.#cmp(key, key) !== 0) {
+      throw new TypeError('comparator must return 0 for a key compared with itself')
+    }
   }
 
   #lowerBound(keys: readonly K[], key: K): number {
@@ -1024,6 +1081,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     const snapshotRoot = this.#root
     const snapshotSize = this.#size
     this.#token = {}
+    this.#atomicDepth++
     try {
       return fn()
     } catch (err) {
@@ -1031,67 +1089,31 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
       this.#size = snapshotSize
       this.#version++
       throw err
+    } finally {
+      this.#atomicDepth--
     }
   }
 
-  #bulkLoad(entries: Iterable<readonly [K, V]>): void {
-    const items = arrayFromIterableMap(entries, (e): [K, V] => {
-      const pair = e as readonly [K, V]
-      return [pair[0], pair[1]]
-    })
-    if (items.length === 0) {
-      this.#root = emptyLeaf(this.#token)
-      this.#size = 0
-      this.#version++
-      return
-    }
-    let ascending = true
-    for (let i = 1; i < items.length; i++) {
-      const prev = items[i - 1]
-      const cur = items[i]
-      if (!(this.#cmp(prev[0], cur[0]) < 0)) {
-        ascending = false
-        break
-      }
-    }
-    let unique = items
-    if (!ascending) {
-      unique = items.slice()
-      unique.sort((a, b) => this.#cmp(a[0], b[0]))
-      const collapsed: [K, V][] = []
-      for (const pair of unique) {
-        const last = collapsed.at(-1)
-        if (last !== undefined && this.#cmp(last[0], pair[0]) === 0) {
-          collapsed[collapsed.length - 1] = pair
-        } else {
-          collapsed.push(pair)
-        }
-      }
-      unique = collapsed
-    }
+  #bulkLoad(keys: K[], values: V[]): void {
+    for (const key of keys) this.#assertReflexive(key)
+    const ascending = keys.every((key, i) => i === 0 || this.#cmp(keys[i - 1], key) < 0)
+    const sorted = ascending ? { keys, values } : this.#sortedLastWins(keys, values)
     const M = this.#nodeCapacity
-    const n = unique.length
-    const leafCount = Math.ceil(n / M)
+    const n = sorted.keys.length
+    const leafCount = Math.max(1, Math.ceil(n / M))
     const leaves: LeafNode<K, V>[] = []
-    if (leafCount === 0) {
-      this.#root = emptyLeaf(this.#token)
-      this.#size = 0
-      this.#version++
-      return
-    }
     const base = Math.floor(n / leafCount)
     const extra = n % leafCount
     let offset = 0
     for (let i = 0; i < leafCount; i++) {
-      const size = base + (i < extra ? 1 : 0)
-      const chunk = unique.slice(offset, offset + size)
-      offset += size
+      const end = offset + base + (i < extra ? 1 : 0)
       leaves.push({
         kind: 'leaf',
         owner: this.#token,
-        keys: chunk.map((p) => p[0]),
-        values: chunk.map((p) => p[1])
+        keys: sorted.keys.slice(offset, end),
+        values: sorted.values.slice(offset, end)
       })
+      offset = end
     }
     let level: TreeNode<K, V>[] = leaves
     while (level.length > 1) {
@@ -1124,5 +1146,17 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
     this.#root = level[0]
     this.#size = n
     this.#version++
+  }
+
+  #sortedLastWins(keys: K[], values: V[]): { keys: K[]; values: V[] } {
+    const order = keys.map((_, i) => i).sort((a, b) => this.#cmp(keys[a], keys[b]))
+    const sorted: { keys: K[]; values: V[] } = { keys: [], values: [] }
+    for (const i of order) {
+      const last = sorted.keys.length - 1
+      const slot = last >= 0 && this.#cmp(sorted.keys[last], keys[i]) === 0 ? last : last + 1
+      sorted.keys[slot] = keys[i]
+      sorted.values[slot] = values[i]
+    }
+    return sorted
   }
 }

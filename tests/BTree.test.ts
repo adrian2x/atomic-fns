@@ -1,8 +1,36 @@
 import { describe, expect, it } from 'vitest'
 import { BTree } from '../src/collections/BTree.js'
 import { checkInvariants } from '../src/collections/internal.js'
+import { clone } from '../src/collections/object.js'
 import { SortedMap } from '../src/collections/SortedMap.js'
 import { SortedSet } from '../src/collections/SortedSet.js'
+import { deepEqual } from '../src/operators/index.js'
+
+const ENTRY_ERROR = 'entries must be [key, value] pairs'
+const SELF_COMPARE_ERROR = 'comparator must return 0 for a key compared with itself'
+const FINITE_ERROR = 'comparator must return a finite number'
+
+const neverEqual = (a: number, b: number) => (a < b ? -1 : 1)
+const selfLess = (a: number, b: number) => (a <= b ? -1 : 1)
+
+/** Live heap growth at the first comparator call, after collecting garbage. */
+function heapHeldAtFirstCompare(load: (cmp: (a: number, b: number) => number) => void): number {
+  const { gc } = globalThis
+  if (gc === undefined) throw new Error('tests need --expose-gc')
+  gc()
+  const before = process.memoryUsage().heapUsed
+  let held = Infinity
+  let compared = false
+  load((a, b) => {
+    if (!compared) {
+      compared = true
+      gc()
+      held = process.memoryUsage().heapUsed - before
+    }
+    return a - b
+  })
+  return held
+}
 
 describe('BTree', () => {
   it('SPEC-R79 set get has clear and size', () => {
@@ -258,8 +286,11 @@ describe('BTree', () => {
     expect([...t.keys()]).toContain(undefined)
     expect(t.has(undefined)).toBe(true)
     expect(t.get(undefined)).toBe('u')
-    expect([...t.entries(undefined)]).toEqual([[undefined, 'u']])
-    expect([...t.entriesDescending(undefined)]).toEqual([...forward].reverse().slice(0))
+    expect(t.entriesBetween(2, undefined)).toEqual([[2, 'b']])
+    expect(t.entriesBetween(2, undefined, { inclusiveEnd: true })).toEqual([
+      [2, 'b'],
+      [undefined, 'u']
+    ])
     expect(t.delete(undefined)).toBe(true)
     expect(t.size).toBe(2)
     expect(t.has(undefined)).toBe(false)
@@ -663,7 +694,8 @@ describe('BTree', () => {
     const sorted = Array.from({ length: 10_000 }, (_, i) => [i, i] as [number, number])
     calls = 0
     const t = new BTree(sorted, cmp)
-    expect(calls).toBe(9_999)
+    // one self-compare per key, one compare per adjacent pair
+    expect(calls).toBe(19_999)
     t[checkInvariants]()
     expect(t.height).toBe(2)
     const u = new BTree([
@@ -675,6 +707,14 @@ describe('BTree', () => {
       [1, 'x'],
       [2, 'b']
     ])
+    const adjacentDuplicates = new BTree([
+      [1, 'a'],
+      [1, 'b']
+    ])
+    expect(adjacentDuplicates.toArray()).toEqual([[1, 'b']])
+    const nothing = new BTree<number, string>([])
+    expect(nothing.setAll([])).toBe(0)
+    expect(nothing.set(1, 'a').toArray()).toEqual([[1, 'a']])
     const empty = new BTree<number, string>()
     expect(
       empty.setAll([
@@ -753,5 +793,266 @@ describe('BTree', () => {
     t.set({ id: 3, tag: 'new' }, 'x')
     t[checkInvariants]()
     expect([...t.keys()][3]?.tag).toBe('new')
+  })
+
+  it('rejects a comparator that does not return 0 for a key against itself', () => {
+    for (const cmp of [neverEqual, selfLess]) {
+      expect(() => new BTree([[1, 'a']], cmp)).toThrow(SELF_COMPARE_ERROR)
+      const t = new BTree<number, string>(undefined, cmp)
+      expect(() => t.set(1, 'a')).toThrow(SELF_COMPARE_ERROR)
+      expect(() => t.setAll([[1, 'a']])).toThrow(SELF_COMPARE_ERROR)
+      expect(t.size).toBe(0)
+    }
+  })
+
+  it('stops walks that a never-equal comparator would feed forever', () => {
+    const pairs: [number, string][] = [
+      [1, 'a'],
+      [2, 'b'],
+      [3, 'c']
+    ]
+    let steps = 0
+    const step = () => {
+      if (++steps > 1000) throw new Error('walk never ended')
+    }
+
+    expect(() => {
+      const t = new BTree(pairs, neverEqual)
+      t.updateRange(1, 4, () => {
+        step()
+        return { replace: 'x' }
+      })
+    }).toThrow(SELF_COMPARE_ERROR)
+    expect(() => {
+      const t = new BTree(pairs, neverEqual)
+      for (const [k] of t) {
+        step()
+        t.set(k, 'x')
+      }
+    }).toThrow(SELF_COMPARE_ERROR)
+    expect(() => {
+      const t = new BTree(pairs, selfLess)
+      for (const [k] of t.entriesDescending()) {
+        step()
+        t.set(k, 'x')
+      }
+    }).toThrow(SELF_COMPARE_ERROR)
+  })
+
+  it('rejects a key the comparator cannot order before it enters an empty tree', () => {
+    const subtract = (a: unknown, b: unknown) => Number(a) - Number(b)
+    const t = new BTree<unknown, number>(undefined, subtract)
+
+    for (const bad of [Number.NaN, Infinity, undefined]) {
+      expect(() => t.set(bad, 1)).toThrow(FINITE_ERROR)
+      expect(() => new BTree([[bad, 1]], subtract)).toThrow(FINITE_ERROR)
+    }
+
+    expect(t.size).toBe(0)
+    expect(t.set(1, 1).toArray()).toEqual([[1, 1]])
+  })
+
+  it('rejects a non-function comparator at construction', () => {
+    expect(() => new BTree([[1, 1]], 'x' as never)).toThrow('comparator must be a function')
+    expect(() => new SortedMap(undefined, 1 as never)).toThrow('comparator must be a function')
+    expect(() => new SortedSet(undefined, {} as never)).toThrow('comparator must be a function')
+  })
+
+  it('removeAll refuses a huge sparse array', () => {
+    const t = new BTree([[1, 1]])
+
+    expect(() => t.removeAll(new Array<number>(2 ** 24 + 1))).toThrow('sparse array too large')
+
+    expect(t.size).toBe(1)
+  })
+
+  it('bulk loads hold no per-item boxes', () => {
+    const n = 200_000
+    function* pairs(): Generator<[number, number]> {
+      for (let i = 0; i < n; i++) yield [i, i]
+    }
+    const values = Array.from({ length: n }, (_, i) => i)
+
+    const tree = heapHeldAtFirstCompare((cmp) => new BTree(pairs(), cmp))
+    const map = heapHeldAtFirstCompare((cmp) => new SortedMap(pairs(), cmp))
+    const set = heapHeldAtFirstCompare((cmp) => new SortedSet(values, cmp))
+
+    // a boxed [k, v] pair alone costs over 60 bytes
+    expect(tree).toBeLessThan(40 * n)
+    expect(map).toBeLessThan(40 * n)
+    expect(set).toBeLessThan(40 * n)
+  })
+
+  it('rejects items that are not entries, as native Map does', () => {
+    expect(() => new BTree(JSON.parse('[1,2,3]') as never)).toThrow(ENTRY_ERROR)
+    expect(() => new BTree(JSON.parse('["ab","cd"]') as never)).toThrow(ENTRY_ERROR)
+    expect(() => new BTree('hey' as never)).toThrow(ENTRY_ERROR)
+    expect(() => new BTree([null] as never)).toThrow(ENTRY_ERROR)
+    expect(() => new BTree<number, number>().setAll([1, 2] as never)).toThrow(ENTRY_ERROR)
+    const t = new BTree<number, number>([[1, 1]])
+    expect(() => t.setAll([[2, 2], 3] as never)).toThrow(ENTRY_ERROR)
+
+    expect(t.toArray()).toEqual([[1, 1]])
+    expect([...new BTree([[1]] as never)]).toEqual([[1, undefined]])
+  })
+
+  it('treats null entries as none, as native Map does', () => {
+    expect(new BTree(null).size).toBe(0)
+  })
+
+  it('shallow clones keep the subclass, comparator and capacity', () => {
+    class Tree extends BTree<number, string> {}
+    const t = new Tree(
+      [
+        [1, 'a'],
+        [2, 'b']
+      ],
+      (a, b) => b - a,
+      { nodeCapacity: 9 }
+    )
+
+    const copies = [t.clone(), clone(t)]
+
+    for (const copy of copies) {
+      expect(copy).toBeInstanceOf(Tree)
+      expect(deepEqual(t, copy)).toBe(true)
+      expect(copy.nodeCapacity).toBe(9)
+      expect([...copy.set(3, 'c').keys()]).toEqual([3, 2, 1])
+    }
+    expect(t.size).toBe(2)
+  })
+
+  it('self-nested trees reach the documented 125 levels', () => {
+    const nest = (depth: number) => {
+      let t = new BTree<number, unknown>([[0, 0]])
+      for (let i = 1; i < depth; i++) t = new BTree([[0, t]])
+      return t
+    }
+
+    expect(deepEqual(nest(125), nest(125))).toBe(true)
+    expect(() => deepEqual(nest(126), nest(126))).toThrow('nesting deeper than 1000 levels')
+  })
+
+  it('updateRange acts on a truthy remove only', () => {
+    const t = new BTree<number, number>([
+      [0, 0],
+      [1, 1],
+      [2, 2]
+    ])
+
+    t.updateRange(0, 3, (k) => (k === 1 ? ({ remove: false } as never) : undefined))
+    expect([...t.keys()]).toEqual([0, 1, 2])
+
+    t.updateRange(0, 3, () => ({ replace: 9, remove: false }) as never)
+    expect([...t.values()]).toEqual([9, 9, 9])
+
+    expect(() => t.updateRange(0, 3, () => ({ replace: 1, remove: true }) as never)).toThrow(
+      'RangeUpdate cannot both replace and remove'
+    )
+    expect([...t.values()]).toEqual([9, 9, 9])
+  })
+
+  it('updateRange leaves an entry alone on null and names the contract on a primitive', () => {
+    const t = new BTree<number, number>([[0, 0]])
+
+    expect(t.updateRange(0, 1, () => null)).toBe(1)
+    expect(t.toArray()).toEqual([[0, 0]])
+
+    for (const primitive of [0, 'x', true]) {
+      expect(() => t.updateRange(0, 1, () => primitive as never)).toThrow(
+        'update must return a RangeUpdate, null or undefined'
+      )
+    }
+  })
+
+  it('rejects non-object options instead of ignoring 1.x positional arguments', () => {
+    const t = new BTree([
+      [1, 1],
+      [2, 2],
+      [3, 3]
+    ])
+    const error = 'options must be an object'
+
+    expect(() => t.entriesBetween(1, 3, true as never)).toThrow(error)
+    expect(() => t.removeRange(1, 3, true as never)).toThrow(error)
+    expect(() => t.visitRange(1, 3, () => undefined, true as never)).toThrow(error)
+    expect(() => t.updateRange(1, 3, () => undefined, true as never)).toThrow(error)
+    expect(() => new BTree(undefined, undefined, 32 as never)).toThrow(error)
+    expect(() => new BTree(undefined, undefined, null as never)).toThrow(error)
+
+    expect(t.size).toBe(3)
+  })
+
+  it('an explicit undefined start means omitted, even with an undefined key', () => {
+    const numbers = new BTree([
+      [1, 'a'],
+      [2, 'b']
+    ])
+    const walk = (from?: number) => numbers.entries(from)
+    const undefinedFirst = new BTree<number | undefined, string>(
+      [
+        [1, 'a'],
+        [undefined, 'u']
+      ],
+      (a, b) => (a ?? -1) - (b ?? -1)
+    )
+    const undefinedLast = new BTree<number | undefined, string>([
+      [1, 'a'],
+      [undefined, 'u']
+    ])
+
+    expect([...walk()]).toEqual([...numbers])
+    expect([...undefinedLast.entries(undefined)]).toEqual([
+      [1, 'a'],
+      [undefined, 'u']
+    ])
+    expect([...undefinedFirst.entriesDescending(undefined)]).toEqual([
+      [1, 'a'],
+      [undefined, 'u']
+    ])
+  })
+
+  it('setAll reads its whole input before it writes', () => {
+    const empty = new BTree<string, number>()
+    function* writingToEmpty(): Generator<[string, number]> {
+      empty.set('side', 1)
+      yield ['a', 1]
+    }
+    const filled = new BTree<string, number>([['z', 0]])
+    function* writingToFilled(): Generator<[string, number]> {
+      filled.set('side', 1)
+      yield ['a', 1]
+    }
+
+    expect(empty.setAll(writingToEmpty())).toBe(1)
+    expect(filled.setAll(writingToFilled())).toBe(1)
+
+    expect([...empty.keys()]).toEqual(['a', 'side'])
+    expect([...filled.keys()]).toEqual(['a', 'side', 'z'])
+  })
+
+  it('freeze during an atomic update throws, so a frozen tree never rolls back', () => {
+    const error = 'BTree cannot freeze during an atomic update'
+    function* freezing(tree: BTree<number, number>): Generator<[number, number]> {
+      tree.freeze()
+      yield [2, 2]
+    }
+    const empty = new BTree<number, number>()
+    const t = new BTree<number, number>([[1, 1]])
+
+    expect(() => empty.setAll(freezing(empty))).toThrow(error)
+    expect(() => t.setAll(freezing(t))).toThrow(error)
+    expect(() =>
+      t.updateRange(1, 2, () => {
+        t.set(100, 1)
+        t.freeze()
+        return undefined
+      })
+    ).toThrow(error)
+
+    expect(empty.size).toBe(0)
+    expect(t.toArray()).toEqual([[1, 1]])
+    expect(t.isFrozen).toBe(false)
+    expect(t.freeze().isFrozen).toBe(true)
   })
 })
