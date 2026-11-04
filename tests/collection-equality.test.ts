@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import {
   BTree,
   Deque,
@@ -13,6 +13,7 @@ import {
 } from '../src/collections/index.js'
 import { decimal } from '../src/decimal/index.js'
 import { IntlDate } from '../src/i18n/date/index.js'
+import { createDeepEqualSession, deepEqualInSession } from '../src/operators/equality.js'
 import { deepEqual, eq, protocol } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
@@ -406,6 +407,357 @@ describe('Heap equality with oversized (hashed) keys', () => {
     const items = (ids: number[]): object[] => ids.map((id) => ({ s: dagChain(0), id }))
     expect(deepEqual(new Heap(items([1, 1, 2])), new Heap(items([2, 1, 1])))).toBe(true)
     expect(deepEqual(new Heap(items([1, 1, 2])), new Heap(items([1, 2, 2])))).toBe(false)
+  })
+})
+
+const tied = (): number => 0
+const byIdentity = (x: unknown, y: unknown): number => (x === y ? 0 : 1)
+const twoEntries = (x: unknown): [number, unknown][] => [
+  [0, x],
+  [1, x]
+]
+
+type Level = [name: string, prototype: object, level: (x: unknown) => unknown]
+
+/** Each level holds the level below twice, so a walk without a shared memo doubles per level. */
+const structuralLevels: Level[] = [
+  ['Deque', Deque.prototype, (x) => new Deque([x, x])],
+  ['Heap', Heap.prototype, (x) => new Heap([x, x], tied)],
+  ['SortedSet', SortedSet.prototype, (x) => new SortedSet<unknown>([[x], [x]], byIdentity)],
+  ['SortedMap', SortedMap.prototype, (x) => new SortedMap(twoEntries(x))],
+  ['BTree', BTree.prototype, (x) => new BTree(twoEntries(x))],
+  ['SplayTree', SplayTree.prototype, (x) => new SplayTree<number, unknown>().set(0, x).set(1, x)],
+  ['LRUCache', LRUCache.prototype, (x) => new LRUCache<number, unknown>(4).set(0, x).set(1, x)]
+]
+const cloneLevels: Level[] = [
+  ...structuralLevels,
+  ['FrozenSet', FrozenSet.prototype, (x) => new FrozenSet([[x], [x]])]
+]
+
+const LEVELS = 16
+const DOS_TIMEOUT = { timeout: 5000 }
+
+function stack(level: (x: unknown) => unknown, levels: number, leaf: unknown = 0): unknown {
+  let x = leaf
+  for (let i = 0; i < levels; i++) x = level(x)
+  return x
+}
+
+function hookCalls(
+  prototype: object,
+  hook: typeof protocol.clone | typeof protocol.equals
+): { mock: { calls: unknown[] } } {
+  return vi.spyOn(prototype as Record<symbol, () => unknown>, hook)
+}
+
+describe('shared references across collection hooks', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it.each(cloneLevels)(
+    '%s: deep clone copies each collection once',
+    DOS_TIMEOUT,
+    (_, proto, level) => {
+      const source = stack(level, LEVELS)
+      const calls = hookCalls(proto, protocol.clone)
+
+      clone(source, true)
+
+      expect(calls.mock.calls.length).toBe(LEVELS)
+    }
+  )
+
+  it.each(structuralLevels)(
+    '%s: deepEqual compares each pair once',
+    DOS_TIMEOUT,
+    (_, proto, level) => {
+      const left = stack(level, LEVELS)
+      const right = stack(level, LEVELS)
+      const calls = hookCalls(proto, protocol.equals)
+
+      expect(deepEqual(left, right)).toBe(true)
+
+      expect(calls.mock.calls.length).toBe(LEVELS)
+    }
+  )
+
+  it('a difference under shared Heaps is found once', DOS_TIMEOUT, () => {
+    const level = (x: unknown): unknown => new Heap([x, x], tied)
+    const left = stack(level, LEVELS)
+    const right = stack(level, LEVELS, 1)
+    const calls = hookCalls(Heap.prototype, protocol.equals)
+
+    expect(deepEqual(left, right)).toBe(false)
+
+    expect(calls.mock.calls.length).toBeLessThanOrEqual(8 * LEVELS)
+  })
+
+  it('Heaps reached through different hops share one session', DOS_TIMEOUT, () => {
+    const level = (x: unknown): unknown =>
+      new Heap([new Heap([x], tied), new Heap([[x]], tied)], tied)
+    const left = stack(level, LEVELS)
+    const right = stack(level, LEVELS)
+    const calls = hookCalls(Heap.prototype, protocol.equals)
+
+    expect(deepEqual(left, right)).toBe(true)
+
+    expect(calls.mock.calls.length).toBe(3 * LEVELS)
+  })
+
+  it('a row shared by a Deque stays one object in the deep clone', () => {
+    const row = { id: 1 }
+
+    const copy = clone(new Deque([row, row]), true)
+
+    expect(copy.at(0)).not.toBe(row)
+    expect(copy.at(0)).toBe(copy.at(1))
+  })
+
+  it('a row shared through distinct wrappers stays one object, as in an array', () => {
+    const row = { id: 1 }
+
+    const copy = clone(new Deque([[row], [row]]), true)
+
+    expect(copy.at(0)?.[0]).toBe(copy.at(1)?.[0])
+  })
+
+  it('a collection shared by a plain array stays one object in the deep clone', () => {
+    const shared = new Deque([1])
+
+    const copy = clone([shared, shared], true)
+
+    expect(copy[0]).not.toBe(shared)
+    expect(copy[0]).toBe(copy[1])
+  })
+
+  it('a direct deep clone hook call keeps rows shared across its elements', () => {
+    const row = { id: 1 }
+
+    const copy = new Deque([[row], [row]])[protocol.clone](true)
+
+    expect(copy.at(0)?.[0]).toBe(copy.at(1)?.[0])
+  })
+
+  it('a shallow clone inside a deep walk leaves the memo alone', () => {
+    const row = { id: 1 }
+    class ShallowCopier {
+      [protocol.clone](): object {
+        return { shallow: clone(row), deep: clone(row, true) }
+      }
+    }
+
+    const copy = clone<unknown[]>([new ShallowCopier(), row], true) as [
+      { shallow: object; deep: object },
+      object
+    ]
+
+    expect(copy[0].shallow).not.toBe(copy[1])
+    expect(copy[0].deep).toBe(copy[1])
+  })
+})
+
+function containsItself(tail: unknown): Deque<unknown> {
+  const self = new Deque<unknown>()
+  self.push(self, tail)
+  return self
+}
+
+/** `outer` holds `inner` holds `outer`, so a walk from `outer` assumes it before reaching `tail`. */
+function loop(tail: unknown): { outer: Deque<unknown>; inner: Deque<unknown> } {
+  const inner = new Deque<unknown>()
+  const outer = new Deque<unknown>([inner, tail])
+  inner.push(outer)
+  return { outer, inner }
+}
+
+describe('session memory', () => {
+  it('an acyclic walk logs no proofs', () => {
+    const session = createDeepEqualSession()
+
+    deepEqualInSession([{ n: 1 }], [{ n: 1 }], session)
+
+    expect(session.provenLog).toEqual([])
+  })
+
+  it('a scalar with an equals hook leaves no entry', () => {
+    const session = createDeepEqualSession()
+    const left = decimal(1)
+
+    deepEqualInSession(left, decimal(1), session)
+
+    expect(session.proven.has(left)).toBe(false)
+  })
+
+  it('a shallow failure leaves no entry, so a wide Heap stores none', () => {
+    const session = createDeepEqualSession()
+    const left = { n: 1 }
+
+    deepEqualInSession(left, { n: 2 }, session)
+
+    expect(session.disproven?.has(left)).toBeFalsy()
+  })
+
+  it('a failure that walked far is remembered', () => {
+    const session = createDeepEqualSession()
+    const rows = (last: number): object[] => [...Array.from({ length: 40 }, () => ({})), { last }]
+    const left = rows(1)
+
+    deepEqualInSession(left, rows(2), session)
+
+    expect(session.disproven?.has(left)).toBe(true)
+  })
+})
+
+describe('comparisons that fail inside a Heap', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('a pair assumed equal on its own path is not reused after it fails', () => {
+    const one = containsItself(1)
+    const two = containsItself(2)
+    const otherOne = containsItself(1)
+
+    const matched = deepEqual(new Heap([one, one], tied), new Heap([two, otherOne], tied))
+
+    expect(matched).toBe(false)
+  })
+
+  it('a pair proven under a failed assumption is not reused', () => {
+    const [one, otherOne] = [loop(1), loop(1)]
+    const [two, otherTwo] = [loop(2), loop(2)]
+    const left = [one.outer, otherTwo.outer, one.inner]
+    const right = [two.outer, otherOne.outer, two.inner]
+
+    const twoOnes = new Heap([...left, one.inner], tied)
+    const oneOfEach = new Heap([...right, otherOne.inner], tied)
+
+    expect(deepEqual(twoOnes, oneOfEach)).toBe(false)
+  })
+
+  it('a pair that failed does not hide a later true match', () => {
+    const [one, otherOne] = [loop(1), loop(1)]
+    const [two, otherTwo] = [loop(2), loop(2)]
+
+    const left = new Heap([one.outer, otherTwo.outer, one.inner, otherTwo.inner], tied)
+    const right = new Heap([two.outer, otherOne.outer, two.inner, otherOne.inner], tied)
+
+    expect(deepEqual(left, right)).toBe(true)
+  })
+
+  it('a match that holds only by assumption does not spend a partner another item needs', () => {
+    const pad = (): unknown => new Deque(Array.from({ length: 40 }, () => ({})))
+    function second(items: (heaps: Heap<unknown>[]) => unknown[][]): Heap<unknown> {
+      const heaps = Array.from({ length: 3 }, () => new Heap<unknown>([pad()], tied))
+      items(heaps).forEach((own, i) => {
+        for (const item of own) heaps[i].push(item)
+      })
+      return heaps[1]
+    }
+
+    const left = second(([a, b, c]) => [
+      [a, 0, c],
+      [b, a, a],
+      [a, 0, 1]
+    ])
+    const right = second(([a, b, c]) => [
+      [0, c, a],
+      [a, b, a],
+      [0, a, 1]
+    ])
+
+    expect(deepEqual(left, right)).toBe(true)
+  })
+
+  it('a failed match over one class of self-containing items costs one comparison each', () => {
+    const width = 40
+    const items = (odd: number): Deque<unknown>[] => [
+      ...Array.from({ length: width }, () => containsItself(1)),
+      containsItself(odd)
+    ]
+    const left = new Heap(items(2), tied)
+    const right = new Heap(items(3), tied)
+    const calls = hookCalls(Deque.prototype, protocol.equals)
+
+    expect(deepEqual(left, right)).toBe(false)
+
+    expect(calls.mock.calls.length).toBeLessThanOrEqual(5 * width)
+  })
+
+  it('a failed match that assumed nothing runs one pass over the candidates', () => {
+    const width = 40
+    const values = Array.from({ length: width }, (_, i) => i + 2)
+    const deques = (list: number[]): Deque<number>[] => list.map((value) => new Deque([value]))
+    const left = new Heap(deques([...values, 1]), tied)
+    const right = new Heap(deques([...values.toReversed(), 0]), tied)
+    const calls = hookCalls(Deque.prototype, protocol.equals)
+
+    expect(deepEqual(left, right)).toBe(false)
+
+    expect(calls.mock.calls.length).toBeLessThanOrEqual(width * width)
+  })
+
+  it('a Heap that contains itself terminates', () => {
+    const left = new Heap<unknown>([], tied)
+    left.push(left)
+    const right = new Heap<unknown>([], tied)
+    right.push(right)
+
+    expect(deepEqual(left, right)).toBe(true)
+  })
+
+  /** A failed candidate costs a re-walk of what it retracted, never a multiple per level. */
+  const TOWER_LEVELS = 10
+  const retried: [string, (x: unknown, tail: number) => unknown][] = [
+    ['plain wrappers', (x, tail) => [x, tail]],
+    ['collection wrappers', (x, tail) => new Deque([x, tail])]
+  ]
+
+  describe.each(retried)('failed candidates with %s', (_, wrap) => {
+    const level =
+      (order: [number, number]) =>
+      (x: unknown): unknown =>
+        new Heap([wrap(x, order[0]), wrap(x, order[1])], tied)
+
+    function tower(order: [number, number], leaf: unknown): unknown {
+      return stack(level(order), TOWER_LEVELS, leaf)
+    }
+
+    it('over a self-containing leaf stay polynomial', DOS_TIMEOUT, () => {
+      const left = tower([2, 1], containsItself(1))
+      const right = tower([1, 2], containsItself(1))
+      const calls = hookCalls(Heap.prototype, protocol.equals)
+
+      expect(deepEqual(left, right)).toBe(true)
+
+      expect(calls.mock.calls.length).toBeLessThanOrEqual(TOWER_LEVELS * TOWER_LEVELS)
+    })
+
+    it('under a pair assumed at the root stay polynomial', DOS_TIMEOUT, () => {
+      function rooted(order: [number, number]): Deque<unknown> {
+        const root = new Deque<unknown>()
+        root.push(tower(order, new Deque([root])))
+        return root
+      }
+      const left = rooted([2, 1])
+      const right = rooted([1, 2])
+      const calls = hookCalls(Heap.prototype, protocol.equals)
+
+      expect(deepEqual(left, right)).toBe(true)
+
+      expect(calls.mock.calls.length).toBeLessThanOrEqual(TOWER_LEVELS * TOWER_LEVELS)
+    })
+
+    it('that end in a difference stay polynomial', DOS_TIMEOUT, () => {
+      const left = tower([2, 1], containsItself(1))
+      const right = tower([1, 2], containsItself(2))
+      const calls = hookCalls(Heap.prototype, protocol.equals)
+
+      expect(deepEqual(left, right)).toBe(false)
+
+      expect(calls.mock.calls.length).toBeLessThanOrEqual(TOWER_LEVELS * TOWER_LEVELS)
+    })
   })
 })
 

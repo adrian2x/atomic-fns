@@ -42,6 +42,23 @@ const FLATTEN_SHARED_REVISIT_ERROR = 'input repeats shared objects beyond 250000
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
 let currentDepth = 0
 
+/** Sessions of the running walk, keyed by the factory that built them. */
+const walkSessions = new Map<() => object, object>()
+
+/**
+ * The session `create` built for the running walk, built on first use. Collection hooks re-enter
+ * `clone` and `deepEqual` mid-walk, so every hop of one top-level call sees the same session. It
+ * is dropped when the nesting count returns to 0.
+ */
+export function walkSession<T extends object>(create: () => T): T {
+  let session = walkSessions.get(create) as T | undefined
+  if (session === undefined) {
+    session = create()
+    walkSessions.set(create, session)
+  }
+  return session
+}
+
 let sharedWork = 0
 let lastSharedWork = 0
 let revisitGuardDepth = 0
@@ -78,6 +95,7 @@ export function withHookNesting<T>(fn: () => T): T {
     return fn()
   } finally {
     exitNesting(half)
+    if (currentDepth === 0) walkSessions.clear()
   }
 }
 
@@ -104,6 +122,8 @@ export function guardNesting<T>(fn: () => T): T {
       throw new RangeError(NESTING_ERROR, { cause: e })
     }
     throw e
+  } finally {
+    walkSessions.clear()
   }
 }
 

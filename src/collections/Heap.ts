@@ -4,7 +4,7 @@ import {
   type CanonicalKeySession
 } from '../internal/canonicalKey.js'
 import { arrayFromIterable } from '../internal/iterable.js'
-import { withHookNesting } from '../internal/nesting.js'
+import { walkSession, withHookNesting } from '../internal/nesting.js'
 import { createDeepEqualSession, deepEqualInSession } from '../operators/equality.js'
 import type { DeepEqualSession } from '../operators/equality.js'
 import type { Comparer } from '../operators/index.js'
@@ -55,12 +55,13 @@ function bucketize<T>(side: HeapEqItem<T>[]): Buckets<T> {
  * Multiset equality leftovers after exact-key cancellation and hashed-group matching, then
  * pairwise matching for every leftover impure item (O(leftover_impure × leftovers)). Pure
  * leftovers may only be consumed by those matches. JSON-only heaps cancel entirely by key and
- * never take the pairwise path. Every pairwise comparison shares one deepEqual session, so
- * subtrees already proven equal are not compared again.
+ * never take the pairwise path. Every pairwise comparison shares the walk's deepEqual session,
+ * so subtrees already settled are not compared again, across nested Heaps too. A failed greedy
+ * pass is final only if nothing was assumed equal yet; otherwise exact matching decides.
  */
 function heapMultisetEqual<T>(aItems: Iterable<T>, bItems: Iterable<T>): boolean {
   const keys = createCanonicalKeySession()
-  const session = createDeepEqualSession()
+  const session = walkSession(createDeepEqualSession)
   const sideA = bucketize([...aItems].map((item) => classifyHeapItem(item, keys)))
   const sideB = bucketize([...bItems].map((item) => classifyHeapItem(item, keys)))
 
@@ -88,6 +89,16 @@ function heapMultisetEqual<T>(aItems: Iterable<T>, bItems: Iterable<T>): boolean
   if (leftoverA.length === 0 && leftoverB.length === 0) return true
   if (leftoverA.length !== leftoverB.length) return false
 
+  if (matchLeftovers(leftoverA, leftoverB, session)) return true
+  return session.assumptions !== 0 && hasPerfectMatching(leftoverA, leftoverB, session)
+}
+
+/** Greedy pairwise matching: exact when `deepEqual` is an equivalence on the items. */
+function matchLeftovers<T>(
+  leftoverA: HeapEqItem<T>[],
+  leftoverB: HeapEqItem<T>[],
+  session: DeepEqualSession
+): boolean {
   const usedA = new Array<boolean>(leftoverA.length).fill(false)
   const usedB = new Array<boolean>(leftoverB.length).fill(false)
 
@@ -123,6 +134,53 @@ function heapMultisetEqual<T>(aItems: Iterable<T>, bItems: Iterable<T>): boolean
   }
   for (let i = 0; i < leftoverB.length; i++) {
     if (!usedB[i]) return false
+  }
+  return true
+}
+
+const NONE = -1
+
+/**
+ * Whether every item of `a` can take its own `deepEqual` partner in `b`, by augmenting paths. A
+ * pair assumed equal on a cycle may turn out unequal, so it is not an equivalence: a greedy match
+ * can spend the partner another item needs, and memoizing that false would poison later matches.
+ * Breadth-first so a wide Heap cannot overflow the stack.
+ */
+function hasPerfectMatching<T>(
+  a: HeapEqItem<T>[],
+  b: HeapEqItem<T>[],
+  session: DeepEqualSession
+): boolean {
+  const partnerOfA = new Array<number>(a.length).fill(NONE)
+  const partnerOfB = new Array<number>(b.length).fill(NONE)
+  const matches = (i: number, j: number): boolean =>
+    !(a[i].pure && b[j].pure) && deepEqualInSession(a[i].item, b[j].item, session)
+  for (let start = 0; start < a.length; start++) {
+    const reachedFrom = new Array<number>(b.length).fill(NONE)
+    const queue = [start]
+    let free = NONE
+    for (let head = 0; head < queue.length && free === NONE; head++) {
+      const i = queue[head]
+      // Free partners first, so an all-equal class never compares against taken ones.
+      free = partnerOfB.findIndex((partner, j) => partner === NONE && matches(i, j))
+      if (free !== NONE) {
+        reachedFrom[free] = i
+        break
+      }
+      for (let j = 0; j < b.length; j++) {
+        if (partnerOfB[j] === NONE || reachedFrom[j] !== NONE || !matches(i, j)) continue
+        reachedFrom[j] = i
+        queue.push(partnerOfB[j])
+      }
+    }
+    if (free === NONE) return false
+    while (free !== NONE) {
+      const i = reachedFrom[free]
+      const displaced = partnerOfA[i]
+      partnerOfA[i] = free
+      partnerOfB[free] = i
+      free = displaced
+    }
   }
   return true
 }
@@ -194,8 +252,8 @@ export class Heap<T> extends ValueCollection<T> {
    * and match pairwise within the group (a collision only costs time). After that, every
    * leftover impure item is matched pairwise by `deepEqual` against an unmatched leftover of the
    * other side (leftover pures may only be consumed by those matches); any unmatched leftover
-   * yields false. All pairwise comparisons share one deepEqual session (proven pairs and nesting
-   * counters), so shared-reference DAGs stay linear. JSON-only heaps never take the pairwise
+   * yields false. All pairwise comparisons share the walk's deepEqual session (settled pairs and
+   * nesting counters), so shared-reference DAGs stay linear. JSON-only heaps never take the pairwise
    * path. Iteration / heap order is not part of equality.
    */
   override [protocol.equals](other: unknown): boolean {

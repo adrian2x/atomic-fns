@@ -3,30 +3,64 @@
  */
 
 import { isHugeSparse, walkArray } from '../internal/arrayKeys.js'
-import { enterNesting, exitNesting, guardNesting, withHookNesting } from '../internal/nesting.js'
+import {
+  enterNesting,
+  exitNesting,
+  guardNesting,
+  walkSession,
+  withHookNesting
+} from '../internal/nesting.js'
 import { eq, sameValueZero } from './order.js'
 import { hasMethod, protocol } from './protocol.js'
 
 /** Pairs `(a, b)` currently being compared on the active path, keyed by `a`. */
 type Pending = WeakMap<object, Set<object>>
 
-/** Pairs already proven equal within one deepEqual session. */
-type Proven = WeakMap<object, WeakSet<object>>
+/** Pairs with a settled answer within one deepEqual session. */
+type Settled = WeakMap<object, WeakSet<object>>
 
 /**
- * Internal state shared by every comparison of one deepEqual session: the pairs proven equal
- * and the pairs on the active path. Public `deepEqual` creates a fresh session per call; Heap
- * equality shares one across all of its pairwise comparisons so shared-reference subtrees are
- * compared once. Not exported from any barrel.
+ * Internal state shared by every comparison of one top-level call, collection hooks and Heap
+ * matching included, so shared-reference subtrees are compared once. Not exported from any barrel.
+ *
+ * A pair on the active path is assumed equal, which a later failure of that pair can disprove.
+ * In a plain walk that failure ends the call, but Heap matching catches it and tries the next
+ * candidate, so proofs that may rest on the assumption are retracted (see `deepEqualInSession`).
+ * Unequal answers are never retracted: every comparison is monotone in its parts, so a false
+ * reached under an assumption also holds without it (Heap matching keeps this by leaving its
+ * greedy pass once a pair was assumed). A pair that walked far can therefore fail only once,
+ * which bounds the retractions and keeps cyclic input polynomial.
  */
 export interface DeepEqualSession {
   readonly pending: Pending
-  readonly proven: Proven
+  readonly proven: Settled
+  /** Created by the first remembered failure; most walks have none. */
+  disproven?: Settled
+  /** Pairs proven since the first assumption: the only proofs that can rest on one. */
+  readonly provenLog: [object, object][]
+  /** Times a pair on the active path was assumed equal. */
+  assumptions: number
+  /** Pairs put on the active path so far. */
+  visits: number
 }
 
-/** Create an empty session (no pairs pending or proven). */
+/**
+ * Pairs a failed comparison must have walked before it is remembered. A wide Heap fails most of
+ * its k^2 candidate pairs: remembering the shallow ones costs quadratic memory and saves nothing,
+ * while the walks that multiply per level all pass this quickly.
+ * shortcut: deep items in a wide Heap still store k^2 failures, a cap needs a per-walk budget.
+ */
+const MIN_VISITS_TO_REMEMBER_FAILURE = 32
+
+/** Create an empty session (no pairs pending or settled). */
 export function createDeepEqualSession(): DeepEqualSession {
-  return { pending: new WeakMap(), proven: new WeakMap() }
+  return {
+    pending: new WeakMap(),
+    proven: new WeakMap(),
+    provenLog: [],
+    assumptions: 0,
+    visits: 0
+  }
 }
 
 const BOXED_PRIMITIVES = [Number, String, Boolean, BigInt, Symbol] as const
@@ -62,23 +96,81 @@ function bytesEqual(a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBuff
   return ua.length === ub.length && ua.every((byte, i) => byte === ub[i])
 }
 
-function rememberProven(proven: Proven, a: object, b: object): void {
-  let set = proven.get(a)
+function remember(pairs: Settled, a: object, b: object): void {
+  let set = pairs.get(a)
   if (set === undefined) {
     set = new WeakSet()
-    proven.set(a, set)
+    pairs.set(a, set)
   }
   set.add(b)
 }
 
-function isProven(proven: Proven, a: object, b: object): boolean {
-  return proven.get(a)?.has(b) === true || proven.get(b)?.has(a) === true
+function isRemembered(pairs: Settled, a: object, b: object): boolean {
+  return pairs.get(a)?.has(b) === true || pairs.get(b)?.has(a) === true
 }
 
-function deepEqualInner(a: unknown, b: unknown, pending: Pending, proven: Proven): boolean {
+/** The session's settled answer for a pair, or `undefined` when it has none. */
+function knownAnswer(a: object, b: object, session: DeepEqualSession): boolean | undefined {
+  if (session.disproven !== undefined && isRemembered(session.disproven, a, b)) return false
+  return isRemembered(session.proven, a, b) ? true : undefined
+}
+
+/**
+ * Put a pair on the active path; delete `b` from the returned set to take it off again. A pair
+ * already there is assumed equal instead, and `undefined` is returned.
+ */
+function enterPair(a: object, b: object, session: DeepEqualSession): Set<object> | undefined {
+  let partners = session.pending.get(a)
+  if (partners === undefined) {
+    partners = new Set()
+    session.pending.set(a, partners)
+  } else if (partners.has(b)) {
+    session.assumptions++
+    return undefined
+  }
+  partners.add(b)
+  session.visits++
+  return partners
+}
+
+function settle(
+  a: object,
+  b: object,
+  session: DeepEqualSession,
+  equal: boolean,
+  visitsBefore: number
+): boolean {
+  if (equal) {
+    remember(session.proven, a, b)
+    if (session.assumptions !== 0) session.provenLog.push([a, b])
+  } else if (session.visits - visitsBefore >= MIN_VISITS_TO_REMEMBER_FAILURE) {
+    session.disproven ??= new WeakMap()
+    remember(session.disproven, a, b)
+  }
+  return equal
+}
+
+/** Only iterables can share work: a hook on a scalar (Decimal, IntlDate) has nothing to walk. */
+function hasItems(v: unknown): v is object {
+  return typeof v === 'object' && v !== null && Symbol.iterator in v
+}
+
+// The two pair walks below stay inline: a shared wrapper adds stack frames per nesting level.
+function deepEqualInner(a: unknown, b: unknown, session: DeepEqualSession): boolean {
   if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) {
     // Half of HOOK_NESTING_COST at dispatch; collection hooks charge the other half in-method.
-    return withHookNesting(() => eq(a, b))
+    if (!hasItems(a) || !hasItems(b)) return withHookNesting(() => eq(a, b))
+    const known = knownAnswer(a, b, session)
+    if (known !== undefined) return known
+    const partners = enterPair(a, b, session)
+    if (partners === undefined) return true
+    const visitsBefore = session.visits
+    try {
+      const equal = withHookNesting(() => eq(a, b))
+      return settle(a, b, session, equal, visitsBefore)
+    } finally {
+      partners.delete(b)
+    }
   }
   if (eq(a, b)) return true
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
@@ -91,21 +183,16 @@ function deepEqualInner(a: unknown, b: unknown, pending: Pending, proven: Proven
     const boxed = unboxed(a)
     if (boxed !== NOT_BOXED) return Object.is(boxed, unboxed(b))
 
-    if (isProven(proven, a, b)) return true
-
     // A pair on the current path is treated as equal. The pair is removed again after its
     // children are compared, so a shared sub-object may be paired with different partners.
-    let partners = pending.get(a)
-    if (partners?.has(b)) return true
-    if (partners === undefined) {
-      partners = new Set()
-      pending.set(a, partners)
-    }
-    partners.add(b)
+    const known = knownAnswer(a, b, session)
+    if (known !== undefined) return known
+    const partners = enterPair(a, b, session)
+    if (partners === undefined) return true
+    const visitsBefore = session.visits
     try {
-      const equal = deepEqualChildren(a, b, pending, proven)
-      if (equal) rememberProven(proven, a, b)
-      return equal
+      const equal = deepEqualChildren(a, b, session)
+      return settle(a, b, session, equal, visitsBefore)
     } finally {
       partners.delete(b)
     }
@@ -114,7 +201,7 @@ function deepEqualInner(a: unknown, b: unknown, pending: Pending, proven: Proven
   }
 }
 
-function deepEqualChildren(a: object, b: object, pending: Pending, proven: Proven): boolean {
+function deepEqualChildren(a: object, b: object, session: DeepEqualSession): boolean {
   if (a instanceof Date) {
     return a.getTime() === (b as Date).getTime()
   }
@@ -129,7 +216,7 @@ function deepEqualChildren(a: object, b: object, pending: Pending, proven: Prove
     if (a.size !== mb.size) return false
     for (const [k, v] of a) {
       if (!mb.has(k)) return false
-      if (!deepEqualInner(v, mb.get(k), pending, proven)) return false
+      if (!deepEqualInner(v, mb.get(k), session)) return false
     }
     return true
   }
@@ -147,7 +234,7 @@ function deepEqualChildren(a: object, b: object, pending: Pending, proven: Prove
     const len = a.length
     let i = 0
     for (; i < len && i in a && i in bb; i++) {
-      if (!deepEqualInner(a[i], bb[i], pending, proven)) return false
+      if (!deepEqualInner(a[i], bb[i], session)) return false
     }
     if (i < len && (isHugeSparse(a) || isHugeSparse(bb))) {
       const keysA: number[] = []
@@ -161,12 +248,12 @@ function deepEqualChildren(a: object, b: object, pending: Pending, proven: Prove
       if (keysA.length !== keysB.length) return false
       for (let k = 0; k < keysA.length; k++) {
         if (keysA[k] !== keysB[k]) return false
-        if (!deepEqualInner(a[keysA[k]], bb[keysB[k]], pending, proven)) return false
+        if (!deepEqualInner(a[keysA[k]], bb[keysB[k]], session)) return false
       }
       return true
     }
     for (; i < len; i++) {
-      if (!deepEqualInner(a[i], bb[i], pending, proven)) return false
+      if (!deepEqualInner(a[i], bb[i], session)) return false
     }
     return true
   }
@@ -177,12 +264,7 @@ function deepEqualChildren(a: object, b: object, pending: Pending, proven: Prove
   for (const k of keysA) {
     if (!Object.hasOwn(b, k)) return false
     if (
-      !deepEqualInner(
-        (a as Record<string, unknown>)[k],
-        (b as Record<string, unknown>)[k],
-        pending,
-        proven
-      )
+      !deepEqualInner((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], session)
     ) {
       return false
     }
@@ -195,22 +277,29 @@ function deepEqualChildren(a: object, b: object, pending: Pending, proven: Prove
  * Dispatches to `protocol.equals` when either side defines it. Boxed primitives compare by
  * `Object.is` on their primitive value. Nesting past 1000 levels throws `RangeError` (the cap
  * is a security bound, not an implementation limit). A pair already under comparison on the
- * current path is treated as equal. Pairs proven equal are memoized for the rest of the
- * top-level call so shared-reference DAGs stay linear. Collection equality hooks re-enter this
- * function and continue the same nesting count. Nesting is counted only for object pairs (after
- * primitive checks), so a 1000-deep structure ending in a primitive is accepted.
+ * current path is treated as equal. Settled pairs are memoized for the rest of the top-level
+ * call so shared-reference DAGs stay linear. Collection equality hooks re-enter this function,
+ * continue the same nesting count and share that memo. Nesting is counted only for object pairs
+ * (after primitive checks), so a 1000-deep structure ending in a primitive is accepted.
  */
 export function deepEqual(a: unknown, b: unknown): boolean {
-  return deepEqualInSession(a, b, createDeepEqualSession())
+  return deepEqualInSession(a, b, walkSession(createDeepEqualSession))
 }
 
 /**
- * `deepEqual` over a caller-owned session. Pairs proven equal by earlier calls on the same
- * session are reused, and nesting is counted through the shared nesting guard exactly as in
- * `deepEqual`. Internal: not exported from the public barrels.
+ * `deepEqual` over a given session. Pairs settled by earlier calls on the same session are
+ * reused, and nesting is counted through the shared nesting guard exactly as in `deepEqual`. A
+ * comparison that fails after assuming a pair retracts what it proved, because those proofs may
+ * rest on the assumption that just failed. Internal: not exported from the public barrels.
  */
 export function deepEqualInSession(a: unknown, b: unknown, session: DeepEqualSession): boolean {
-  return guardNesting(() => deepEqualInner(a, b, session.pending, session.proven))
+  const proofsBefore = session.provenLog.length
+  const assumptionsBefore = session.assumptions
+  const equal = guardNesting(() => deepEqualInner(a, b, session))
+  if (!equal && session.assumptions !== assumptionsBefore) {
+    for (const [x, y] of session.provenLog.splice(proofsBefore)) session.proven.get(x)?.delete(y)
+  }
+  return equal
 }
 
 /**

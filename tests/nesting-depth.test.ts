@@ -21,7 +21,7 @@ import {
   HOOK_NESTING_COST,
   setHookNestingCost
 } from '../src/internal/nesting.js'
-import { deepEqual } from '../src/operators/index.js'
+import { deepEqual, protocol } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
 function nestArray(depth: number): unknown {
@@ -254,6 +254,49 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
     } finally {
       setHookNestingCost(saved)
     }
+  })
+
+  it.each<[string, (shared: Deque<{ n: number }>) => void]>([
+    ['deep clone', (shared) => void clone([shared], true)],
+    ['clone hook', (shared) => void shared[protocol.clone](true)],
+    [
+      'deep clone stopped by the cap',
+      (shared) => {
+        expect(() => clone([shared, nestDeque(DEEP)], true)).toThrow(NESTING_MSG)
+      }
+    ]
+  ])('a finished %s leaves no memo for the next clone', (_, walk) => {
+    const row = { n: 1 }
+    const shared = new Deque([row])
+
+    walk(shared)
+    row.n = 2
+
+    expect(getNestingDepth()).toBe(0)
+    expect(clone(shared, true).at(0)).toEqual({ n: 2 })
+  })
+
+  it.each<[string, (left: Deque<{ n: number }>, right: Deque<{ n: number }>) => void]>([
+    ['deepEqual', (left, right) => void deepEqual([left], [right])],
+    ['equals hook', (left, right) => void left[protocol.equals](right)],
+    [
+      'deepEqual stopped by the cap',
+      (left, right) => {
+        expect(() => deepEqual([left, nestDeque(DEEP)], [right, nestDeque(DEEP)])).toThrow(
+          NESTING_MSG
+        )
+      }
+    ]
+  ])('a finished %s leaves no proof for the next deepEqual', (_, walk) => {
+    const row = { n: 1 }
+    const left = new Deque([{ n: 1 }])
+    const right = new Deque([row])
+
+    walk(left, right)
+    row.n = 2
+
+    expect(getNestingDepth()).toBe(0)
+    expect(deepEqual(left, right)).toBe(false)
   })
 
   it('omit cyclic deep path hits nesting cap, not stack overflow', () => {

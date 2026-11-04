@@ -10,6 +10,7 @@ import {
   guardNesting,
   guardSharedRevisits,
   noteExpanded,
+  walkSession,
   withHookNesting
 } from '../internal/nesting.js'
 import { truncateForError } from '../internal/truncate.js'
@@ -530,7 +531,9 @@ const BOXED_TAGS = new Set([
  * keeps key identity and deep-clones values. RegExp match arrays keep `index` / `input` /
  * `groups`. Class instances stay by reference. Symbol `protocol.clone` is honored and
  * receives the `deep` flag; a string-named `clone` method is ignored. Collection classes
- * deep-clone their values when `deep` is true (map-like keys stay by reference).
+ * deep-clone their values when `deep` is true (map-like keys stay by reference). Within one
+ * top-level deep clone, an object reached twice is copied once and stays shared in the result,
+ * also through `protocol.clone` hooks. A collection that contains itself still hits the cap.
  * Deep nesting deeper than 1000 levels throws `RangeError`. A shallow clone of a huge sparse array
  * (`length > 2^24` and `length > 2 * filled + 1024`) throws
  * `RangeError('sparse array too large')`; a deep clone walks own elements only and returns.
@@ -538,7 +541,13 @@ const BOXED_TAGS = new Set([
  * @param deep Deep clone when true.
  */
 export function clone<T>(value: T, deep = false): T {
-  return guardNesting(() => cloneInner(value, deep, new WeakMap()) as T)
+  return guardNesting(
+    () => cloneInner(value, deep, deep ? walkSession(createCloneMemo) : new WeakMap()) as T
+  )
+}
+
+function createCloneMemo(): WeakMap<object, unknown> {
+  return new WeakMap()
 }
 
 function copyEnumerableSymbols(
@@ -577,7 +586,9 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
   }
   if (hasMethod(v, protocol.clone)) {
     // Half of HOOK_NESTING_COST at dispatch; collection clone hooks charge the other half.
-    return withHookNesting(() => v[protocol.clone](true))
+    const copy = withHookNesting(() => v[protocol.clone](true))
+    map.set(v, copy)
+    return copy
   }
   enterNesting()
   try {

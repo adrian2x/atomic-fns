@@ -2,27 +2,9 @@ import { withHookNesting } from '../internal/nesting.js'
 import { deepEqual, protocol } from '../operators/index.js'
 import { clone } from './object.js'
 
-/** Pairs `(a, b)` whose `equals` is running, so a collection that contains itself terminates. */
-const comparing = new WeakMap<object, Set<object>>()
-
-function beginCompare(a: object, b: object): boolean {
-  let partners = comparing.get(a)
-  if (partners?.has(b)) return true
-  if (partners === undefined) {
-    partners = new Set()
-    comparing.set(a, partners)
-  }
-  partners.add(b)
-  return false
-}
-
-function endCompare(a: object, b: object): void {
-  comparing.get(a)?.delete(b)
-}
-
 /**
  * Collection equality: same constructor, same size, and pairwise `deepEqual` of the items in
- * iteration order. A pair already being compared is treated as equal.
+ * iteration order. `deepEqual` ends the walk of a collection that contains itself.
  */
 function sameItems<C extends object & { readonly size: number }>(
   a: C,
@@ -33,7 +15,6 @@ function sameItems<C extends object & { readonly size: number }>(
   if (typeof b !== 'object' || b?.constructor !== a.constructor) return false
   const other = b as C
   if (a.size !== other.size) return false
-  if (beginCompare(a, other)) return true
   const ia = items(a)
   const ib = items(other)
   try {
@@ -46,7 +27,6 @@ function sameItems<C extends object & { readonly size: number }>(
   } finally {
     ia.return?.()
     ib.return?.()
-    endCompare(a, other)
   }
 }
 
@@ -60,15 +40,10 @@ export function sameSetMembers<
   if (typeof b !== 'object' || b?.constructor !== a.constructor) return false
   const other = b as C
   if (a.size !== other.size) return false
-  if (beginCompare(a, other)) return true
-  try {
-    for (const v of values(a)) {
-      if (!other.has(v)) return false
-    }
-    return true
-  } finally {
-    endCompare(a, other)
+  for (const v of values(a)) {
+    if (!other.has(v)) return false
   }
+  return true
 }
 
 /**
@@ -84,17 +59,12 @@ function sameMapEntries<C extends object & { readonly size: number }>(
   if (typeof b !== 'object' || b?.constructor !== a.constructor) return false
   const other = b as C
   if (a.size !== other.size) return false
-  if (beginCompare(a, other)) return true
-  try {
-    const otherMap = new Map(entries(other))
-    for (const [k, v] of entries(a)) {
-      if (!otherMap.has(k)) return false
-      if (!deepEqual(v, otherMap.get(k))) return false
-    }
-    return true
-  } finally {
-    endCompare(a, other)
+  const otherMap = new Map(entries(other))
+  for (const [k, v] of entries(a)) {
+    if (!otherMap.has(k)) return false
+    if (!deepEqual(v, otherMap.get(k))) return false
   }
+  return true
 }
 
 /** Sequence equality helper for ordered collections (Deque, SortedMap, SortedSet, BTree). */
@@ -119,7 +89,6 @@ export function sameEntrySequence<C extends object & { readonly size: number }>(
   if (typeof b !== 'object' || b?.constructor !== a.constructor) return false
   const other = b as C
   if (a.size !== other.size) return false
-  if (beginCompare(a, other)) return true
   const ia = entries(a)
   const ib = entries(other)
   try {
@@ -134,7 +103,6 @@ export function sameEntrySequence<C extends object & { readonly size: number }>(
   } finally {
     ia.return?.()
     ib.return?.()
-    endCompare(a, other)
   }
 }
 
