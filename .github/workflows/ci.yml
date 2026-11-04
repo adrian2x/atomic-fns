@@ -17,6 +17,8 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: node scripts/check-dist.mjs
       - run: npm run check
   consumer:
     runs-on: ubuntu-latest
