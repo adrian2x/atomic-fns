@@ -407,7 +407,7 @@ describe('globals', () => {
   it('list rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
     expectFast(() => {
-      assert.throws(() => list(evil), TypeError, 'expected an iterable')
+      assert.throws(() => list(evil), { name: 'TypeError', message: 'expected an iterable' })
     }, 1000)
   })
 
@@ -443,11 +443,10 @@ describe('globals', () => {
 
   it('POL-24 set refuses sparse array growth beyond length', () => {
     const d = { tags: ['a'] as unknown[] }
-    assert.throws(
-      () => set('tags.4294967294', d, 'x', true, true),
-      RangeError,
-      'array index beyond length'
-    )
+    assert.throws(() => set('tags.4294967294', d, 'x', true, true), {
+      name: 'RangeError',
+      message: 'array index beyond length'
+    })
     assert.equal(d.tags.length, 1)
     set('tags.1', d, 'b', true, true)
     assert.equal(d.tags.length, 2)
@@ -456,7 +455,7 @@ describe('globals', () => {
 
   it('R13-D1: path segments must be strings, numbers or symbols', () => {
     const d = { tags: ['a'] as unknown[] }
-    const err = 'path segments must be strings, numbers or symbols'
+    const err = { name: 'TypeError', message: 'path segments must be strings, numbers or symbols' }
     for (const path of [
       ['tags', ['4294967294']],
       ['tags', [4294967294]],
@@ -465,28 +464,26 @@ describe('globals', () => {
       ['tags', true],
       ['tags', null]
     ]) {
-      assert.throws(() => set(path, d, 'x', true, true), TypeError, err)
-      assert.throws(() => get(path, d, 'D'), TypeError, err)
-      assert.throws(() => del(path, d), TypeError, err)
-      assert.throws(() => has(d, path), TypeError, err)
+      assert.throws(() => set(path, d, 'x', true, true), err)
+      assert.throws(() => get(path, d, 'D'), err)
+      assert.throws(() => del(path, d), err)
+      assert.throws(() => has(d, path), err)
     }
     assert.equal(d.tags.length, 1)
-    assert.throws(() => set([['__proto__']], {}, { p: 1 }, true, true), TypeError, err)
-    assert.throws(() => set([['constructor'], 'prototype', 'x'], {}, 1, true, true), TypeError, err)
+    assert.throws(() => set([['__proto__']], {}, { p: 1 }, true, true), err)
+    assert.throws(() => set([['constructor'], 'prototype', 'x'], {}, 1, true, true), err)
   })
 
   it('R12-D: path segment checks apply to every path form', () => {
     const d = { tags: ['a'] as unknown[] }
-    assert.throws(
-      () => set(['tags', 4294967294], d, 'x', true, true),
-      RangeError,
-      'array index beyond length'
-    )
-    assert.throws(
-      () => set(['tags', 1e9], d, 'x', true, true),
-      RangeError,
-      'array index beyond length'
-    )
+    assert.throws(() => set(['tags', 4294967294], d, 'x', true, true), {
+      name: 'RangeError',
+      message: 'array index beyond length'
+    })
+    assert.throws(() => set(['tags', 1e9], d, 'x', true, true), {
+      name: 'RangeError',
+      message: 'array index beyond length'
+    })
     assert.equal(d.tags.length, 1)
     set(['tags', 0], d, 'z', true, true)
     assert.equal(d.tags[0], 'z')
@@ -496,11 +493,10 @@ describe('globals', () => {
     assert.equal(d.tags.length, 3)
     assert.equal(d.tags[2], 'c')
 
-    assert.throws(
-      () => set(['__proto__', 'x'], {}, 1, true, true),
-      TypeError,
-      'refusing to write through "__proto__"'
-    )
+    assert.throws(() => set(['__proto__', 'x'], {}, 1, true, true), {
+      name: 'TypeError',
+      message: 'refusing to write through "__proto__"'
+    })
     assert.equal(get(['__proto__', 'x'], {}, 'D'), 'D')
     assert.equal(get(['a', 'constructor'], { a: {} }, 'D'), 'D')
     assert.equal(get('a.constructor', { a: {} }, 'D'), 'D')
@@ -537,18 +533,16 @@ describe('globals', () => {
     if (f16) {
       assert.equal(get('f16.fill', { f16 }, 'D'), 'D')
     }
-    assert.throws(
-      () => set('ta.fill.call', doc, 'pwned', true, true),
-      TypeError,
-      'refusing to write through inherited "fills"'
-    )
+    assert.throws(() => set('ta.fill.call', doc, 'pwned', true, true), {
+      name: 'TypeError',
+      message: 'refusing to write through inherited "fill"'
+    })
     assert.equal(get('buf.toString', doc, 'D'), 'D')
     assert.equal(has(doc.buf, 'toString'), false)
-    assert.throws(
-      () => set('buf.toString.call', doc, 'pwned', true, true),
-      TypeError,
-      'refusing to write through inherited "toString"'
-    )
+    assert.throws(() => set('buf.toString.call', doc, 'pwned', true, true), {
+      name: 'TypeError',
+      message: 'refusing to write through inherited "toString"'
+    })
     const ta = new Uint8Array(2)
     ta.fill(9)
     del('ta.fill.name', doc)
@@ -655,13 +649,62 @@ describe('globals', () => {
 
     const obj = { tags: [] as unknown[] }
     const includesBefore = Array.prototype.includes
-    assert.throws(
-      () => set('tags.constructor.prototype.includes', obj, () => false),
-      TypeError,
-      'refusing to write through "constructor"'
-    )
+    assert.throws(() => set('tags.constructor.prototype.includes', obj, () => false), {
+      name: 'TypeError',
+      message: 'refusing to write through "constructor"'
+    })
     assert.equal(Array.prototype.includes, includesBefore)
     assert.equal([1].includes(1), true)
+  })
+
+  it('set refuses to write through an inherited object into the shared prototype', () => {
+    const shared = {}
+    const child = Object.create({ a: shared }) as object
+
+    assert.throws(() => set('a.x', child, 1), {
+      name: 'TypeError',
+      message: 'refusing to write through inherited "a"'
+    })
+
+    assert.deepEqual(Reflect.ownKeys(shared), [])
+  })
+
+  it('set refuses a dangerous last segment on a class instance, not on a plain own key', () => {
+    class Widget {
+      label = 'w'
+    }
+
+    for (const segment of ['__proto__', 'constructor', 'prototype']) {
+      const widget = new Widget()
+      const plain = Object.fromEntries([[segment, 'own']])
+
+      assert.throws(() => set(segment, widget, 'x'), {
+        name: 'TypeError',
+        message: `refusing to write through "${segment}"`
+      })
+      set(segment, plain, 'x')
+
+      assert.equal(Object.hasOwn(widget, segment), false)
+      assert.equal(plain[segment], 'x')
+    }
+  })
+
+  it('del keeps a dangerous own key on a class instance, removes it from a plain object', () => {
+    class Widget {
+      label = 'w'
+    }
+
+    for (const segment of ['__proto__', 'constructor', 'prototype']) {
+      const descriptor = { value: 'own', configurable: true }
+      const widget = Object.defineProperty(new Widget(), segment, descriptor)
+      const plain = Object.fromEntries([[segment, 'own']])
+
+      del(segment, widget)
+      del(segment, plain)
+
+      assert.equal(Object.hasOwn(widget, segment), true)
+      assert.equal(Object.hasOwn(plain, segment), false)
+    }
   })
 
   it('len', () => {

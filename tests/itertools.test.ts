@@ -317,7 +317,7 @@ describe('itertools', () => {
   it('reversed rejects length-driven array-likes before allocating', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
     expectFast(() => {
-      assert.throws(() => reversed(evil), TypeError, 'expected an iterable')
+      assert.throws(() => reversed(evil), { name: 'TypeError', message: 'expected an iterable' })
     }, 1000)
   })
 
