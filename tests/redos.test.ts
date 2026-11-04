@@ -40,18 +40,22 @@ describe('NFR-4 ReDoS guards', () => {
     }
   })
 
-  it('SPEC-R87 asDate finishes on 1e5-char adversarial input', () => {
-    const input = '2022' + '1'.repeat(1e5) + 'x'
+  it('SPEC-R87 asDate finishes on adversarial input that reaches the Date fallback', () => {
+    // Length 128 is the Date-fallback path; longer strings are rejected by the length cap first.
+    const input = '2022' + '1'.repeat(123) + 'x'
+    expect(input.length).toBe(128)
     expectFast(() => {
-      asDate(input)
+      expect(Number.isNaN(asDate(input).getTime())).toBe(true)
     }, BUDGET)
   })
 
   it('SPEC-R87 asDate ReDoS vectors stay within budget and invalid', () => {
     for (const input of [
+      // Linear parser path (never hits the 128 length cap).
       '2021-' + '1'.repeat(1e5),
       '2021-01-01T' + '1'.repeat(1e5),
-      ' '.repeat(1e5)
+      // Date fallback at the length ceiling (cap is > 128).
+      ' '.repeat(128)
     ]) {
       expectFast(() => {
         const d = asDate(input)

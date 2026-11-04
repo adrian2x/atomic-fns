@@ -318,10 +318,22 @@ describe('F-055 linear-time parse and normalize', () => {
   })
 
   it('rejects a long invalid digit run within budget', { timeout: 2000 }, () => {
-    const bad = '1'.repeat(40000) + 'x'
-    expectFast(() => {
-      expect(() => decimal(bad)).toThrow(ValueError)
-    }, 1000)
+    // Just under MAX_INPUT_LENGTH so the length cap does not mask a backtracking regex.
+    const n = Decimal.MAX_INPUT_LENGTH - 1
+    const shapes = [
+      '1'.repeat(n) + 'x',
+      '.' + '1'.repeat(n - 1) + 'x',
+      '-' + '1'.repeat(n - 1) + 'x',
+      '+' + '1'.repeat(n - 1) + 'x',
+      '1'.repeat(n - 2) + '.x',
+      '1'.repeat(n - 2) + 'ex'
+    ]
+    for (const bad of shapes) {
+      expect(bad.length).toBeLessThanOrEqual(Decimal.MAX_INPUT_LENGTH)
+      expectFast(() => {
+        expect(() => decimal(bad)).toThrow(ValueError)
+      }, 200)
+    }
   })
 
   it('old MAX_EXPONENT literals throw exponent out of range fast', { timeout: 2000 }, () => {
