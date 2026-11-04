@@ -14,7 +14,11 @@ import {
 import { decimal } from '../src/decimal/index.js'
 import { IntlDate } from '../src/i18n/date/index.js'
 import { walkSession } from '../src/internal/nesting.js'
-import { createDeepEqualSession, deepEqualInSession } from '../src/operators/equality.js'
+import {
+  createDeepEqualSession,
+  deepEqualInSession,
+  type DeepEqualSession
+} from '../src/operators/equality.js'
 import { deepEqual, eq, protocol } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
@@ -574,12 +578,11 @@ function loop(tail: unknown): { outer: Deque<unknown>; inner: Deque<unknown> } {
 
 /** How many pairs of `left` x `right` a memo holds, in either order. */
 function storedPairs(
-  memo: WeakMap<object, WeakSet<object>> | undefined,
+  memo: DeepEqualSession['proven'] | undefined,
   left: object[],
   right: object[]
 ): number {
-  const held = (a: object, b: object): boolean => memo?.get(a)?.has(b) === true
-  return left.flatMap((a) => right.filter((b) => held(a, b) || held(b, a))).length
+  return left.flatMap((a) => right.filter((b) => memo?.has(a, b) === true)).length
 }
 
 describe('session memory', () => {
@@ -660,6 +663,28 @@ describe('session memory', () => {
     expect(createDeepEqualSession()).toMatchObject({ proofRoom: 2 ** 21, failureRoom: 2 ** 20 })
   })
 
+  it('a walk over distinct rows holds a small fraction of what per-pair sets would', () => {
+    const rows = (): unknown[] => Array.from({ length: 200_000 }, (_, i) => [i, { i }])
+    const { gc } = globalThis
+    if (gc === undefined) throw new Error('tests need --expose-gc')
+    const left = rows()
+    const right = rows()
+    gc()
+    const before = process.memoryUsage().heapUsed
+    let held = Infinity
+    const probe = {
+      [protocol.equals](): boolean {
+        gc()
+        held = process.memoryUsage().heapUsed - before
+        return true
+      }
+    }
+
+    expect(deepEqual([...left, probe], [...right, probe])).toBe(true)
+
+    expect(held).toBeLessThan(64 * 1024 * 1024)
+  })
+
   it('an acyclic walk logs no proofs', () => {
     const session = createDeepEqualSession()
 
@@ -671,29 +696,32 @@ describe('session memory', () => {
   it('a scalar with an equals hook leaves no entry', () => {
     const session = createDeepEqualSession()
     const left = decimal(1)
+    const right = decimal(1)
 
-    deepEqualInSession(left, decimal(1), session)
+    deepEqualInSession(left, right, session)
 
-    expect(session.proven.has(left)).toBe(false)
+    expect(session.proven.has(left, right)).toBe(false)
   })
 
   it('a shallow failure leaves no entry, so a wide Heap stores none', () => {
     const session = createDeepEqualSession()
     const left = { n: 1 }
+    const right = { n: 2 }
 
-    deepEqualInSession(left, { n: 2 }, session)
+    deepEqualInSession(left, right, session)
 
-    expect(session.disproven?.has(left)).toBeFalsy()
+    expect(session.disproven?.has(left, right)).toBeFalsy()
   })
 
   it('a failure that walked far is remembered', () => {
     const session = createDeepEqualSession()
     const rows = (last: number): object[] => [...Array.from({ length: 40 }, () => ({})), { last }]
     const left = rows(1)
+    const right = rows(2)
 
-    deepEqualInSession(left, rows(2), session)
+    deepEqualInSession(left, right, session)
 
-    expect(session.disproven?.has(left)).toBe(true)
+    expect(session.disproven?.has(left, right)).toBe(true)
   })
 })
 
