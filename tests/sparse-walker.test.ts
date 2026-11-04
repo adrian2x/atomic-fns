@@ -49,8 +49,8 @@ import { expectFast } from './helpers/perf.js'
 
 /** Pre-fix: hang on length 4e9. Hang-floor budget max(1000, 5xM). */
 const BUDGET = 1000
-/** Dense 1e6 deepEqual median under coverage ~178ms -> max(1000, 5xM)=1000. */
-const DENSE_EQ_BUDGET = 1000
+/** Dense 1e6 deepEqual on a CI runner under coverage ~1200ms -> max(1000, 5xM)=6000. */
+const DENSE_EQ_BUDGET = 6000
 /** Dense 1e6 clone median ~28ms -> max(1000, 5xM)=1000. */
 const DENSE_CLONE_BUDGET = 1000
 /** Far above the few hundred reads an own-element walk needs; far below any huge length. */
