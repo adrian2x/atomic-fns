@@ -1,5 +1,6 @@
 import { afterEach, describe, it, expect } from 'vitest'
 import { merge } from '../src/collections/index.js'
+import { budget } from './helpers/perf.js'
 
 describe('merge', () => {
   it('SPEC-R31 pollution payloads top-level nested and array-nested', () => {
@@ -124,7 +125,7 @@ describe('merge', () => {
     ['one past the end', { length: 1 }]
   ])(
     'merge refuses a source length that could grow an array target: %s',
-    { timeout: 1000 },
+    { timeout: budget(1000) },
     (_kind, source) => {
       const target: unknown[] = []
 

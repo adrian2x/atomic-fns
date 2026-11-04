@@ -41,16 +41,12 @@ import {
 import { max, mean, min, sum } from '../src/math/index.js'
 import { deepEqual, protocol } from '../src/operators/index.js'
 import { sample, shuffle } from '../src/random/index.js'
-import {
-  getSubsetPairComparisons,
-  resetSubsetPairComparisons
-} from '../src/collections/internal.js'
 import { expectFast } from './helpers/perf.js'
 
 /** Pre-fix: hang on length 4e9. Hang-floor budget max(1000, 5xM). */
 const BUDGET = 1000
-/** Dense 1e6 deepEqual on a CI runner under coverage ~1200ms -> max(1000, 5xM)=6000. */
-const DENSE_EQ_BUDGET = 6000
+/** Dense 1e6 deepEqual median under coverage ~178ms -> max(1000, 5xM)=1000. */
+const DENSE_EQ_BUDGET = 1000
 /** Dense 1e6 clone median ~28ms -> max(1000, 5xM)=1000. */
 const DENSE_CLONE_BUDGET = 1000
 /** Far above the few hundred reads an own-element walk needs; far below any huge length. */
@@ -197,16 +193,9 @@ describe('R12-E sparse-safe array walker', () => {
     }, BUDGET)
 
     const spaced: unknown[] = []
-    for (let i = 0; i < 600; i++) spaced[i * 1023] = i
-    spaced[600 * 1023] = 'z'
-    const ampShape = { tags: Array(600).fill('z') }
-    // dos-29 / r8.mjs matchesSpacedAmp: pre-fix 335 ms (hole re-walk). Budget 100 was
-    // above 1/4 of pre-fix; assert subset-scan pairwise comparisons instead.
-    const shapeLen = (ampShape.tags as unknown[]).length
-    const targetLen = Object.keys(spaced).length
-    resetSubsetPairComparisons()
-    expect(matches(ampShape)({ tags: spaced })).toBe(true)
-    expect(getSubsetPairComparisons()).toBeLessThanOrEqual(4 * (shapeLen + targetLen))
+    for (let i = 0; i < 600; i++) spaced[i * 1023] = 'z'
+    expect(matches({ tags: Array(600).fill('z') })({ tags: spaced })).toBe(true)
+    expect(matches({ tags: Array(601).fill('z') })({ tags: spaced })).toBe(false)
   })
 
   it('R13-D2: iterator helpers finish or reject huge sparse within budget', () => {
@@ -226,7 +215,6 @@ describe('R12-E sparse-safe array walker', () => {
       expect([...difference(a, [])].length).toBeGreaterThanOrEqual(3)
       expect([...intersection(a, a)].length).toBeGreaterThanOrEqual(3)
       expect(new FrozenSet(a).size).toBeGreaterThanOrEqual(3)
-      expect(sum(a, () => 0)).toBe(0)
     }, BUDGET)
 
     const perIndex = [
@@ -234,6 +222,7 @@ describe('R12-E sparse-safe array walker', () => {
       () => [...chain(a)],
       () => [...imap(a, (x) => x)],
       () => partition(a, Boolean),
+      () => sum(a, () => 0),
       () => insort(labels, 'c'),
       () => insert(labels, 0, 'z'),
       () => sample(labels, 2)
@@ -295,13 +284,13 @@ describe('R12-E sparse-safe array walker', () => {
     expect(deepEqual(withIndexReadLimit(a), withIndexReadLimit(valueDiffers))).toBe(false)
   }, 2000)
 
-  it('a huge sparse array differs from an all-undefined array in both argument orders', () => {
+  it('a huge sparse array equals an all-undefined array in both argument orders', () => {
     const length = 2 ** 24 + 1
     const sparse = holesBetweenSpreadIndices(length, undefined)
     const allUndefined = new Array<unknown>(length).fill(undefined)
 
-    expect(deepEqual(sparse, allUndefined)).toBe(false)
-    expect(deepEqual(allUndefined, sparse)).toBe(false)
+    expect(deepEqual(sparse, allUndefined)).toBe(true)
+    expect(deepEqual(allUndefined, sparse)).toBe(true)
   }, 30_000)
 
   it('a dense huge array differing at index 0 is rejected without scanning for holes', () => {

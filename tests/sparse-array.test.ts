@@ -3,7 +3,7 @@ import { clone, flatten, pick } from '../src/collections/index.js'
 import { set } from '../src/globals/index.js'
 import { HUGE_SPARSE_MIN_LENGTH } from '../src/internal/arrayKeys.js'
 import { deepEqual } from '../src/operators/index.js'
-import { expectFast } from './helpers/perf.js'
+import { budget, expectFast } from './helpers/perf.js'
 
 /** Pre-fix: hang iterating length 2**32-1. Hang-floor budget max(1000, 5xM). */
 const BUDGET = 1000
@@ -70,7 +70,7 @@ describe('POL-24 sparse array walks', () => {
 describe('shallow copies of sparse arrays', () => {
   it.each(shallowCopiers)(
     '%s refuses an array over the huge sparse threshold',
-    { timeout: BUDGET },
+    { timeout: budget(BUDGET) },
     (_name, copy) => {
       const source = sparseOfLength(JUST_OVER_THRESHOLD)
 
@@ -80,7 +80,7 @@ describe('shallow copies of sparse arrays', () => {
 
   it.each(shallowCopiers)(
     '%s copies a sparse array at the threshold with its holes',
-    { timeout: BUDGET },
+    { timeout: budget(BUDGET) },
     (_name, copy) => {
       const source = sparseOfLength(HUGE_SPARSE_MIN_LENGTH)
 

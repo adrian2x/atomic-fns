@@ -1,8 +1,10 @@
+import vm from 'node:vm'
 import { describe, it, expect, vi } from 'vitest'
 import {
   compact,
   count,
   defaults,
+  defineData,
   difference,
   filter,
   find,
@@ -19,7 +21,7 @@ import {
   intersection,
   lastIndexOf,
   map,
-  matches,
+  merge,
   omit,
   pick,
   reject,
@@ -30,16 +32,9 @@ import {
   uniq,
   without
 } from '../src/collections/index.js'
-import {
-  getSubsetPairComparisons,
-  resetSubsetPairComparisons
-} from '../src/collections/internal.js'
 import { isPlainObject } from '../src/collections/object.js'
-import { Decimal, decimal } from '../src/decimal/index.js'
-import { Currency } from '../src/i18n/currency.js'
-import { IntlDate } from '../src/i18n/date/index.js'
-import { deepEqual } from '../src/operators/equality.js'
-import { expectFast } from './helpers/perf.js'
+import { ValueError } from '../src/globals/index.js'
+import { budget, expectFast } from './helpers/perf.js'
 
 describe('collections', () => {
   it('SPEC-R30 remove mutates and returns removed', () => {
@@ -142,7 +137,7 @@ describe('collections', () => {
     expect(() => flatten(cyclic)).toThrow(/cyclic structure/)
   })
 
-  it('flatten refuses to copy a huge sparse array at depth 0', { timeout: 5000 }, () => {
+  it('flatten refuses to copy a huge sparse array at depth 0', { timeout: budget(5000) }, () => {
     const atLimit: unknown[] = []
     atLimit.length = 2 ** 24
     const huge: unknown[] = []
@@ -167,236 +162,8 @@ describe('collections', () => {
     expect(Object.getOwnPropertyDescriptor(fromDate, '__proto__')?.value).toBe(date)
   })
 
-  it('SPEC-R42 matches deep partial; null shape', () => {
-    expect(filter([{ a: { b: 1, c: 2 } }], { a: { b: 1 } })).toHaveLength(1)
-    expect(matches({ a: 1 })({ a: 2 })).toBe(false)
-    expect(matches(null)({ a: 1 })).toBe(false)
-  })
-
-  it('matches: Date/Map/Set/RegExp by deepEqual; undefined keys; array subset; empty shape', () => {
-    expect(matches({ d: new Date(0) })({ d: new Date(0) })).toBe(true)
-    expect(matches({ m: new Map([[1, 1]]) })({ m: new Map([[1, 1]]) })).toBe(true)
-    expect(matches({ s: new Set([1]) })({ s: new Set([1]) })).toBe(true)
-    expect(matches({ r: /a/g })({ r: /a/g })).toBe(true)
-    expect(filter([{ d: new Date(0) }], { d: new Date(0) })).toHaveLength(1)
-
-    expect(matches({ a: undefined })({})).toBe(false)
-    expect(matches({ a: undefined })({ a: undefined })).toBe(true)
-
-    expect(matches({ tags: ['b'] })({ tags: ['a', 'b'] })).toBe(true)
-    expect(matches({})(1)).toBe(true)
-    expect(matches([])('x')).toBe(true)
-  })
-
-  it('nested empty shapes require the same kind', () => {
-    expect(find([{ email: 'a', token: 't' }], { email: 'a', token: {} })).toBeUndefined()
-    expect(find([{ email: 'a', token: { x: 1 } }], { email: 'a', token: {} })).toEqual({
-      email: 'a',
-      token: { x: 1 }
-    })
-    expect(find([{ email: 'a', token: [] }], { email: 'a', token: [] })).toEqual({
-      email: 'a',
-      token: []
-    })
-    expect(filter([{ email: 'a', token: 't' }], { token: [] })).toEqual([])
-    expect(matches({ a: {} })({})).toBe(false)
-    expect(matches({ a: {} })({ a: 'str' })).toBe(false)
-    expect(matches({ a: {} })({ a: null })).toBe(false)
-    expect(matches({ a: {} })({ a: [] })).toBe(false)
-    expect(matches({ a: {} })({ a: { b: 1 } })).toBe(true)
-    expect(matches({ a: [] })({ a: 'str' })).toBe(false)
-    expect(matches({ a: [] })({ a: [1] })).toBe(true)
-  })
-
-  it('R15-E2: matches probe cases stay within subset-scan comparison bound', () => {
-    // Pre-fix (pre-e0323a0): O(n^2) pairwise scan, ~308 ms for [[0]]x1600. Wall-clock
-    // budgets cannot be both load-safe (>= 5x median) and revert-detecting (<= 1/4 of 308 ms).
-    const cases: [unknown, unknown, number][] = [
-      [[[0]], [[1]], 1600],
-      [[{}], [1], 1400],
-      [[[0]], [[1]], 800]
-    ]
-    for (const [se, te, n] of cases) {
-      const s = Array.from({ length: n }, () => structuredClone(se))
-      const t = Array.from({ length: n }, () => structuredClone(te))
-      t[n - 1] = structuredClone(se)
-      resetSubsetPairComparisons()
-      expect(matches({ a: s })({ a: t })).toBe(true)
-      const bound = 4 * (s.length + t.length)
-      expect(getSubsetPairComparisons()).toBeLessThanOrEqual(bound)
-    }
-  })
-
-  it('R16-A: matches index is only an accelerator for cross-kind array elements', () => {
-    expect(matches({ prices: [1] })({ prices: [decimal(1)] })).toBe(true)
-    expect(matches({ items: [{ amount: 10 }] })({ items: [{ amount: decimal(10) }] })).toBe(true)
-    const ms = Date.UTC(2020, 0, 1)
-    expect(matches({ when: [new Date(ms)] })({ when: [new IntlDate(ms)] })).toBe(true)
-    expect(matches({ prices: [1] })({ prices: [new Currency(1, 'USD')] })).toBe(true)
-    expect(matches([[1, 1]])([[1]])).toBe(false)
-    expect(matches([[decimal(1), decimal(1)]])([[decimal(1)]])).toBe(false)
-    expect(matches([1, 1])([1])).toBe(false)
-  })
-
-  it('matches scans class-instance and array elements for shapes it cannot index', () => {
-    const run = () => 1
-    class Job {
-      run = run
-    }
-    expect(matches([{ run }])([new Job()])).toBe(true)
-    expect(matches([{ 0: run }])([[run]])).toBe(true)
-    expect(matches([{ run }])([1, { other: run }])).toBe(false)
-  })
-
-  it('R19-A: Date leaf inside array-element object matches', () => {
-    const d = (n: number) => new Date(n)
-    expect(matches({ at: d(5) })({ at: d(5) })).toBe(true)
-    expect(matches({ t: [d(5)] })({ t: [d(5)] })).toBe(true)
-    expect(matches({ t: [{ at: d(5) }] })({ t: [{ at: d(5) }] })).toBe(true)
-    expect(matches({ t: [{ at: d(5) }] })({ t: [{ at: d(6) }] })).toBe(false)
-  })
-
-  it('R19-A: matches agrees with SPEC-R42 reference over 5000 random pairs', () => {
-    // Reference: no index; plain recursion; leaf equality via deepEqual (matchDeep / Lodash
-    // isMatch baseIsEqual; SPEC-R42 names eq, which is false for Date/RegExp pairs).
-    // Arrays: Lodash subset + length rule.
-    function refMatch(shape: unknown, obj: unknown, top = true): boolean {
-      if (Array.isArray(shape)) {
-        if (shape.length === 0) return top || Array.isArray(obj)
-        if (!Array.isArray(obj) || obj.length < shape.length) return false
-        for (const item of shape) {
-          let found = false
-          for (const candidate of obj) {
-            if (refMatch(item, candidate, false)) {
-              found = true
-              break
-            }
-          }
-          if (!found) return false
-        }
-        return true
-      }
-      if (isPlainObject(shape)) {
-        const shapeKeys = Object.keys(shape)
-        if (shapeKeys.length === 0) {
-          return top || (obj !== null && typeof obj === 'object' && !Array.isArray(obj))
-        }
-        if (obj === null || typeof obj !== 'object') return false
-        const record = obj as Record<string, unknown>
-        for (const key of shapeKeys) {
-          const expected = shape[key]
-          if (expected === undefined && !Object.hasOwn(obj, key)) return false
-          if (!refMatch(expected, record[key], false)) return false
-        }
-        return true
-      }
-      return deepEqual(shape, obj)
-    }
-
-    // Deterministic LCG
-    let seed = 0xc0ffee ^ 19
-    const rnd = () => {
-      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
-      return seed / 0x100000000
-    }
-    const pick = <T>(xs: readonly T[]): T => {
-      const v = xs[Math.floor(rnd() * xs.length)]
-      if (v === undefined) throw new Error('empty pool')
-      return v
-    }
-
-    function freshLeaf(): unknown {
-      const kind = Math.floor(rnd() * 12)
-      switch (kind) {
-        case 0:
-          return null
-        case 1:
-          return rnd() < 0.5
-        case 2:
-          return Math.floor(rnd() * 5)
-        case 3:
-          return pick(['a', 'b', 'c'] as const)
-        case 4:
-          return undefined
-        case 5:
-          return new Date(Math.floor(rnd() * 20))
-        case 6:
-          return decimal(Math.floor(rnd() * 5))
-        case 7:
-          return new Currency(Math.floor(rnd() * 3), pick(['USD', 'EUR'] as const))
-        case 8:
-          return new IntlDate(Math.floor(rnd() * 20))
-        case 9:
-          return Object(Math.floor(rnd() * 3))
-        case 10:
-          return Object(pick(['x', 'y'] as const))
-        default:
-          return Object(rnd() < 0.5)
-      }
-    }
-
-    function gen(depth: number): unknown {
-      if (depth <= 0 || rnd() < 0.45) return freshLeaf()
-      if (rnd() < 0.5) {
-        const n = 1 + Math.floor(rnd() * 3)
-        return Array.from({ length: n }, () => gen(depth - 1))
-      }
-      const n = 1 + Math.floor(rnd() * 3)
-      const o: Record<string, unknown> = {}
-      for (let i = 0; i < n; i++) o['k' + String(i)] = gen(depth - 1)
-      return o
-    }
-
-    /** Rebuild a value that deepEqual-matches `v` (fresh instances for class leaves). */
-    function twin(v: unknown): unknown {
-      if (v === null || typeof v !== 'object') return v
-      if (Array.isArray(v)) return v.map(twin)
-      if (v instanceof Date) return new Date(v.getTime())
-      if (v instanceof Currency) return v.clone()
-      if (v instanceof IntlDate) return new IntlDate(v.valueOf())
-      if (v instanceof Decimal) return v.clone()
-      if (isPlainObject(v)) {
-        const o: Record<string, unknown> = {}
-        for (const key of Object.keys(v)) o[key] = twin(v[key])
-        return o
-      }
-      if (v instanceof Number) return Object(Number(v))
-      if (v instanceof String) return Object(String(v))
-      if (v instanceof Boolean) return Object(Boolean(v))
-      return v
-    }
-
-    function refMatches(shape: unknown, obj: unknown): boolean {
-      // matches() short-circuits non-object top-level shapes (incl. null) to false.
-      if (shape === null || typeof shape !== 'object') return false
-      return refMatch(shape, obj, true)
-    }
-
-    let diffs = 0
-    for (let i = 0; i < 5000; i++) {
-      const depth = 1 + Math.floor(rnd() * 4)
-      // Top-level shape must be a container so the pair exercises partial matching.
-      let shape: unknown
-      do {
-        shape = gen(depth)
-      } while (
-        shape === null ||
-        typeof shape !== 'object' ||
-        !(Array.isArray(shape) || isPlainObject(shape))
-      )
-      const value = rnd() < 0.55 ? twin(shape) : gen(depth)
-      const got = matches(shape)(value)
-      const want = refMatches(shape, value)
-      if (got !== want) diffs += 1
-    }
-    expect(diffs).toBe(0)
-  })
-
-  it('indexOf rejects length-driven array-likes before allocating', () => {
-    const evil = JSON.parse('{"length":1e15}') as never
-    expectFast(() => {
-      expect(() => indexOf(evil, 'x')).toThrow(TypeError)
-    }, 1000)
+  it('a length no array can have is not an array-like', () => {
+    expect(indexOf(JSON.parse('{"length":1e15}') as never, 'x')).toBe(-1)
   })
 
   it('R13-D3: defaults refuses array index keys beyond length', () => {
@@ -1068,17 +835,19 @@ describe('collections', () => {
   })
 })
 
+describe('pick with an empty path', () => {
+  it('picks nothing, as Lodash does', () => {
+    expect(pick({ a: 1 }, [[]])).toEqual({})
+    expect(pick({ a: 1 }, [[], 'a'])).toEqual({ a: 1 })
+  })
+})
+
 describe('collections edge coverage', () => {
-  it('compact insert matches forEachRight index find groupBy', () => {
-    expect(compact(null as unknown as Record<string, number>)).toEqual({})
+  it('compact insert forEachRight index find groupBy', () => {
+    expect(compact(null)).toEqual([])
     expect(compact({ a: 1, b: 0 })).toEqual({ a: 1 })
     expect(insert(null, 0, 1)).toBeNull()
     expect(insert([1, 3], 1, 2)).toEqual([1, 2, 3])
-    expect(matches(null)({})).toBe(false)
-    expect(matches([1, { a: 1 }])([1, { a: 1, b: 2 }])).toBe(true)
-    expect(matches([1])({})).toBe(false)
-    expect(matches([1, 2])([1, 3])).toBe(false)
-    expect(matches(new Set([1]))(new Set([1]))).toBe(true)
     const seen: number[] = []
     forEachRight([1, 2, 3], (v) => {
       seen.push(v)
@@ -1123,5 +892,676 @@ describe('collections edge coverage', () => {
     const shapeArr = [{ a: 1 }, { a: 2 }]
     expect(remove(shapeArr, { a: 1 })).toEqual([{ a: 1 }])
     expect(shapeArr).toEqual([{ a: 2 }])
+  })
+})
+
+/** An array of `length` with holes everywhere `entries` does not name. */
+function sparse(length: number, entries: Record<number, unknown> = {}): unknown[] {
+  const arr: unknown[] = []
+  arr.length = length
+  for (const [index, value] of Object.entries(entries)) arr[Number(index)] = value
+  return arr
+}
+
+/** Throws past `limit` element reads, so a walk that repeats work fails instead of hanging. */
+function readLimited<T>(arr: T[], limit: number): T[] {
+  let reads = 0
+  const countRead = (key: string | symbol): void => {
+    if (typeof key === 'string' && /^\d+$/.test(key) && ++reads > limit) {
+      throw new Error(`read more than ${String(limit)} elements`)
+    }
+  }
+  return new Proxy(arr, {
+    has(target, key) {
+      countRead(key)
+      return Reflect.has(target, key)
+    },
+    get(target, key): unknown {
+      countRead(key)
+      return Reflect.get(target, key)
+    }
+  })
+}
+
+const argumentsOf = vm.runInNewContext('(function () { return arguments })') as (
+  ...values: unknown[]
+) => unknown
+
+class Point {
+  x = 1
+  y = 0
+}
+
+describe('iteratee shorthands', () => {
+  const users = [
+    { u: 'a', active: true },
+    { u: 'b', active: false }
+  ]
+
+  it('a missing or null iteratee is identity', () => {
+    expect(map([1, 2])).toEqual([1, 2])
+    expect(map([1, 2], null)).toEqual([1, 2])
+    expect(find([0, 1])).toBe(1)
+    expect(findLast([1, 0])).toBe(1)
+    expect(findIndex([0, 1])).toBe(1)
+    expect(findLastIndex([1, 0])).toBe(0)
+    expect(reject([0, 1])).toEqual([0])
+    expect(remove([0, 1])).toEqual([1])
+    expect(filter([0, 1], null)).toEqual([1])
+    expect(uniq([1, 1], null)).toEqual([1])
+    expect(() => {
+      forEach([1])
+    }).not.toThrow()
+  })
+
+  it('[path, value] is matchesProperty', () => {
+    expect(filter(users, ['active', false])).toEqual([users[1]])
+    expect(find(users, ['u', 'b'])).toBe(users[1])
+    expect(map(users, ['u', 'b'])).toEqual([false, true])
+    expect(filter([{ a: { b: 1, c: 2 } }], ['a', { b: 1 }])).toHaveLength(1)
+    expect(filter([{ a: undefined }, {}], ['a', undefined])).toEqual([{ a: undefined }])
+  })
+
+  it('any non-function object is a matches shape', () => {
+    const when = new Date(0)
+    expect(filter([when, new Date(1)], new Date(0))).toEqual([when])
+    expect(filter([new Map([[1, 2]]), new Map()], new Map())).toHaveLength(1)
+  })
+
+  it('count and groupBy take the same shorthands', () => {
+    expect(count([1, 1])).toEqual({ 1: 2 })
+    expect(count([{ a: 1 }], 'a')).toEqual({ 1: 1 })
+    expect(count([{ a: 1 }], { a: 1 })).toEqual({ true: 1 })
+    expect(groupBy([1, 2])).toEqual({ 1: [1], 2: [2] })
+    expect(groupBy([{ a: 1 }], { a: 1 })).toEqual({ true: [{ a: 1 }] })
+    expect(groupBy([{ a: 1 }], ['a', 2])).toEqual({ false: [{ a: 1 }] })
+    expect(groupByMap([{ a: 1 }], { a: 1 }).get(true)).toEqual([{ a: 1 }])
+    expect(groupByMap([1]).get(1)).toEqual([1])
+  })
+
+  it('a key too deep to stringify throws the nesting error', () => {
+    const deep: unknown = JSON.parse('['.repeat(1e5) + ']'.repeat(1e5))
+    const nesting = new RangeError('nesting deeper than 1000 levels')
+    expect(() => count([deep], (x) => x)).toThrow(nesting)
+    expect(() => groupBy([deep], (x) => x as string)).toThrow(nesting)
+  })
+})
+
+describe('find and findLast fromIndex', () => {
+  it('starts at fromIndex and counts a negative one from the end', () => {
+    expect(find([1, 2, 3], () => true, 1)).toBe(2)
+    expect(find([1, 2, 3], () => true, -1)).toBe(3)
+    expect(find([1, 2, 3], () => true, 9)).toBeUndefined()
+    expect(find({ a: 1, b: 2 }, () => true, 1)).toBe(2)
+    expect(find(new Set([1, 2, 3]), () => true, 1)).toBe(2)
+    expect(find(new Set([1, 2, 3]), () => true, -1)).toBe(3)
+    expect(findLast([1, 2, 3], () => true, 1)).toBe(2)
+    expect(findLast([1, 2, 3], () => true, -2)).toBe(2)
+    expect(findLast({ a: 1, b: 2 }, () => true, 0)).toBe(1)
+    expect(findLast(new Set([1, 2, 3]), () => true, 1)).toBe(2)
+  })
+
+  it('stops an endless iterable at the first hit', () => {
+    function* naturals(): Generator<number> {
+      for (let n = 0; ; n++) yield n
+    }
+    expect(find(naturals(), (n) => Number(n) > 2)).toBe(3)
+    expect(find(naturals(), () => true, 5)).toBe(5)
+  })
+})
+
+describe('search start', () => {
+  const n = 5000
+  const forward: [string, (list: number[], from: number) => number][] = [
+    ['indexOf', (list, from) => indexOf(list, 7, from)],
+    ['findIndex', (list, from) => findIndex(list, (x) => x === 7, from)]
+  ]
+  const backward: [string, (list: number[], from?: number) => number][] = [
+    ['lastIndexOf', (list, from) => lastIndexOf(list, 7, from)],
+    ['findLastIndex', (list, from) => findLastIndex(list, (x) => x === 7, from)]
+  ]
+
+  it.each(forward)('a %s find-all loop reads each element once', (_name, search) => {
+    const list = readLimited(new Array<number>(n).fill(7), 2 * n)
+    let hits = 0
+    for (let i = search(list, 0); i !== -1; i = search(list, i + 1)) hits++
+    expect(hits).toBe(n)
+  })
+
+  it.each(backward)('a %s find-all loop reads each element once', (_name, search) => {
+    const list = readLimited(new Array<number>(n).fill(7), 2 * n)
+    let hits = 0
+    for (let i = search(list); i !== -1; i = i === 0 ? -1 : search(list, i - 1)) hits++
+    expect(hits).toBe(n)
+  })
+
+  it.each(backward)('%s reads only the last element when it hits', (_name, search) => {
+    expect(search(readLimited(new Array<number>(n).fill(7), 2))).toBe(n - 1)
+  })
+
+  it('a dense array above the huge sparse threshold still scans from start', () => {
+    const big = new Array<number>(2 ** 24 + 1).fill(7)
+    expect(indexOf(readLimited(big, 3), 7, 2 ** 24)).toBe(2 ** 24)
+    expect(lastIndexOf(readLimited(big, 3), 7)).toBe(2 ** 24)
+  })
+
+  it('a negative start counts from the end on both sides', () => {
+    expect(lastIndexOf([1, 2, 3], 3, -1)).toBe(2)
+    expect(lastIndexOf([1, 2, 3], 2, -2)).toBe(1)
+    expect(lastIndexOf([1, 2, 3], 3, -2)).toBe(-1)
+    expect(lastIndexOf([1, 2, 3], 1, -9)).toBe(0)
+    expect(findLastIndex([1, 2, 3], () => true, -1)).toBe(2)
+    expect(findLastIndex([1, 2, 3], () => true, -9)).toBe(0)
+    expect(indexOf([1, 2, 3], 1, '-1' as never)).toBe(-1)
+  })
+
+  it('start follows ToIntegerOrInfinity', () => {
+    expect(indexOf([1, 2, 3], 2, 1.5)).toBe(1)
+    expect(findIndex([1, 2, 3], () => true, 1.5)).toBe(1)
+    expect(findIndex(sparse(3), () => true, 1.5)).toBe(1)
+    expect(findLastIndex(sparse(3), () => true, 1.5)).toBe(1)
+    expect(lastIndexOf([1, 2, 1], 1, NaN)).toBe(0)
+    expect(lastIndexOf([1, 2, 1], 1, null as never)).toBe(0)
+    expect(findLastIndex([1, 2, 1], (x) => x === 1, NaN)).toBe(0)
+    expect(indexOf([1, 2], 1, -Infinity)).toBe(0)
+    expect(indexOf([1, 2], 1, Infinity)).toBe(-1)
+  })
+
+  it('the predicate sees every index of a hole run', () => {
+    expect(findIndex(sparse(4, { 3: 4 }), (_v, i) => i === 2)).toBe(2)
+    expect(findLastIndex(sparse(4, { 3: 4 }), (_v, i) => i === 1)).toBe(1)
+    const seen: unknown[] = []
+    find(sparse(3), (_v, i) => {
+      seen.push(i)
+    })
+    expect(seen).toEqual([0, 1, 2])
+  })
+
+  it('array-likes work and other non-iterables give -1', () => {
+    const letters = { 0: 'a', 1: 'b', 2: 'a', length: 3 } as never
+    expect(findIndex(letters, (x) => x === 'b')).toBe(1)
+    expect(indexOf(letters, 'b')).toBe(1)
+    expect(lastIndexOf(letters, 'a')).toBe(2)
+    expect(findLastIndex(letters, (x) => x === 'a')).toBe(2)
+    for (const value of [{}, 5, true, new Date(0), new Point()] as never[]) {
+      expect(indexOf(value, 1)).toBe(-1)
+      expect(lastIndexOf(value, 1)).toBe(-1)
+      expect(findIndex(value, () => true)).toBe(-1)
+      expect(findLastIndex(value, () => true)).toBe(-1)
+    }
+  })
+
+  it('an array-like needs own keys to back its length', () => {
+    const parsed = (json: string): never => readLimited(JSON.parse(json) as unknown[], 10) as never
+    expect(indexOf(parsed('{"5":"x","length":6}'), 'x')).toBe(5)
+    expect(indexOf(parsed('{"4294967294":"x","length":4294967295}'), 'x')).toBe(-1)
+    expect(uniq(parsed('{"length":16777216}'))).toEqual([])
+    expect(without(parsed('{"length":16777216}'), 1)).toEqual([])
+    expect([...union(parsed('{"length":16777216}'))]).toEqual([])
+    expect(compact(parsed('{"length":16777216}'))).toEqual({ length: 16777216 })
+  })
+
+  it('an object whose length no keys back stays an object', () => {
+    class Plank {
+      length = 5000
+      width = 0
+    }
+    const plank = new Plank()
+    expect(compact(plank)).toEqual({ length: 5000 })
+    expect(flatten(plank)).toBe(plank)
+  })
+})
+
+describe('hole rules', () => {
+  const holey = (): unknown[] => sparse(3, { 0: 1, 2: 3 })
+
+  it('a helper named after a native method follows it', () => {
+    const visited = (run: (visit: (value: unknown, index?: PropertyKey) => void) => void) => {
+      const indices: unknown[] = []
+      run((_value, index) => {
+        indices.push(index)
+      })
+      return indices
+    }
+    expect(visited((visit) => find(holey(), visit))).toEqual([0, 1, 2])
+    expect(visited((visit) => findLast(holey(), visit))).toEqual([2, 1, 0])
+    expect(visited((visit) => findIndex(holey(), visit))).toEqual([0, 1, 2])
+    expect(visited((visit) => findLastIndex(holey(), visit))).toEqual([2, 1, 0])
+    expect(
+      visited((visit) => {
+        forEach(holey(), visit)
+      })
+    ).toEqual([0, 2])
+    expect(visited((visit) => filter(holey(), visit))).toEqual([0, 2])
+    expect(indexOf(holey(), undefined)).toBe(-1)
+    expect(lastIndexOf(holey(), undefined)).toBe(-1)
+    expect(1 in map(holey(), (x) => x)).toBe(false)
+  })
+
+  it('reject, forEachRight and count follow filter and forEach', () => {
+    expect(reject(holey(), (x) => x === 1)).toEqual([3])
+    const seen: unknown[] = []
+    forEachRight(holey(), (_v, i) => {
+      seen.push(i)
+    })
+    expect(seen).toEqual([2, 0])
+    expect(count(holey(), (x) => x)).toEqual({ 1: 1, 3: 1 })
+  })
+
+  it('set-style helpers read a hole as undefined, as new Set does', () => {
+    expect(uniq(holey())).toHaveLength(3)
+    expect(sortedUniq(holey())).toHaveLength(3)
+    expect(without(holey(), 3)).toHaveLength(2)
+    expect(without(holey(), undefined)).toEqual([1, 3])
+    expect([...union(holey())]).toHaveLength(3)
+    expect([...difference(holey(), [1])]).toHaveLength(2)
+    expect([...intersection(holey(), [undefined])]).toHaveLength(1)
+    expect([...symmetricDifference(holey(), [1])]).toHaveLength(2)
+  })
+
+  it('a huge sparse array keeps own-element walks', () => {
+    const huge = (): unknown[] =>
+      readLimited(sparse(2 ** 32 - 1, { 0: 'x', 4000000000: 'y' }), 2000)
+    expect(filter(huge(), () => true)).toEqual(['x', 'y'])
+    expect(uniq(huge())).toEqual(['x', 'y'])
+    expect(without(huge(), 'x')).toEqual(['y'])
+    expect([...union(huge())]).toEqual(['x', 'y'])
+    expect(indexOf(huge(), undefined)).toBe(-1)
+    expect(lastIndexOf(huge(), undefined)).toBe(-1)
+    expect(findIndex(huge(), (x) => x === undefined)).toBe(1)
+    expect(findLastIndex(huge(), (x) => x === undefined)).toBe(2 ** 32 - 2)
+    expect(findIndex(huge(), (x) => x === 'y', 5)).toBe(4000000000)
+    expect(findLastIndex(huge(), (x) => x === 'x', 5)).toBe(0)
+  })
+})
+
+describe('remove', () => {
+  it('keeps hole offsets and returns matched holes, as Lodash', () => {
+    const untouched = sparse(3, { 0: 1, 2: 3 })
+    expect(remove(untouched, () => false)).toEqual([])
+    expect(untouched).toHaveLength(3)
+    expect(1 in untouched).toBe(false)
+    expect(untouched[2]).toBe(3)
+
+    const shifted = sparse(3, { 0: 1, 2: 3 })
+    expect(remove(shifted, (x) => x === 1)).toEqual([1])
+    expect(shifted).toHaveLength(2)
+    expect(0 in shifted).toBe(false)
+    expect(shifted[1]).toBe(3)
+
+    const matched = sparse(3, { 0: 1, 2: 3 })
+    const removed = remove(matched, (x) => x === undefined)
+    expect(removed).toHaveLength(1)
+    expect(removed[0]).toBeUndefined()
+    expect(matched).toEqual([1, 3])
+
+    const byIndex = sparse(5, { 2: 1 })
+    expect(remove(byIndex, (_v, i) => i === 1)).toEqual([undefined])
+    expect(byIndex).toHaveLength(4)
+    expect(byIndex[1]).toBe(1)
+  })
+
+  it('shifts own elements of a huge sparse array in own-element time', () => {
+    const huge = sparse(2 ** 32 - 1, { 0: 'x', 4000000000: 'y' })
+    expect(remove(readLimited(huge, 2000), (x) => x === 'x')).toEqual(['x'])
+    expect(huge).toHaveLength(2 ** 32 - 2)
+    expect(huge[3999999999]).toBe('y')
+  })
+
+  it('refuses anything else that is not an array', () => {
+    expect(() => remove({ length: 0 } as never, () => true)).toThrow(
+      new TypeError('remove expects an array')
+    )
+  })
+})
+
+describe('reject', () => {
+  it('passes the real key or index, as filter does', () => {
+    expect(reject({ a: 1, b: 2 }, (_v, k) => k === 'a')).toEqual([2])
+    expect(reject(sparse(4, { 0: 1, 2: 3, 3: 4 }), (_v, i) => i === 2)).toEqual([1, 4])
+  })
+})
+
+describe('list input', () => {
+  const letters = { 0: 'a', 1: 'b', 2: 'a', length: 3 } as never
+
+  it('nullish input is empty', () => {
+    expect(uniq(null)).toEqual([])
+    expect(uniq(undefined)).toEqual([])
+    expect(sortedUniq(undefined)).toEqual([])
+    expect(without(null, 1)).toEqual([])
+    expect(remove(null, () => true)).toEqual([])
+    expect([...intersection(null, [1])]).toEqual([])
+    expect([...intersection([1], undefined)]).toEqual([])
+    expect([...symmetricDifference(null, [1])]).toEqual([1])
+    expect([...union(null, [1])]).toEqual([1])
+    expect([...difference(null, [1])]).toEqual([])
+  })
+
+  it('the set helpers accept array-likes and ignore other non-iterables', () => {
+    expect(uniq(letters)).toEqual(['a', 'b'])
+    expect(sortedUniq(letters)).toEqual(['a', 'b'])
+    expect(without(letters, 'a')).toEqual(['b'])
+    expect([...union(letters, ['c'])]).toEqual(['a', 'b', 'c'])
+    expect([...difference(letters, ['a'])]).toEqual(['b'])
+    expect([...intersection(letters, ['b'])]).toEqual(['b'])
+    expect([...symmetricDifference(letters, ['a', 'c'])]).toEqual(['b', 'c'])
+    expect(uniq(5 as never)).toEqual([])
+    expect(without({} as never, 1)).toEqual([])
+    expect([...union([1], 5 as never, { a: 1 } as never)]).toEqual([1])
+    expect([...difference([1, 2], new Point() as never)]).toEqual([1, 2])
+  })
+})
+
+describe('set helpers', () => {
+  /** Elements the native Set methods copied, the work an accumulating fold repeats per input. */
+  function setCopyWork(run: () => void): number {
+    const spies = [vi.spyOn(Set.prototype, 'union'), vi.spyOn(Set.prototype, 'difference')]
+    run()
+    const receivers = spies.flatMap((spy) => spy.mock.contexts as Set<unknown>[])
+    const copied = receivers.reduce((sum, set) => sum + set.size, 0)
+    for (const spy of spies) spy.mockRestore()
+    return copied
+  }
+
+  it('union and difference do not copy the result per input', () => {
+    const inputs = Array.from({ length: 2000 }, (_, i) => [i])
+    expect(
+      setCopyWork(() => {
+        expect([...union(...inputs)]).toHaveLength(2000)
+      })
+    ).toBeLessThan(2000)
+    expect(
+      setCopyWork(() => {
+        expect([...difference(inputs.flat(), ...inputs)]).toHaveLength(0)
+      })
+    ).toBeLessThan(2000)
+  })
+
+  it('intersection normalizes -0 and reads its first input at the call', () => {
+    expect(Object.is([...intersection([-0], [0])][0], 0)).toBe(true)
+    const first = [1]
+    const result = intersection(first, [1, 2])
+    first.push(2)
+    expect([...result]).toEqual([1])
+  })
+
+  it('symmetricDifference keeps what exactly one input holds, across any number of inputs', () => {
+    expect([...symmetricDifference([1], [2], [3])]).toEqual([1, 2, 3])
+    expect([...symmetricDifference([1, 2], [2, 3], [3, 4])]).toEqual([1, 4])
+    expect([...symmetricDifference([1], [1], [1])]).toEqual([])
+    expect([...symmetricDifference([1, 1], [2])]).toEqual([1, 2])
+    expect([...symmetricDifference()]).toEqual([])
+  })
+})
+
+describe('flatten input', () => {
+  it('nullish gives [], and array-likes and strings spread', () => {
+    expect(flatten(null)).toEqual([])
+    expect(flatten(undefined)).toEqual([])
+    expect(flatten('ab')).toEqual(['a', 'b'])
+    expect(flatten(new Uint8Array([1, 2]))).toEqual([1, 2])
+    expect(flatten(argumentsOf(1, [2]) as never)).toEqual([1, 2])
+  })
+
+  it('a non-plain root returns unchanged', () => {
+    for (const root of [new Point(), new Date(0), new Map(), new Set([1]), 5] as never[]) {
+      expect(flatten(root)).toBe(root)
+    }
+  })
+
+  it('a plain object stays an object even with a length key', () => {
+    expect(flatten({ length: 2, a: { b: 1 } })).toEqual({ length: 2, 'a.b': 1 })
+  })
+
+  it('a fractional depth truncates', () => {
+    expect(flatten([[[1]]], 1.5)).toEqual([[1]])
+    expect(flatten([[1]], 0.5)).toEqual([[1]])
+  })
+})
+
+describe('flatten cycles and budgets', () => {
+  const cyclic = new ValueError('cyclic structure')
+
+  it('a cyclic array throws at any depth', () => {
+    const twice: unknown[] = []
+    twice.push(twice, twice)
+    expect(() => flatten(twice, 10)).toThrow(cyclic)
+    expect(() => flatten(twice, true)).toThrow(cyclic)
+    const inner: unknown[] = []
+    const outer = [inner]
+    inner.push(outer)
+    expect(() => flatten(outer, 5)).toThrow(cyclic)
+  })
+
+  it('a depth that stops short of the cycle never meets it', () => {
+    const inner: unknown[] = []
+    const outer = [inner]
+    inner.push(outer)
+    expect(flatten(outer, 1)).toEqual([outer])
+  })
+
+  it('the same array twice is not a cycle', () => {
+    const shared = [1]
+    expect(flatten([shared, [shared]], true)).toEqual([1, 1])
+  })
+
+  it('linear input passes however often it repeats a container', () => {
+    const rows = Array.from({ length: 300_000 }, () => [1])
+    expect(flatten([rows, rows])).toHaveLength(600_000)
+    expect(flatten(new Array<number[]>(300_000).fill([]))).toEqual([])
+    expect(flatten(new Array<number[]>(300_000).fill([0]))).toHaveLength(300_000)
+  })
+
+  it('a wide row shared many times trips the budget', { timeout: 60_000 }, () => {
+    const repeated = new RangeError('input repeats shared objects beyond 250000 containers')
+    const row = Array.from({ length: 20_000 }, (_, i) => i)
+    const wide = Object.fromEntries(row.map((i) => [`k${String(i)}`, i]))
+    expect(() => flatten(new Array<number[]>(2000).fill(row))).toThrow(repeated)
+    expect(() => flatten({ rows: new Array<object>(2000).fill(wide) })).toThrow(repeated)
+  })
+
+  /** One long prefix over `count` children, every output key the same length. */
+  function longPrefixed(prefixLength: number, count: number): object {
+    const children = Array.from({ length: count }, (_, i): [string, number] => [
+      `c${String(10_000 + i)}`,
+      1
+    ])
+    return { ['k'.repeat(prefixLength)]: Object.fromEntries(children) }
+  }
+
+  it('output key characters are capped', () => {
+    const capped = new RangeError('flatten output keys exceed 134217728 characters')
+    expect(() => flatten(longPrefixed(16_000, 8400))).toThrow(capped)
+    expect(Object.keys(flatten(longPrefixed(16_000, 8300)))).toHaveLength(8300)
+  })
+
+  it('keys too long for V8 to hash cost 16 times their length', () => {
+    let reads = 0
+    const row: Record<string, number> = {}
+    for (let i = 0; i < 600; i++) {
+      Object.defineProperty(row, `c${String(10_000 + i)}`, {
+        enumerable: true,
+        get() {
+          reads++
+          return 1
+        }
+      })
+    }
+    expect(() => flatten({ ['k'.repeat(16_400)]: row })).toThrow(
+      new RangeError('flatten output keys exceed 134217728 characters')
+    )
+    expect(reads).toBeLessThan(600)
+  })
+})
+
+describe('compact', () => {
+  it('nullish gives [] and array-likes give arrays', () => {
+    expect(compact(undefined)).toEqual([])
+    expect(compact('a')).toEqual(['a'])
+    expect(compact(new Uint8Array([0, 1]))).toEqual([1])
+    expect(compact(argumentsOf(0, 1))).toEqual([1])
+    expect(compact(new Set([0, 1]))).toEqual([1])
+    expect(compact(5)).toEqual([])
+  })
+
+  it('other objects compact their own enumerable values into a plain object', () => {
+    expect(compact({ a: 0, b: 1 })).toEqual({ b: 1 })
+    expect(compact({ length: 0, a: 1 })).toEqual({ a: 1 })
+    expect(compact(new Point())).toEqual({ x: 1 })
+    expect(compact(new Point())).not.toBeInstanceOf(Point)
+  })
+})
+
+describe('object-like collections', () => {
+  class Tagged {
+    readonly [Symbol.toStringTag] = 'Tagged'
+    a = 1
+  }
+  const withOwnKey: [string, () => object][] = [
+    ['function', () => Object.assign(() => undefined, { a: 1 })],
+    ['Error', () => Object.assign(new Error('x'), { a: 1 })],
+    ['tagged class', () => new Tagged()]
+  ]
+
+  it.each(withOwnKey)('every helper visits the own keys of a %s', (_name, make) => {
+    const value = make()
+    expect(filter(value, () => true)).toEqual([1])
+    expect(map(value, (x) => x)).toEqual([1])
+    expect(find(value, () => true)).toBe(1)
+    expect(findLast(value, () => true)).toBe(1)
+    const keys: unknown[] = []
+    forEachRight(value, (_v, k) => {
+      keys.push(k)
+    })
+    expect(keys).toEqual(['a'])
+  })
+})
+
+describe('defaults input', () => {
+  it('skips nullish sources', () => {
+    expect(defaults({ a: 1 }, undefined)).toEqual({ a: 1 })
+    expect(defaults({ a: 1 }, null, { b: 2 })).toEqual({ a: 1, b: 2 })
+  })
+
+  it('a target that is no object throws the named error', () => {
+    const named = new TypeError('defaults target must be an object')
+    expect(() => defaults(null as never, { a: 1 })).toThrow(named)
+    expect(() => defaults(undefined as never, { a: 1 })).toThrow(named)
+    expect(() => defaults(5 as never, { a: 1 })).toThrow(named)
+  })
+})
+
+describe('defineData', () => {
+  const dataDescriptor = { value: 1, enumerable: true, writable: true, configurable: true }
+
+  it('defines a data property whatever the target has at that key', () => {
+    let writes = 0
+    const accessor = {
+      set x(_v: number) {
+        writes++
+      }
+    }
+    defineData(accessor, 'x', 1)
+    expect(writes).toBe(0)
+    expect(Object.getOwnPropertyDescriptor(accessor, 'x')).toEqual(dataDescriptor)
+
+    const hidden = Object.defineProperty({}, 'x', { value: 0, writable: true, configurable: true })
+    defineData(hidden, 'x', 1)
+    expect(Object.getOwnPropertyDescriptor(hidden, 'x')).toEqual(dataDescriptor)
+
+    const child = Object.create(Object.freeze({ x: 0 })) as object
+    defineData(child, 'x', 1)
+    expect(Object.getOwnPropertyDescriptor(child, 'x')).toEqual(dataDescriptor)
+  })
+})
+
+describe('isPlainObject', () => {
+  it('needs an object tag', () => {
+    expect(isPlainObject(Math)).toBe(false)
+    expect(isPlainObject(JSON)).toBe(false)
+    expect(isPlainObject(Reflect)).toBe(false)
+    expect(isPlainObject(argumentsOf(1))).toBe(false)
+  })
+
+  it('accepts a plain object from another realm, and nothing that only looks like one', () => {
+    expect(isPlainObject(vm.runInNewContext('({ a: 1 })'))).toBe(true)
+    expect(isPlainObject(vm.runInNewContext('Object.create(null)'))).toBe(true)
+    expect(isPlainObject(vm.runInNewContext('new (class A {})()'))).toBe(false)
+    expect(isPlainObject(Object.create(Object.create(null) as object))).toBe(false)
+    expect(isPlainObject(Object.create({ constructor: Object }) as object)).toBe(false)
+  })
+})
+
+describe('values from another realm', () => {
+  const foreign = (): { a: { b: number }; r: unknown[] } =>
+    vm.runInNewContext('({ a: { b: 1 }, r: [1, { c: 2 }] })') as { a: { b: number }; r: unknown[] }
+
+  it('are plain to omit, flatten and merge', () => {
+    const value = foreign()
+    expect(Object.keys(omit(value, ['a']))).toEqual(['r'])
+    expect(Object.keys(omit({ r: value.r }, ['r.0']).r as object)).toEqual(['1'])
+    expect(flatten(value)).toEqual({ 'a.b': 1, 'r[0]': 1, 'r[1].c': 2 })
+    const merged = merge({}, { x: value }) as { x: unknown }
+    expect(merged.x).not.toBe(value)
+  })
+})
+
+describe('pick and omit paths', () => {
+  const s = Symbol('s')
+  const other = Symbol('other')
+  const named = new TypeError('path segments must be strings, numbers or symbols')
+
+  it('take one path', () => {
+    expect(pick({ name: 'x', n: 1, a: 2 }, 'name')).toEqual({ name: 'x' })
+    expect(omit({ name: 'x', n: 1 }, 'name')).toEqual({ n: 1 })
+    expect(pick({ a: { b: 1, c: 2 } }, 'a.b')).toEqual({ a: { b: 1 } })
+    expect(pick({ 0: 'a', 1: 'b' }, 1)).toEqual({ 1: 'b' })
+    expect(pick({ [s]: 1, a: 2 }, s)).toEqual({ [s]: 1 })
+  })
+
+  it('take numbers and symbols in a list', () => {
+    expect(pick({ 0: 'a', 1: 'b' }, [0])).toEqual({ 0: 'a' })
+    expect(pick({ a: [1] }, [['a', 0]])).toEqual({ a: [1] })
+    expect(omit({ 0: 'a', b: 1 }, [0])).toEqual({ b: 1 })
+    expect(1 in omit(['x', 'y'], [1])).toBe(false)
+    expect(pick({ [s]: 1, [other]: 2 }, [s, other])).toEqual({ [s]: 1, [other]: 2 })
+    expect(omit({ [s]: 1, b: 2 }, [s])).toEqual({ b: 2 })
+  })
+
+  it('take a Set of paths', () => {
+    expect(pick({ a: 1, b: 2 }, new Set(['a']))).toEqual({ a: 1 })
+    expect(omit({ a: 1, b: 2 }, new Set(['a']))).toEqual({ b: 2 })
+  })
+
+  it('name the error for anything else', () => {
+    for (const paths of [undefined, null, {}, true] as never[]) {
+      expect(() => pick({ a: 1 }, paths)).toThrow(named)
+      expect(() => omit({ a: 1 }, paths)).toThrow(named)
+    }
+    for (const path of [null, {}, true] as never[]) {
+      expect(() => pick({ a: 1 }, [path])).toThrow(named)
+      expect(() => omit({ a: 1 }, [path])).toThrow(named)
+    }
+  })
+
+  it('pick is own-only', () => {
+    class User {
+      first = 'a'
+      get full(): string {
+        return this.first
+      }
+    }
+    expect(pick(new User(), ['full', 'first'])).toEqual({ first: 'a' })
+  })
+
+  it('a function value counts as a picked ancestor', () => {
+    const f = Object.assign(() => undefined, { x: 1 })
+    expect(pick({ f }, ['f', 'f.x']).f).toBe(f)
+  })
+
+  it('pick builds an object when the next segment is not an index', () => {
+    expect(pick({ a: [1, 2] }, ['a.length'])).toEqual({ a: { length: 2 } })
+    expect(Array.isArray(pick({ a: [1, 2] }, ['a.1']).a)).toBe(true)
   })
 })

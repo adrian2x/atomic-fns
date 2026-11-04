@@ -17,7 +17,7 @@ import { Currency } from '../src/i18n/currency.js'
 import { IntlDate } from '../src/i18n/date/index.js'
 import { DeepEqualSession, deepEqualInSession } from '../src/operators/equality.js'
 import { deepEqual, eq, protocol } from '../src/operators/index.js'
-import { expectFast } from './helpers/perf.js'
+import { budget, expectFast } from './helpers/perf.js'
 
 describe('SPEC-R75 collection equality and clone protocol', () => {
   it('SortedSet equals by content', () => {
@@ -437,7 +437,7 @@ const cloneLevels: Level[] = [
 ]
 
 const LEVELS = 16
-const DOS_TIMEOUT = { timeout: 5000 }
+const DOS_TIMEOUT = { timeout: budget(5000) }
 
 function stack(level: (x: unknown) => unknown, levels: number, leaf: unknown = 0): unknown {
   let x = leaf
