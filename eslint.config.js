@@ -8,7 +8,7 @@ export default tseslint.config(
   ...tseslint.configs.stylisticTypeChecked,
   {
     rules: {
-      // Conflicts with Global rule forbidding non-null ! assertions.
+      // Rewrites `x as T` to `x!`, which no-non-null-assertion in the strict preset forbids.
       '@typescript-eslint/non-nullable-type-assertion-style': 'off',
       // Override params kept for signature match (e.g. FrozenSet.add).
       '@typescript-eslint/no-unused-vars': [

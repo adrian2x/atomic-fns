@@ -59,7 +59,7 @@ export interface Equatable {
 }
 
 /** Declarable protocol ranks (1 numeric, 5 date-like, 6 object). */
-export type Rank = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
+export type Rank = 1 | 5 | 6
 
 /** True when `v` is an object or function with a callable `key` property. */
 export function hasMethod(

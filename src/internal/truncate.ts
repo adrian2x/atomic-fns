@@ -6,22 +6,10 @@ const MAX_ECHO = 40
 function appendCapped(out: { s: string; n: number }, chunk: string, limit: number): boolean {
   const room = limit - out.n
   if (room <= 0) return true
-  if (chunk.length <= room) {
-    out.s += chunk
-    out.n += chunk.length
-    return false
-  }
-  let units = 0
-  let end = 0
-  for (const ch of chunk) {
-    const next = units + ch.length
-    if (next > room) break
-    units = next
-    end += ch.length
-  }
-  out.s += chunk.slice(0, end)
-  out.n += units
-  return true
+  const cut = cutToLimit(chunk, room)
+  out.s += cut
+  out.n += cut.length
+  return cut.length < chunk.length
 }
 
 /**
@@ -34,16 +22,13 @@ function writeEcho(
   limit: number,
   stack: object[]
 ): boolean {
-  if (typeof value === 'bigint' || typeof value === 'symbol') {
-    return appendCapped(out, JSON.stringify(String(value)), limit)
-  }
-  if (typeof value === 'undefined') {
-    return appendCapped(out, JSON.stringify('undefined'), limit)
-  }
-  if (typeof value === 'function') {
-    return appendCapped(out, JSON.stringify(String(value)), limit)
-  }
-  if (typeof value === 'number' && !Number.isFinite(value)) {
+  if (
+    typeof value === 'bigint' ||
+    typeof value === 'symbol' ||
+    typeof value === 'undefined' ||
+    typeof value === 'function' ||
+    (typeof value === 'number' && !Number.isFinite(value))
+  ) {
     return appendCapped(out, JSON.stringify(String(value)), limit)
   }
   if (typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
@@ -51,9 +36,6 @@ function writeEcho(
   }
   if (value === null) {
     return appendCapped(out, 'null', limit)
-  }
-  if (typeof value !== 'object') {
-    return appendCapped(out, JSON.stringify(Object.prototype.toString.call(value)), limit)
   }
 
   if (stack.includes(value)) {
@@ -98,23 +80,16 @@ function writeEcho(
   stack.push(value)
   let first = true
   for (const key of Object.keys(value)) {
-    if (!first && appendCapped(out, ',', limit)) {
+    const hit =
+      (!first && appendCapped(out, ',', limit)) ||
+      appendCapped(out, JSON.stringify(key), limit) ||
+      appendCapped(out, ':', limit) ||
+      writeEcho((value as Record<string, unknown>)[key], out, limit, stack)
+    if (hit) {
       stack.pop()
       return true
     }
     first = false
-    if (appendCapped(out, JSON.stringify(key), limit)) {
-      stack.pop()
-      return true
-    }
-    if (appendCapped(out, ':', limit)) {
-      stack.pop()
-      return true
-    }
-    if (writeEcho((value as Record<string, unknown>)[key], out, limit, stack)) {
-      stack.pop()
-      return true
-    }
   }
   stack.pop()
   return appendCapped(out, '}', limit)

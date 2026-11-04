@@ -11,12 +11,18 @@ import {
   gt,
   gte,
   add,
+  div,
+  mod,
+  mul,
+  pow,
+  sub,
   shallowEqual,
   deepEqual,
   adaptProtocol,
   protocol
 } from '../src/operators/index.js'
 import { sorted } from '../src/itertools/index.js'
+import { abs } from '../src/math/index.js'
 import { decimal } from '../src/decimal/index.js'
 
 describe('SPEC-R11 identity, bool, not', () => {
@@ -287,5 +293,124 @@ describe('isinstance', () => {
   it('isinstance checks constructors', () => {
     expect(isinstance([], Array)).toBe(true)
     expect(isinstance(new Set(), Set)).toBe(true)
+  })
+})
+
+describe('SPEC-R16 arithmetic operators coverage', () => {
+  it('SPEC-R16 sub mul div mod pow numeric and protocol paths', () => {
+    expect(sub(5, 2)).toBe(3)
+    expect(mul(3, 4)).toBe(12)
+    expect(div(10, 2)).toBe(5)
+    expect(mod(7, 3)).toBe(1)
+    expect(pow(2, 3)).toBe(8)
+    const o = {
+      [protocol.sub](y: unknown) {
+        return Number(y) + 1
+      },
+      [protocol.mul](y: unknown) {
+        return Number(y) + 2
+      },
+      [protocol.div](y: unknown) {
+        return Number(y) + 3
+      },
+      [protocol.mod](y: unknown) {
+        return Number(y) + 4
+      },
+      [protocol.pow](y: unknown) {
+        return Number(y) + 5
+      },
+      [protocol.add](y: unknown) {
+        return Number(y) + 6
+      },
+      [protocol.abs]() {
+        return 99
+      }
+    }
+    expect(sub(o, 1)).toBe(2)
+    expect(mul(o, 1)).toBe(3)
+    expect(div(o, 1)).toBe(4)
+    expect(mod(o, 1)).toBe(5)
+    expect(pow(o, 1)).toBe(6)
+    expect(add(o, 1)).toBe(7)
+    expect(abs(o)).toBe(99)
+  })
+})
+
+describe('SPEC-R17 deepEqual branch coverage', () => {
+  it('SPEC-R17 RegExp ArrayBuffer Map Set mismatch and nested failure', () => {
+    expect(deepEqual(/a/g, /a/i)).toBe(false)
+    expect(deepEqual(/a/g, /a/g)).toBe(true)
+    expect(deepEqual(new ArrayBuffer(2), new ArrayBuffer(3))).toBe(false)
+    const a = new ArrayBuffer(2)
+    const b = new ArrayBuffer(2)
+    new Uint8Array(a)[0] = 1
+    new Uint8Array(b)[0] = 2
+    expect(deepEqual(a, b)).toBe(false)
+    expect(deepEqual(new ArrayBuffer(1), new ArrayBuffer(1))).toBe(true)
+    expect(deepEqual(new Uint8Array([1, 2]), new Uint8Array([1, 3]))).toBe(false)
+    expect(deepEqual(new Uint8Array([1]), new Uint8Array([1, 2]))).toBe(false)
+    expect(deepEqual(new Map([[1, 2]]), new Map([[1, 3]]))).toBe(false)
+    expect(deepEqual(new Map([[1, 2]]), new Map([[2, 2]]))).toBe(false)
+    expect(
+      deepEqual(
+        new Map([[1, 2]]),
+        new Map([
+          [1, 2],
+          [3, 4]
+        ])
+      )
+    ).toBe(false)
+    expect(deepEqual(new Map([[1, 2]]), new Map([[1, 2]]))).toBe(true)
+    expect(deepEqual(new Set([1]), new Set([2]))).toBe(false)
+    expect(deepEqual(new Set([1, 2]), new Set([1]))).toBe(false)
+    expect(deepEqual(new Set([1]), new Set([1]))).toBe(true)
+    expect(deepEqual([1, 2], [1])).toBe(false)
+    expect(deepEqual([1, 2], [1, 3])).toBe(false)
+    expect(deepEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false)
+    expect(deepEqual({ a: 1 }, { b: 1 })).toBe(false)
+    expect(deepEqual({ a: 1 }, { a: 2 })).toBe(false)
+    expect(deepEqual(null, {})).toBe(false)
+    expect(deepEqual(1, 2)).toBe(false)
+  })
+
+  it('SPEC-R18 shallowEqual mismatch branches', () => {
+    expect(shallowEqual({ a: 1 }, { a: 1 })).toBe(true)
+    expect(shallowEqual({ a: 1 }, { a: 2 })).toBe(false)
+    expect(shallowEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false)
+    expect(shallowEqual({ a: 1 }, { b: 1 })).toBe(false)
+    expect(shallowEqual(null, {})).toBe(false)
+    expect(shallowEqual(1, 1)).toBe(true)
+    expect(shallowEqual(Object.create(null), {})).toBe(false)
+  })
+})
+
+describe('SPEC-R10 adaptProtocol gt-only ordering', () => {
+  it('SPEC-R10 gt-only class derives compare', () => {
+    class G {
+      constructor(readonly n: number) {}
+      gt(o: G) {
+        return this.n > o.n
+      }
+    }
+    adaptProtocol(G)
+    expect(compare(new G(2), new G(1))).toBe(1)
+    expect(compare(new G(1), new G(2))).toBe(-1)
+    expect(compare(new G(1), new G(1))).toBe(0)
+  })
+
+  it('SPEC-R10 gt+eq class declines incomparable', () => {
+    class GE {
+      constructor(readonly n: number) {}
+      gt(o: GE) {
+        return this.n > o.n
+      }
+      eq(o: GE) {
+        return this.n === o.n
+      }
+    }
+    adaptProtocol(GE)
+    const a = new GE(NaN)
+    const b = new GE(NaN)
+    expect(compare(a, b)).toBe(-compare(b, a))
   })
 })

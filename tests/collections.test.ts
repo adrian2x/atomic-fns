@@ -8,11 +8,14 @@ import {
   find,
   findIndex,
   findLast,
+  findLastIndex,
   flatten,
   forEach,
+  forEachRight,
   groupBy,
   groupByMap,
   indexOf,
+  insert,
   intersection,
   lastIndexOf,
   map,
@@ -1062,5 +1065,63 @@ describe('collections', () => {
       })
     ).toEqual(['a:1'])
     expect(find(new Set([1, 2, 3]), (x) => Number(x) > 1)).toBe(2)
+  })
+})
+
+describe('collections edge coverage', () => {
+  it('compact insert matches forEachRight index find groupBy', () => {
+    expect(compact(null as unknown as Record<string, number>)).toEqual({})
+    expect(compact({ a: 1, b: 0 })).toEqual({ a: 1 })
+    expect(insert(null, 0, 1)).toBeNull()
+    expect(insert([1, 3], 1, 2)).toEqual([1, 2, 3])
+    expect(matches(null)({})).toBe(false)
+    expect(matches([1, { a: 1 }])([1, { a: 1, b: 2 }])).toBe(true)
+    expect(matches([1])({})).toBe(false)
+    expect(matches([1, 2])([1, 3])).toBe(false)
+    expect(matches(new Set([1]))(new Set([1]))).toBe(true)
+    const seen: number[] = []
+    forEachRight([1, 2, 3], (v) => {
+      seen.push(v)
+      return v !== 2
+    })
+    expect(seen).toEqual([3, 2])
+    const objSeen: string[] = []
+    forEachRight({ a: 1, b: 2 }, (_v, k) => {
+      objSeen.push(String(k))
+    })
+    expect(objSeen).toEqual(['b', 'a'])
+    const setSeen: unknown[] = []
+    forEachRight(new Set([1]), (v) => {
+      setSeen.push(v)
+      return false
+    })
+    expect(setSeen).toEqual([1])
+    let nullCalls = 0
+    forEachRight(null, () => {
+      nullCalls++
+      throw new Error('no')
+    })
+    expect(nullCalls).toBe(0)
+    expect(findIndex(null, () => true)).toBe(-1)
+    expect(findIndex([1, 2, 3], (x) => x === 2, -2)).toBe(1)
+    expect(findIndex([], () => true)).toBe(-1)
+    expect(findIndex([1], () => false)).toBe(-1)
+    expect(indexOf(null, 1)).toBe(-1)
+    expect(indexOf([1, 2, 3], 2, -2)).toBe(1)
+    expect(indexOf([], 1)).toBe(-1)
+    expect(indexOf([1], 9)).toBe(-1)
+    expect(findLastIndex(null, () => true)).toBe(-1)
+    expect(findLastIndex([1, 2, 3], (x) => x === 2)).toBe(1)
+    expect(findLastIndex([], () => true)).toBe(-1)
+    expect(findLastIndex([1], () => false)).toBe(-1)
+    expect([...intersection()]).toEqual([])
+    expect(groupBy({ x: 1, y: 2 }, (v) => v)).toEqual({ 1: [1], 2: [2] })
+    expect(groupByMap({ x: '10' }, 'length').get(2)).toEqual(['10'])
+    expect(map(new Date(), () => 1)).toEqual([])
+    const lenRemoved = remove([1, 2, 3], 'length')
+    expect(lenRemoved).toEqual([])
+    const shapeArr = [{ a: 1 }, { a: 2 }]
+    expect(remove(shapeArr, { a: 1 })).toEqual([{ a: 1 }])
+    expect(shapeArr).toEqual([{ a: 2 }])
   })
 })

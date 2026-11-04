@@ -770,3 +770,17 @@ describe('globals', () => {
     assert(names.includes('keys'))
   })
 })
+
+describe('len and del edges', () => {
+  it('len size paths and del get edges', () => {
+    assert.equal(len({ size: 3 }), 3)
+    assert.equal(len({ size: () => 4 }), 4)
+    assert.equal(len(Symbol()), undefined)
+    const o = { a: 1 }
+    del('a', o)
+    assert.deepEqual(o, {})
+    assert.equal(del('a', null), null)
+    assert.equal(get('missing', null, 7), 7)
+    assert.equal(get('a.b', { a: null }, 9), 9)
+  })
+})

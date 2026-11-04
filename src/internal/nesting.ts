@@ -20,20 +20,7 @@ export const MAX_FLATTEN_SHARED_WORK = 250_000
  * free under Node 24.22.2 with and without coverage instrumentation.
  * Effective self-nested collection limit: {@link MAX_NESTING_DEPTH} / hook cost (default 8 -> 125).
  */
-let hookNestingCost = 8
-
-/** Default / current levels charged per nested collection hop. */
 export const HOOK_NESTING_COST = 8
-
-/** Read the live hook nesting cost (may differ from {@link HOOK_NESTING_COST} when patched in tests). */
-export function getHookNestingCost(): number {
-  return hookNestingCost
-}
-
-/** Test-only: patch the live hook nesting cost (always restore after). */
-export function setHookNestingCost(cost: number): void {
-  hookNestingCost = cost
-}
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
 const SHARED_REVISIT_ERROR = 'input repeats shared objects beyond 500000 copied nodes'
@@ -89,7 +76,7 @@ export function exitNesting(cost = 1): void {
  * Used at protocol dispatch and inside collection equals/clone hooks.
  */
 export function withHookNesting<T>(fn: () => T): T {
-  const half = hookNestingCost / 2
+  const half = HOOK_NESTING_COST / 2
   enterNesting(half)
   try {
     return fn()

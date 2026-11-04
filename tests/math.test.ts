@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { abs, divmod, max, mean, min, round, sum } from '../src/math/index.js'
+import { abs, divmod, logBase, max, mean, min, round, sum } from '../src/math/index.js'
 import { decimal } from '../src/decimal/index.js'
 import { expectFast } from './helpers/perf.js'
 
@@ -85,5 +85,13 @@ describe('math', () => {
     expectFast(() => {
       expect(() => mean(evil)).toThrow(TypeError)
     }, 1000)
+  })
+})
+
+describe('SPEC-R61 math helpers coverage', () => {
+  it('SPEC-R61 logBase mean empty and plain', () => {
+    expect(logBase(10, 100)).toBe(2)
+    expect(Number.isNaN(logBase(-1, 10))).toBe(true)
+    expect(Number.isNaN(mean([]))).toBe(true)
   })
 })

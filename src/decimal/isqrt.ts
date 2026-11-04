@@ -37,9 +37,3 @@ export function isqrtRoot(N: bigint): { root: bigint; exact: boolean } {
   const r = isqrtRoot(N >> BigInt(2 * k)).root << BigInt(k)
   return isqrtFix((r + N / r) >> 1n, N)
 }
-
-/** Floor integer square root. Internal; not part of the public API. */
-export function isqrt(N: bigint): bigint {
-  if (N < 0n) throw new RangeError('isqrt of a negative number')
-  return isqrtRoot(N).root
-}

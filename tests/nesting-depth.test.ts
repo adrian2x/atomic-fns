@@ -15,12 +15,7 @@ import {
   SplayTree,
   Trie
 } from '../src/collections/index.js'
-import {
-  getHookNestingCost,
-  getNestingDepth,
-  HOOK_NESTING_COST,
-  setHookNestingCost
-} from '../src/internal/nesting.js'
+import { getNestingDepth, HOOK_NESTING_COST } from '../src/internal/nesting.js'
 import { deepEqual, protocol } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
@@ -236,24 +231,6 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
     expect(frozenErr).toBeInstanceOf(RangeError)
     expect((frozenErr as Error).message).toBe(NESTING_MSG)
     expect((frozenErr as Error).cause).toBeUndefined()
-  })
-
-  it('POL-4c: HOOK_NESTING_COST patched to 0 fails the 126-no-cause gate', () => {
-    const saved = getHookNestingCost()
-    setHookNestingCost(0)
-    try {
-      let err: unknown
-      try {
-        deepEqual(nestDeque(126), nestDeque(126))
-      } catch (e) {
-        err = e
-      }
-      const gateHolds =
-        err instanceof RangeError && err.message === NESTING_MSG && err.cause === undefined
-      expect(gateHolds).toBe(false)
-    } finally {
-      setHookNestingCost(saved)
-    }
   })
 
   it.each<[string, (shared: Deque<{ n: number }>) => void]>([

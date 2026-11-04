@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { decimal, Decimal } from '../src/decimal/index.js'
-import { isqrt } from '../src/decimal/isqrt.js'
+import { isqrtRoot } from '../src/decimal/isqrt.js'
 import type { RoundingMode } from '../src/decimal/index.js'
 import { ValueError, ZeroDivisionError } from '../src/globals/errors.js'
 import { sorted } from '../src/itertools/index.js'
@@ -363,15 +363,10 @@ describe('F-055 linear-time parse and normalize', () => {
 
 describe('isqrt precision-doubling', () => {
   function assertIsqrt(N: bigint): void {
-    const x = isqrt(N)
+    const x = isqrtRoot(N).root
     expect(x * x <= N).toBe(true)
     expect((x + 1n) * (x + 1n) > N).toBe(true)
   }
-
-  it('rejects negative inputs', () => {
-    expect(() => isqrt(-1n)).toThrow(RangeError)
-    expect(() => isqrt(-1n)).toThrow(/isqrt of a negative number/)
-  })
 
   it('exact floor root on edges and 2000 random bit lengths', () => {
     const edges = [0n, 1n, 2n, 3n, 4n, (1n << 52n) - 1n, 1n << 52n, (1n << 52n) + 1n, 1n << 104n]
@@ -866,5 +861,25 @@ describe('R15-E1 constant-work normalize and digit counts', () => {
         globalThis.String = OrigString
       }
     }, 5000)
+  })
+})
+
+describe('SPEC-R66 decimal edge coverage', () => {
+  it('SPEC-R66 rounding modes and compare edges', () => {
+    expect(decimal('2.5').div(1, { precision: 0, rounding: 'halfUp' }).toString()).toBe('3')
+    expect(decimal('2.5').div(1, { precision: 0, rounding: 'halfDown' }).toString()).toBe('2')
+    expect(decimal('2.5').div(1, { precision: 0, rounding: 'up' }).toString()).toBe('3')
+    expect(decimal('2.5').div(1, { precision: 0, rounding: 'down' }).toString()).toBe('2')
+    expect(decimal('2.5').div(1, { precision: 0, rounding: 'floor' }).toString()).toBe('2')
+    expect(decimal('2.5').div(1, { precision: 0, rounding: 'ceil' }).toString()).toBe('3')
+    expect(decimal(-2.5).div(1, { precision: 0, rounding: 'floor' }).toString()).toBe('-3')
+    expect(decimal(-2.5).div(1, { precision: 0, rounding: 'ceil' }).toString()).toBe('-2')
+    expect(decimal(1).lt(2)).toBe(true)
+    expect(decimal(1).lte(decimal(1))).toBe(true)
+    expect(decimal(1).eq(1)).toBe(true)
+    expect(decimal(1).lte(1)).toBe(true)
+    expect(decimal(2).gt(1)).toBe(true)
+    expect(decimal(1).gte(decimal(1))).toBe(true)
+    expect(decimal(1).gte(1)).toBe(true)
   })
 })

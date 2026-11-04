@@ -13,6 +13,7 @@ import {
   icompact,
   ifilter,
   iflatten,
+  iforEach,
   imap,
   islice,
   itake,
@@ -523,5 +524,15 @@ describe('itertools', () => {
         (a, b) => a.localeCompare(b)
       )
     ).toEqualTypeOf<{ name: string; age: number }[]>()
+  })
+})
+
+describe('iforEach', () => {
+  it('visits every item in order', () => {
+    const acc: number[] = []
+    iforEach([1, 2], (v) => {
+      acc.push(v)
+    })
+    assert.deepEqual(acc, [1, 2])
   })
 })
