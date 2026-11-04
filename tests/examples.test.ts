@@ -363,7 +363,7 @@ describe('SPEC-R107 JSDoc @example', () => {
   })
 
   it('src/i18n/format.ts #2', () => {
-    expect(strftime('%A, %d/%m/%y', new Date(2020, 1, 1))).toEqual('Saturday, 01/02/20')
+    expect(strftime('%A, %d/%m/%y', new Date(2020, 1, 1), 'en-US')).toEqual('Saturday, 01/02/20')
   })
 
   it('src/itertools/index.ts #1', () => {

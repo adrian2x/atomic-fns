@@ -149,7 +149,7 @@ describe('IntlDate', () => {
   it('toString', () => {
     const date = new Date(1964, 6, 2)
     const testDate = mockDate('1964-07-02')
-    expect(testDate.toString()).toBe(date.toLocaleString())
+    expect(testDate.toString()).toBe(date.toLocaleString('en-US'))
   })
 
   it('inspect', () => {

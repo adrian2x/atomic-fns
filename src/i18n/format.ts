@@ -721,7 +721,7 @@ function strftimeValues(date: Date, opts: ResolvedFormatOptions): Map<string, ()
  * @see {@link https://strftime.org/ strftime format}
  * @example
 ```js
-strftime('%A, %d/%m/%y', new Date(2020, 1, 1))
+strftime('%A, %d/%m/%y', new Date(2020, 1, 1), 'en-US')
 // 'Saturday, 01/02/20'
 ```
  */
