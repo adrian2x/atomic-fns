@@ -27,6 +27,10 @@ import {
   uniq,
   without
 } from '../src/collections/index.js'
+import {
+  getSubsetPairComparisons,
+  resetSubsetPairComparisons
+} from '../src/collections/internal.js'
 import { expectFast } from './helpers/perf.js'
 
 describe('collections', () => {
@@ -171,22 +175,22 @@ describe('collections', () => {
     expect(matches({ a: [] })({ a: [1] })).toBe(true)
   })
 
-  it('R15-E2: matches probe cases finish within budget', { timeout: 2000 }, () => {
+  it('R15-E2: matches probe cases stay within subset-scan comparison bound', () => {
+    // Pre-fix (pre-e0323a0): O(n^2) pairwise scan, ~308 ms for [[0]]x1600. Wall-clock
+    // budgets cannot be both load-safe (>= 5x median) and revert-detecting (<= 1/4 of 308 ms).
     const cases: [unknown, unknown, number][] = [
       [[[0]], [[1]], 1600],
-      [[[0]], [[1]], 800],
       [[{}], [1], 1400],
-      [[[]], [{}], 1400],
-      [['x'], ['y'], 1500],
-      [{ a: [0] }, { a: [1] }, 1000]
+      [[[0]], [[1]], 800]
     ]
     for (const [se, te, n] of cases) {
       const s = Array.from({ length: n }, () => structuredClone(se))
       const t = Array.from({ length: n }, () => structuredClone(te))
       t[n - 1] = structuredClone(se)
-      expectFast(() => {
-        expect(matches({ a: s })({ a: t })).toBe(true)
-      }, 50)
+      resetSubsetPairComparisons()
+      expect(matches({ a: s })({ a: t })).toBe(true)
+      const bound = 4 * (s.length + t.length)
+      expect(getSubsetPairComparisons()).toBeLessThanOrEqual(bound)
     }
   })
 

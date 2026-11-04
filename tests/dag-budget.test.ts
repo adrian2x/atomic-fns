@@ -126,11 +126,10 @@ describe('shared-reference DAG budgets', () => {
     }
   })
 
-  it('dos-31: flattenFan4d12 throws within expectFast 100 ms', { timeout: 2000 }, () => {
+  it('dos-31: flattenFan4d12 throws within shared-work bound', () => {
+    // Pre-fix 154 ms; expectFast 100 was above 1/4 of pre-fix. Count via nesting budget.
     const src = fan(4, 12)
-    expectFast(() => {
-      expect(() => flatten(src)).toThrow(FLATTEN_REVISIT)
-    }, 100)
+    expectBudgetTrip(() => flatten(src), src, FLATTEN_REVISIT, MAX_FLATTEN_SHARED_WORK)
   })
 
   it('matches depth-40 DAG shape and value within budget', () => {

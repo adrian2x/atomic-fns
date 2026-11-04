@@ -41,6 +41,10 @@ import {
 import { max, mean, min, sum } from '../src/math/index.js'
 import { deepEqual } from '../src/operators/index.js'
 import { sample, shuffle } from '../src/random/index.js'
+import {
+  getSubsetPairComparisons,
+  resetSubsetPairComparisons
+} from '../src/collections/internal.js'
 import { expectFast } from './helpers/perf.js'
 
 /** Pre-fix: hang on length 4e9. Hang-floor budget. */
@@ -166,10 +170,13 @@ describe('R12-E sparse-safe array walker', () => {
     for (let i = 0; i < 600; i++) spaced[i * 1023] = i
     spaced[600 * 1023] = 'z'
     const ampShape = { tags: Array(600).fill('z') }
-    // dos-29 / r8.mjs matchesSpacedAmp: subset scan must not re-walk holes per shape item.
-    expectFast(() => {
-      expect(matches(ampShape)({ tags: spaced })).toBe(true)
-    }, 100)
+    // dos-29 / r8.mjs matchesSpacedAmp: pre-fix 335 ms (hole re-walk). Budget 100 was
+    // above 1/4 of pre-fix; assert subset-scan pairwise comparisons instead.
+    const shapeLen = (ampShape.tags as unknown[]).length
+    const targetLen = Object.keys(spaced).length
+    resetSubsetPairComparisons()
+    expect(matches(ampShape)({ tags: spaced })).toBe(true)
+    expect(getSubsetPairComparisons()).toBeLessThanOrEqual(4 * (shapeLen + targetLen))
   })
 
   it('R13-D2: iterator helpers finish or reject huge sparse within budget', () => {

@@ -32,6 +32,7 @@ import { truncateForError } from '../internal/truncate.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, deepEqual, eq, identity } from '../operators/index.js'
 import type { Iteratee } from '../types.js'
+import { noteSubsetPairComparison } from './internal.js'
 import { defineData, isPlainObject } from './object.js'
 
 export { SetCollection, ValueCollection, MapCollection } from './abc.js'
@@ -591,6 +592,7 @@ function matchDeep(
               const bucket = byKey.get(info.key)
               if (bucket !== undefined) {
                 for (const candidate of bucket) {
+                  noteSubsetPairComparison()
                   if (matchDeep(item, candidate, false, depth + 1, pending, proven, keys)) {
                     found = true
                     break
@@ -599,6 +601,7 @@ function matchDeep(
               }
             } else {
               for (const candidate of valueEls) {
+                noteSubsetPairComparison()
                 if (matchDeep(item, candidate, false, depth + 1, pending, proven, keys)) {
                   found = true
                   break
@@ -648,6 +651,7 @@ function matchDeep(
             }
             if (candidateIdxs !== undefined) {
               for (const i of candidateIdxs) {
+                noteSubsetPairComparison()
                 if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
                   found = true
                   break
@@ -656,6 +660,7 @@ function matchDeep(
             } else {
               for (let i = 0; i < valueEls.length; i++) {
                 if (!matchSigCompatible(item, sigs[i])) continue
+                noteSubsetPairComparison()
                 if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
                   found = true
                   break
@@ -663,12 +668,11 @@ function matchDeep(
               }
             }
           }
-          if (
-            !found &&
-            hasHole &&
-            matchDeep(item, undefined, false, depth + 1, pending, proven, keys)
-          ) {
-            found = true
+          if (!found && hasHole) {
+            noteSubsetPairComparison()
+            if (matchDeep(item, undefined, false, depth + 1, pending, proven, keys)) {
+              found = true
+            }
           }
           if (!found) {
             ok = false
