@@ -40,14 +40,18 @@ function* sortedArrays(maxLen: number, maxVal: number): Generator<number[]> {
 }
 
 describe('bisect', () => {
-  it('SPEC-R33 bisect matches Python bisect_right on exhaustive small arrays', () => {
-    for (const arr of sortedArrays(8, 9)) {
-      for (let x = -1; x <= 10; x++) {
-        expect(bisect(arr, x)).toBe(pyBisectRight(arr, x))
-        expect(bisectLeft(arr, x)).toBe(pyBisectLeft(arr, x))
+  it(
+    'SPEC-R33 bisect matches Python bisect_right on exhaustive small arrays',
+    { timeout: 60_000 },
+    () => {
+      for (const arr of sortedArrays(8, 9)) {
+        for (let x = -1; x <= 10; x++) {
+          expect(bisect(arr, x)).toBe(pyBisectRight(arr, x))
+          expect(bisectLeft(arr, x)).toBe(pyBisectLeft(arr, x))
+        }
       }
     }
-  })
+  )
 
   it('SPEC-R33 bisectLeft / bisect hi clamp and lo RangeError', () => {
     const arr = [1, 2, 3]

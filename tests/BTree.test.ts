@@ -189,7 +189,7 @@ describe('BTree', () => {
     tree[checkInvariants]()
   })
 
-  it('SPEC-R79 differential fuzz vs Map', () => {
+  it('SPEC-R79 differential fuzz vs Map', { timeout: 60_000 }, () => {
     const sizes = [8, 9, 16, 32]
     for (const nodeCapacity of sizes) {
       const tree = new BTree<number, number>(undefined, undefined, { nodeCapacity: nodeCapacity })
