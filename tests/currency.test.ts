@@ -141,4 +141,53 @@ describe('SPEC-R71 Currency', () => {
     expect(compare(jpy1, usd1)).toBeLessThan(0)
     expect(eq(jpy1, usd1)).toBe(false)
   })
+
+  it('R16-D: currency checks use the unit hook across library copies', async () => {
+    const { ValueError } = await import('../src/globals/errors.js')
+    const { DECIMAL_BRAND } = await import('../src/decimal/index.js')
+    const {
+      add,
+      sub,
+      mul,
+      div,
+      lt,
+      lte,
+      gt,
+      gte,
+      eq: oeq
+    } = await import('../src/operators/index.js')
+    const { min, max } = await import('../src/math/index.js')
+    const usd = new Currency('1', 'USD')
+    // Foreign Currency-like: Decimal brand + unit hook, not instanceof Currency.
+    const foreignJpy = {
+      [DECIMAL_BRAND]() {
+        return '1000000'
+      },
+      get [protocol.unit]() {
+        return 'JPY'
+      }
+    }
+    const msg = /currency mismatch: (USD vs JPY|JPY vs USD)/
+    expect(() => usd.add(foreignJpy as never)).toThrow(ValueError)
+    expect(() => usd.add(foreignJpy as never)).toThrow(msg)
+    expect(() => usd.sub(foreignJpy as never)).toThrow(msg)
+    expect(() => usd.mul(foreignJpy as never)).toThrow(msg)
+    expect(() => usd.div(foreignJpy as never)).toThrow(msg)
+    expect(() => usd.compare(foreignJpy as never)).toThrow(msg)
+    expect(() => usd.lt(foreignJpy as never)).toThrow(msg)
+    expect(() => usd.lte(foreignJpy as never)).toThrow(msg)
+    expect(() => usd.gt(foreignJpy as never)).toThrow(msg)
+    expect(() => usd.gte(foreignJpy as never)).toThrow(msg)
+    expect(() => add(usd, foreignJpy)).toThrow(msg)
+    expect(() => sub(usd, foreignJpy)).toThrow(msg)
+    expect(() => mul(usd, foreignJpy)).toThrow(msg)
+    expect(() => div(usd, foreignJpy)).toThrow(msg)
+    expect(() => lt(usd, foreignJpy)).toThrow(msg)
+    expect(() => lte(usd, foreignJpy)).toThrow(msg)
+    expect(() => gt(usd, foreignJpy)).toThrow(msg)
+    expect(() => gte(usd, foreignJpy)).toThrow(msg)
+    expect(oeq(usd, foreignJpy)).toBe(false)
+    expect(() => min([usd, foreignJpy as never])).toThrow(msg)
+    expect(() => max([usd, foreignJpy as never])).toThrow(msg)
+  })
 })

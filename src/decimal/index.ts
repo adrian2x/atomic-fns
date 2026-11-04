@@ -5,7 +5,7 @@
  */
 
 import { ValueError, ZeroDivisionError } from '../globals/errors.js'
-import { compareValueThenUnit } from '../internal/rank1.js'
+import { assertSameCurrency, compareValueThenUnit } from '../internal/rank1.js'
 import { truncateForError } from '../internal/truncate.js'
 import { registerRank1NumericCompare } from '../operators/order.js'
 import { protocol, unitOf } from '../operators/protocol.js'
@@ -1014,18 +1014,23 @@ export class Decimal {
   }
 
   [protocol.add](o: unknown) {
+    // Check units on the original operand before brand→string coercion drops the unit hook.
+    assertSameCurrency(this, o)
     return this.add(toDecimalInput(o))
   }
 
   [protocol.sub](o: unknown) {
+    assertSameCurrency(this, o)
     return this.sub(toDecimalInput(o))
   }
 
   [protocol.mul](o: unknown) {
+    assertSameCurrency(this, o)
     return this.mul(toDecimalInput(o))
   }
 
   [protocol.div](o: unknown) {
+    assertSameCurrency(this, o)
     return this.div(toDecimalInput(o))
   }
 

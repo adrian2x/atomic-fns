@@ -4,7 +4,7 @@
 
 import { Decimal } from '../decimal/index.js'
 import type { DecimalInput, DivOptions } from '../decimal/index.js'
-import { ValueError } from '../globals/errors.js'
+import { assertSameCurrency } from '../internal/rank1.js'
 import { protocol } from '../operators/protocol.js'
 
 /** Runtime accepts decimal strings via ToIntlMathematicalValue (ECMA-402). */
@@ -77,10 +77,9 @@ export class Currency extends Decimal {
     return this.clone(super.abs())
   }
 
+  /** Unit check via `protocol.unit` so foreign library copies and fakes are covered. */
   #assertSameCurrency(x: DecimalInput): void {
-    if (x instanceof Currency && x.currency !== this.currency) {
-      throw new ValueError(`currency mismatch: ${this.currency} vs ${x.currency}`)
-    }
+    assertSameCurrency(this, x)
   }
 
   override add(x: DecimalInput): Currency {
