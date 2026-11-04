@@ -24,7 +24,7 @@ import {
   insort
 } from '../src/collections/index.js'
 import { list } from '../src/globals/index.js'
-import { isHugeSparse, walkArray } from '../src/internal/arrayKeys.js'
+import { isCanonicalArrayIndex, isHugeSparse, walkArray } from '../src/internal/arrayKeys.js'
 import {
   all,
   any,
@@ -39,7 +39,7 @@ import {
   sorted
 } from '../src/itertools/index.js'
 import { max, mean, min, sum } from '../src/math/index.js'
-import { deepEqual } from '../src/operators/index.js'
+import { deepEqual, protocol } from '../src/operators/index.js'
 import { sample, shuffle } from '../src/random/index.js'
 import {
   getSubsetPairComparisons,
@@ -53,6 +53,8 @@ const BUDGET = 1000
 const DENSE_EQ_BUDGET = 1000
 /** Dense 1e6 clone median ~28ms -> max(1000, 5xM)=1000. */
 const DENSE_CLONE_BUDGET = 1000
+/** Far above the few hundred reads an own-element walk needs; far below any huge length. */
+const INDEX_READ_LIMIT = 10_000
 
 function hugeSparse(): unknown[] {
   const a: unknown[] = []
@@ -61,6 +63,34 @@ function hugeSparse(): unknown[] {
   a[1e9] = 'y'
   a[4e9] = 'admin'
   return a
+}
+
+/** All holes except 8 evenly spaced indices, endpoints included, set to `value`. */
+function holesBetweenSpreadIndices(length: number, value: unknown): unknown[] {
+  const arr: unknown[] = []
+  arr.length = length
+  for (let step = 0; step < 8; step++) arr[Math.floor((step * (length - 1)) / 7)] = value
+  return arr
+}
+
+/** vitest timeouts cannot interrupt synchronous code, so a hole walk has to throw to fail fast. */
+function withIndexReadLimit(arr: unknown[]): unknown[] {
+  let reads = 0
+  const countRead = (key: string | symbol): void => {
+    if (typeof key === 'string' && isCanonicalArrayIndex(key) && ++reads > INDEX_READ_LIMIT) {
+      throw new Error(`read more than ${String(INDEX_READ_LIMIT)} indices`)
+    }
+  }
+  return new Proxy(arr, {
+    has(target, key) {
+      countRead(key)
+      return Reflect.has(target, key)
+    },
+    get(target, key): unknown {
+      countRead(key)
+      return Reflect.get(target, key)
+    }
+  })
 }
 
 describe('R12-E sparse-safe array walker', () => {
@@ -250,6 +280,54 @@ describe('R12-E sparse-safe array walker', () => {
       expect(indexOf(huge, undefined)).toBe(-1)
       expect(findIndex(huge, (x) => x === undefined)).toBe(1)
     }, BUDGET)
+  })
+
+  it('huge arrays filled at evenly spaced indices compare own elements without walking holes', () => {
+    const length = 2 ** 32 - 1
+    const a = holesBetweenSpreadIndices(length, 'x')
+    const same = holesBetweenSpreadIndices(length, 'x')
+    const valueDiffers = holesBetweenSpreadIndices(length, 'x')
+    a[1234] = 'y'
+    same[1234] = 'y'
+    valueDiffers[1234] = 'z'
+
+    expect(deepEqual(withIndexReadLimit(a), withIndexReadLimit(same))).toBe(true)
+    expect(deepEqual(withIndexReadLimit(a), withIndexReadLimit(valueDiffers))).toBe(false)
+  }, 2000)
+
+  it('a huge sparse array differs from an all-undefined array in both argument orders', () => {
+    const length = 2 ** 24 + 1
+    const sparse = holesBetweenSpreadIndices(length, undefined)
+    const allUndefined = new Array<unknown>(length).fill(undefined)
+
+    expect(deepEqual(sparse, allUndefined)).toBe(false)
+    expect(deepEqual(allUndefined, sparse)).toBe(false)
+  }, 30_000)
+
+  it('a dense huge array differing at index 0 is rejected without scanning for holes', () => {
+    const length = 2 ** 24 + 1
+    const dense = new Array<unknown>(length).fill('x')
+    const other = holesBetweenSpreadIndices(length, 'y')
+
+    expect(deepEqual(withIndexReadLimit(dense), other)).toBe(false)
+  })
+
+  it('a huge sparse array compares the element before its first hole once', () => {
+    let comparisons = 0
+    const counted = {
+      [protocol.equals]: () => {
+        comparisons++
+        return true
+      }
+    }
+    const a = hugeSparse()
+    const b = hugeSparse()
+    a[0] = counted
+    b[0] = counted
+
+    expect(deepEqual(a, b)).toBe(true)
+    // hooks bypass the proven memo, so a repeat here would double at every nesting level
+    expect(comparisons).toBe(1)
   })
 
   it('dense deepEqual of 1e6 arrays stays within budget', () => {

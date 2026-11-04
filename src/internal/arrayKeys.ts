@@ -114,11 +114,6 @@ export function isHugeSparse(arr: unknown[]): boolean {
   return len > 2 * own + 1024
 }
 
-/** @see {@link isHugeSparse} */
-export function isHugeSparseArray(arr: unknown[]): boolean {
-  return isHugeSparse(arr)
-}
-
 /** Throw when `arr` is a huge sparse array that must not be expanded per-index. */
 export function assertNotHugeSparse(arr: unknown[]): void {
   if (isHugeSparse(arr)) {
