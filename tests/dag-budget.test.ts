@@ -1,5 +1,7 @@
+import { deserialize, serialize } from 'node:v8'
 import { describe, expect, it } from 'vitest'
 import { flatten, matches, merge } from '../src/collections/index.js'
+import { getLeafKeyVisits, resetLeafKeyVisits } from '../src/collections/internal.js'
 import { Duration, durationField } from '../src/i18n/duration.js'
 import { canonicalKey } from '../src/internal/canonicalKey.js'
 import {
@@ -137,6 +139,65 @@ describe('shared-reference DAG budgets', () => {
     expectFast(() => {
       expect(matches(src)(src)).toBe(true)
     }, BUDGET)
+  })
+
+  /** Array DAG: x(i+1) = [x(i), x(i)] - shared refs survive structured clone. */
+  function arrDag(depth: number): unknown {
+    let x: unknown = [1]
+    for (let i = 0; i < depth; i++) x = [x, x]
+    return x
+  }
+
+  const SHARED_REVISIT_RE = /shared objects beyond/
+
+  /**
+   * Completes with `expected` or throws the shared-work budget error; leaf-key visits stay
+   * O(distinct nodes) in arrDag(depth) (d+1 arrays) with headroom for wrappers.
+   */
+  function expectMatchesDagBounded(depth: number, expected: boolean, run: () => boolean): void {
+    resetLeafKeyVisits()
+    let result: boolean | undefined
+    let err: unknown
+    try {
+      result = run()
+    } catch (e) {
+      err = e
+    }
+    if (err !== undefined) {
+      expect(err).toBeInstanceOf(RangeError)
+      expect((err as Error).message).toMatch(SHARED_REVISIT_RE)
+    } else {
+      expect(result).toBe(expected)
+    }
+    expect(getLeafKeyVisits()).toBeLessThanOrEqual(8 * (depth + 4))
+  }
+
+  it('dos-37: matchesDagTarget30 leaf-key work is linear in distinct nodes', () => {
+    const depth = 30
+    const bytes = serialize({ t: [arrDag(depth), 7] })
+    const msg: unknown = deserialize(bytes)
+    expectFast(() => {
+      expectMatchesDagBounded(depth, true, () => matches({ t: [7] })(msg))
+    }, 1000)
+  })
+
+  it('dos-37: matchesDagBoth24 leaf-key work is linear in distinct nodes', () => {
+    const depth = 24
+    const bytes = serialize({ t: [arrDag(depth)] })
+    const shape: unknown = deserialize(bytes)
+    const value: unknown = deserialize(bytes)
+    expectFast(() => {
+      expectMatchesDagBounded(depth, true, () => matches(shape)(value))
+    }, 1000)
+  })
+
+  it('dos-37: matchesDagShape30 leaf-key work is linear in distinct nodes', () => {
+    const depth = 30
+    const bytes = serialize({ t: [arrDag(depth)] })
+    const shape: unknown = deserialize(bytes)
+    expectFast(() => {
+      expectMatchesDagBounded(depth, false, () => matches(shape)({ t: [1] }))
+    }, 1000)
   })
 
   it('merge of 10001 shared row objects works with distinct copies', () => {

@@ -67,6 +67,13 @@ export interface CanonicalKeySession {
   readonly memo: WeakMap<object, NodeInfo>
   readonly failed: WeakSet<object>
   readonly inProgress: WeakSet<object>
+  /**
+   * Shape-side descendant pure leaf-key sets for matches indexing. `false` means the node is
+   * impure (cannot index). Valid only while the keyed values are not mutated.
+   */
+  readonly matchShapeLeafKeys: WeakMap<object, Set<string> | false>
+  /** Target-side descendant pure leaf-key sets for matches posting lists. */
+  readonly matchTargetLeafKeys: WeakMap<object, Set<string>>
 }
 
 /** Create an empty key session. */
@@ -74,7 +81,9 @@ export function createCanonicalKeySession(): CanonicalKeySession {
   return {
     memo: new WeakMap(),
     failed: new WeakSet(),
-    inProgress: new WeakSet()
+    inProgress: new WeakSet(),
+    matchShapeLeafKeys: new WeakMap(),
+    matchTargetLeafKeys: new WeakMap()
   }
 }
 

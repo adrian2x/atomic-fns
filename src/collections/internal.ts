@@ -21,3 +21,24 @@ export function getSubsetPairComparisons(): number {
 export function noteSubsetPairComparison(): void {
   subsetPairComparisons++
 }
+
+/**
+ * Distinct containers expanded while building matches leaf-key indexes in one call.
+ * Not exported from any public barrel; tests import this module directly.
+ */
+let leafKeyVisits = 0
+
+/** Reset the leaf-key visit counter (tests). */
+export function resetLeafKeyVisits(): void {
+  leafKeyVisits = 0
+}
+
+/** Read the leaf-key visit counter (tests). */
+export function getLeafKeyVisits(): number {
+  return leafKeyVisits
+}
+
+/** Record one distinct-container expansion in a leaf-key index walk. */
+export function noteLeafKeyVisit(): void {
+  leafKeyVisits++
+}

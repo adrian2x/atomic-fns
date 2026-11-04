@@ -233,3 +233,16 @@ export function noteExpanded(obj: object, prepaid = false): boolean {
   }
   return true
 }
+
+/**
+ * Charge `cost` units against the active shared-work budget (no-op outside a revisit guard).
+ * Used by walks that count distinct nodes rather than re-expansions (e.g. matches leaf-key index).
+ */
+export function chargeSharedWork(cost = 1): void {
+  if (revisitGuardDepth === 0) return
+  sharedWork += cost
+  lastSharedWork = sharedWork
+  if (sharedWork > sharedWorkLimit) {
+    throw new RangeError(sharedWorkError)
+  }
+}
