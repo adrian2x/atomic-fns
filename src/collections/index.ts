@@ -246,7 +246,8 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
  * an array (primitives, missing keys, and null never match). Arrays in the shape match as subsets
  * (each shape element must match some target element). Shape keys whose value is `undefined`
  * require that own key on the target. Non-plain shape values (Date, RegExp, Map, Set, typed arrays)
- * compare with {@link deepEqual}. Nesting deeper than 1000 levels throws `RangeError`.
+ * compare with {@link deepEqual}. Map and Set leaves must be deepEqual (exact), unlike Lodash
+ * partial mode which allows subsets. Nesting deeper than 1000 levels throws `RangeError`.
  * Array subset matching buckets target elements by canonical key for primitives and other
  * deepEqual-equivalent leaves, and filters partial array/object shape elements by a cheap
  * structural signature (type tag; object key set; array length), then runs the deep walk only
