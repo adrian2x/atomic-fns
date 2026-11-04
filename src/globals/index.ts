@@ -381,8 +381,58 @@ function isOwnDataProperty(base: object, key: PropertyKey): boolean {
 }
 
 /**
+ * Standard constructors looked up by name on `globalThis` (never enumerated).
+ * Missing or non-function bindings are skipped via per-name try/catch.
+ */
+const INTRINSIC_CTOR_NAMES = [
+  'Object',
+  'Function',
+  'Array',
+  'String',
+  'Number',
+  'Boolean',
+  'BigInt',
+  'Symbol',
+  'RegExp',
+  'Date',
+  'Map',
+  'Set',
+  'WeakMap',
+  'WeakSet',
+  'WeakRef',
+  'FinalizationRegistry',
+  'Promise',
+  'Error',
+  'EvalError',
+  'RangeError',
+  'ReferenceError',
+  'SyntaxError',
+  'TypeError',
+  'URIError',
+  'AggregateError',
+  'ArrayBuffer',
+  'SharedArrayBuffer',
+  'DataView',
+  'Int8Array',
+  'Uint8Array',
+  'Uint8ClampedArray',
+  'Int16Array',
+  'Uint16Array',
+  'Int32Array',
+  'Uint32Array',
+  'Float16Array',
+  'Float32Array',
+  'Float64Array',
+  'BigInt64Array',
+  'BigUint64Array',
+  'Iterator',
+  'Buffer'
+] as const
+
+/**
  * Intrinsic prototypes whose function-valued members are treated as missing when inherited.
- * Built once at module load - no `Function.prototype.toString` sniffing on the hot path.
+ * Built once at module load from an explicit constructor list - no `globalThis` enumeration
+ * and no `Function.prototype.toString` sniffing on the hot path.
  */
 const INTRINSIC_PROTOTYPES: WeakSet<object> = (() => {
   const set = new WeakSet<object>()
@@ -395,12 +445,33 @@ const INTRINSIC_PROTOTYPES: WeakSet<object> = (() => {
       add((ctor as { prototype?: unknown }).prototype)
     }
   }
-
-  for (const key of Object.getOwnPropertyNames(globalThis)) {
-    addCtor((globalThis as Record<string, unknown>)[key])
+  const lookupGlobalCtor = (name: string): void => {
+    try {
+      const ctor = (globalThis as Record<string, unknown>)[name]
+      if (typeof ctor === 'function') addCtor(ctor)
+    } catch {
+      // Throwing getters (e.g. sandboxed iframe localStorage) must not abort import.
+    }
   }
-  for (const sym of Object.getOwnPropertySymbols(globalThis)) {
-    addCtor((globalThis as Record<symbol, unknown>)[sym])
+
+  for (const name of INTRINSIC_CTOR_NAMES) {
+    lookupGlobalCtor(name)
+  }
+
+  try {
+    const intl = (globalThis as { Intl?: object }).Intl
+    if (intl && typeof intl === 'object') {
+      for (const key of Object.getOwnPropertyNames(intl)) {
+        try {
+          const ctor = (intl as Record<string, unknown>)[key]
+          if (typeof ctor === 'function') addCtor(ctor)
+        } catch {
+          // Skip throwing Intl accessors.
+        }
+      }
+    }
+  } catch {
+    // Intl unavailable.
   }
 
   add(Object.prototype)
