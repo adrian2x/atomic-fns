@@ -625,7 +625,8 @@ export function omit<T extends object>(
  * receives the `deep` flag; a string-named `clone` method is ignored. Collection classes
  * deep-clone their values when `deep` is true (map-like keys stay by reference). Within one
  * top-level deep clone, an object reached twice is copied once and stays shared in the result,
- * also through `protocol.clone` hooks. A collection that contains itself still hits the cap.
+ * also through `protocol.clone` hooks, so a collection class in a cycle keeps the cycle. A custom
+ * hook that clones its way around a cycle hits the cap.
  * Deep nesting deeper than 1000 levels throws `RangeError`. A shallow clone of a huge sparse array
  * (`length > 2^24` and `length > 2 * filled + 1024`) throws
  * `RangeError('sparse array too large')`; a deep clone walks own elements only and returns.
@@ -640,6 +641,14 @@ export function clone<T>(value: T, deep = false): T {
 
 function createCloneMemo(): WeakMap<object, unknown> {
   return new WeakMap()
+}
+
+/**
+ * Record `copy` as the deep clone of `source` for the running walk. A `protocol.clone` hook calls
+ * this before it clones the contents, so a cycle back to `source` lands on `copy`.
+ */
+export function rememberDeepClone(source: object, copy: object): void {
+  walkSession(createCloneMemo).set(source, copy)
 }
 
 function copyEnumerableSymbols(

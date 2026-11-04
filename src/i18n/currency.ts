@@ -190,11 +190,6 @@ export class Currency extends Decimal {
     return this.greaterThanMaxValue() ? `${super.toString()} ${this.currency}` : this.toString()
   }
 
-  /** Numeric value from the exact decimal string (not the formatted display). */
-  override toNumber(): number {
-    return Number(super.toString())
-  }
-
   override toJSON(): string {
     return super.toString()
   }

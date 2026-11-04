@@ -1,6 +1,17 @@
 import vm from 'node:vm'
 import { describe, it, expect } from 'vitest'
-import { clone, Deque, Heap, LRUCache, SortedMap, Trie } from '../src/collections/index.js'
+import {
+  BTree,
+  clone,
+  Deque,
+  FrozenSet,
+  Heap,
+  LRUCache,
+  SortedMap,
+  SortedSet,
+  SplayTree,
+  Trie
+} from '../src/collections/index.js'
 import { deepEqual, protocol } from '../src/operators/index.js'
 
 describe('clone', () => {
@@ -267,5 +278,215 @@ describe('clone across realms', () => {
   it('a foreign subclass stays by reference', () => {
     const value = foreign('new (class Sub extends Map {})()')
     expect(clone(value)).toBe(value)
+  })
+})
+
+interface Holder {
+  name: string
+  make: () => object
+  put: (holder: object, item: unknown) => void
+  read: (holder: object) => unknown
+}
+
+function holder<C extends object>(
+  name: string,
+  make: () => C,
+  put: (collection: C, item: unknown) => unknown,
+  read: (collection: C) => unknown
+): Holder {
+  return {
+    name,
+    make,
+    put: (collection, item) => void put(collection as C, item),
+    read: (collection) => read(collection as C)
+  }
+}
+
+const holders = [
+  holder(
+    'Deque',
+    () => new Deque<unknown>(),
+    (c, item) => c.push(item),
+    (c) => c.at(0)
+  ),
+  holder(
+    'Heap',
+    () => new Heap<unknown>(),
+    (c, item) => c.push(item),
+    (c) => c.peek()
+  ),
+  holder(
+    'SortedSet',
+    () => new SortedSet<unknown>(),
+    (c, item) => c.add(item),
+    (c) => c.at(0)
+  ),
+  holder(
+    'BTree',
+    () => new BTree<number, unknown>(),
+    (c, item) => c.set(1, item),
+    (c) => c.get(1)
+  ),
+  holder(
+    'SortedMap',
+    () => new SortedMap<number, unknown>(),
+    (c, item) => c.set(1, item),
+    (c) => c.get(1)
+  ),
+  holder(
+    'SplayTree',
+    () => new SplayTree<number, unknown>(),
+    (c, item) => c.set(1, item),
+    (c) => c.get(1)
+  ),
+  holder(
+    'LRUCache',
+    () => new LRUCache<number, unknown>(),
+    (c, item) => c.set(1, item),
+    (c) => c.get(1)
+  )
+]
+
+describe('deep clone of collections in a cycle', () => {
+  it.each(holders)('$name holding itself keeps the cycle', ({ make, put, read }) => {
+    const source = make()
+    put(source, source)
+
+    const copy = clone(source, true)
+
+    expect(copy).not.toBe(source)
+    expect(copy.constructor).toBe(source.constructor)
+    expect(read(copy)).toBe(copy)
+    expect(read(source)).toBe(source)
+    expect(deepEqual(source, copy)).toBe(true)
+  })
+
+  it.each(holders)('$name reached through an array is copied once', ({ make, put, read }) => {
+    const items: unknown[] = []
+    const source = make()
+    put(source, items)
+    items.push(source)
+
+    const fromCollection = clone(source, true)
+    const fromArray = clone(items, true)
+
+    const copiedItems = read(fromCollection) as unknown[]
+    expect(copiedItems).not.toBe(items)
+    expect(copiedItems[0]).toBe(fromCollection)
+    expect(fromArray[0]).not.toBe(source)
+    expect(read(fromArray[0] as object)).toBe(fromArray)
+  })
+
+  it.each(holders)('$name keeps the cycle through a direct hook call', ({ make, put, read }) => {
+    const source = make()
+    put(source, source)
+
+    const copy = (source as { [protocol.clone](deep: boolean): object })[protocol.clone](true)
+
+    expect(copy).not.toBe(source)
+    expect(read(copy)).toBe(copy)
+  })
+
+  it('collections holding each other stay paired', () => {
+    const left = new Deque<unknown>()
+    const right = new SortedMap([['left', left]])
+    left.push(right)
+
+    const copy = clone(left, true)
+
+    const copiedRight = copy.at(0) as typeof right
+    expect(copiedRight).not.toBe(right)
+    expect(copiedRight.get('left')).toBe(copy)
+  })
+
+  it('a FrozenSet reached through an array is copied once', () => {
+    const items: unknown[] = []
+    const source = new FrozenSet<unknown>([items])
+    items.push(source)
+
+    const copy = clone(source, true)
+
+    const [copiedItems] = copy as FrozenSet<unknown[]>
+    expect(copy).toBeInstanceOf(FrozenSet)
+    expect(copiedItems).not.toBe(items)
+    expect(copiedItems[0]).toBe(copy)
+    expect(() => copy.add(1)).toThrow('FrozenSet is immutable')
+  })
+
+  it('a copy keeps the class and construction arguments of its source', () => {
+    class Ring extends Deque<unknown> {}
+    const ring = new Ring([], { maxlen: 2 })
+    ring.push(ring)
+    const cache = new LRUCache<string, unknown>(3)
+    cache.set('self', cache)
+    const tree = new BTree<number, unknown>(undefined, (a, b) => b - a, { nodeCapacity: 9 })
+    tree.set(1, tree).set(2, tree)
+
+    const [ringCopy, cacheCopy, treeCopy] = [ring, cache, tree].map((c) => clone(c, true)) as [
+      Ring,
+      typeof cache,
+      typeof tree
+    ]
+
+    expect(ringCopy).toBeInstanceOf(Ring)
+    expect(ringCopy.maxlen).toBe(2)
+    expect(cacheCopy.capacity).toBe(3)
+    expect(treeCopy.nodeCapacity).toBe(9)
+    expect([...treeCopy.keys()]).toEqual([2, 1])
+  })
+})
+
+describe('what a collection clone shares', () => {
+  it.each(holders)('a shallow $name clone shares what it holds', ({ make, put, read }) => {
+    const row = { id: 1 }
+    const source = make()
+    put(source, row)
+
+    const copy = clone(source)
+
+    expect(copy).not.toBe(source)
+    expect(read(copy)).toBe(row)
+  })
+
+  it('a shallow FrozenSet clone shares what it holds', () => {
+    const row = { id: 1 }
+    const source = new FrozenSet([row])
+
+    const copy = clone(source)
+
+    expect(copy).not.toBe(source)
+    expect(copy.has(row)).toBe(true)
+  })
+
+  it('a deep clone of a map-like collection keeps keys by reference', () => {
+    const key = { id: 1 }
+    const maps = [
+      new BTree([[key, 1]]),
+      new SortedMap([[key, 1]]),
+      new SplayTree<object, number>().set(key, 1),
+      new LRUCache<object, number>().set(key, 1)
+    ]
+
+    for (const map of maps) {
+      expect(clone(map, true).keys().next().value).toBe(key)
+    }
+  })
+})
+
+describe('deep clone fills a copy in iteration order', () => {
+  it('keeps sequence, heap order and recency', () => {
+    const cache = new LRUCache<number, string>(4).set(1, 'a').set(2, 'b').set(3, 'c')
+    cache.get(1)
+    const heap = new Heap([5, 1, 4, 2, 3])
+    const splay = new SplayTree<number, string>().set(2, 'b').set(1, 'a')
+
+    expect([...clone(new Deque([3, 1, 2]), true)]).toEqual([3, 1, 2])
+    expect([...clone(new Trie(['b', 'a']), true)].sort()).toEqual(['a', 'b'])
+    expect([...clone(heap, true)]).toEqual([...heap])
+    expect([...clone(cache, true).keys()]).toEqual([2, 3, 1])
+    expect([...clone(splay, true)]).toEqual([
+      [1, 'a'],
+      [2, 'b']
+    ])
   })
 })

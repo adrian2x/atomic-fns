@@ -922,6 +922,25 @@ describe('BTree', () => {
     expect(t.size).toBe(2)
   })
 
+  it('a shallow clone shares structure without comparing a key', () => {
+    let compares = 0
+    const t = new BTree<number, number>(
+      [
+        [1, 1],
+        [2, 2]
+      ],
+      (a, b) => {
+        compares++
+        return a - b
+      }
+    )
+    compares = 0
+
+    clone(t)
+
+    expect(compares).toBe(0)
+  })
+
   it('self-nested trees reach the documented 125 levels', () => {
     const nest = (depth: number) => {
       let t = new BTree<number, unknown>([[0, 0]])

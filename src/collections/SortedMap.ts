@@ -2,7 +2,6 @@ import { withHookNesting } from '../internal/nesting.js'
 import { protocol, type Comparer } from '../operators/index.js'
 import { MapCollection, sameEntrySequence } from './abc.js'
 import { BTree } from './BTree.js'
-import { clone } from './object.js'
 
 function positiveZero<K>(key: K): K {
   return key === 0 ? (0 as K) : key
@@ -53,14 +52,6 @@ export class SortedMap<K, V> extends MapCollection<K, V> {
   /** Sequence equality: key order is part of meaning. */
   override [protocol.equals](other: unknown): boolean {
     return withHookNesting(() => sameEntrySequence(this, other, (c) => c.entries()))
-  }
-
-  /** Deep clone keeps keys by reference (comparator owns key identity) and deep-clones values. */
-  override [protocol.clone](deep = false): this {
-    return withHookNesting(() => {
-      if (!deep) return this.cloneFrom(this.entries())
-      return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
-    })
   }
 
   readonly [Symbol.toStringTag] = 'SortedMap'

@@ -2,7 +2,7 @@ import { forEachArrayElement, isTypedArray } from '../internal/iterable.js'
 import { withHookNesting } from '../internal/nesting.js'
 import { deepMultisetEqual } from '../operators/equality.js'
 import { protocol } from '../operators/index.js'
-import { clone } from './object.js'
+import { clone, rememberDeepClone } from './object.js'
 
 /**
  * An immutable Set. Contents cannot change after construction.
@@ -64,12 +64,23 @@ export class FrozenSet<T = unknown> extends Set<T> {
     })
   }
 
-  /** A distinct `FrozenSet` with the same members (deep-clones values when `deep`). */
+  /**
+   * A distinct `FrozenSet` with the same members. When `deep`, an empty copy joins the clone memo
+   * first and fills with deep-cloned values, so a cycle back here stays a cycle.
+   */
   [protocol.clone](deep = false): this {
     return withHookNesting(() => {
-      const values = deep ? [...this].map((v) => clone(v, true)) : this
-      return Reflect.construct(this.constructor, [values]) as this
+      if (!deep) return Reflect.construct(this.constructor, [this]) as this
+      const copy = Reflect.construct(this.constructor, []) as this
+      rememberDeepClone(this, copy)
+      for (const value of this) Set.prototype.add.call(copy, clone(value, true))
+      return copy
     })
+  }
+
+  /** False when empty, as for Python collections. */
+  [protocol.bool](): boolean {
+    return this.size > 0
   }
 
   readonly [Symbol.toStringTag] = 'FrozenSet'

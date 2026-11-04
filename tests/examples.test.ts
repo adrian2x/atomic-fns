@@ -324,8 +324,8 @@ describe('SPEC-R107 JSDoc @example', () => {
 
   it('src/i18n/duration.ts #5', () => {
     expect(new Duration({ hours: 1, seconds: -30 }).abs().toObject()).toEqual({
-      hours: 1,
-      seconds: 30
+      hours: 0,
+      seconds: 3570
     })
   })
 

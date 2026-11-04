@@ -177,6 +177,10 @@ export class Trie extends ValueCollection<string> {
     return this.#count
   }
 
+  protected override cloneInsert(word: string): void {
+    this.add(word)
+  }
+
   readonly [Symbol.toStringTag] = 'Trie';
 
   /** Set membership: same words regardless of insertion order. */

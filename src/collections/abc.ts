@@ -1,7 +1,7 @@
 import { withHookNesting } from '../internal/nesting.js'
 import { deepMapEqual } from '../operators/equality.js'
 import { deepEqual, protocol } from '../operators/index.js'
-import { clone } from './object.js'
+import { clone, rememberDeepClone } from './object.js'
 
 /**
  * Collection equality: same constructor, same size, and pairwise `deepEqual` of the items in
@@ -105,6 +105,11 @@ abstract class BaseCollection {
   abstract get size(): number
   abstract clear(): void
   abstract get [Symbol.toStringTag](): string
+
+  /** False when empty, as for Python collections. */
+  [protocol.bool](): boolean {
+    return this.size > 0
+  }
 }
 
 /**
@@ -138,13 +143,18 @@ export abstract class SetCollection<T, K = T> extends BaseCollection implements 
 
   /**
    * New instance of the same class holding the same values in iteration order.
-   * When `deep` is true, values are deep-cloned via {@link clone}; otherwise the copy is shallow.
+   * When `deep` is true, an empty copy joins the clone memo first and {@link cloneInsert} fills it
+   * with values deep-cloned via {@link clone}, so a cycle back here stays a cycle; otherwise the
+   * copy is shallow.
    * Subclasses whose constructor needs more than the values override {@link cloneFrom}.
    */
   [protocol.clone](deep = false): this {
     return withHookNesting(() => {
       if (!deep) return this.cloneFrom(this.values())
-      return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
+      const copy = this.cloneFrom([])
+      rememberDeepClone(this, copy)
+      for (const value of this.values()) copy.cloneInsert(clone(value, true))
+      return copy
     })
   }
 
@@ -155,6 +165,9 @@ export abstract class SetCollection<T, K = T> extends BaseCollection implements 
   protected cloneFrom(values: Iterable<T>): this {
     return Reflect.construct(this.constructor, [values]) as this
   }
+
+  /** Add `value` to a copy that {@link cloneFrom} built, after the values already there. */
+  protected abstract cloneInsert(value: T): void
 }
 
 /**
@@ -203,14 +216,18 @@ export abstract class MapCollection<K, V> extends BaseCollection implements Iter
 
   /**
    * New instance of the same class holding the same entries.
-   * When `deep` is true, keys are kept by reference and values are deep-cloned via {@link clone}
-   * (matching native Map deep clone); otherwise the copy is shallow.
+   * When `deep` is true, an empty copy joins the clone memo first and `set` fills it, with keys
+   * kept by reference and values deep-cloned via {@link clone} (matching native Map deep clone),
+   * so a cycle back here stays a cycle; otherwise the copy is shallow.
    * Subclasses whose constructor needs more than the entries override {@link cloneFrom}.
    */
   [protocol.clone](deep = false): this {
     return withHookNesting(() => {
       if (!deep) return this.cloneFrom(this.entries())
-      return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
+      const copy = this.cloneFrom([])
+      rememberDeepClone(this, copy)
+      for (const [key, value] of this.entries()) copy.set(key, clone(value, true))
+      return copy
     })
   }
 

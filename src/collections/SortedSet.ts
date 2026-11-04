@@ -1,9 +1,7 @@
 import { arrayFromIterable } from '../internal/iterable.js'
-import { withHookNesting } from '../internal/nesting.js'
-import { protocol, type Comparer } from '../operators/index.js'
+import type { Comparer } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
 import { BTree } from './BTree.js'
-import { clone } from './object.js'
 
 /**
  * Set whose values stay ordered by the library total-order `compare` (or a supplied comparator).
@@ -40,15 +38,8 @@ export class SortedSet<T> extends ValueCollection<T> {
     return Reflect.construct(this.constructor, [values, this.#compareFn]) as this
   }
 
-  /**
-   * Deep clone deep-clones values (nested collections must hit the nesting cap). Comparator key
-   * identity for object values follows the cloned value.
-   */
-  override [protocol.clone](deep = false): this {
-    return withHookNesting(() => {
-      if (!deep) return this.cloneFrom(this.values())
-      return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
-    })
+  protected override cloneInsert(value: T): void {
+    this.add(value)
   }
 
   readonly [Symbol.toStringTag] = 'SortedSet'

@@ -3,7 +3,6 @@ import { withHookNesting } from '../internal/nesting.js'
 import { compare, protocol, type Comparer } from '../operators/index.js'
 import { MapCollection, sameEntrySequence } from './abc.js'
 import { checkInvariants } from './internal.js'
-import { clone } from './object.js'
 
 /** Construction options for {@link BTree}. */
 export interface BTreeOptions {
@@ -206,10 +205,7 @@ export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
    * Shallow: O(1) copy-on-write. Deep: new tree with keys by reference and deep-cloned values.
    */
   override [protocol.clone](deep = false): this {
-    return withHookNesting(() => {
-      if (!deep) return this.clone()
-      return this.cloneFrom([...this.entries()].map(([k, v]): [K, V] => [k, clone(v, true)]))
-    })
+    return deep ? super[protocol.clone](true) : this.clone()
   }
 
   clear(): void {

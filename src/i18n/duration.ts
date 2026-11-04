@@ -815,6 +815,11 @@ new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
     return this[protocol.compare](o) === 0
   }
 
+  /** False at zero length, as for Python's `timedelta`. */
+  [protocol.bool](): boolean {
+    return totalNanos(this.#fields, this.#exact) !== 0n
+  }
+
   /**
    * Build a Duration from an ISO 8601 string, milliseconds, field object, or Duration.
    * ISO components stay as written, unlike Temporal's balancing: `PT1.5H` is `{ hours: 1.5 }`,

@@ -8,6 +8,11 @@ import { SortedMap } from '../src/collections/SortedMap.js'
 import { SortedSet } from '../src/collections/SortedSet.js'
 import { SplayTree } from '../src/collections/SplayTree.js'
 import { Trie } from '../src/collections/Trie.js'
+import { decimal } from '../src/decimal/index.js'
+import { isEmpty } from '../src/globals/index.js'
+import { Currency, Duration } from '../src/i18n/index.js'
+import { all, any } from '../src/itertools/index.js'
+import { bool } from '../src/operators/index.js'
 
 const oldNames = [
   'contains',
@@ -90,6 +95,43 @@ const migrated: Migrated[] = [
   }
 ]
 
+describe('truth values of library types', () => {
+  it('Decimal, Currency and Duration are false at zero, as in Python', () => {
+    const zeros = [
+      decimal('0'),
+      decimal('-0.00'),
+      new Currency(0, 'USD'),
+      new Duration(),
+      new Duration({ seconds: 0 }),
+      new Duration({ hours: 1, minutes: -60 })
+    ]
+    const others = [
+      decimal('5'),
+      decimal('-0.1'),
+      new Currency(5, 'USD'),
+      new Duration({ seconds: 1 }),
+      new Duration({ seconds: -1 })
+    ]
+
+    for (const zero of zeros) {
+      expect(bool(zero), String(zero)).toBe(false)
+      expect(isEmpty(zero), String(zero)).toBe(true)
+    }
+    for (const other of others) {
+      expect(bool(other), String(other)).toBe(true)
+      expect(isEmpty(other), String(other)).toBe(false)
+    }
+    expect(isEmpty(0)).toBe(true)
+  })
+
+  it('all and any read those truth values', () => {
+    expect(all([decimal('0')])).toBe(false)
+    expect(all([decimal('1'), new Deque([0])])).toBe(true)
+    expect(any([new Deque(), new Duration()])).toBe(false)
+    expect(any([new Deque(), decimal('1')])).toBe(true)
+  })
+})
+
 describe('SPEC-R75 collection protocol (M8 classes)', () => {
   for (const m of migrated) {
     describe(m.name, () => {
@@ -126,6 +168,16 @@ describe('SPEC-R75 collection protocol (M8 classes)', () => {
         expect(x.values()).toBeInstanceOf(Iterator)
         expect(x.entries()).toBeInstanceOf(Iterator)
         expect(typeof x.keys().map).toBe('function')
+      })
+
+      it('is true only while it holds something', () => {
+        const full = m.create()
+        const empty = Reflect.construct(full.constructor, []) as object
+
+        expect(bool(full)).toBe(true)
+        expect(isEmpty(full)).toBe(false)
+        expect(bool(empty)).toBe(false)
+        expect(isEmpty(empty)).toBe(true)
       })
 
       it('old 1.x names absent on prototype', () => {

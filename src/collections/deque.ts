@@ -74,6 +74,10 @@ export class Deque<T> extends SetCollection<T, number> {
     return Reflect.construct(this.constructor, [values, options]) as this
   }
 
+  protected override cloneInsert(value: T): void {
+    this.push(value)
+  }
+
   /**
    * Maximum size when constructed with `maxlen`, otherwise `undefined`.
    */

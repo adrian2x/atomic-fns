@@ -5,7 +5,6 @@ import { deepMultisetEqual } from '../operators/equality.js'
 import type { Comparer } from '../operators/index.js'
 import { compare, protocol, sameValueZero } from '../operators/index.js'
 import { ValueCollection } from './abc.js'
-import { clone } from './object.js'
 
 /**
  * Binary min-heap (or max-heap with a custom comparator).
@@ -36,6 +35,10 @@ export class Heap<T> extends ValueCollection<T> {
     return Reflect.construct(this.constructor, [values, this.#compare]) as this
   }
 
+  protected override cloneInsert(value: T): void {
+    this.push(value)
+  }
+
   /**
    * Multiset equality under `deepEqual`, independent of the heap comparator and of iteration order.
    * Shared references cancel without a comparison, items pair within groups of a bounded structural
@@ -48,13 +51,6 @@ export class Heap<T> extends ValueCollection<T> {
       if (this === other) return true
       if (typeof other !== 'object' || other?.constructor !== this.constructor) return false
       return deepMultisetEqual([...this.values()], [...(other as Heap<T>).values()])
-    })
-  }
-
-  override [protocol.clone](deep = false): this {
-    return withHookNesting(() => {
-      if (!deep) return this.cloneFrom(this.values())
-      return this.cloneFrom([...this.values()].map((v) => clone(v, true)))
     })
   }
 

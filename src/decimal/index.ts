@@ -777,6 +777,11 @@ export class Decimal {
     return this.protocolEquals(o)
   }
 
+  /** False at zero, as for Python's `Decimal`. */
+  [protocol.bool](): boolean {
+    return this.#i !== 0n
+  }
+
   [protocol.add](o: unknown): Decimal {
     // Check units on the original operand before brand→string coercion drops the unit hook.
     assertSameCurrency(this, o)

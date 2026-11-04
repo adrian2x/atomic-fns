@@ -202,14 +202,16 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
     expect(deepEqual([1], [1])).toBe(true)
   })
 
-  it('POL-4c: Deque/SortedSet/SortedMap/FrozenSet 125 deep work; 126 throw without cause', () => {
+  it('POL-4c: Deque/SortedSet/SortedMap/BTree/FrozenSet 125 deep work; 126 throw without cause', () => {
     const eqNests: [string, (d: number) => unknown][] = [
       ['Deque', nestDeque],
       ['SortedSet', nestSortedSet],
-      ['SortedMap', nestSortedMap]
+      ['SortedMap', nestSortedMap],
+      ['BTree', nestBTree]
     ]
     for (const [name, nest] of eqNests) {
-      expect(deepEqual(nest(125), nest(125)), `${name} 125`).toBe(true)
+      expect(deepEqual(nest(125), clone(nest(125), true)), `${name} 125`).toBe(true)
+      expect(() => clone(nest(126), true), `${name} clone 126`).toThrow(NESTING_MSG)
       let err: unknown
       try {
         deepEqual(nest(126), nest(126))

@@ -73,19 +73,6 @@ export function* arrayElements<T>(arr: T[]): Generator<T, void, undefined> {
   yield* out
 }
 
-/** Build a Set from an iterable; arrays use {@link forEachArrayElement} hole semantics. */
-export function setFromIterable<T>(it: Iterable<T>): Set<T> {
-  if (isTypedArray(it)) {
-    const s = new Set<T>()
-    forEachArrayElement(it, (v) => {
-      s.add(v)
-      return undefined
-    })
-    return s
-  }
-  return new Set(it)
-}
-
 /** Guard per-index array producers: reject absolute-length huge sparse arrays. */
 export function assertArrayNotHugeSparse(value: unknown): void {
   if (Array.isArray(value)) assertNotHugeSparse(value as unknown[])
