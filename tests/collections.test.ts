@@ -31,6 +31,9 @@ import {
   getSubsetPairComparisons,
   resetSubsetPairComparisons
 } from '../src/collections/internal.js'
+import { decimal } from '../src/decimal/index.js'
+import { Currency } from '../src/i18n/currency.js'
+import { IntlDate } from '../src/i18n/date/index.js'
 import { expectFast } from './helpers/perf.js'
 
 describe('collections', () => {
@@ -192,6 +195,17 @@ describe('collections', () => {
       const bound = 4 * (s.length + t.length)
       expect(getSubsetPairComparisons()).toBeLessThanOrEqual(bound)
     }
+  })
+
+  it('R16-A: matches index is only an accelerator for cross-kind array elements', () => {
+    expect(matches({ prices: [1] })({ prices: [decimal(1)] })).toBe(true)
+    expect(matches({ items: [{ amount: 10 }] })({ items: [{ amount: decimal(10) }] })).toBe(true)
+    const ms = Date.UTC(2020, 0, 1)
+    expect(matches({ when: [new Date(ms)] })({ when: [new IntlDate(ms)] })).toBe(true)
+    expect(matches({ prices: [1] })({ prices: [new Currency(1, 'USD')] })).toBe(true)
+    expect(matches([[1, 1]])([[1]])).toBe(false)
+    expect(matches([[decimal(1), decimal(1)]])([[decimal(1)]])).toBe(false)
+    expect(matches([1, 1])([1])).toBe(false)
   })
 
   it('indexOf rejects length-driven array-likes before allocating', () => {

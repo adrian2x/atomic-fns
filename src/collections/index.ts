@@ -421,6 +421,35 @@ function collectTargetLeafKeys(el: unknown, keys: CanonicalKeySession, into: str
   }
 }
 
+/**
+ * True when a target element is unkeyed or impure (incl. hashed). The key index only accelerates
+ * pure JSON-shaped targets; cross-kind matches (number vs Decimal, Date vs IntlDate, …) always
+ * involve an unkeyed or impure leftover, same rule as Heap multiset equality.
+ */
+function targetNeedsFallback(el: unknown, keys: CanonicalKeySession): boolean {
+  const info = canonicalKeyInfo(el, keys)
+  return info === undefined || !info.pure || info.hashed
+}
+
+/** Full matchDeep against unkeyed / impure target elements after an index miss. */
+function matchAgainstFallback(
+  item: unknown,
+  valueEls: unknown[],
+  fallbackIdxs: number[],
+  skip: ReadonlySet<number> | undefined,
+  depth: number,
+  pending: MatchPending,
+  proven: MatchProven,
+  keys: CanonicalKeySession
+): boolean {
+  for (const i of fallbackIdxs) {
+    if (skip?.has(i)) continue
+    noteSubsetPairComparison()
+    if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) return true
+  }
+  return false
+}
+
 function hasPlainObjectDescendant(el: unknown): boolean {
   if (el === null || typeof el !== 'object') return false
   if (isPlainObject(el)) return true
@@ -534,6 +563,12 @@ function matchDeep(
         ok = top || Array.isArray(obj)
       } else if (!Array.isArray(obj)) {
         ok = false
+      } else if (!isHugeSparse(shape) && obj.length < shape.length) {
+        // Lodash isMatch duplicate rule on dense shapes: every shape element matches some
+        // target element and the target is at least as long as the shape. Huge-sparse shapes
+        // keep their .length for storage only; walkArray emits one event per hole-run, so the
+        // length check would reject valid subset matches (see R13-E1).
+        ok = false
       } else {
         // One walk of the value: present elements plus a has-hole flag (holes match as undefined).
         const valueEls: unknown[] = []
@@ -542,7 +577,7 @@ function matchDeep(
           if (ev.kind === 'value') valueEls.push(ev.value)
           else hasHole = true
         })
-        const byKey = new Map<string, unknown[]>()
+        const byKey = new Map<string, number[]>()
         const sigs: MatchTargetSig[] = []
         // Target array indices that contain each pure leaf key (for nested array shapes).
         const leafPostings = new Map<string, number[]>()
@@ -551,6 +586,7 @@ function matchDeep(
         const otherCandidates: number[] = []
         const withObjectDescendant: number[] = []
         const withArrayDescendant: number[] = []
+        const fallbackIdxs: number[] = []
         for (let i = 0; i < valueEls.length; i++) {
           const el = valueEls[i]
           const sig = matchTargetSig(el)
@@ -567,8 +603,9 @@ function matchDeep(
               bucket = []
               byKey.set(info.key, bucket)
             }
-            bucket.push(el)
+            bucket.push(i)
           }
+          if (targetNeedsFallback(el, keys)) fallbackIdxs.push(i)
           const leafKeys: string[] = []
           collectTargetLeafKeys(el, keys, leafKeys)
           for (const leafKey of leafKeys) {
@@ -588,16 +625,42 @@ function matchDeep(
             const info = canonicalKeyInfo(item, keys)
             if (info !== undefined && info.pure && !info.hashed) {
               found = byKey.has(info.key)
+              if (!found) {
+                found = matchAgainstFallback(
+                  item,
+                  valueEls,
+                  fallbackIdxs,
+                  undefined,
+                  depth,
+                  pending,
+                  proven,
+                  keys
+                )
+              }
             } else if (info !== undefined) {
               const bucket = byKey.get(info.key)
+              const tried = new Set<number>()
               if (bucket !== undefined) {
-                for (const candidate of bucket) {
+                for (const i of bucket) {
+                  tried.add(i)
                   noteSubsetPairComparison()
-                  if (matchDeep(item, candidate, false, depth + 1, pending, proven, keys)) {
+                  if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
                     found = true
                     break
                   }
                 }
+              }
+              if (!found) {
+                found = matchAgainstFallback(
+                  item,
+                  valueEls,
+                  fallbackIdxs,
+                  tried,
+                  depth,
+                  pending,
+                  proven,
+                  keys
+                )
               }
             } else {
               for (const candidate of valueEls) {
@@ -650,12 +713,26 @@ function matchDeep(
               }
             }
             if (candidateIdxs !== undefined) {
+              const tried = new Set<number>()
               for (const i of candidateIdxs) {
+                tried.add(i)
                 noteSubsetPairComparison()
                 if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
                   found = true
                   break
                 }
+              }
+              if (!found) {
+                found = matchAgainstFallback(
+                  item,
+                  valueEls,
+                  fallbackIdxs,
+                  tried,
+                  depth,
+                  pending,
+                  proven,
+                  keys
+                )
               }
             } else {
               for (let i = 0; i < valueEls.length; i++) {
