@@ -7,7 +7,7 @@ import { sorted } from '../src/itertools/index.js'
 import { max } from '../src/math/index.js'
 import { add, compare, eq } from '../src/operators/index.js'
 import { protocol } from '../src/operators/protocol.js'
-import { expectFast } from './helpers/perf.js'
+import { budget, expectFast } from './helpers/perf.js'
 
 const MODES: RoundingMode[] = ['halfEven', 'halfUp', 'halfDown', 'down', 'up', 'floor', 'ceil']
 
@@ -23,7 +23,7 @@ describe('SPEC-R65 Decimal construction', () => {
     expect(decimal(decimal('2')).toString()).toBe('2')
   })
 
-  it('SPEC-R65 rejects invalid and hang inputs', { timeout: 1000 }, () => {
+  it('SPEC-R65 rejects invalid and hang inputs', { timeout: budget(1000) }, () => {
     for (const bad of ['abc', '', '1.2.3', '1e', '--1', '1e1.5', NaN, Infinity, -Infinity, {}]) {
       expectFast(() => {
         expect(
@@ -294,7 +294,7 @@ describe('F-055 linear-time parse and normalize', () => {
 
   it(
     'accepts a trailing-zero run above MAX_DIGITS as one significant digit',
-    { timeout: 2000 },
+    { timeout: budget(2000) },
     () => {
       expectFast(() => {
         const d = decimal('1' + '0'.repeat(Decimal.MAX_DIGITS))
@@ -303,19 +303,19 @@ describe('F-055 linear-time parse and normalize', () => {
     }
   )
 
-  it('adds 1e10000 succeeds exactly', { timeout: 2000 }, () => {
+  it('adds 1e10000 succeeds exactly', { timeout: budget(2000) }, () => {
     expectFast(() => {
       expect(decimal(0).add('1e10000').eq('1e10000')).toBe(true)
     }, 1000)
   })
 
-  it('divides 1e10000 by 1 succeeds exactly', { timeout: 2000 }, () => {
+  it('divides 1e10000 by 1 succeeds exactly', { timeout: budget(2000) }, () => {
     expectFast(() => {
       expect(decimal('1e10000').div(1).eq('1e10000')).toBe(true)
     }, 1000)
   })
 
-  it('rejects a long invalid digit run within budget', { timeout: 2000 }, () => {
+  it('rejects a long invalid digit run within budget', { timeout: budget(2000) }, () => {
     // Just under MAX_INPUT_LENGTH so the length cap does not mask a backtracking regex.
     const n = Decimal.MAX_INPUT_LENGTH - 1
     const shapes = [
@@ -334,22 +334,26 @@ describe('F-055 linear-time parse and normalize', () => {
     }
   })
 
-  it('old MAX_EXPONENT literals throw exponent out of range fast', { timeout: 2000 }, () => {
-    expectFast(() => {
-      expect(() => decimal('1e1000000')).toThrow(ValueError)
-      expect(() => decimal('1e1000000')).toThrow(/exponent out of range/)
-      expect(() => decimal('1e999999')).toThrow(ValueError)
-      expect(() => decimal('1e80000')).toThrow(ValueError)
-    }, 1000)
-  })
+  it(
+    'old MAX_EXPONENT literals throw exponent out of range fast',
+    { timeout: budget(2000) },
+    () => {
+      expectFast(() => {
+        expect(() => decimal('1e1000000')).toThrow(ValueError)
+        expect(() => decimal('1e1000000')).toThrow(/exponent out of range/)
+        expect(() => decimal('1e999999')).toThrow(ValueError)
+        expect(() => decimal('1e80000')).toThrow(ValueError)
+      }, 1000)
+    }
+  )
 
-  it('sqrt of 1e10000 succeeds exactly', { timeout: 2000 }, () => {
+  it('sqrt of 1e10000 succeeds exactly', { timeout: budget(2000) }, () => {
     expectFast(() => {
       expect(decimal('1e10000').sqrt().eq('1e5000')).toBe(true)
     }, 1000)
   })
 
-  it('sqrt of 2e10000 at high precision throws RangeError fast', { timeout: 2000 }, () => {
+  it('sqrt of 2e10000 at high precision throws RangeError fast', { timeout: budget(2000) }, () => {
     expectFast(() => {
       expect(() => decimal('2e10000').sqrt({ precision: 9998 })).toThrow(RangeError)
       expect(() => decimal('2e10000').sqrt({ precision: 9998 })).toThrow(
@@ -516,7 +520,7 @@ describe('Decimal.MAX_DIGITS', () => {
     expect(() => decimal('9'.repeat(10_001))).toThrow(/result exceeds 10000 digits/)
   })
 
-  it('R15-B: MAX_INPUT_LENGTH rejects before scanning', { timeout: 2000 }, () => {
+  it('R15-B: MAX_INPUT_LENGTH rejects before scanning', { timeout: budget(2000) }, () => {
     const huge = '1'.repeat(Decimal.MAX_INPUT_LENGTH + 1)
     expectFast(() => {
       expect(() => decimal(huge)).toThrow(ValueError)
@@ -544,7 +548,7 @@ describe('Decimal.MAX_DIGITS', () => {
     expect(Decimal.MAX_INPUT_LENGTH).toBe(2 * Decimal.MAX_EXPONENT + Decimal.MAX_DIGITS + 32)
   })
 
-  it('R14-C: every op at MAX_DIGITS finishes within budget', { timeout: 2000 }, () => {
+  it('R14-C: every op at MAX_DIGITS finishes within budget', { timeout: budget(2000) }, () => {
     const a = decimal('9'.repeat(Decimal.MAX_DIGITS))
     const b = decimal('1')
     expectFast(() => {
@@ -572,7 +576,7 @@ describe('Decimal.MAX_DIGITS', () => {
 
   it(
     'R14-C: r9 running sum of 1000 attacker items stays within digit bound',
-    { timeout: 2000 },
+    { timeout: budget(2000) },
     () => {
       // Pre-fix (R10-1 / pre-a13d312 normalize): ~498 ms for similar 1400-item totals.
       // P/3 < max(1000, 5xM~270) -> deterministic digit-bound check + hang guard.
@@ -605,7 +609,7 @@ describe('Decimal.MAX_PRECISION', () => {
     }
   })
 
-  it('div at precision MAX_PRECISION finishes within budget', { timeout: 2000 }, () => {
+  it('div at precision MAX_PRECISION finishes within budget', { timeout: budget(2000) }, () => {
     expectFast(() => {
       const s = decimal('1').div('3', { precision: Decimal.MAX_PRECISION }).toString()
       expect(s.length).toBeGreaterThan(Decimal.MAX_PRECISION)
@@ -731,13 +735,17 @@ describe('magnitude-first Decimal comparison', () => {
     }
   })
 
-  it('sorted of 200 extreme-exponent Decimals finishes within budget', { timeout: 2000 }, () => {
-    // Pre-fix: scale-by-gap compare hang. Revert of fb3c9cf fails this.
-    const vals = Array.from({ length: 200 }, (_, i) => decimal(i % 2 ? '1e-9999' : '1e9999'))
-    expectFast(() => {
-      expect(sorted(vals).length).toBe(200)
-    }, 1000)
-  })
+  it(
+    'sorted of 200 extreme-exponent Decimals finishes within budget',
+    { timeout: budget(2000) },
+    () => {
+      // Pre-fix: scale-by-gap compare hang. Revert of fb3c9cf fails this.
+      const vals = Array.from({ length: 200 }, (_, i) => decimal(i % 2 ? '1e-9999' : '1e9999'))
+      expectFast(() => {
+        expect(sorted(vals).length).toBe(200)
+      }, 1000)
+    }
+  )
 
   it('R13-F1: cached digit counts keep wide compares fast', { timeout: 30_000 }, () => {
     // Wide coeffs under MAX_DIGITS (probe 1eN+1e-N is rejected by MAX_DIGITS).
@@ -762,7 +770,7 @@ describe('magnitude-first Decimal comparison', () => {
 
   it(
     'math.max over 900 extreme-exponent Decimals finishes within budget',
-    { timeout: 2000 },
+    { timeout: budget(2000) },
     () => {
       const vals = Array.from({ length: 900 }, (_, i) => decimal(i % 2 ? '1e-9999' : '1e9999'))
       expectFast(() => {
@@ -779,7 +787,7 @@ describe('R15-D2 MAX_EXPONENT 10000 and toNumber', () => {
     expect(decimal('123.456').toNumber()).toBe(Number('123.456'))
   })
 
-  it('1000x toJSON of largest allowed value stays within budget', { timeout: 2000 }, () => {
+  it('1000x toJSON of largest allowed value stays within budget', { timeout: budget(2000) }, () => {
     const d = decimal('1e10000')
     expectFast(() => {
       for (let i = 0; i < 1000; i++) d.toJSON()

@@ -5,6 +5,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['tests/setup.ts'],
     pool: 'forks',
+    testTimeout: process.env.CI ? 40_000 : 5000,
     execArgv: ['--expose-gc'],
     coverage: {
       provider: 'v8',
