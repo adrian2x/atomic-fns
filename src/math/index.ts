@@ -20,10 +20,27 @@ export function abs(x: unknown): unknown {
   return Math.abs(x as number)
 }
 
+/** Fractional digit count of the shortest round-trip decimal string of `x`. */
+function fractionalDigitCount(x: number): number {
+  const s = String(x)
+  const expMatch = /e([+-]?\d+)$/i.exec(s)
+  if (expMatch !== null) {
+    const exp = Number(expMatch[1])
+    const coeff = s.slice(0, expMatch.index)
+    const dot = coeff.indexOf('.')
+    const fracLen = dot === -1 ? 0 : coeff.length - dot - 1
+    return Math.max(0, fracLen - exp)
+  }
+  const dot = s.indexOf('.')
+  return dot === -1 ? 0 : s.length - dot - 1
+}
+
 /**
  * Round `x` to `digits` places after the decimal point (ties toward +Infinity).
  * Uses the shortest round-trip decimal string of `x`. Negative `digits` round
- * to tens, hundreds, etc. Non-finite values are returned unchanged.
+ * to tens, hundreds, etc. Any integer `digits` is accepted: values already
+ * exact at that place are returned unchanged, and a rounding unit more than
+ * 10× `|x|` yields `0`. Non-finite values are returned unchanged.
  *
  * @param x The number to round.
  * @param digits Fractional digits (default 0); may be negative.
@@ -35,6 +52,11 @@ export function round(x: number, digits = 0): number {
   if (!Number.isInteger(digits)) {
     throw new RangeError('digits must be an integer')
   }
+  if (digits >= fractionalDigitCount(x)) return x
+  const absX = Math.abs(x)
+  // unit = 10^(-digits) exceeds |x| by more than a factor of 10 -> 0.
+  // At the boundary Decimal decides between 0 and the unit.
+  if (absX !== 0 && digits < -1 - Math.log10(absX)) return 0
   const rounded = decimal(String(x)).round(digits, x < 0 ? 'halfDown' : 'halfUp')
   const n = Number(rounded.toString())
   return Object.is(n, -0) ? 0 : n

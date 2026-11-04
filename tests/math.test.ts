@@ -51,6 +51,12 @@ describe('math', () => {
     expect(round(-Infinity)).toBe(-Infinity)
   })
 
+  it('R16-C: round accepts any integer digits', () => {
+    expect(round(1.5, 1e9)).toBe(1.5)
+    expect(round(1.5, -1e9)).toBe(0)
+    expect(round(123.456, 2)).toBe(123.46)
+  })
+
   it('SPEC-R60 divmod floor quotient and matching remainder', () => {
     expect(divmod(-7, 2)).toEqual([-4, 1])
     expect(divmod(7, -2)).toEqual([-4, -1])
