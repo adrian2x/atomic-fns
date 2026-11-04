@@ -767,7 +767,10 @@ describe('R15-D2 MAX_EXPONENT 10000 and toNumber', () => {
 })
 
 describe('R15-E1 constant-work normalize and digit counts', () => {
-  it('1400-item running totals finish within budget', { timeout: 2000 }, () => {
+  it('1400-item running totals make no bigint string conversions', { timeout: 2000 }, () => {
+    // Pre-fix (pre-a13d312): normalizeIE/digitLengthAbs called toString per op (~498 ms).
+    // Wall-clock budgets cannot be both load-safe (>= 5x coverage median ~57 ms => 285) and
+    // revert-detecting (<= 1/4 of 498 ms => 124).
     for (const [hi, lo] of [
       ['1e9980', '1e-9'],
       ['1e9980', '-1e-9'],
@@ -776,9 +779,28 @@ describe('R15-E1 constant-work normalize and digit counts', () => {
       const items = Array.from({ length: 1400 }, (_, i) => (i % 2 ? lo : hi))
       expectFast(() => {
         let total = decimal(0)
-        for (const x of items) total = total.add(x)
+        const bigintToString = vi.spyOn(BigInt.prototype, 'toString')
+        const OrigString = globalThis.String
+        let stringBigintCalls = 0
+        function wrappedString(value?: unknown): string {
+          if (arguments.length === 0) return ''
+          if (typeof value === 'bigint') stringBigintCalls += 1
+          return OrigString(value)
+        }
+        Object.defineProperties(wrappedString, Object.getOwnPropertyDescriptors(OrigString))
+        globalThis.String = wrappedString as StringConstructor
+        try {
+          bigintToString.mockClear()
+          stringBigintCalls = 0
+          for (const x of items) total = total.add(x)
+          expect(bigintToString).toHaveBeenCalledTimes(0)
+          expect(stringBigintCalls).toBe(0)
+        } finally {
+          bigintToString.mockRestore()
+          globalThis.String = OrigString
+        }
         expect(total.toString().length).toBeGreaterThan(0)
-      }, 100)
+      }, 1000)
     }
   })
 
