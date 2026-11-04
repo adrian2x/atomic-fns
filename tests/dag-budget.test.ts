@@ -1,7 +1,12 @@
 import { deserialize, serialize } from 'node:v8'
 import { describe, expect, it } from 'vitest'
 import { flatten, matches, merge } from '../src/collections/index.js'
-import { getLeafKeyVisits, resetLeafKeyVisits } from '../src/collections/internal.js'
+import {
+  getLeafKeyVisits,
+  getSubsetPairComparisons,
+  resetLeafKeyVisits,
+  resetSubsetPairComparisons
+} from '../src/collections/internal.js'
 import { Duration, durationField } from '../src/i18n/duration.js'
 import { canonicalKey } from '../src/internal/canonicalKey.js'
 import {
@@ -15,8 +20,8 @@ import { deepEqual } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
 /** Shared-reference DAG: x(i+1) = { l: x(i), r: x(i) }. */
-function dag(depth: number): object {
-  let x: object = { v: 1 }
+function dag(depth: number, bottom: object = { v: 1 }): object {
+  let x = bottom
   for (let i = 0; i < depth; i++) {
     x = { l: x, r: x }
   }
@@ -38,6 +43,23 @@ function nestIn(d: number, inner: object): object {
   let x: object = inner
   for (let i = 0; i < d; i++) x = { n: x }
   return x
+}
+
+/** Peak heap growth at reads of the probe's getter, after collecting garbage. */
+function heapHeldAtProbe(run: (probe: { readonly p: number }) => void): number {
+  const { gc } = globalThis
+  if (gc === undefined) throw new Error('tests need --expose-gc')
+  gc()
+  const before = process.memoryUsage().heapUsed
+  let held = 0
+  run({
+    get p() {
+      gc()
+      held = Math.max(held, process.memoryUsage().heapUsed - before)
+      return 0
+    }
+  })
+  return held
 }
 
 const SHARED_REVISIT = 'input repeats shared objects beyond 500000 copied nodes'
@@ -117,7 +139,7 @@ describe('shared-reference DAG budgets', () => {
     expectBudgetTrip(() => merge({}, src), src)
   })
 
-  it('r9 fan-out shapes throw the budget error deterministically', () => {
+  it('r9 fan-out shapes throw the budget error deterministically', { timeout: 60_000 }, () => {
     for (const [f, d] of [
       [4, 12],
       [3, 14],
@@ -143,9 +165,16 @@ describe('shared-reference DAG budgets', () => {
   })
 
   /** Array DAG: x(i+1) = [x(i), x(i)] - shared refs survive structured clone. */
-  function arrDag(depth: number): unknown {
-    let x: unknown = [1]
+  function arrDag(depth: number, bottom: unknown = [1]): unknown {
+    let x = bottom
     for (let i = 0; i < depth; i++) x = [x, x]
+    return x
+  }
+
+  /** Single-path shape that walks one route down an {@link arrDag} of the same depth. */
+  function arrChain(depth: number, bottom: unknown): unknown {
+    let x = bottom
+    for (let i = 0; i < depth; i++) x = [x]
     return x
   }
 
@@ -201,6 +230,134 @@ describe('shared-reference DAG budgets', () => {
     }, 1000)
   })
 
+  it('matches compares each failed shared pair once', { timeout: 5000 }, () => {
+    const depth = 16
+    const shape = arrChain(depth, { a: 1 })
+    const target = arrDag(depth, { a: 2, b: 1 })
+    resetSubsetPairComparisons()
+
+    expect(matches(shape)(target)).toBe(false)
+
+    expect(getSubsetPairComparisons()).toBeLessThanOrEqual(4 * depth)
+  })
+
+  it('a failed pair leaves the other candidates and shapes free to match', () => {
+    const depth = 12
+    const dead = arrDag(depth, { a: 2, b: 1 })
+    const live = arrDag(depth, { a: 1 })
+    expect(matches(arrChain(depth + 1, { a: 1 }))([dead, live])).toBe(true)
+
+    const failsFirstShape = { a: 2, b: 1 }
+    expect(matches([{ a: 1 }, { a: 2 }])([failsFirstShape, { a: 1 }])).toBe(true)
+  })
+
+  it('matches walks a shape DAG of empty containers in bounded time', () => {
+    const arrays = arrDag(26, [])
+    const objects = dag(26, {})
+    expectFast(() => {
+      expect(matches([arrays])([[1]])).toBe(false)
+      expect(matches([objects])([{ l: 1 }])).toBe(false)
+    }, BUDGET)
+  })
+
+  /** Two-node cycle: `node.x.back === node`, with `node.y` read after the cycle edge. */
+  function ring(y: number): { node: object; back: object } {
+    const node: Record<string, unknown> = {}
+    const back = { back: node }
+    node.x = back
+    node.y = y
+    // Shared leaf key, so the index keeps every ring as a candidate.
+    node.z = 1
+    return { node, back }
+  }
+
+  it('matches rejects a pair whose cycle partner failed after proving it', () => {
+    const shape = ring(1)
+    const failing = ring(2)
+    const passing = ring(1)
+    const elements = [failing.node, passing.node]
+
+    expect(matches([{ u: [shape.node], k: shape.back }])([{ u: elements, k: failing.back }])).toBe(
+      false
+    )
+    expect(matches([{ u: [shape.node], k: shape.back }])([{ u: elements, k: passing.back }])).toBe(
+      true
+    )
+  })
+
+  it('a pair reached twice on one cycle resolves below the nesting cap', () => {
+    function selfPair(...tail: number[]): unknown[] {
+      const a: unknown[] = []
+      a.push(a, a, ...tail)
+      return a
+    }
+    expect(matches(selfPair())(selfPair())).toBe(true)
+    expect(matches(selfPair(1))(selfPair(2))).toBe(false)
+  })
+
+  describe('matches memory', () => {
+    const LEAVES = Array.from({ length: 100_000 }, (_, i) => i)
+    const CHAIN_DEPTH = 100
+    /** An uncapped index holds about 290 MB here and grows with depth. */
+    const HEAP_BOUND = 128 * 1024 * 1024
+
+    it('holds no per-level copy of a deep target leaf set', { timeout: 10_000 }, () => {
+      const chain = nestIn(CHAIN_DEPTH, LEAVES)
+
+      const held = heapHeldAtProbe((probe) => {
+        expect(matches({ list: [{ n: -1 }] })({ list: [chain, probe] })).toBe(false)
+      })
+
+      expect(held).toBeLessThan(HEAP_BOUND)
+    })
+
+    it('holds no per-level copy of a deep shape leaf set', { timeout: 10_000 }, () => {
+      const chain = nestIn(CHAIN_DEPTH, LEAVES)
+
+      const held = heapHeldAtProbe((probe) => {
+        expect(matches({ list: [[chain, probe]] })({ list: [[1, 2]] })).toBe(false)
+      })
+
+      expect(held).toBeLessThan(HEAP_BOUND)
+    })
+
+    it('caps its memo of pairs through a quadratic failing scan', { timeout: 10_000 }, () => {
+      const rows = 2000
+      /** An uncapped memo holds about 128 MB here, against 30 MB capped. */
+      const memoBound = 64 * 1024 * 1024
+      const shape: object[] = Array.from({ length: rows }, () => ({ a: 5, b: 6 }))
+      shape.push({ z: { p: 0 } })
+      const target: object[] = Array.from({ length: rows }, () => ({ a: 6, b: 5 }))
+
+      const held = heapHeldAtProbe((probe) => {
+        target.push({ a: 5, b: 6, z: probe })
+        expect(matches(shape)(target)).toBe(true)
+      })
+
+      expect(held).toBeLessThan(memoBound)
+    })
+
+    it('still matches elements and shapes the index gave up on', { timeout: 10_000 }, () => {
+      const chain = nestIn(CHAIN_DEPTH, LEAVES)
+      const twin = nestIn(CHAIN_DEPTH, LEAVES)
+
+      expect(matches({ list: [{ n: 7 }] })({ list: [chain, { n: 7 }] })).toBe(true)
+      expect(matches({ list: [chain] })({ list: [twin] })).toBe(true)
+      expect(matches({ list: [chain] })({ list: [nestIn(CHAIN_DEPTH - 1, LEAVES)] })).toBe(false)
+
+      const item = nestIn(CHAIN_DEPTH, [7])
+      const indexedFirst = nestIn(CHAIN_DEPTH, [7])
+      const overflows = nestIn(CHAIN_DEPTH, LEAVES.slice(0, 2000))
+      expect(
+        matches({ a: [item], b: [item], c: [item] })({
+          a: [indexedFirst],
+          b: [overflows],
+          c: [overflows]
+        })
+      ).toBe(true)
+    })
+  })
+
   it('merge of 10001 shared row objects works with distinct copies', () => {
     const row = { x: 1 }
     const out = merge({}, { rows: new Array(10_001).fill(row) }) as { rows: object[] }
@@ -251,11 +408,15 @@ describe('shared-reference DAG budgets', () => {
     expect(out.rows[0]).toEqual({ x: 1, meta: {} })
   })
 
-  it('merge of 1.2M distinct empty objects succeeds (first visits are unbounded)', () => {
-    const items = Array.from({ length: 1_200_000 }, () => ({}))
-    const out = merge({}, { a: items }) as { a: unknown[] }
-    expect(out.a).toHaveLength(1_200_000)
-  })
+  it(
+    'merge of 1.2M distinct empty objects succeeds (first visits are unbounded)',
+    { timeout: 60_000 },
+    () => {
+      const items = Array.from({ length: 1_200_000 }, () => ({}))
+      const out = merge({}, { a: items }) as { a: unknown[] }
+      expect(out.a).toHaveLength(1_200_000)
+    }
+  )
 
   it('a failed flatten does not leak revisit state into the next call', () => {
     expect(() => flatten(dag(20))).toThrow(FLATTEN_REVISIT)

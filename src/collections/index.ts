@@ -240,6 +240,82 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
   return arr
 }
 
+/** State of one matches call. */
+interface MatchSession extends CanonicalKeySession {
+  /** Pairs on the active match path, with the depth each was entered at (cycle handling). */
+  readonly pending: WeakMap<object, Map<object, number>>
+  /** Settled `(shape, value)` results. */
+  settled: WeakMap<object, WeakMap<object, boolean>>
+  settledCount: number
+  /** Settled successes still resting on a pending pair. */
+  readonly tentative: [shape: object, obj: object][]
+  /** Shallowest pending pair assumed true since the last final success. */
+  assumedDepth: number
+  /** Leaf-key entries the index may still copy. Negative once it has stopped growing. */
+  leafKeyRoom: number
+}
+
+/** The settled memo is only a cache: past this many pairs it restarts, which bounds its memory. */
+const MAX_SETTLED_PAIRS = 2 ** 20
+
+/**
+ * Average entries the leaf-key index may copy per parent-child edge. Every parent copies its
+ * children's sets, so without this bound memory grows as depth x keys on deep, key-heavy input.
+ */
+const LEAF_KEY_ENTRIES_PER_EDGE = 16
+
+function createMatchSession(): MatchSession {
+  return {
+    ...createCanonicalKeySession(),
+    pending: new WeakMap(),
+    settled: new WeakMap(),
+    settledCount: 0,
+    tentative: [],
+    assumedDepth: Infinity,
+    leafKeyRoom: 0
+  }
+}
+
+function rememberMatch(session: MatchSession, shape: object, obj: object, ok: boolean): void {
+  if (session.settledCount === MAX_SETTLED_PAIRS) {
+    session.settled = new WeakMap()
+    session.settledCount = 0
+  }
+  session.settledCount++
+  let results = session.settled.get(shape)
+  if (results === undefined) {
+    results = new WeakMap()
+    session.settled.set(shape, results)
+  }
+  results.set(obj, ok)
+}
+
+/**
+ * Record a finished pair. A failure is final: pending pairs only ever answer true, so no
+ * assumption can have caused it. A success is final once no pending pair above `depth` backs it;
+ * until then it stays tentative, and any enclosing failure undoes it.
+ */
+function settleMatch(
+  session: MatchSession,
+  shape: object,
+  obj: object,
+  ok: boolean,
+  depth: number,
+  tentativeMark: number
+): void {
+  if (!ok) {
+    for (const [tentativeShape, tentativeObj] of session.tentative.splice(tentativeMark)) {
+      session.settled.get(tentativeShape)?.delete(tentativeObj)
+    }
+  } else if (session.assumedDepth < depth) {
+    session.tentative.push([shape, obj])
+  } else {
+    session.assumedDepth = Infinity
+    session.tentative.length = tentativeMark
+  }
+  rememberMatch(session, shape, obj, ok)
+}
+
 /**
  * Creates a function that performs a Lodash-style partial deep comparison (`isMatch`) between a
  * given value and `shape`. A top-level empty plain object or empty array matches any value; a
@@ -252,7 +328,9 @@ export function insert<T, A extends T[] | null | undefined>(arr: A, index: numbe
  * Array subset matching buckets target elements by canonical key for primitives and other
  * deepEqual-equivalent leaves, and filters partial array/object shape elements by a cheap
  * structural signature (type tag; object key set; array length), then runs the deep walk only
- * on candidates - O((shape + target) + candidates). Untrusted shapes should be size-limited.
+ * on candidates - O((shape + target) + candidates). The index holds at most 16 entries per edge
+ * of its input; elements and shapes past that are scanned, which costs comparisons, not results.
+ * Untrusted shapes should be size-limited.
  * @example
 ```js
 const objects = [
@@ -272,34 +350,13 @@ matches({ a: undefined })({})
  * @param shape Partial shape to match against.
  * @returns Predicate that returns true when its argument matches `shape`.
  */
-/** Pairs `(shape, value)` already proven to match within one matches call. */
-type MatchProven = WeakMap<object, WeakSet<object>>
-
-/** Pairs on the active match path (cycle handling). */
-type MatchPending = WeakMap<object, Set<object>>
-
-function rememberMatch(proven: MatchProven, shape: object, obj: object): void {
-  let set = proven.get(shape)
-  if (set === undefined) {
-    set = new WeakSet()
-    proven.set(shape, set)
-  }
-  set.add(obj)
-}
-
-function isMatchProven(proven: MatchProven, shape: object, obj: object): boolean {
-  return proven.get(shape)?.has(obj) === true
-}
-
 export function matches(shape: unknown): (obj: unknown) => boolean {
   if (shape === null || typeof shape !== 'object') {
     return () => false
   }
   return function (obj) {
     return guardSharedRevisits(() =>
-      guardNesting(() =>
-        matchDeep(shape, obj, true, 1, new WeakMap(), new WeakMap(), createCanonicalKeySession())
-      )
+      guardNesting(() => matchDeep(shape, obj, true, 1, createMatchSession()))
     )
   }
 }
@@ -331,7 +388,7 @@ function matchSigCompatible(item: unknown, sig: MatchTargetSig): boolean {
     return sig.kind === 'array' && sig.length >= item.length
   }
   if (isPlainObject(item)) {
-    if (sig.kind !== 'object') return false
+    if (sig.kind !== 'object') return sig.kind !== 'prim'
     for (const key of Object.keys(item)) {
       if (!sig.keys.has(key)) return false
     }
@@ -359,15 +416,20 @@ function pushPureLeafKey(
   out.add(info.key)
 }
 
+/** Copy `nested` into `into`, or return `false` when that would pass the index's room. */
+function absorbLeafKeys(into: Set<string>, nested: Set<string>, session: MatchSession): boolean {
+  session.leafKeyRoom += LEAF_KEY_ENTRIES_PER_EDGE - nested.size
+  if (session.leafKeyRoom < 0) return false
+  for (const k of nested) into.add(k)
+  return true
+}
+
 /**
  * Descendant pure leaf keys of a partial shape array/object, or `undefined` when any node is
- * an impure / non-plain leaf (cannot index). Empty containers yield an empty set. Each object
- * node is expanded once per session (shared-reference DAGs stay linear).
+ * an impure / non-plain leaf or the index ran out of room (cannot index). Empty containers yield
+ * an empty set. Each object node is expanded once per session (shared-reference DAGs stay linear).
  */
-function shapeDescendantPureLeafKeys(
-  item: unknown,
-  keys: CanonicalKeySession
-): Set<string> | undefined {
+function shapeDescendantPureLeafKeys(item: unknown, keys: MatchSession): Set<string> | undefined {
   if (item === null || typeof item !== 'object') {
     const out = new Set<string>()
     const state = { failed: false }
@@ -376,6 +438,7 @@ function shapeDescendantPureLeafKeys(
   }
   const cached = keys.matchShapeLeafKeys.get(item)
   if (cached !== undefined) return cached === false ? undefined : cached
+  if (keys.leafKeyRoom < 0) return undefined
 
   noteLeafKeyVisit()
   chargeSharedWork(1)
@@ -386,11 +449,10 @@ function shapeDescendantPureLeafKeys(
     const state = { failed: false }
     walkArray(item, (ev) => {
       const nested = shapeDescendantPureLeafKeys(ev.kind === 'value' ? ev.value : undefined, keys)
-      if (nested === undefined) {
+      if (nested === undefined || !absorbLeafKeys(out, nested, keys)) {
         state.failed = true
         return false
       }
-      for (const k of nested) out.add(k)
     })
     if (state.failed) {
       keys.matchShapeLeafKeys.set(item, false)
@@ -403,11 +465,10 @@ function shapeDescendantPureLeafKeys(
     keys.matchShapeLeafKeys.set(item, out)
     for (const key of Object.keys(item)) {
       const nested = shapeDescendantPureLeafKeys(item[key], keys)
-      if (nested === undefined) {
+      if (nested === undefined || !absorbLeafKeys(out, nested, keys)) {
         keys.matchShapeLeafKeys.set(item, false)
         return undefined
       }
-      for (const k of nested) out.add(k)
     }
     return out
   }
@@ -424,18 +485,20 @@ function shapeDescendantPureLeafKeys(
 }
 
 /**
- * Pure leaf keys under a target element for posting-list indexing. Each object node is expanded
- * once per session (shared-reference DAGs stay linear). Date/RegExp/etc leaves are keyed the same
- * way as on the shape side (SPEC-R42 leaf equality), so a Date nested in an array-element object
- * posts under its leaf key.
+ * Pure leaf keys under a target element for posting-list indexing, or `undefined` when the index
+ * ran out of room. Each object node is expanded once per session (shared-reference DAGs stay
+ * linear). Date/RegExp/etc leaves are keyed the same way as on the shape side (SPEC-R42 leaf
+ * equality), so a Date nested in an array-element object posts under its leaf key.
  */
-function collectTargetLeafKeys(el: unknown, keys: CanonicalKeySession): Set<string> {
+function collectTargetLeafKeys(el: unknown, keys: MatchSession): Set<string> | undefined {
   if (el === null || typeof el !== 'object') {
     const into = new Set<string>()
     const info = canonicalKeyInfo(el, keys)
     if (info !== undefined && info.pure && !info.hashed) into.add(info.key)
     return into
   }
+  // Before the cache: a walk that ran out of room leaves its partial set there.
+  if (keys.leafKeyRoom < 0) return undefined
   const cached = keys.matchTargetLeafKeys.get(el)
   if (cached !== undefined) return cached
 
@@ -447,20 +510,20 @@ function collectTargetLeafKeys(el: unknown, keys: CanonicalKeySession): Set<stri
   if (Array.isArray(el)) {
     walkArray(el, (ev) => {
       if (ev.kind !== 'value') return
-      for (const k of collectTargetLeafKeys(ev.value, keys)) into.add(k)
+      const nested = collectTargetLeafKeys(ev.value, keys)
+      if (nested === undefined || !absorbLeafKeys(into, nested, keys)) return false
     })
-    return into
-  }
-  if (isPlainObject(el)) {
+  } else if (isPlainObject(el)) {
     for (const key of Object.keys(el)) {
-      for (const k of collectTargetLeafKeys(el[key], keys)) into.add(k)
+      const nested = collectTargetLeafKeys(el[key], keys)
+      if (nested === undefined || !absorbLeafKeys(into, nested, keys)) break
     }
-    return into
+  } else {
+    // Date/RegExp/etc: same leaf key as shapeDescendantPureLeafKeys.
+    const info = canonicalKeyInfo(el, keys)
+    if (info !== undefined && info.pure && !info.hashed) into.add(info.key)
   }
-  // Date/RegExp/etc: same leaf key as shapeDescendantPureLeafKeys.
-  const info = canonicalKeyInfo(el, keys)
-  if (info !== undefined && info.pure && !info.hashed) into.add(info.key)
-  return into
+  return keys.leafKeyRoom < 0 ? undefined : into
 }
 
 /**
@@ -473,21 +536,19 @@ function targetNeedsFallback(el: unknown, keys: CanonicalKeySession): boolean {
   return info === undefined || !info.pure || info.hashed
 }
 
-/** Full matchDeep against unkeyed / impure target elements after an index miss. */
+/** Full matchDeep against unkeyed, impure, or unindexed target elements after an index miss. */
 function matchAgainstFallback(
   item: unknown,
   valueEls: unknown[],
   fallbackIdxs: number[],
   skip: ReadonlySet<number> | undefined,
   depth: number,
-  pending: MatchPending,
-  proven: MatchProven,
-  keys: CanonicalKeySession
+  session: MatchSession
 ): boolean {
   for (const i of fallbackIdxs) {
     if (skip?.has(i)) continue
     noteSubsetPairComparison()
-    if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) return true
+    if (matchDeep(item, valueEls[i], false, depth + 1, session)) return true
   }
   return false
 }
@@ -548,19 +609,20 @@ function hasNestedArrayDescendant(el: unknown, seen: WeakMap<object, boolean>): 
 }
 
 /** True when `item` is an empty plain object or contains one nested somewhere. */
-function shapeHasEmptyObject(item: unknown): boolean {
-  if (item === null || typeof item !== 'object') return false
+function shapeHasEmptyObject(item: unknown, seen = new WeakSet<object>()): boolean {
+  if (item === null || typeof item !== 'object' || seen.has(item)) return false
+  seen.add(item)
   if (isPlainObject(item)) {
     if (Object.keys(item).length === 0) return true
     for (const key of Object.keys(item)) {
-      if (shapeHasEmptyObject(item[key])) return true
+      if (shapeHasEmptyObject(item[key], seen)) return true
     }
     return false
   }
   if (Array.isArray(item)) {
     let found = false
     walkArray(item, (ev) => {
-      if (ev.kind === 'value' && shapeHasEmptyObject(ev.value)) {
+      if (ev.kind === 'value' && shapeHasEmptyObject(ev.value, seen)) {
         found = true
         return false
       }
@@ -571,13 +633,14 @@ function shapeHasEmptyObject(item: unknown): boolean {
 }
 
 /** True when `item` is an empty array or contains one nested somewhere. */
-function shapeHasEmptyArray(item: unknown): boolean {
-  if (item === null || typeof item !== 'object') return false
+function shapeHasEmptyArray(item: unknown, seen = new WeakSet<object>()): boolean {
+  if (item === null || typeof item !== 'object' || seen.has(item)) return false
+  seen.add(item)
   if (Array.isArray(item)) {
     if (item.length === 0) return true
     let found = false
     walkArray(item, (ev) => {
-      if (ev.kind === 'value' && shapeHasEmptyArray(ev.value)) {
+      if (ev.kind === 'value' && shapeHasEmptyArray(ev.value, seen)) {
         found = true
         return false
       }
@@ -586,7 +649,7 @@ function shapeHasEmptyArray(item: unknown): boolean {
   }
   if (isPlainObject(item)) {
     for (const key of Object.keys(item)) {
-      if (shapeHasEmptyArray(item[key])) return true
+      if (shapeHasEmptyArray(item[key], seen)) return true
     }
   }
   return false
@@ -597,24 +660,29 @@ function matchDeep(
   obj: unknown,
   top: boolean,
   depth: number,
-  pending: MatchPending,
-  proven: MatchProven,
-  keys: CanonicalKeySession
+  session: MatchSession
 ): boolean {
   if (shape === null || typeof shape !== 'object') return eq(obj, shape)
   enterNesting()
-  let partners: Set<object> | undefined
+  const value = obj !== null && typeof obj === 'object' ? obj : undefined
+  const tentativeMark = session.tentative.length
+  let partners: Map<object, number> | undefined
   try {
     assertNestingDepth(depth)
-    if (obj !== null && typeof obj === 'object') {
-      if (isMatchProven(proven, shape, obj)) return true
-      partners = pending.get(shape)
-      if (partners?.has(obj)) return true
-      if (partners === undefined) {
-        partners = new Set()
-        pending.set(shape, partners)
+    if (value !== undefined) {
+      const settled = session.settled.get(shape)?.get(value)
+      if (settled !== undefined) return settled
+      partners = session.pending.get(shape)
+      const assumedAt = partners?.get(value)
+      if (assumedAt !== undefined) {
+        session.assumedDepth = Math.min(session.assumedDepth, assumedAt)
+        return true
       }
-      partners.add(obj)
+      if (partners === undefined) {
+        partners = new Map()
+        session.pending.set(shape, partners)
+      }
+      partners.set(value, depth)
     }
     let ok = false
     if (Array.isArray(shape)) {
@@ -657,7 +725,7 @@ function matchDeep(
           else if (sig.kind === 'other') otherCandidates.push(i)
           if (hasPlainObjectDescendant(el, plainObjSeen)) withObjectDescendant.push(i)
           if (hasNestedArrayDescendant(el, nestedArrSeen)) withArrayDescendant.push(i)
-          const info = canonicalKeyInfo(el, keys)
+          const info = canonicalKeyInfo(el, session)
           if (info !== undefined) {
             let bucket = byKey.get(info.key)
             if (bucket === undefined) {
@@ -666,8 +734,9 @@ function matchDeep(
             }
             bucket.push(i)
           }
-          if (targetNeedsFallback(el, keys)) fallbackIdxs.push(i)
-          for (const leafKey of collectTargetLeafKeys(el, keys)) {
+          const elLeafKeys = collectTargetLeafKeys(el, session)
+          if (elLeafKeys === undefined || targetNeedsFallback(el, session)) fallbackIdxs.push(i)
+          for (const leafKey of elLeafKeys ?? []) {
             let posting = leafPostings.get(leafKey)
             if (posting === undefined) {
               posting = []
@@ -681,7 +750,7 @@ function matchDeep(
           const item = sev.kind === 'value' ? sev.value : undefined
           let found = false
           if (isKeyableMatchLeaf(item)) {
-            const info = canonicalKeyInfo(item, keys)
+            const info = canonicalKeyInfo(item, session)
             if (info !== undefined && info.pure && !info.hashed) {
               found = byKey.has(info.key)
               if (!found) {
@@ -691,9 +760,7 @@ function matchDeep(
                   fallbackIdxs,
                   undefined,
                   depth,
-                  pending,
-                  proven,
-                  keys
+                  session
                 )
               }
             } else if (info !== undefined) {
@@ -703,28 +770,19 @@ function matchDeep(
                 for (const i of bucket) {
                   tried.add(i)
                   noteSubsetPairComparison()
-                  if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
+                  if (matchDeep(item, valueEls[i], false, depth + 1, session)) {
                     found = true
                     break
                   }
                 }
               }
               if (!found) {
-                found = matchAgainstFallback(
-                  item,
-                  valueEls,
-                  fallbackIdxs,
-                  tried,
-                  depth,
-                  pending,
-                  proven,
-                  keys
-                )
+                found = matchAgainstFallback(item, valueEls, fallbackIdxs, tried, depth, session)
               }
             } else {
               for (const candidate of valueEls) {
                 noteSubsetPairComparison()
-                if (matchDeep(item, candidate, false, depth + 1, pending, proven, keys)) {
+                if (matchDeep(item, candidate, false, depth + 1, session)) {
                   found = true
                   break
                 }
@@ -733,7 +791,7 @@ function matchDeep(
           } else {
             const leafKeys =
               Array.isArray(item) || isPlainObject(item)
-                ? shapeDescendantPureLeafKeys(item, keys)
+                ? shapeDescendantPureLeafKeys(item, session)
                 : undefined
             let candidateIdxs: number[] | undefined
             if (leafKeys !== undefined && leafKeys.size > 0) {
@@ -779,28 +837,19 @@ function matchDeep(
               for (const i of candidateIdxs) {
                 tried.add(i)
                 noteSubsetPairComparison()
-                if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
+                if (matchDeep(item, valueEls[i], false, depth + 1, session)) {
                   found = true
                   break
                 }
               }
               if (!found) {
-                found = matchAgainstFallback(
-                  item,
-                  valueEls,
-                  fallbackIdxs,
-                  tried,
-                  depth,
-                  pending,
-                  proven,
-                  keys
-                )
+                found = matchAgainstFallback(item, valueEls, fallbackIdxs, tried, depth, session)
               }
             } else {
               for (let i = 0; i < valueEls.length; i++) {
                 if (!matchSigCompatible(item, sigs[i])) continue
                 noteSubsetPairComparison()
-                if (matchDeep(item, valueEls[i], false, depth + 1, pending, proven, keys)) {
+                if (matchDeep(item, valueEls[i], false, depth + 1, session)) {
                   found = true
                   break
                 }
@@ -809,7 +858,7 @@ function matchDeep(
           }
           if (!found && hasHole) {
             noteSubsetPairComparison()
-            if (matchDeep(item, undefined, false, depth + 1, pending, proven, keys)) {
+            if (matchDeep(item, undefined, false, depth + 1, session)) {
               found = true
             }
           }
@@ -836,7 +885,7 @@ function matchDeep(
               break
             }
           }
-          if (!matchDeep(expected, record[key], false, depth + 1, pending, proven, keys)) {
+          if (!matchDeep(expected, record[key], false, depth + 1, session)) {
             ok = false
             break
           }
@@ -845,14 +894,10 @@ function matchDeep(
     } else {
       ok = deepEqual(shape, obj)
     }
-    if (ok && obj !== null && typeof obj === 'object') {
-      rememberMatch(proven, shape, obj)
-    }
+    if (value !== undefined) settleMatch(session, shape, value, ok, depth, tentativeMark)
     return ok
   } finally {
-    if (partners !== undefined && obj !== null && typeof obj === 'object') {
-      partners.delete(obj)
-    }
+    if (value !== undefined && partners?.get(value) === depth) partners.delete(value)
     exitNesting()
   }
 }
@@ -989,7 +1034,8 @@ export function forEachRight<T>(
  * Structural nesting deeper than 1000 levels throws `RangeError`. Re-expanding shared sources beyond
  * 250000 work units throws
  * `RangeError('input repeats shared objects beyond 250000 output keys')` (flatten's own cap;
- * merge keeps 500000).
+ * merge keeps 500000). A `depth` of 0 or less copies the array, so a huge sparse array throws
+ * `RangeError('sparse array too large')`.
  * @example
 ```js
 flatten([1, [2, [3, [4]], 5]])
@@ -1025,7 +1071,10 @@ export function flatten<T>(arr: T[] | object, depth: boolean | number = 1): T[] 
       if (Array.isArray(arr)) {
         const items = arr as T[]
         const d = depth === true ? Infinity : Number(depth)
-        if (!(d > 0)) return items.slice()
+        if (!(d > 0)) {
+          assertNotHugeSparse(items)
+          return items.slice()
+        }
         return flattenArray(items, d)
       }
       if (isObject(arr)) return flattenObj(arr)
@@ -1097,7 +1146,7 @@ function setFlatKey(result: Record<string, unknown>, key: string, value: unknown
   if (Object.hasOwn(result, key)) {
     throw new TypeError(`flatten produced duplicate key ${truncateForError(key)}`)
   }
-  result[key] = value
+  defineData(result, key, value)
 }
 
 function flattenObj(root: unknown): Record<string, unknown> {

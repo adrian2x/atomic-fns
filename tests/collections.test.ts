@@ -139,6 +139,31 @@ describe('collections', () => {
     expect(() => flatten(cyclic)).toThrow(/cyclic structure/)
   })
 
+  it('flatten refuses to copy a huge sparse array at depth 0', { timeout: 5000 }, () => {
+    const atLimit: unknown[] = []
+    atLimit.length = 2 ** 24
+    const huge: unknown[] = []
+    huge.length = 2 ** 24 + 1
+
+    expect(flatten(atLimit, 0)).toHaveLength(2 ** 24)
+    expect(() => flatten(huge, 0)).toThrow(new RangeError('sparse array too large'))
+  })
+
+  it('flatten keeps an own __proto__ key as plain data', () => {
+    const date = new Date(0)
+
+    const fromNull = flatten(JSON.parse('{"__proto__":null,"a":1}') as object)
+    const fromDate = flatten({ ['__proto__']: date })
+
+    expect(Object.getPrototypeOf(fromNull)).toBe(Object.prototype)
+    expect(Object.entries(fromNull)).toEqual([
+      ['__proto__', null],
+      ['a', 1]
+    ])
+    expect(Object.getPrototypeOf(fromDate)).toBe(Object.prototype)
+    expect(Object.getOwnPropertyDescriptor(fromDate, '__proto__')?.value).toBe(date)
+  })
+
   it('SPEC-R42 matches deep partial; null shape', () => {
     expect(filter([{ a: { b: 1, c: 2 } }], { a: { b: 1 } })).toHaveLength(1)
     expect(matches({ a: 1 })({ a: 2 })).toBe(false)
@@ -208,6 +233,16 @@ describe('collections', () => {
     expect(matches([[1, 1]])([[1]])).toBe(false)
     expect(matches([[decimal(1), decimal(1)]])([[decimal(1)]])).toBe(false)
     expect(matches([1, 1])([1])).toBe(false)
+  })
+
+  it('matches scans class-instance and array elements for shapes it cannot index', () => {
+    const run = () => 1
+    class Job {
+      run = run
+    }
+    expect(matches([{ run }])([new Job()])).toBe(true)
+    expect(matches([{ 0: run }])([[run]])).toBe(true)
+    expect(matches([{ run }])([1, { other: run }])).toBe(false)
   })
 
   it('R19-A: Date leaf inside array-element object matches', () => {

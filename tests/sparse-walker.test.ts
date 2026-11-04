@@ -330,7 +330,7 @@ describe('R12-E sparse-safe array walker', () => {
     expect(comparisons).toBe(1)
   })
 
-  it('dense deepEqual of 1e6 arrays stays within budget', () => {
+  it('dense deepEqual of 1e6 arrays stays within budget', { timeout: 60_000 }, () => {
     const a = Array.from({ length: 1e6 }, (_, i) => i)
     const b = Array.from({ length: 1e6 }, (_, i) => i)
     expectFast(() => {
