@@ -229,3 +229,25 @@ describe('merge', () => {
     })
   })
 })
+
+describe('merge of one wide row shared many times', () => {
+  const row = (keys: number): Record<string, number> =>
+    Object.fromEntries(Array.from({ length: keys }, (_, i) => [`k${String(i)}`, i]))
+
+  it('throws instead of copying past the shared-work budget', () => {
+    const shared = row(20_000)
+    const source = Array.from({ length: 2000 }, () => shared)
+    expect(() => merge([], source)).toThrow(
+      new RangeError('input repeats shared objects beyond 500000 copied nodes')
+    )
+  })
+
+  it('still copies a narrow row shared many times', () => {
+    const shared = row(15)
+    const source = Array.from({ length: 1000 }, () => shared)
+    const merged = merge([], source) as Record<string, number>[]
+    expect(merged).toHaveLength(1000)
+    expect(merged[999]).toEqual(shared)
+    expect(merged[0]).not.toBe(merged[1])
+  })
+})

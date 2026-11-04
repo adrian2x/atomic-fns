@@ -155,7 +155,7 @@ function mergeInto(
     const charged = noteExpanded(s, prepaid)
     const childPrepaid = prepaid || charged
     assertNestingDepth(depth)
-    if (t === Object.prototype || t === Function.prototype) return
+    if (t === Object.prototype) return
     const rec = s as Record<string, unknown>
     if (Array.isArray(s) && Array.isArray(t)) {
       // Refuse huge sparse sources before extending the target (caller's array would hang on map/forEach).
@@ -291,31 +291,21 @@ function setPickedPath(
   let srcCur: unknown = source
   for (let i = 0; i < parts.length - 1; i++) {
     const p = parts[i]
-    let next = Object.hasOwn(cur, p) ? (cur as Record<string, unknown>)[p] : undefined
+    const existing = Object.hasOwn(cur, p) ? (cur as Record<string, unknown>)[p] : undefined
     const srcNext =
       srcCur !== null &&
       (typeof srcCur === 'object' || typeof srcCur === 'function') &&
       Object.hasOwn(srcCur, p)
         ? (srcCur as Record<string, unknown>)[p]
         : undefined
-    if (next !== undefined && created.has(next as object)) {
-      cur = next as object
-      srcCur = srcNext
-      continue
-    }
-    if (next === undefined) {
-      next = Array.isArray(srcNext) ? [] : {}
-    } else if (Array.isArray(next)) {
-      assertNotHugeSparse(next)
-      next = next.slice()
-    } else if (isPlainObject(next)) {
-      next = copyOwnEnumerable(next)
+    if (created.has(existing as object)) {
+      cur = existing as object
     } else {
-      next = Array.isArray(srcNext) ? [] : {}
+      const next = Array.isArray(srcNext) ? [] : {}
+      defineData(cur, p, next)
+      created.add(next)
+      cur = next
     }
-    defineData(cur, p, next)
-    created.add(next as object)
-    cur = next as object
     srcCur = srcNext
   }
   let leaf = value
@@ -436,6 +426,7 @@ export function pick<T extends object>(
   const pickedTrie: PickPathTrie = {}
   for (const path of paths) {
     const parts = normalizePath(path)
+    if (parts.length === 0) continue
     const key = JSON.stringify(parts)
     if (seen.has(key)) continue
     if (hasPickedAncestor(parts, pickedTrie)) continue

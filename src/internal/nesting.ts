@@ -4,9 +4,13 @@ export const MAX_NESTING_DEPTH = 1000
 /**
  * Max shared-object work units per top-level merge call.
  * Each re-expansion of an already-expanded container charges that container's subtree
- * size (plain-object / array count, cached per source node for the call). First visits are free.
+ * size (see {@link subtreeContainerCount}, cached per source node for the call). First visits
+ * are free.
  */
 export const MAX_SHARED_WORK = 500_000
+
+/** Keys in one container that cost one extra work unit, so a wide row weighs what it copies. */
+const KEYS_PER_WORK_UNIT = 16
 
 /**
  * Max shared-object work units per top-level flatten call (lower than merge: each re-expanded
@@ -138,7 +142,8 @@ function isExpandableContainer(v: unknown): v is object {
 
 /**
  * Tree-multiplicity count of plain objects / arrays under `obj` (shared children counted once
- * per edge). Cached for the active revisit guard. Not a public API.
+ * per edge), each weighing one unit plus one per {@link KEYS_PER_WORK_UNIT} keys. Cached for the
+ * active revisit guard. Not a public API.
  */
 export function subtreeContainerCount(obj: object): number {
   const hit = subtreeCache.get(obj)
@@ -151,9 +156,10 @@ function computeSubtreeCount(obj: object, stack: Set<object>): number {
   if (hit !== undefined) return hit
   if (stack.has(obj)) return 0
   stack.add(obj)
-  let n = 1
+  const keys = Object.keys(obj)
+  let n = 1 + Math.floor(keys.length / KEYS_PER_WORK_UNIT)
   const rec = obj as Record<string, unknown>
-  for (const key of Object.keys(obj)) {
+  for (const key of keys) {
     const v = rec[key]
     if (isExpandableContainer(v)) n += computeSubtreeCount(v, stack)
   }

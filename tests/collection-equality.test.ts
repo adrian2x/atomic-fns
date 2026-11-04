@@ -852,3 +852,47 @@ describe('comparisons that fail inside a Heap', () => {
 function cmpA(x: { a: number }, y: { a: number }): number {
   return x.a - y.a
 }
+
+describe('deepEqual work limit', () => {
+  /** Two sides that double the work per level once nothing can be remembered. */
+  function tower(levels: number): unknown {
+    let node: unknown = { leaf: 1 }
+    for (let i = 0; i < levels; i++) node = [node, node]
+    return node
+  }
+
+  it('throws once a walk that can remember nothing passes its visit limit', () => {
+    const session = createDeepEqualSession()
+    session.proofRoom = 0
+    session.failureRoom = 0
+    session.visitRoom = 10_000
+    expect(() => deepEqualInSession(tower(40), tower(40), session)).toThrow(
+      new RangeError('deepEqual exceeded 33554432 comparisons')
+    )
+  })
+
+  it('counts hook classes that are not iterable', () => {
+    class Node {
+      constructor(readonly next: Node | null) {}
+      [protocol.equals](other: unknown): boolean {
+        const peer = (other as Node).next
+        return deepEqual(this.next, peer) && deepEqual(this.next, peer)
+      }
+    }
+    let a: Node | null = null
+    let b: Node | null = null
+    for (let i = 0; i < 40; i++) {
+      a = new Node(a)
+      b = new Node(b)
+    }
+    const session = walkSession(createDeepEqualSession)
+    session.visitRoom = 10_000
+    expect(() => deepEqualInSession(a, b, session)).toThrow(
+      new RangeError('deepEqual exceeded 33554432 comparisons')
+    )
+  })
+
+  it('leaves ordinary comparisons alone', () => {
+    expect(deepEqual(tower(40), tower(40))).toBe(true)
+  })
+})

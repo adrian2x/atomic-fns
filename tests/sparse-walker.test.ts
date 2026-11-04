@@ -348,3 +348,17 @@ describe('R12-E sparse-safe array walker', () => {
     }, DENSE_CLONE_BUDGET)
   })
 })
+
+describe('walkArray on elements spaced below the hole streak', () => {
+  it('takes keys once holes outnumber elements instead of visiting every hole', () => {
+    const spaced: unknown[] = []
+    spaced.length = 2 ** 20
+    for (let i = 0; i < spaced.length; i += 200) spaced[i] = i
+    const indices: number[] = []
+    walkArray(withIndexReadLimit(spaced), (ev) => {
+      if (ev.kind === 'value') indices.push(ev.index)
+    })
+    expect(indices).toHaveLength(Math.ceil(spaced.length / 200))
+    expect(indices.at(-1)).toBe(Math.floor((spaced.length - 1) / 200) * 200)
+  })
+})

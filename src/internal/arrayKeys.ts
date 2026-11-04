@@ -14,13 +14,14 @@ export type ArrayWalkEvent =
   | { readonly kind: 'value'; readonly index: number; readonly value: unknown }
   | { readonly kind: 'holeRun'; readonly start: number; readonly end: number }
 
-/** Switch to Object.keys after this many consecutive holes (keeps 1023-spaced walks own-element). */
+/** Holes a walk may visit one by one, beyond one per element seen, before it takes Object.keys. */
 const HOLE_STREAK_BEFORE_KEYS = 256
 
 /**
  * Walk `arr` without expanding huge hole runs index-by-index.
- * Dense indices use `i in arr`; after {@link HOLE_STREAK_BEFORE_KEYS} consecutive misses,
- * take `Object.keys` once and continue over remaining canonical indices only.
+ * Dense indices use `i in arr`. Once holes pass {@link HOLE_STREAK_BEFORE_KEYS} plus the elements
+ * seen so far, take `Object.keys` once and continue over remaining canonical indices only, so
+ * cost stays proportional to the elements however they are spaced.
  * Holes are reported as a single `holeRun` event (`end` exclusive).
  * Return `false` from `visit` to stop.
  */
@@ -30,19 +31,21 @@ export function walkArray(
 ): void {
   const len = arr.length
   let i = 0
+  let elements = 0
+  let holes = 0
   while (i < len) {
     if (i in arr) {
       if (visit({ kind: 'value', index: i, value: arr[i] }) === false) return
       i++
+      elements++
       continue
     }
     const holeStart = i
-    let streak = 0
-    while (i < len && !(i in arr) && streak < HOLE_STREAK_BEFORE_KEYS) {
+    while (i < len && !(i in arr) && holes < HOLE_STREAK_BEFORE_KEYS + elements) {
       i++
-      streak++
+      holes++
     }
-    if (streak >= HOLE_STREAK_BEFORE_KEYS && i < len) {
+    if (holes >= HOLE_STREAK_BEFORE_KEYS + elements && i < len) {
       const rest: number[] = []
       for (const key of Object.keys(arr)) {
         if (!isCanonicalArrayIndex(key)) continue

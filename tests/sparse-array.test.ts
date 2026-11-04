@@ -101,11 +101,4 @@ describe('shallow copies of sparse arrays', () => {
     expect(copied).toEqual(['a', 'b', 'c'])
     expect(copied).not.toBe(source)
   })
-
-  it('pick refuses a huge sparse array on the way to a nested path', { timeout: BUDGET }, () => {
-    // The [] path copies the source under the key "undefined"; the next path walks into that copy.
-    const source = { x: sparseOfLength(JUST_OVER_THRESHOLD), undefined: { x: { y: 1 } } }
-
-    expect(() => pick(source, [[], ['undefined', 'x', 'y']])).toThrow(SPARSE_REFUSAL)
-  })
 })

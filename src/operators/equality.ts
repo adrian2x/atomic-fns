@@ -42,6 +42,8 @@ export interface DeepEqualSession {
   assumptions: number
   /** Pairs put on the active path so far. */
   visits: number
+  /** Comparisons the walk may still make before it gives up. */
+  visitRoom: number
   /** Proofs the session may still store. */
   proofRoom: number
   /** Failures the session may still store. */
@@ -61,11 +63,17 @@ const MIN_VISITS_TO_REMEMBER_FAILURE = 32
  * that finds no room is only compared again, so answers do not change. Failures get their own
  * bound so that a flood of failed Heap candidates cannot take the room proofs need to keep shared
  * references linear.
- * shortcut: past a bound repeated work is recomputed and can multiply per level again; refusing
- * the walk instead would be a new RangeError for input that succeeds today.
  */
 const MAX_REMEMBERED_PROOFS = 2 ** 21
 const MAX_REMEMBERED_FAILURES = 2 ** 20
+
+/**
+ * Comparisons one call may make. Past the memo bounds repeated work can multiply per level, so
+ * this turns a hang into a catchable error. Distinct pairs alone cannot reach it: 2^25 pairs
+ * would need more objects than a default heap holds.
+ */
+const MAX_COMPARISONS = 2 ** 25
+const COMPARISONS_ERROR = `deepEqual exceeded ${String(MAX_COMPARISONS)} comparisons`
 
 /** Create an empty session (no pairs pending or settled). */
 export function createDeepEqualSession(): DeepEqualSession {
@@ -75,6 +83,7 @@ export function createDeepEqualSession(): DeepEqualSession {
     provenLog: [],
     assumptions: 0,
     visits: 0,
+    visitRoom: MAX_COMPARISONS,
     proofRoom: MAX_REMEMBERED_PROOFS,
     failureRoom: MAX_REMEMBERED_FAILURES
   }
@@ -132,6 +141,10 @@ function knownAnswer(a: object, b: object, session: DeepEqualSession): boolean |
   return isRemembered(session.proven, a, b) ? true : undefined
 }
 
+function countComparison(session: DeepEqualSession): void {
+  if (session.visitRoom-- <= 0) throw new RangeError(COMPARISONS_ERROR)
+}
+
 /**
  * Put a pair on the active path; delete `b` from the returned set to take it off again. A pair
  * already there is assumed equal instead, and `undefined` is returned.
@@ -147,6 +160,7 @@ function enterPair(a: object, b: object, session: DeepEqualSession): Set<object>
   }
   partners.add(b)
   session.visits++
+  countComparison(session)
   return partners
 }
 
@@ -183,7 +197,10 @@ function hasItems(v: unknown): v is object {
 function deepEqualInner(a: unknown, b: unknown, session: DeepEqualSession): boolean {
   if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) {
     // Half of HOOK_NESTING_COST at dispatch; collection hooks charge the other half in-method.
-    if (!hasItems(a) || !hasItems(b)) return withHookNesting(() => eq(a, b))
+    if (!hasItems(a) || !hasItems(b)) {
+      countComparison(session)
+      return withHookNesting(() => eq(a, b))
+    }
     const known = knownAnswer(a, b, session)
     if (known !== undefined) return known
     const partners = enterPair(a, b, session)
@@ -303,7 +320,8 @@ function deepEqualChildren(a: object, b: object, session: DeepEqualSession): boo
  * is a security bound, not an implementation limit). A pair already under comparison on the
  * current path is treated as equal. Settled pairs are memoized for the rest of the top-level
  * call so shared-reference DAGs stay linear up to the memo bounds (2^20 failures, 2^21 proofs);
- * past them repeated work is recomputed. Collection equality hooks re-enter this function,
+ * past them repeated work is recomputed, and a call that makes 2^25 comparisons throws
+ * `RangeError`. Collection equality hooks re-enter this function,
  * continue the same nesting count and share that memo. Nesting is counted only for object pairs
  * (after primitive checks), so a 1000-deep structure ending in a primitive is accepted.
  */
