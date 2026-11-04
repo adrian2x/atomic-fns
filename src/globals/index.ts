@@ -554,38 +554,36 @@ function isInheritedKey(base: object, key: PropertyKey): boolean {
 }
 
 /**
- * Check if a given property is present in a given object.
+ * Check if a given property or path is present in a given object.
+ * String paths split on `.` as in {@link get}; pass an array for a literal key (`['a.b']`).
  * Own properties and user-class prototype members count; `Object.prototype` /
  * `Function.prototype` members, prototype-reaching `__proto__`/`constructor`/`prototype`
  * segments (unless own data on a plain object or array), and inherited functions whose owning
  * prototype is an intrinsic do not.
  * @param obj The object to check.
- * @param attr A property key name.
- * @returns `true` if the object has the property name.
+ * @param attr A property key, dotted string path, or array of path segments.
+ * @returns `true` if every segment of the path is present.
+ * @example
+```js
+has({ a: { b: 1 } }, 'a.b') // true
+has({ 'a.b': 1 }, ['a.b']) // true
+```
  */
 export function has(obj: unknown, attr: PropertyKey | readonly unknown[]): boolean {
   if (obj == null) return false
-  if (Array.isArray(attr)) {
-    const paths = pathSegments(attr)
-    if (paths.length === 0) return false
-    let cur: unknown = obj
-    for (const k of paths) {
-      if (cur == null) return false
-      const t = typeof cur
-      if (t !== 'object' && t !== 'function' && t !== 'string') return false
-      const base = Object(cur) as object
-      if (isForbiddenPathSegment(base, k)) return false
-      if (!Reflect.has(base, k)) return false
-      cur = (cur as Record<PropertyKey, unknown>)[k]
-    }
-    return true
-  }
   const paths = pathSegments(attr)
-  if (paths.length !== 1) return false
-  const key = paths[0]
-  const base = Object(obj) as object
-  if (isForbiddenPathSegment(base, key)) return false
-  return Reflect.has(base, key)
+  if (paths.length === 0) return false
+  let cur: unknown = obj
+  for (const k of paths) {
+    if (cur == null) return false
+    const t = typeof cur
+    if (t !== 'object' && t !== 'function' && t !== 'string') return false
+    const base = Object(cur) as object
+    if (isForbiddenPathSegment(base, k)) return false
+    if (!Reflect.has(base, k)) return false
+    cur = (cur as Record<PropertyKey, unknown>)[k]
+  }
+  return true
 }
 
 /**

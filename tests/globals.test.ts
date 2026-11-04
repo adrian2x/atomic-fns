@@ -330,6 +330,11 @@ describe('globals', () => {
     assert(!has(0, 'x'))
     assert(has({ a: 1 }, 'a'))
     assert(!has(null, 'a'))
+    assert.equal(has({ a: { b: 1 } }, 'a.b'), true)
+    assert.equal(has({ a: { b: 1 } }, 'a.c'), false)
+    assert.equal(has({ a: 1 }, 'a.b'), false)
+    assert.equal(has({ 'a.b': 1 }, 'a.b'), false)
+    assert.equal(has({ 'a.b': 1 }, ['a.b']), true)
   })
 
   it('SPEC-R24 int truncates numbers and parseInt strings', () => {

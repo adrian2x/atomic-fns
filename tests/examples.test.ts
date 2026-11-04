@@ -28,7 +28,7 @@ import {
 } from '../src/collections/index.js'
 import { decimal } from '../src/decimal/index.js'
 import { once } from '../src/functools/index.js'
-import { uniqueId, uuid } from '../src/globals/index.js'
+import { has, uniqueId, uuid } from '../src/globals/index.js'
 import { Duration, formatDate, IntlDate, strftime } from '../src/i18n/index.js'
 import {
   all,
@@ -268,6 +268,11 @@ describe('SPEC-R107 JSDoc @example', () => {
   it('src/globals/index.ts #1', () => {
     expect(uniqueId('user_').startsWith('user_')).toEqual(true)
     expect(typeof uniqueId()).toEqual('string')
+  })
+
+  it('src/globals/index.ts #3', () => {
+    expect(has({ a: { b: 1 } }, 'a.b')).toEqual(true)
+    expect(has({ 'a.b': 1 }, ['a.b'])).toEqual(true)
   })
 
   it('src/globals/index.ts #2', () => {
