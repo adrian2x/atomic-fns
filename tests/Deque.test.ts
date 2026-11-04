@@ -184,7 +184,7 @@ describe('Deque', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
     expectFast(() => {
       expect(() => new Deque(evil)).toThrow(TypeError)
-    }, 250)
+    }, 1000)
   })
 
   it('maxlen above 2**30 grows without overwriting live slots', () => {

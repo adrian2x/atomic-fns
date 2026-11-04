@@ -103,7 +103,7 @@ describe('itertools', () => {
   it('SPEC-R45 dropWhile terminates when source ends before predicate fails', () => {
     expectFast(() => {
       assert.deepEqual([...dropWhile([1, 2], () => true)], [])
-    }, 250)
+    }, 1000)
     assert.deepEqual([...dropWhile([{ a: 1 }], (o) => o.a)], [])
   })
 
@@ -318,7 +318,7 @@ describe('itertools', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
     expectFast(() => {
       assert.throws(() => reversed(evil), TypeError, 'expected an iterable')
-    }, 250)
+    }, 1000)
   })
 
   it('sort', () => {

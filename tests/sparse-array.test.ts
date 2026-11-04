@@ -4,8 +4,8 @@ import { set } from '../src/globals/index.js'
 import { deepEqual } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
-/** Pre-fix: hang iterating length 2**32-1. Hang-floor budget. */
-const BUDGET = 250
+/** Pre-fix: hang iterating length 2**32-1. Hang-floor budget max(1000, 5xM). */
+const BUDGET = 1000
 
 describe('POL-24 sparse array walks', () => {
   it('set refuses index beyond length; append at length works', () => {

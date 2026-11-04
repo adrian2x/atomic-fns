@@ -157,7 +157,7 @@ describe('MAX_NESTING_DEPTH = 1000', () => {
     ]) {
       expectFast(() => {
         expect(fn).toThrow(NESTING_MSG)
-      }, 250)
+      }, 1000)
     }
   })
 

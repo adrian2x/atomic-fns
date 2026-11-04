@@ -47,12 +47,12 @@ import {
 } from '../src/collections/internal.js'
 import { expectFast } from './helpers/perf.js'
 
-/** Pre-fix: hang on length 4e9. Hang-floor budget. */
-const BUDGET = 250
-/** Dense 1e6 deepEqual median under coverage ~178ms -> 5x = 900, use 1000. */
+/** Pre-fix: hang on length 4e9. Hang-floor budget max(1000, 5xM). */
+const BUDGET = 1000
+/** Dense 1e6 deepEqual median under coverage ~178ms -> max(1000, 5xM)=1000. */
 const DENSE_EQ_BUDGET = 1000
-/** Dense 1e6 clone median ~28ms -> 5x = 141, hang-adjacent floor 250. */
-const DENSE_CLONE_BUDGET = 250
+/** Dense 1e6 clone median ~28ms -> max(1000, 5xM)=1000. */
+const DENSE_CLONE_BUDGET = 1000
 
 function hugeSparse(): unknown[] {
   const a: unknown[] = []

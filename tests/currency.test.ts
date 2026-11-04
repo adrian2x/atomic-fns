@@ -47,7 +47,7 @@ describe('SPEC-R71 Currency', () => {
     expectFast(() => {
       expect(decimal('1e-9999').greaterThanMaxValue()).toBe(false)
       expect(decimal('1e9999').greaterThanMaxValue()).toBe(true)
-    }, 250)
+    }, 1000)
     expect(() => new Currency('1e-9999', 'USD', 'en-US').toString()).not.toThrow()
     expect(() => new Currency('1e9999', 'USD', 'en-US').toString()).toThrow(RangeError)
 

@@ -84,6 +84,6 @@ describe('math', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
     expectFast(() => {
       expect(() => mean(evil)).toThrow(TypeError)
-    }, 250)
+    }, 1000)
   })
 })

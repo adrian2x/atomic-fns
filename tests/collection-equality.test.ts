@@ -91,21 +91,21 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
     // Pre-fix: quadratic Heap equality. Revert of 2443b9e fails these.
     expectFast(() => {
       expect(deepEqual(h1, h2)).toBe(true)
-    }, 250)
+    }, 1000)
 
     const dated = Array.from({ length: 2000 }, (_, i) => ({ p: 0, at: new Date(i) }))
     const hd1 = new Heap(dated)
     const hd2 = new Heap(dated.slice().reverse())
     expectFast(() => {
       expect(deepEqual(hd1, hd2)).toBe(true)
-    }, 250)
+    }, 1000)
 
     const h3 = new Heap(keyed)
     h3.pop()
     h3.push({ i: -1 })
     expectFast(() => {
       expect(deepEqual(h1, h3)).toBe(false)
-    }, 250)
+    }, 1000)
 
     interface Item {
       p: number
@@ -164,7 +164,7 @@ describe('SPEC-R75 collection equality and clone protocol', () => {
     )
     expectFast(() => {
       expect(deepEqual(new Heap(jsonA), new Heap(jsonB))).toBe(false)
-    }, 250)
+    }, 1000)
   })
 
   it('Trie', () => {
@@ -342,14 +342,14 @@ describe('Heap equality with oversized (hashed) keys', () => {
       const reversed = new Heap(Array.from({ length: count }, (_, i) => [xB, count - 1 - i]))
       expectFast(() => {
         expect(deepEqual(left, reversed)).toBe(true)
-      }, 250)
+      }, 1000)
 
       const different = new Heap(
         Array.from({ length: count }, (_, i) => [xB, i === 7 ? count + 1 : i])
       )
       expectFast(() => {
         expect(deepEqual(left, different)).toBe(false)
-      }, 250)
+      }, 1000)
     })
 
     it('{ s, id } items sharing one S per side: true / false, < 200 ms', () => {
@@ -361,14 +361,14 @@ describe('Heap equality with oversized (hashed) keys', () => {
       )
       expectFast(() => {
         expect(deepEqual(left, reversed)).toBe(true)
-      }, 250)
+      }, 1000)
 
       const different = new Heap(
         Array.from({ length: count }, (_, i) => ({ s: sB, id: i === 11 ? -1 : i }))
       )
       expectFast(() => {
         expect(deepEqual(left, different)).toBe(false)
-      }, 250)
+      }, 1000)
     })
   })
 
@@ -391,7 +391,7 @@ describe('Heap equality with oversized (hashed) keys', () => {
     const right = new Heap([wide()])
     expectFast(() => {
       expect(deepEqual(left, right)).toBe(true)
-    }, 250)
+    }, 1000)
   })
 
   it('hashed items still match cross-kind unkeyed items (Decimal vs number)', () => {

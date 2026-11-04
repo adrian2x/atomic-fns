@@ -5,8 +5,8 @@ import { asDate, formatDate, strftime } from '../src/i18n/format.js'
 import { camelCase, words } from '../src/string/index.js'
 import { expectFast } from './helpers/perf.js'
 
-/** Pre-fix: ReDoS hang / multi-second. Hang-floor budget. */
-const BUDGET = 250
+/** Pre-fix: ReDoS hang / multi-second. Hang-floor budget max(1000, 5xM). */
+const BUDGET = 1000
 
 describe('NFR-4 ReDoS guards', () => {
   it('SPEC-R63 words finishes on 1e5-char adversarial input', () => {

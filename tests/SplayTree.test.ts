@@ -163,7 +163,7 @@ describe('SplayTree', () => {
       expect(keys.length).toBe(4000)
       expect(keys[0]).toBe(0)
       expect(keys[3999]).toBe(3999)
-    }, 250)
+    }, 1000)
   })
 
   it('SPEC-R77 reads during for-of visit each key once across 50 trials', () => {

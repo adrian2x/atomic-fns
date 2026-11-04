@@ -16,7 +16,7 @@ describe('SortedSet', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
     expectFast(() => {
       expect(() => new SortedSet(evil)).toThrow(TypeError)
-    }, 250)
+    }, 1000)
   })
 
   it('SPEC-R78 initialized values stay ordered', () => {

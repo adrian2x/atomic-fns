@@ -408,7 +408,7 @@ describe('globals', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
     expectFast(() => {
       assert.throws(() => list(evil), TypeError, 'expected an iterable')
-    }, 250)
+    }, 1000)
   })
 
   it('get', () => {

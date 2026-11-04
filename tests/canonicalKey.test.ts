@@ -269,7 +269,7 @@ describe('hashed oversized keys', () => {
       const info = canonicalKeyInfo(wide)
       expect(info?.hashed).toBe(true)
       expect(info?.key).toMatch(/^H:[0-9a-f]{16}$/)
-    }, 250)
+    }, 1000)
   })
 
   it('a shared session keys shared subtrees once and gives the same keys', () => {

@@ -16,7 +16,7 @@ describe('Heap', () => {
     const evil = JSON.parse('{"length":4294967295}') as never
     expectFast(() => {
       expect(() => new Heap(evil)).toThrow(TypeError)
-    }, 250)
+    }, 1000)
   })
 
   it('SPEC-R83 heapifies a copied array and pops in order', () => {

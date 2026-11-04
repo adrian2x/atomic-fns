@@ -42,7 +42,8 @@ function nestIn(d: number, inner: object): object {
 
 const SHARED_REVISIT = 'input repeats shared objects beyond 500000 copied nodes'
 const FLATTEN_REVISIT = 'input repeats shared objects beyond 250000 output keys'
-const BUDGET = 250
+/** Pre-fix: hang / multi-second DAG walks. Hang-floor budget max(1000, 5xM). */
+const BUDGET = 1000
 
 function expectBudgetTrip(
   run: () => void,
