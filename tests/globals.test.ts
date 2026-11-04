@@ -1,5 +1,6 @@
-import { describe, it, vi } from 'vitest'
+import { describe, expectTypeOf, it, vi } from 'vitest'
 import assert from 'node:assert/strict'
+import vm from 'node:vm'
 import {
   bin,
   call,
@@ -12,19 +13,27 @@ import {
   hash,
   hashCode,
   hex,
+  IndexError,
   isArrayLike,
   isAsyncFunction,
   isBigint,
   isBool,
+  isDate,
   isEmpty,
+  isError,
   isFunction,
   isGenerator,
+  isMap,
   isNull,
   isNumber,
   isObject,
   isPromise,
+  isRegExp,
+  isSet,
   isString,
   isSymbol,
+  isWeakMap,
+  isWeakSet,
   keys,
   list,
   next,
@@ -43,7 +52,12 @@ import {
   int,
   len
 } from '../src/globals/index.js'
+import { Deque } from '../src/collections/deque.js'
+import { omit, pick } from '../src/collections/index.js'
+import { durationField } from '../src/i18n/index.js'
+import { truncateForError } from '../src/internal/truncate.js'
 import { enumerate } from '../src/itertools/index.js'
+import { protocol } from '../src/operators/index.js'
 import { expectFast } from './helpers/perf.js'
 
 describe('globals', () => {
@@ -773,8 +787,6 @@ describe('globals', () => {
 
 describe('len and del edges', () => {
   it('len size paths and del get edges', () => {
-    assert.equal(len({ size: 3 }), 3)
-    assert.equal(len({ size: () => 4 }), 4)
     assert.equal(len(Symbol()), undefined)
     const o = { a: 1 }
     del('a', o)
@@ -782,5 +794,494 @@ describe('len and del edges', () => {
     assert.equal(del('a', null), null)
     assert.equal(get('missing', null, 7), 7)
     assert.equal(get('a.b', { a: null }, 9), 9)
+  })
+})
+
+const foreign = (source: string): unknown => vm.runInNewContext(source)
+
+function revokedProxy(): object {
+  const { proxy, revoke } = Proxy.revocable({}, {})
+  revoke()
+  return proxy
+}
+
+describe('set follows _.set with its own argument order', () => {
+  it('creates missing and primitive intermediates as plain containers', () => {
+    assert.deepEqual(set('a.b', {}, 1), { a: { b: 1 } })
+    assert.deepEqual(set('a.b', { a: null }, 1), { a: { b: 1 } })
+    assert.deepEqual(set('a.b', { a: undefined }, 1), { a: { b: 1 } })
+    assert.deepEqual(set('a.b', { a: 1 }, 1), { a: { b: 1 } })
+    assert.deepEqual(set('a.b', { a: 'text' }, 1), { a: { b: 1 } })
+    assert.deepEqual(set('a.b.c', {}, 1), { a: { b: { c: 1 } } })
+    assert.deepEqual(set(['a', 'b'], {}, 1), { a: { b: 1 } })
+  })
+
+  it('creates an array when the next segment is an index', () => {
+    assert.deepEqual(set('a.0', {}, 1), { a: [1] })
+    assert.deepEqual(set('a.0.b', {}, 1), { a: [{ b: 1 }] })
+    assert.deepEqual(set(['a', 0], {}, 1), { a: [1] })
+    assert.deepEqual(set('a.1.b', { a: [{}] }, 1), { a: [{}, { b: 1 }] })
+  })
+
+  it('refuses a bad segment before writing anything', () => {
+    const target = {}
+    assert.throws(() => set('a.__proto__.x', target, 1), {
+      name: 'TypeError',
+      message: 'refusing to write through "__proto__"'
+    })
+    assert.throws(() => set('a.constructor', target, 1), {
+      name: 'TypeError',
+      message: 'refusing to write through "constructor"'
+    })
+    assert.throws(() => set('a.5.b', target, 1), {
+      name: 'RangeError',
+      message: 'array index beyond length'
+    })
+    assert.deepEqual(target, {})
+    assert.equal(Object.getPrototypeOf(target), Object.prototype)
+  })
+
+  it('assigns the last segment, so keys stay enumerable and writable and setters run', () => {
+    assert.equal(JSON.stringify(set('a', { a: 1, b: 2 }, 9)), '{"a":9,"b":2}')
+    assert.deepEqual(Object.getOwnPropertyDescriptor(set('n', {}, 1), 'n'), {
+      value: 1,
+      writable: true,
+      enumerable: true,
+      configurable: true
+    })
+    assert.deepEqual(set('0', [3, 2, 1], 9).sort(), [1, 2, 9])
+
+    let seen = 0
+    set(
+      'x',
+      {
+        set x(v: number) {
+          seen = v
+        }
+      },
+      5
+    )
+    assert.equal(seen, 5)
+
+    class Doubler {
+      #v = 0
+      get x() {
+        return this.#v
+      }
+      set x(v: number) {
+        this.#v = v * 2
+      }
+    }
+    const doubler = set('x', new Doubler(), 5)
+    assert.equal(doubler.x, 10)
+    assert.equal(Object.hasOwn(doubler, 'x'), false)
+  })
+
+  it('writes where plain assignment works', () => {
+    assert.deepEqual(set('a', Object.seal({ a: 1 }), 2), { a: 2 })
+    assert.deepEqual(set('length', [1, 2, 3], 1), [1])
+    assert.deepEqual([...set('0', new Uint8Array(2), 1)], [1, 0])
+  })
+
+  it('explicit flags define the property, each defaulting to true', () => {
+    const descriptor = (o: object) => Object.getOwnPropertyDescriptor(o, 'x')
+    assert.deepEqual(descriptor(set('x', {}, 1, false, false)), {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true
+    })
+    assert.equal(descriptor(set('x', {}, 1, false))?.enumerable, true)
+    assert.equal(descriptor(set('x', {}, 1, undefined, false))?.writable, true)
+    assert.equal(
+      Object.getOwnPropertyDescriptor(set('a.x', {}, 1, false, false), 'a')?.enumerable,
+      true
+    )
+  })
+
+  it('returns a null root, after the path is validated', () => {
+    assert.equal(set('a', null, 1), null)
+    assert.equal(set('a.b', undefined as object | undefined, 1), undefined)
+    assert.throws(() => set([true], null, 1), {
+      name: 'TypeError',
+      message: 'path segments must be strings, numbers or symbols'
+    })
+  })
+})
+
+describe('one path grammar for get, set, has, del, pick, omit', () => {
+  it('numeric brackets walk indexes; every other bracket stays literal', () => {
+    const doc = { a: [{ b: 1 }], m: [[1, 2]] }
+    assert.equal(get('a[0].b', doc), 1)
+    assert.equal(get('m[0][1]', doc), 2)
+    assert.equal(get('[0].b', doc.a), 1)
+    assert.equal(has(doc, 'a[0].b'), true)
+    assert.deepEqual(del('a[0].b', { a: [{ b: 1 }] }), { a: [{}] })
+    assert.deepEqual(set('a[0].b', { a: [{}] }, 1), { a: [{ b: 1 }] })
+    assert.deepEqual(pick(doc, ['a[0].b']), { a: [{ b: 1 }] })
+    assert.deepEqual(omit({ a: [{ b: 1, c: 2 }] }, ['a[0].b']), { a: [{ c: 2 }] })
+
+    assert.equal(get('a["b"]', { a: { b: 1 } }, 'D'), 'D')
+    assert.equal(get('a[b]', { 'a[b]': 1 }), 1)
+    assert.equal(get('a[0]b', { 'a[0]b': 1 }), 1)
+    assert.equal(get(['a[0]'], { 'a[0]': 1 }), 1)
+  })
+
+  it('caps string paths at 2^20 characters', () => {
+    const atCap = 'a'.repeat(2 ** 20)
+    const tooLong = atCap + 'a'
+    assert.equal(get(atCap, {}, 'D'), 'D')
+    const err = { name: 'RangeError', message: 'path longer than 1048576 characters' }
+    assert.throws(() => get(tooLong, {}), err)
+    assert.throws(() => has({}, tooLong), err)
+    assert.throws(() => set(tooLong, {}, 1), err)
+    assert.throws(() => del(tooLong, {}), err)
+    assert.throws(() => pick({}, [tooLong]), err)
+    assert.throws(() => omit({}, [tooLong]), err)
+  })
+
+  it('validates a path before the null check', () => {
+    const err = { name: 'TypeError', message: 'path segments must be strings, numbers or symbols' }
+    assert.throws(() => get([true], null, 'D'), err)
+    assert.throws(() => has(null, [true]), err)
+    assert.throws(() => del([true], null), err)
+  })
+
+  it('rejects holes and huge sparse path arrays', () => {
+    const err = { name: 'TypeError', message: 'path segments must be strings, numbers or symbols' }
+    assert.throws(() => get(new Array(1), { undefined: 5 }), err)
+    assert.throws(() => has({ undefined: 5 }, new Array(1)), err)
+    assert.throws(() => set(new Array(1), {}, 1), err)
+    assert.throws(() => del(new Array(1), { undefined: 1 }), err)
+    assert.throws(() => get(new Array(2 ** 32 - 1), {}), {
+      name: 'RangeError',
+      message: 'sparse array too large'
+    })
+  })
+
+  it('an empty path names nothing', () => {
+    const doc = { a: 1 }
+    assert.equal(get([], doc, 'D'), 'D')
+    assert.equal(has(doc, []), false)
+    assert.equal(set([], doc, 1), doc)
+    assert.equal(del([], doc), doc)
+    assert.deepEqual(doc, { a: 1 })
+  })
+
+  it('get lets getter errors through, as has and del do', () => {
+    const boom = new Error('boom')
+    const doc = {
+      get a(): unknown {
+        throw boom
+      }
+    }
+    assert.throws(() => get('a', doc, 'D'), boom)
+    assert.throws(() => get('a.b', doc, 'D'), boom)
+    assert.throws(() => has(doc, 'a.b'), boom)
+    assert.throws(() => del('a.b', doc), boom)
+  })
+
+  it('get and has read own data named prototype or constructor on class instances', () => {
+    class Car {
+      prototype = 'v1'
+    }
+    const car = Object.defineProperty(new Car(), 'constructor', { value: 'own' })
+    assert.equal(get('prototype', car, 'D'), 'v1')
+    assert.equal(has(car, 'prototype'), true)
+    assert.equal(get('constructor', car, 'D'), 'own')
+    assert.equal(has(car, 'constructor'), true)
+
+    assert.equal(get('constructor', new Date(0), 'D'), 'D')
+    assert.equal(get('prototype', Car, 'D'), 'D')
+    assert.equal(get('a.prototype', { a: Object }, 'D'), 'D')
+    assert.equal(has(Car, 'prototype'), false)
+  })
+
+  it('writes still refuse own data named prototype on a class instance', () => {
+    class Car {
+      prototype = { x: 1 }
+    }
+    const car = new Car()
+    assert.throws(() => set('prototype.x', car, 2), {
+      name: 'TypeError',
+      message: 'refusing to write through "prototype"'
+    })
+    del('prototype.x', car)
+    assert.equal(car.prototype.x, 1)
+  })
+
+  it('treats another realm and platform classes as intrinsic', () => {
+    const doc = foreign('({ list: [], fn() {}, made: new (class Foo { m() {} })() })')
+    assert.equal(has(doc, 'toString'), false)
+    assert.equal(get('hasOwnProperty', doc, 'D'), 'D')
+    assert.equal(get('list.push', doc, 'D'), 'D')
+    assert.equal(get('fn.call', doc, 'D'), 'D')
+    assert.equal(typeof get('made.m', doc), 'function')
+
+    assert.equal(has(new URL('http://a.example/'), 'toString'), false)
+    assert.equal(has(new URLSearchParams('a=1'), 'get'), false)
+    assert.equal(has(new Blob([]), 'text'), false)
+    assert.equal(get('href', new URL('http://a.example/')), 'http://a.example/')
+    const { Temporal } = globalThis as { Temporal?: { Now: { instant(): object } } }
+    if (Temporal) assert.equal(has(Temporal.Now.instant(), 'add'), false)
+  })
+
+  it('has the types its behavior supports', () => {
+    expectTypeOf(get('a', { a: 's' }, 0)).toBeUnknown()
+    expectTypeOf(get('a', { a: 's' })).toBeUnknown()
+    expectTypeOf(get<string>('a', { a: 's' }, 'dflt')).toBeString()
+    const afterIsNumber = (x: number | string) => {
+      if (!isNumber(x)) expectTypeOf(x).toEqualTypeOf<number | string>()
+    }
+    afterIsNumber(NaN)
+  })
+})
+
+describe('predicates read internal slots, not realms or tags', () => {
+  it('accept builtins from another realm', () => {
+    assert.equal(isDate(foreign('new Date(0)')), true)
+    assert.equal(isRegExp(foreign('/x/')), true)
+    assert.equal(isError(foreign('new TypeError("x")')), true)
+    assert.equal(isMap(foreign('new Map')), true)
+    assert.equal(isSet(foreign('new Set')), true)
+    assert.equal(isWeakMap(foreign('new WeakMap')), true)
+    assert.equal(isWeakSet(foreign('new WeakSet')), true)
+    assert.equal(isPromise(foreign('Promise.resolve()')), true)
+    assert.equal(type(foreign('new Error("x")')), 'error')
+  })
+
+  it('refuse objects that only inherit from or are tagged like a builtin', () => {
+    const tagged = (tag: string) => ({ [Symbol.toStringTag]: tag })
+    assert.equal(isDate(Object.create(Date.prototype)), false)
+    assert.equal(isDate(tagged('Date')), false)
+    assert.equal(isRegExp(Object.create(RegExp.prototype)), false)
+    assert.equal(isRegExp(RegExp.prototype), false)
+    assert.equal(isMap(Object.create(Map.prototype)), false)
+    assert.equal(isSet(Object.create(Set.prototype)), false)
+    assert.equal(isWeakMap(Object.create(WeakMap.prototype)), false)
+    assert.equal(isWeakSet(Object.create(WeakSet.prototype)), false)
+    assert.equal(isError(Object.create(Error.prototype)), false)
+    assert.equal(isError(tagged('Error')), false)
+    assert.equal(isPromise(tagged('Promise')), false)
+    assert.equal(isGenerator(tagged('Generator')), false)
+  })
+
+  it('keep recognizing a real builtin that carries its own tag', () => {
+    const tag = { [Symbol.toStringTag]: 'Custom' }
+    assert.equal(isDate(Object.assign(new Date(0), tag)), true)
+    assert.equal(isRegExp(Object.assign(/x/, tag)), true)
+    assert.equal(isMap(Object.defineProperty(new Map(), Symbol.toStringTag, { value: 'X' })), true)
+  })
+
+  it('isError falls back to the tag where Error.isError is missing', () => {
+    const native = Object.getOwnPropertyDescriptor(Error, 'isError')
+    assert(native)
+    Reflect.deleteProperty(Error, 'isError')
+    try {
+      assert.equal(isError(foreign('new Error("x")')), true)
+      assert.equal(isError({}), false)
+    } finally {
+      Object.defineProperty(Error, 'isError', native)
+    }
+  })
+
+  it('isArrayLike requires a valid length', () => {
+    assert.equal(isArrayLike({ length: 0 }), true)
+    assert.equal(isArrayLike({ length: 3 }), true)
+    assert.equal(isArrayLike({ length: -1 }), false)
+    assert.equal(isArrayLike({ length: 1.5 }), false)
+    assert.equal(isArrayLike({ length: NaN }), false)
+    assert.equal(isArrayLike({ length: Infinity }), false)
+    assert.equal(isArrayLike({ length: 2 ** 53 }), false)
+  })
+
+  it('isObject covers class instances that carry a tag, not builtins', () => {
+    class Tagged {
+      readonly [Symbol.toStringTag] = 'Tagged'
+    }
+    assert.equal(isObject(new Tagged()), true)
+    assert.equal(isObject(new Deque()), true)
+    assert.equal(isObject({ [Symbol.toStringTag]: 'Date' }), true)
+    assert.equal(isObject(new Map()), false)
+    assert.equal(isObject(foreign('new Map')), false)
+    assert.equal(isObject(new Date()), false)
+    assert.equal(isObject(new Error('x')), false)
+    class TaggedError extends Error {
+      readonly [Symbol.toStringTag] = 'TaggedError'
+    }
+    assert.equal(isObject(new TaggedError('x')), false)
+    assert.equal(isObject(Object.assign([], { [Symbol.toStringTag]: 'T' })), false)
+  })
+
+  it('type and the predicates built on it never throw', () => {
+    const throwingTag = {
+      get [Symbol.toStringTag](): string {
+        throw new Error('boom')
+      }
+    }
+    for (const value of [throwingTag, revokedProxy()]) {
+      assert.equal(type(value), 'object')
+      assert.equal(isObject(value), true)
+      assert.equal(isString(value), false)
+      assert.equal(isNumber(value), false)
+      assert.equal(isPromise(value), false)
+      assert.equal(isGenerator(value), false)
+      assert.equal(isDate(value), false)
+      assert.equal(isMap(value), false)
+    }
+  })
+})
+
+describe('len and isEmpty share one set of rules', () => {
+  class OwnSize {
+    size = 0
+    name = 'a.txt'
+  }
+  class Sized {
+    readonly #items = [1, 2]
+    get size() {
+      return this.#items.length
+    }
+  }
+  class SizeMethod {
+    size() {
+      return 3
+    }
+  }
+
+  it('leaves an own size getter unread', () => {
+    const doc = {
+      get size(): number {
+        throw new Error('read')
+      }
+    }
+    assert.equal(isEmpty(doc), false)
+    assert.equal(len(doc), 1)
+  })
+
+  it('len counts own keys of objects that merely own a length or size', () => {
+    assert.equal(len({ length: 0, a: 1 }), 2)
+    assert.equal(len({ length: -1 }), 1)
+    assert.equal(len(JSON.parse('{"length":1e308,"a":1}')), 2)
+    assert.equal(len({ size: 3 }), 1)
+    assert.equal(len({ size: () => 4 }), 1)
+    assert.equal(len(new OwnSize()), 2)
+    assert.equal(isEmpty(new OwnSize()), false)
+    assert.equal(isEmpty({ length: 0, a: 1 }), false)
+  })
+
+  it('len and isEmpty read a size the class defines on its prototype', () => {
+    assert.equal(len(new Sized()), 2)
+    assert.equal(len(new SizeMethod()), 3)
+    assert.equal(isEmpty(new Sized()), false)
+    assert.equal(isEmpty(new SizeMethod()), false)
+    assert.equal(len(new Deque([1, 2])), 2)
+    assert.equal(isEmpty(new Deque()), true)
+    assert.equal(len(new Blob(['abc'])), 3)
+  })
+
+  it('len agrees with isEmpty on functions, Dates, buffers and boxes', () => {
+    assert.equal(
+      len(function (a: number, b: number) {
+        return a + b
+      }),
+      0
+    )
+    assert.equal(len(Object.assign(() => undefined, { a: 1 })), 1)
+    assert.equal(len(new Date()), undefined)
+    assert.equal(len(new Error('x')), 0)
+    assert.equal(len(new Uint16Array(3)), 3)
+    assert.equal(len(new DataView(new ArrayBuffer(8))), 8)
+    assert.equal(len(new ArrayBuffer(8)), 8)
+    assert.equal(len(new SharedArrayBuffer(8)), 8)
+    assert.equal(len(new Number(5)), undefined)
+    assert.equal(len(new String('ab')), 2)
+    assert.equal(len(foreign('(function () { return arguments })(1, 2)')), 2)
+  })
+
+  it('isEmpty unboxes, reads buffers and ignores the realm', () => {
+    assert.equal(isEmpty(new Number(5)), false)
+    assert.equal(isEmpty(new Number(0)), true)
+    assert.equal(isEmpty(new Boolean(true)), false)
+    assert.equal(isEmpty(new Boolean(false)), true)
+    assert.equal(isEmpty(Object(1n)), false)
+    assert.equal(isEmpty(Object(0n)), true)
+    assert.equal(isEmpty(Object(Symbol())), false)
+    assert.equal(isEmpty(new String('')), true)
+    assert.equal(isEmpty(new ArrayBuffer(8)), false)
+    assert.equal(isEmpty(new ArrayBuffer(0)), true)
+    assert.equal(isEmpty(new SharedArrayBuffer(8)), false)
+    assert.equal(isEmpty(foreign('new Date(0)')), false)
+    assert.equal(isEmpty(foreign('({ size: 0, a: 1 })')), false)
+    assert.equal(isEmpty(foreign('new Map([[1, 2]])')), false)
+  })
+
+  it('isEmpty honors protocol.bool', () => {
+    const truthy = { [protocol.bool]: () => true }
+    const falsy = { [protocol.bool]: () => false, a: 1 }
+    assert.equal(isEmpty(truthy), false)
+    assert.equal(isEmpty(falsy), true)
+  })
+})
+
+describe('str and uniqueId on odd input', () => {
+  it('str falls back to the object tag when toString is not callable', () => {
+    assert.equal(str(JSON.parse('{"toString":1}')), '[object Object]')
+    assert.equal(str(Object.create(null)), '[object Object]')
+    assert.equal(str({ toString: () => 'own' }), 'own')
+  })
+
+  it('uniqueId treats a null prefix as no prefix', () => {
+    assert.match(uniqueId(null), /^\d+$/)
+  })
+})
+
+describe('error names', () => {
+  it('name is not an enumerable own key', () => {
+    const err = new ValueError('bad')
+    assert.equal(err.name, 'ValueError')
+    assert.deepEqual(Object.keys(err), [])
+    assert.equal(JSON.stringify(err), '{}')
+    assert.equal(String(err), 'ValueError: bad')
+    assert.equal(new IndexError('x').name, 'IndexError')
+    assert.equal(new CustomError('x').name, 'CustomError')
+  })
+
+  it('a subclass reports its own name', () => {
+    class Timeout extends ValueError {}
+    class Conflict extends CustomError {}
+    assert.equal(new Timeout('x').name, 'Timeout')
+    assert.equal(String(new Conflict('x')), 'Conflict: x')
+  })
+})
+
+describe('truncateForError under hostile values', () => {
+  it('cuts nested strings and keys before stringifying', () => {
+    const huge = 'x'.repeat(1e6)
+    const stringify = vi.spyOn(JSON, 'stringify')
+    try {
+      assert.equal(truncateForError([huge]), `["${'x'.repeat(38)}...`)
+      assert.equal(truncateForError({ a: huge }), `{"a":"${'x'.repeat(34)}...`)
+      assert.equal(truncateForError({ [huge]: 1 }), `{"${'x'.repeat(38)}...`)
+      const encoded = stringify.mock.calls.map(([value]) => String(value).length)
+      assert(Math.max(...encoded) <= 48)
+    } finally {
+      stringify.mockRestore()
+    }
+  })
+
+  it('falls back to the tag when a getter or proxy throws', () => {
+    const throwing = {
+      get a(): unknown {
+        throw new Error('boom')
+      }
+    }
+    assert.equal(truncateForError(throwing), '"[object Object]"')
+    assert.equal(truncateForError(revokedProxy()), '"[object Object]"')
+    assert.equal(truncateForError([throwing]), '"[object Array]"')
+    assert.throws(() => durationField(throwing as never), {
+      name: 'ValueError',
+      message: 'unknown duration unit "[object Object]"'
+    })
   })
 })

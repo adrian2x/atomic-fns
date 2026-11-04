@@ -2,6 +2,19 @@ import { walkArray } from './arrayKeys.js'
 
 const MAX_ECHO = 40
 
+function tagOf(value: unknown): string {
+  try {
+    return Object.prototype.toString.call(value)
+  } catch {
+    return '[object Object]'
+  }
+}
+
+/** JSON string of at most the first `limit` units of `s`, so a huge string is never encoded whole. */
+function quoted(s: string, limit: number): string {
+  return JSON.stringify(cutToLimit(s, limit))
+}
+
 /** Append to `out` until `limit` UTF-16 units; returns whether the limit was hit. */
 function appendCapped(out: { s: string; n: number }, chunk: string, limit: number): boolean {
   const room = limit - out.n
@@ -29,9 +42,12 @@ function writeEcho(
     typeof value === 'function' ||
     (typeof value === 'number' && !Number.isFinite(value))
   ) {
-    return appendCapped(out, JSON.stringify(String(value)), limit)
+    return appendCapped(out, quoted(String(value), limit), limit)
   }
-  if (typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number') {
+  if (typeof value === 'string') {
+    return appendCapped(out, quoted(value, limit), limit)
+  }
+  if (typeof value === 'boolean' || typeof value === 'number') {
     return appendCapped(out, JSON.stringify(value), limit)
   }
   if (value === null) {
@@ -39,7 +55,7 @@ function writeEcho(
   }
 
   if (stack.includes(value)) {
-    return appendCapped(out, JSON.stringify(Object.prototype.toString.call(value)), limit)
+    return appendCapped(out, JSON.stringify(tagOf(value)), limit)
   }
 
   if (typeof (value as { toJSON?: unknown }).toJSON === 'function') {
@@ -50,7 +66,7 @@ function writeEcho(
       stack.pop()
       return hit
     } catch {
-      return appendCapped(out, JSON.stringify(Object.prototype.toString.call(value)), limit)
+      return appendCapped(out, JSON.stringify(tagOf(value)), limit)
     }
   }
 
@@ -82,7 +98,7 @@ function writeEcho(
   for (const key of Object.keys(value)) {
     const hit =
       (!first && appendCapped(out, ',', limit)) ||
-      appendCapped(out, JSON.stringify(key), limit) ||
+      appendCapped(out, quoted(key, limit), limit) ||
       appendCapped(out, ':', limit) ||
       writeEcho((value as Record<string, unknown>)[key], out, limit, stack)
     if (hit) {
@@ -97,7 +113,11 @@ function writeEcho(
 
 function echoString(value: unknown): string {
   const out = { s: '', n: 0 }
-  writeEcho(value, out, MAX_ECHO + 8, [])
+  try {
+    writeEcho(value, out, MAX_ECHO + 8, [])
+  } catch {
+    return JSON.stringify(tagOf(value))
+  }
   return out.s
 }
 
@@ -127,7 +147,8 @@ function cutCodePoints(s: string, max: number): string {
  * string never pays full stringify cost). Other values are walked with a size-capped writer
  * that stops after the truncation limit (never builds the full JSON). Values JSON cannot
  * represent (bigint, symbol, undefined, functions, non-finite numbers) use `String(value)`
- * quoted. Escapes control characters so messages never embed raw newlines from caller input.
+ * quoted. A value that throws while read (a getter, a revoked proxy) falls back to its object tag.
+ * Escapes control characters so messages never embed raw newlines from caller input.
  */
 export function truncateForError(value: unknown): string {
   if (typeof value === 'string') {

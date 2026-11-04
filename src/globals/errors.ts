@@ -5,41 +5,49 @@
 /**
  * A custom error class that inherits from the Error object.
  * Accepts the standard `Error` constructor arguments: an optional message and `ErrorOptions` (e.g. `cause`).
+ * `name` is the concrete class's name, so a subclass reports its own. Like a native error's, it is
+ * not an enumerable key.
  */
 export class CustomError extends Error {
-  override name: string
+  // Explicit, so bundlers that rename classes leave err.name alone.
+  static readonly name: string = 'CustomError'
+
   constructor(message?: string, options?: ErrorOptions) {
     super(message, options)
-    this.name = 'CustomError'
+    Object.defineProperty(this, 'name', {
+      value: new.target.name,
+      writable: true,
+      configurable: true
+    })
   }
 }
 
 /** Custom error to signal an invalid index access. */
 export class IndexError extends CustomError {
-  override name = 'IndexError'
+  static readonly name = 'IndexError'
 }
 
 /** Raised when a system function returns an I/O failure. */
 export class IOError extends CustomError {
-  override name = 'IOError'
+  static readonly name = 'IOError'
 }
 
 /** Custom error to signal an invalid key access. */
 export class KeyError extends CustomError {
-  override name = 'KeyError'
+  static readonly name = 'KeyError'
 }
 
 /** Custom error to signal an invalid operation. */
 export class NotImplementedError extends CustomError {
-  override name = 'NotImplementedError'
+  static readonly name = 'NotImplementedError'
 }
 
 /** Custom error to signal an invalid value. */
 export class ValueError extends CustomError {
-  override name = 'ValueError'
+  static readonly name = 'ValueError'
 }
 
 /** Raised when the second argument of a division or modulo operation is zero. */
 export class ZeroDivisionError extends CustomError {
-  override name = 'ZeroDivisionError'
+  static readonly name = 'ZeroDivisionError'
 }

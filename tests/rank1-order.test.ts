@@ -214,7 +214,7 @@ describe('operators refuse mixed currencies', () => {
 
   it('SPEC-R13 math min/max throw on mixed currencies and work on one currency', () => {
     expect(() => min([usd, jpy])).toThrow(ValueError)
-    expect(() => max([usd, jpy])).toThrow(/currency mismatch: JPY vs USD/)
+    expect(() => max([usd, jpy])).toThrow(/currency mismatch: USD vs JPY/)
     const usd20 = new Currency(20, 'USD', 'en-US')
     expect(min([usd20, usd])).toBe(usd)
     expect(max([usd, usd20])).toBe(usd20)

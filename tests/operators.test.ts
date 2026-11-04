@@ -19,11 +19,15 @@ import {
   shallowEqual,
   deepEqual,
   adaptProtocol,
-  protocol
+  protocol,
+  unitOf
 } from '../src/operators/index.js'
 import { sorted } from '../src/itertools/index.js'
 import { abs } from '../src/math/index.js'
 import { decimal } from '../src/decimal/index.js'
+import { Deque } from '../src/collections/deque.js'
+import { Currency, IntlDate } from '../src/i18n/index.js'
+import { guardNesting } from '../src/internal/nesting.js'
 
 describe('SPEC-R11 identity, bool, not', () => {
   it('SPEC-R11 identity returns the same value including NaN', () => {
@@ -69,6 +73,170 @@ describe('SPEC-R15 lt lte gt gte', () => {
     expect(typeof gt(1, 2)).toBe('boolean')
     expect(lte(1, 1)).toBe(true)
     expect(gt(2, 1)).toBe(true)
+  })
+})
+
+describe('relational checks use content, never identity', () => {
+  const relations = (x: unknown, y: unknown) => [lt(x, y), lte(x, y), gt(x, y), gte(x, y)]
+  const EQUAL = [false, true, false, true]
+  const LESS = [true, true, false, false]
+  const GREATER = [false, false, true, true]
+  const UNRELATED = [false, false, false, false]
+
+  it('equal-time Dates are equal', () => {
+    expect(relations(new Date(5), new Date(5))).toEqual(EQUAL)
+    expect(relations(new Date(1), new Date(2))).toEqual(LESS)
+    expect(relations(new IntlDate(5), new Date(5))).toEqual(EQUAL)
+    expect(relations(new Date(5), new IntlDate(6))).toEqual(LESS)
+  })
+
+  it('NaN and Invalid Dates make all four false', () => {
+    expect(relations(NaN, 1)).toEqual(UNRELATED)
+    expect(relations(1, NaN)).toEqual(UNRELATED)
+    expect(relations(NaN, NaN)).toEqual(UNRELATED)
+    expect(relations(Infinity, NaN)).toEqual(UNRELATED)
+    expect(relations(new Number(NaN), 1)).toEqual(UNRELATED)
+    expect(relations(new Date(NaN), new Date(0))).toEqual(UNRELATED)
+    expect(relations(new Date(NaN), new Date(NaN))).toEqual(UNRELATED)
+  })
+
+  it('a value relates to itself even when its content cannot', () => {
+    const invalid = new Date(NaN)
+    const holdsNaN = [NaN]
+    expect(relations(invalid, invalid)).toEqual(EQUAL)
+    expect(relations(holdsNaN, holdsNaN)).toEqual(EQUAL)
+    expect(relations([holdsNaN], [holdsNaN])).toEqual(EQUAL)
+  })
+
+  it('operands of different kinds are incomparable', () => {
+    expect(relations(1, undefined)).toEqual(UNRELATED)
+    expect(relations(undefined, 1)).toEqual(UNRELATED)
+    expect(relations(null, 1)).toEqual(UNRELATED)
+    expect(relations(null, undefined)).toEqual(UNRELATED)
+    expect(relations('2', 10)).toEqual(UNRELATED)
+    expect(relations('a', 1)).toEqual(UNRELATED)
+    expect(relations(true, 1)).toEqual(UNRELATED)
+    expect(relations(new Date(5), 10)).toEqual(UNRELATED)
+    expect(relations([1], 1)).toEqual(UNRELATED)
+  })
+
+  it('values with no order relate only through eq', () => {
+    const o = {}
+    const f = () => 0
+    expect(relations({}, {})).toEqual(UNRELATED)
+    expect(relations(o, o)).toEqual(EQUAL)
+    expect(relations(/a/, /a/)).toEqual(UNRELATED)
+    expect(relations(f, () => 0)).toEqual(UNRELATED)
+    expect(relations(f, f)).toEqual(EQUAL)
+    expect(relations(null, null)).toEqual(EQUAL)
+    expect(relations(undefined, undefined)).toEqual(EQUAL)
+    expect(relations(new Uint8Array([1]), new Uint8Array([2]))).toEqual(UNRELATED)
+  })
+
+  it('eq implies lte and gte for hooks with no order of their own', () => {
+    const a = new Deque([1])
+    const b = new Deque([1])
+    expect(eq(a, b)).toBe(true)
+    expect(relations(a, b)).toEqual(EQUAL)
+    expect(relations(new Deque([1]), new Deque([2]))).toEqual(UNRELATED)
+  })
+
+  it('primitives of one kind keep their native order', () => {
+    expect(relations('a', 'b')).toEqual(LESS)
+    expect(relations('a', 'a')).toEqual(EQUAL)
+    expect(relations(false, true)).toEqual(LESS)
+    expect(relations(Symbol.for('a'), Symbol.for('b'))).toEqual(LESS)
+    expect(relations(Symbol('a'), Symbol('a'))).toEqual(UNRELATED)
+    const s = Symbol('s')
+    expect(relations(s, s)).toEqual(EQUAL)
+  })
+
+  it('boxed numbers unbox', () => {
+    expect(relations(new Number(1), 2)).toEqual(LESS)
+    expect(relations(2, new Number(1))).toEqual(GREATER)
+    expect(relations(new Number(1), new Number(1))).toEqual(EQUAL)
+    expect(relations(new Number(1), 1n)).toEqual(EQUAL)
+    expect(relations(new Number(1), decimal(2))).toEqual(LESS)
+  })
+
+  it('arrays compare by content with no tie-break', () => {
+    expect(relations([1], [1])).toEqual(EQUAL)
+    expect(relations([1], [2])).toEqual(LESS)
+    expect(relations([2], [1])).toEqual(GREATER)
+    expect(relations([1], [1, 0])).toEqual(LESS)
+    expect(relations([[1], 2], [[1], 3])).toEqual(LESS)
+    expect(relations([new Date(5)], [new Date(5)])).toEqual(EQUAL)
+    expect(relations([1], ['a'])).toEqual(UNRELATED)
+    expect(relations([NaN], [1])).toEqual(UNRELATED)
+    expect(relations([{}], [{}])).toEqual(UNRELATED)
+    expect(relations([[[1]]], [[[2]]])).toEqual(UNRELATED)
+  })
+
+  it('a hook decides, and undefined from it means incomparable', () => {
+    class Version {
+      constructor(readonly n: number) {}
+      [protocol.compare](o: unknown) {
+        return o instanceof Version ? this.n - o.n : undefined
+      }
+    }
+    expect(relations(new Version(1), new Version(2))).toEqual(LESS)
+    expect(relations(new Version(1), new Version(1))).toEqual(EQUAL)
+    expect(relations(new Version(1), {})).toEqual(UNRELATED)
+    expect(relations({}, new Version(1))).toEqual(UNRELATED)
+  })
+})
+
+describe('arithmetic with a hook on the right', () => {
+  const recorder = (key: symbol) => {
+    const calls: unknown[][] = []
+    const hook = {
+      [key](...args: unknown[]) {
+        calls.push(args)
+        return 'hooked'
+      }
+    }
+    return { calls, hook }
+  }
+
+  it.each([
+    ['add', add, protocol.add],
+    ['sub', sub, protocol.sub],
+    ['mul', mul, protocol.mul],
+    ['div', div, protocol.div],
+    ['mod', mod, protocol.mod],
+    ['pow', pow, protocol.pow]
+  ] as const)('%s calls the right hook with reflected = true', (_name, op, key) => {
+    const { calls, hook } = recorder(key)
+    expect(op(1, hook)).toBe('hooked')
+    expect(calls).toEqual([[1, true]])
+  })
+
+  it('a left hook wins and sees no reflected flag', () => {
+    const left = recorder(protocol.add)
+    const right = recorder(protocol.add)
+    expect(add(left.hook, right.hook)).toBe('hooked')
+    expect(left.calls).toEqual([[right.hook]])
+    expect(right.calls).toEqual([])
+  })
+
+  it('Decimal keeps the operand order', () => {
+    expect(String(add(1, decimal('2')))).toBe('3')
+    expect(String(sub(1, decimal('3')))).toBe('-2')
+    expect(String(mul(2, decimal('3')))).toBe('6')
+    expect(String(div(1, decimal('4')))).toBe('0.25')
+    expect(String(sub(decimal('3'), 1))).toBe('2')
+    expect(String(div(decimal('4'), 1))).toBe('4')
+  })
+
+  it('Currency keeps its unit when subtracted from a number', () => {
+    const difference = sub(10, new Currency(3, 'USD', 'en-US'))
+    expect(difference).toBeInstanceOf(Currency)
+    expect(String(difference)).toBe(String(new Currency(7, 'USD', 'en-US')))
+  })
+
+  it('Decimal has no mod or pow hook', () => {
+    expect(() => mod(decimal('7'), 2)).toThrow(TypeError)
+    expect(() => pow(decimal('2'), 3)).toThrow(TypeError)
   })
 })
 
@@ -381,6 +549,67 @@ describe('SPEC-R17 deepEqual branch coverage', () => {
     expect(shallowEqual(null, {})).toBe(false)
     expect(shallowEqual(1, 1)).toBe(true)
     expect(shallowEqual(Object.create(null), {})).toBe(false)
+  })
+})
+
+describe('adaptProtocol reads descriptors, not values', () => {
+  it('wires a unit inherited from a parent class', () => {
+    class Base {
+      readonly code = 'USD'
+      get unit() {
+        return this.code
+      }
+    }
+    class Child extends Base {}
+    adaptProtocol(Child)
+    expect(unitOf(new Child())).toBe('USD')
+  })
+
+  it('leaves accessors on the prototype unread', () => {
+    class Vector {
+      #x = 1
+      get abs() {
+        return this.#x
+      }
+      get lt() {
+        return this.#x
+      }
+    }
+    expect(() => adaptProtocol(Vector)).not.toThrow()
+    expect(new Vector().abs).toBe(1)
+  })
+
+  it('does not run a private unit getter on an adapted parent', () => {
+    class Base {
+      #unit = 'USD'
+      get unit() {
+        return this.#unit
+      }
+    }
+    class Child extends Base {}
+    adaptProtocol(Base)
+    expect(() => adaptProtocol(Child)).not.toThrow()
+    expect(unitOf(new Child())).toBe('USD')
+  })
+})
+
+describe('guardNesting on engines with other overflow errors', () => {
+  it('rethrows a SpiderMonkey stack overflow as the nesting error', () => {
+    const overflow = Object.assign(new Error('too much recursion'), { name: 'InternalError' })
+    expect(() =>
+      guardNesting(() => {
+        throw overflow
+      })
+    ).toThrow(new RangeError('nesting deeper than 1000 levels', { cause: overflow }))
+  })
+
+  it('leaves another InternalError alone', () => {
+    const other = Object.assign(new Error('out of range'), { name: 'InternalError' })
+    expect(() =>
+      guardNesting(() => {
+        throw other
+      })
+    ).toThrow(other)
   })
 })
 

@@ -22,6 +22,9 @@ export function hashCode(s: string): number {
 /**
  * Hash value for any input. Objects and unregistered symbols get a stable
  * per-identity id from a WeakMap; registered symbols use their key string.
+ *
+ * Not value-consistent: unlike Python, `eq(a, b)` does not imply `hash(a) === hash(b)`.
+ * `eq(decimal('1'), 1)` is true and those hashes differ, as they do for equal Dates or collections.
  */
 export function hash(x: unknown): number {
   if (x === null || x === undefined) return 0

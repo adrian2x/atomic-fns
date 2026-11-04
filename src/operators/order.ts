@@ -2,11 +2,16 @@
  * Total-order compare and derived relations.
  */
 
+import { isDate, unbox } from '../globals/brand.js'
 import { assertSameCurrency, isRank1, NUMERIC_COMPARE } from '../internal/rank1.js'
 import { hasMethod, protocol } from './protocol.js'
 
 /** User comparator; `compare` itself always returns `-1 | 0 | 1`. */
 export type Comparer<T = unknown> = (x: T, y: T) => number
+
+/** How much of an array ordering reads, so every call does bounded work. */
+const ARRAY_ORDER_ELEMENTS = 32
+const ARRAY_ORDER_LEVELS = 2
 
 const seq = new WeakMap<object | symbol, number>()
 let nextSeq = 1
@@ -39,7 +44,7 @@ function rankOf(v: unknown): number {
     const r = (v as { [protocol.rank]?: unknown })[protocol.rank]
     return r === 1 || r === 5 || r === 6 ? r : 6
   }
-  if (Object.prototype.toString.call(v) === '[object Date]') return 5
+  if (isDate(v)) return 5
   return 6
 }
 
@@ -58,7 +63,7 @@ function kind(v: unknown): number {
   if (t === 'boolean') return 3
   if (t === 'symbol') return 4
   if (hasMethod(v, protocol.compare)) return 7
-  if (Object.prototype.toString.call(v) === '[object Date]') return 5
+  if (isDate(v)) return 5
   return 6
 }
 
@@ -82,7 +87,8 @@ function kindTieBreak(x: unknown, y: unknown): -1 | 0 | 1 {
   return seqCompare(x as object | symbol, y as object | symbol)
 }
 
-function compareSymbols(x: symbol, y: symbol): -1 | 0 | 1 {
+/** Symbols by key, then description; `undefined` when those cannot tell them apart. */
+function symbolOrder(x: symbol, y: symbol): -1 | 0 | 1 | undefined {
   const kx = Symbol.keyFor(x)
   const ky = Symbol.keyFor(y)
   if (kx !== undefined && ky !== undefined) {
@@ -97,10 +103,13 @@ function compareSymbols(x: symbol, y: symbol): -1 | 0 | 1 {
   if (dx !== undefined && dy !== undefined && dx !== dy) {
     return cmp3(dx, dy)
   }
-  return seqCompare(x, y)
+  return undefined
 }
 
-function nativeCompare(x: unknown, y: unknown, rank: number): -1 | 0 | 1 {
+const timeOf = (date: Date): number => Date.prototype.getTime.call(date)
+
+/** Order of two same-rank values by content, or `undefined` when content cannot order them. */
+function nativeOrder(x: unknown, y: unknown, rank: number): -1 | 0 | 1 | undefined {
   switch (rank) {
     case 1: {
       if (typeof x === typeof y) {
@@ -112,23 +121,40 @@ function nativeCompare(x: unknown, y: unknown, rank: number): -1 | 0 | 1 {
     case 2:
       return cmp3(x as string, y as string)
     case 3:
-      return x === y ? 0 : x ? 1 : -1
+      return cmp3(x as boolean, y as boolean)
     case 4:
-      return compareSymbols(x as symbol, y as symbol)
-    case 5: {
-      const tx = (x as Date).getTime()
-      const ty = (y as Date).getTime()
-      const nx = Number.isNaN(tx)
-      const ny = Number.isNaN(ty)
-      if (nx !== ny) return nx ? 1 : -1
-      if (!nx && tx !== ty) return cmp3(tx, ty)
-      return x === y ? 0 : seqCompare(x as object, y as object)
-    }
+      return symbolOrder(x as symbol, y as symbol)
+    case 5:
+      return compare(timeOf(x as Date), timeOf(y as Date))
     case 6:
-      return x === y ? 0 : seqCompare(x as object, y as object)
+      return undefined
     default:
       return 0
   }
+}
+
+/** Lexicographic over the first elements, then length. */
+function arrayOrder<Order extends number>(
+  x: unknown[],
+  y: unknown[],
+  element: (a: unknown, b: unknown) => Order
+): Order | -1 | 0 | 1 {
+  const shared = Math.min(x.length, y.length, ARRAY_ORDER_ELEMENTS)
+  for (let i = 0; i < shared; i++) {
+    const order = element(x[i], y[i])
+    if (order !== 0) return order
+  }
+  return cmp3(x.length, y.length)
+}
+
+/** Arrays before other objects, by content. Only the outermost level breaks a tie by identity. */
+function objectOrder(x: object, y: object, level: number): -1 | 0 | 1 {
+  if (x === y) return 0
+  if (!Array.isArray(x)) return Array.isArray(y) ? 1 : seqCompare(x, y)
+  if (!Array.isArray(y)) return -1
+  if (level > ARRAY_ORDER_LEVELS) return 0
+  const order = arrayOrder(x, y, (a, b) => compareSlow(a, b, level + 1))
+  return order !== 0 || level > 1 ? order : seqCompare(x, y)
 }
 
 function assertCompareResult(r: unknown): asserts r is number | undefined {
@@ -137,11 +163,30 @@ function assertCompareResult(r: unknown): asserts r is number | undefined {
   }
 }
 
+/** Sign of the `method` hook on `x`, else reflected from `y`; `undefined` when it declines. */
+function hookOrder(x: unknown, y: unknown, method: symbol): -1 | 0 | 1 | undefined {
+  let r: unknown
+  if (hasMethod(x, method)) r = x[method](y)
+  else if (hasMethod(y, method)) {
+    const flipped = y[method](x)
+    assertCompareResult(flipped)
+    r = flipped === undefined ? undefined : -flipped
+  }
+  assertCompareResult(r)
+  return r === undefined ? undefined : cmp3(r, 0)
+}
+
 /**
  * Total order over all values: `-1`, `0`, or `1`.
  * Antisymmetric and transitive; never applies `<`/`>` to objects.
+ * Dates order by time, so equal instants compare `0`, whether Date or IntlDate.
+ * Arrays order by content (the first 32 elements, two levels deep, then length), before other
+ * objects; a content tie between distinct arrays breaks by identity. Other objects, typed arrays
+ * included, order by identity.
  * Same-type non-NaN numbers and same-type strings take a cheap path before rank logic;
  * the total order is identical to the slow path.
+ * @throws {TypeError} when a `protocol.compare` hook returns a non-finite number or a non-number.
+ * Hooks are user code and may throw on their own.
  */
 export function compare(x: unknown, y: unknown): -1 | 0 | 1 {
   if (typeof x === 'number' && typeof y === 'number') {
@@ -158,27 +203,19 @@ export function compare(x: unknown, y: unknown): -1 | 0 | 1 {
  * Rank/protocol path used when the number/string fast path does not apply.
  * Exported for tests that the fast path agrees with this order.
  */
-export function compareSlow(x: unknown, y: unknown): -1 | 0 | 1 {
+export function compareSlow(x: unknown, y: unknown, level = 1): -1 | 0 | 1 {
   const rx = rankOf(x)
   const ry = rankOf(y)
   if (rx !== ry) return rx < ry ? -1 : 1
 
-  let r: unknown
-  if (hasMethod(x, protocol.compare)) {
-    r = x[protocol.compare](y)
-  } else if (hasMethod(y, protocol.compare)) {
-    const r0 = y[protocol.compare](x)
-    assertCompareResult(r0)
-    r = r0 === undefined ? undefined : -r0
-  } else {
-    return nativeCompare(x, y, rx)
+  if (hasMethod(x, protocol.compare) || hasMethod(y, protocol.compare)) {
+    const order = hookOrder(x, y, protocol.compare)
+    if (order === -1 || order === 1) return order
+    if (order === 0 && (rx === 5 || sameKind(x, y))) return 0
+    return kindTieBreak(x, y)
   }
-
-  assertCompareResult(r)
-  if (typeof r === 'number' && r < 0) return -1
-  if (typeof r === 'number' && r > 0) return 1
-  if (r === 0 && sameKind(x, y)) return 0
-  return kindTieBreak(x, y)
+  if (rx === 6) return objectOrder(x as object, y as object, level)
+  return nativeOrder(x, y, rx) ?? seqCompare(x as symbol, y as symbol)
 }
 
 /** SameValueZero equality. */
@@ -205,32 +242,50 @@ function isNumericPrimitive(v: unknown): v is number | bigint {
 /** Numeric order of two rank-1 values with no kind or unit tie-break, when they have one. */
 function rank1Compare(x: unknown, y: unknown): -1 | 0 | 1 | undefined {
   if (isNumericPrimitive(x) && isNumericPrimitive(y)) return cmp3(x, y)
-  for (const method of [NUMERIC_COMPARE, protocol.compare]) {
-    let r: unknown
-    if (hasMethod(x, method)) r = x[method](y)
-    else if (hasMethod(y, method)) {
-      const flipped = y[method](x)
-      assertCompareResult(flipped)
-      r = flipped === undefined ? undefined : -flipped
-    } else continue
-    assertCompareResult(r)
-    return r === undefined ? undefined : cmp3(r, 0)
+  const method =
+    hasMethod(x, NUMERIC_COMPARE) || hasMethod(y, NUMERIC_COMPARE)
+      ? NUMERIC_COMPARE
+      : protocol.compare
+  return hookOrder(x, y, method)
+}
+
+/** Order of two values with no identity tie-break, or `undefined` when they have none. */
+function contentOrder(x: unknown, y: unknown, level: number): number | undefined {
+  const rank = rankOf(x)
+  if (rank !== rankOf(y)) return undefined
+  if (hasMethod(x, protocol.compare) || hasMethod(y, protocol.compare)) {
+    return hookOrder(x, y, protocol.compare)
   }
-  return undefined
+  if (Array.isArray(x) && Array.isArray(y) && level <= ARRAY_ORDER_LEVELS) {
+    return arrayOrder(x, y, (a, b) => relationalCompare(a, b, level + 1))
+  }
+  return nativeOrder(x, y, rank)
 }
 
 /**
- * Relational compare: numeric-only for rank-1 values; otherwise the total-order `compare`.
+ * `-1`, `0`, or `1`; `NaN` for operands that do not relate, which makes every check false.
+ * Identical values are equal. Rank-1 values compare numerically. NaN and Invalid Dates relate to
+ * nothing else. Everything else compares by content, and a pair with no order relates only when
+ * `eq` says so.
  * @throws {ValueError} when both operands carry different unit codes.
  */
-function relationalCompare(x: unknown, y: unknown): -1 | 0 | 1 {
+function relationalCompare(x: unknown, y: unknown, level = 1): number {
+  if (x === y) return 0
   assertSameCurrency(x, y)
-  const numeric = isRank1(x) && isRank1(y) ? rank1Compare(x, y) : undefined
-  return numeric ?? compare(x, y)
+  const [a, b] = isDate(x) && isDate(y) ? [timeOf(x), timeOf(y)] : [unbox(x), unbox(y)]
+  if (Number.isNaN(a) || Number.isNaN(b)) return Number.NaN
+  if (isRank1(a) && isRank1(b)) return rank1Compare(a, b) ?? compare(a, b)
+  return contentOrder(a, b, level) ?? (eq(a, b) ? 0 : Number.NaN)
 }
 
 /**
- * Strict less-than. Rank-1 values compare numerically only (equal kinds/units are equal).
+ * Strict less-than, with `<` semantics that do not coerce. Rank-1 values compare numerically only
+ * (equal kinds/units are equal). Dates compare by time, strings, booleans and symbols within their
+ * kind, arrays by content (see {@link compare}, with no identity tie-break), wrapper objects as
+ * their primitive, and values with a `protocol.compare` hook by that hook. NaN makes all four
+ * checks false, and so does an Invalid Date against anything but itself. Operands of different
+ * kinds, or with no order such as plain objects, are incomparable: {@link lt} and {@link gt} are
+ * false, {@link lte} and {@link gte} equal `eq`.
  * @throws {ValueError} when both operands carry different unit codes.
  */
 export function lt(x: unknown, y: unknown): boolean {
@@ -238,7 +293,7 @@ export function lt(x: unknown, y: unknown): boolean {
 }
 
 /**
- * Less-than or equal. Rank-1 values compare numerically only.
+ * Less-than or equal. See {@link lt}.
  * @throws {ValueError} when both operands carry different unit codes.
  */
 export function lte(x: unknown, y: unknown): boolean {
@@ -246,7 +301,7 @@ export function lte(x: unknown, y: unknown): boolean {
 }
 
 /**
- * Strict greater-than. Rank-1 values compare numerically only.
+ * Strict greater-than. See {@link lt}.
  * @throws {ValueError} when both operands carry different unit codes.
  */
 export function gt(x: unknown, y: unknown): boolean {
@@ -254,7 +309,7 @@ export function gt(x: unknown, y: unknown): boolean {
 }
 
 /**
- * Greater-than or equal. Rank-1 values compare numerically only.
+ * Greater-than or equal. See {@link lt}.
  * @throws {ValueError} when both operands carry different unit codes.
  */
 export function gte(x: unknown, y: unknown): boolean {

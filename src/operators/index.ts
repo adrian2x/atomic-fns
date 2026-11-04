@@ -31,49 +31,64 @@ export function isinstance(x: unknown, y: abstract new (...args: never[]) => obj
 }
 
 /**
- * The addition (+) operator. Dispatches on `protocol.add` when present.
+ * Runs the left operand's hook, else the right operand's with `reflected = true` as its second
+ * argument, else the native operator.
+ */
+function dispatch(
+  hook: symbol,
+  x: unknown,
+  y: unknown,
+  native: (x: number, y: number) => unknown
+): unknown {
+  if (hasMethod(x, hook)) return x[hook](y)
+  if (hasMethod(y, hook)) return y[hook](x, true)
+  return native(x as number, y as number)
+}
+
+/**
+ * The addition (+) operator. Dispatches on `protocol.add` of `x`, else of `y` with
+ * `reflected = true`.
  */
 export function add(x: unknown, y: unknown): unknown {
-  if (hasMethod(x, protocol.add)) return x[protocol.add](y)
-  return (x as number) + (y as number)
+  return dispatch(protocol.add, x, y, (a, b) => a + b)
 }
 
 /**
- * The subtraction (-) operator. Dispatches on `protocol.sub` when present.
+ * The subtraction (-) operator. Dispatches on `protocol.sub` of `x`, else of `y` with
+ * `reflected = true`, which asks the hook for `x - this`.
  */
 export function sub(x: unknown, y: unknown): unknown {
-  if (hasMethod(x, protocol.sub)) return x[protocol.sub](y)
-  return (x as number) - (y as number)
+  return dispatch(protocol.sub, x, y, (a, b) => a - b)
 }
 
 /**
- * The multiplication (*) operator. Dispatches on `protocol.mul` when present.
+ * The multiplication (*) operator. Dispatches on `protocol.mul` of `x`, else of `y` with
+ * `reflected = true`.
  */
 export function mul(x: unknown, y: unknown): unknown {
-  if (hasMethod(x, protocol.mul)) return x[protocol.mul](y)
-  return (x as number) * (y as number)
+  return dispatch(protocol.mul, x, y, (a, b) => a * b)
 }
 
 /**
- * The division (/) operator. Dispatches on `protocol.div` when present.
+ * The division (/) operator. Dispatches on `protocol.div` of `x`, else of `y` with
+ * `reflected = true`, which asks the hook for `x / this`.
  */
 export function div(x: unknown, y: unknown): unknown {
-  if (hasMethod(x, protocol.div)) return x[protocol.div](y)
-  return (x as number) / (y as number)
+  return dispatch(protocol.div, x, y, (a, b) => a / b)
 }
 
 /**
- * The modulo (%) operator. Dispatches on `protocol.mod` when present.
+ * The modulo (%) operator. Dispatches on `protocol.mod` of `x`, else of `y` with
+ * `reflected = true`. Decimal defines no `protocol.mod`, so a Decimal operand throws `TypeError`.
  */
 export function mod(x: unknown, y: unknown): unknown {
-  if (hasMethod(x, protocol.mod)) return x[protocol.mod](y)
-  return (x as number) % (y as number)
+  return dispatch(protocol.mod, x, y, (a, b) => a % b)
 }
 
 /**
- * The power (**) operator. Dispatches on `protocol.pow` when present.
+ * The power (**) operator. Dispatches on `protocol.pow` of `x`, else of `y` with
+ * `reflected = true`. Decimal defines no `protocol.pow`, so a Decimal operand throws `TypeError`.
  */
 export function pow(x: unknown, y: unknown): unknown {
-  if (hasMethod(x, protocol.pow)) return x[protocol.pow](y)
-  return (x as number) ** (y as number)
+  return dispatch(protocol.pow, x, y, (a, b) => a ** b)
 }

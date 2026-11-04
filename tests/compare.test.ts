@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
+import vm from 'node:vm'
 import { compare, eq, adaptProtocol, protocol } from '../src/operators/index.js'
 import { compareSlow } from '../src/operators/order.js'
 import { sorted } from '../src/itertools/index.js'
 import { decimal } from '../src/decimal/index.js'
+import { SortedSet } from '../src/collections/SortedSet.js'
+import { IntlDate } from '../src/i18n/index.js'
 
 describe('SPEC-R14 rank/kind table', () => {
   it('SPEC-R14 sorted corpus order', () => {
@@ -30,17 +33,41 @@ describe('SPEC-R14 rank/kind table', () => {
     expect(compare(NaN, NaN)).toBe(0)
   })
 
-  it('SPEC-R14 distinct Dates with equal time are non-zero and stable', () => {
-    const a = new Date(5)
-    const b = new Date(5)
-    const r = compare(a, b)
-    expect(r).not.toBe(0)
-    expect(compare(a, b)).toBe(r)
-    expect(compare(b, a)).toBe(-r as -1 | 0 | 1)
+  it('SPEC-R14 equal-time Dates compare 0 in both Date and IntlDate paths', () => {
+    expect(compare(new Date(5), new Date(5))).toBe(0)
+    expect(compare(new IntlDate(5), new IntlDate(5))).toBe(0)
+    expect(compare(new IntlDate(5), new Date(5))).toBe(0)
+    expect(compare(new Date(5), new IntlDate(5))).toBe(0)
+    expect(compare(new Date(4), new IntlDate(5))).toBe(-1)
   })
 
-  it('SPEC-R14 invalid Date after valid', () => {
+  it('SPEC-R14 equal-time Dates keep sorted stable and dedupe in a SortedSet', () => {
+    const a = new Date(5)
+    const b = new Date(5)
+    expect(sorted([b, a])[0]).toBe(b)
+    expect(sorted([a, b])[0]).toBe(a)
+    expect(new SortedSet([a, b]).size).toBe(1)
+  })
+
+  it('SPEC-R14 invalid Date after valid; invalid Dates tie', () => {
     expect(compare(new Date(NaN), new Date(0))).toBe(1)
+    expect(compare(new Date(0), new Date(NaN))).toBe(-1)
+    expect(compare(new Date(NaN), new Date(NaN))).toBe(0)
+  })
+
+  it('SPEC-R14 a Date is what has the internal slot, not a tag', () => {
+    class Fake {
+      readonly [Symbol.toStringTag] = 'Date'
+    }
+    const fake = new Fake()
+    expect(compare(fake, fake)).toBe(0)
+    expect(compare(fake, new Date(0))).toBe(1)
+    expect(compare(new Date(0), fake)).toBe(-1)
+    expect(sorted([fake, new Date(0)])[1]).toBe(fake)
+
+    const shadowed = Object.assign(new Date(1), { getTime: 'not a function' })
+    expect(compare(shadowed, new Date(0))).toBe(1)
+    expect(compare(vm.runInNewContext('new Date(1)'), new Date(2))).toBe(-1)
   })
 
   it('SPEC-R14 registered symbols by key; unregistered stable', () => {
@@ -49,6 +76,70 @@ describe('SPEC-R14 rank/kind table', () => {
     const b = Symbol('a')
     expect(compare(a, b)).not.toBe(0)
     expect(compare(a, b)).toBe(compare(a, b))
+  })
+})
+
+describe('SPEC-R14 arrays order by content', () => {
+  const zeros = (length: number) => new Array<number>(length).fill(0)
+
+  it('orders lexicographically, then by length', () => {
+    expect(compare([1, 2], [1, 3])).toBe(-1)
+    expect(compare([2], [1, 9])).toBe(1)
+    expect(compare([1], [1, 0])).toBe(-1)
+    expect(compare([], [0])).toBe(-1)
+    expect(compare(['a'], [1])).toBe(1)
+    expect(sorted([[3], [1], [2]])).toEqual([[1], [2], [3]])
+    expect(sorted([[1, 2], [1], [0, 9]])).toEqual([[0, 9], [1], [1, 2]])
+  })
+
+  it('reads two levels; deeper arrays tie', () => {
+    expect(compare([[1]], [[2]])).toBe(-1)
+    expect(compare([[1], 3], [[1], 2])).toBe(1)
+    const deepA = [[[2]], 'a']
+    const deepB = [[[1]], 'b']
+    expect(compare(deepA, deepB)).toBe(-1)
+  })
+
+  it('reads the first 32 elements, then the length', () => {
+    const atLastRead = zeros(33)
+    atLastRead[31] = 1
+    expect(compare(atLastRead, zeros(33))).toBe(1)
+    expect(compare(zeros(34), zeros(33))).toBe(1)
+
+    const pastLastRead = zeros(33)
+    pastLastRead[32] = 1
+    // Identity, first compared first: index 32 would have said 1.
+    expect(compare(pastLastRead, zeros(33))).toBe(-1)
+  })
+
+  it('breaks a content tie by identity, so distinct arrays stay distinct', () => {
+    const a = [1]
+    const b = [1]
+    const order = compare(a, b)
+    expect(order).not.toBe(0)
+    expect(compare(a, b)).toBe(order)
+    expect(compare(b, a)).toBe(-order)
+    expect(compare(a, a)).toBe(0)
+    expect(eq(a, b)).toBe(false)
+  })
+
+  it('stays bounded on cycles and huge sparse arrays', () => {
+    const a: unknown[] = []
+    a.push(a)
+    const b: unknown[] = []
+    b.push(b)
+    expect(compare(a, b)).not.toBe(0)
+    expect(compare(new Array(2 ** 32 - 1), new Array(2 ** 32 - 2))).toBe(1)
+  })
+
+  it('arrays sort before other objects; typed arrays stay identity', () => {
+    expect(compare([], {})).toBe(-1)
+    expect(compare({}, [])).toBe(1)
+    const x = new Uint8Array([2])
+    const y = new Uint8Array([1])
+    const order = compare(x, y)
+    expect(order).toBe(-compare(y, x))
+    expect(compare(new Uint8Array([1]), new Uint8Array([1]))).not.toBe(0)
   })
 })
 
@@ -166,9 +257,22 @@ describe('SPEC-R13 antisymmetry and transitivity', () => {
     Symbol.for('k'),
     Symbol('d'),
     new Date(0),
+    new Date(0),
     new Date(NaN),
+    new IntlDate(0),
+    new IntlDate(1),
     {},
     [],
+    [1],
+    [1],
+    [1, 2],
+    [[1]],
+    [[[1]]],
+    [[[2]]],
+    ['a'],
+    [NaN],
+    [{}],
+    new Uint8Array(1),
     () => 0,
     null,
     undefined,
