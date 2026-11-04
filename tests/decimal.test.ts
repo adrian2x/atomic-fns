@@ -523,6 +523,26 @@ describe('Decimal.MAX_DIGITS', () => {
     }, 5)
   })
 
+  it('R16-B: digit overflow rejects before BigInt; plain extremes parse', () => {
+    const over = '1'.repeat(Decimal.MAX_DIGITS + 1)
+    const BigIntSpy = vi.spyOn(globalThis, 'BigInt')
+    try {
+      expect(() => decimal(over)).toThrow(RangeError)
+      expect(() => decimal(over)).toThrow(/result exceeds 10000 digits/)
+      expect(BigIntSpy).not.toHaveBeenCalled()
+    } finally {
+      BigIntSpy.mockRestore()
+    }
+    expectFast(() => {
+      expect(() => decimal(over)).toThrow(RangeError)
+    }, 5)
+    const maxPlain = '1' + '0'.repeat(Decimal.MAX_EXPONENT)
+    const minPlain = '0.' + '0'.repeat(Decimal.MAX_EXPONENT - 1) + '1'
+    expect(decimal(maxPlain).eq('1e10000')).toBe(true)
+    expect(decimal(minPlain).eq('1e-10000')).toBe(true)
+    expect(Decimal.MAX_INPUT_LENGTH).toBe(2 * Decimal.MAX_EXPONENT + Decimal.MAX_DIGITS + 32)
+  })
+
   it('R14-C: every op at MAX_DIGITS finishes within budget', { timeout: 2000 }, () => {
     const a = decimal('9'.repeat(Decimal.MAX_DIGITS))
     const b = decimal('1')

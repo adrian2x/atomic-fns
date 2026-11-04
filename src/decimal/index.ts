@@ -331,11 +331,12 @@ export class Decimal {
   static readonly MAX_DIGITS = 10_000
 
   /**
-   * Maximum raw decimal string length accepted by the parser. Enough for any value within
-   * {@link Decimal.MAX_EXPONENT} written in plain notation. Longer inputs throw {@link ValueError}
+   * Maximum raw decimal string length accepted by the parser. Sized for any value within
+   * {@link Decimal.MAX_DIGITS} significant digits and {@link Decimal.MAX_EXPONENT} written in
+   * plain notation (`2 * MAX_EXPONENT + MAX_DIGITS + 32`). Longer inputs throw {@link ValueError}
    * before scanning so parsing stays linear in the allowed length.
    */
-  static readonly MAX_INPUT_LENGTH = 1_100_000
+  static readonly MAX_INPUT_LENGTH = 2 * Decimal.MAX_EXPONENT + Decimal.MAX_DIGITS + 32
 
   #i = 0n
   #e = 0
@@ -425,6 +426,19 @@ export class Decimal {
     return n
   }
 
+  /**
+   * Significant digit count of a plain digit run (int + frac), skipping leading and trailing
+   * zeros. Used to refuse oversized coefficients before constructing a BigInt.
+   */
+  static #significantDigitCount(intDigits: string, frac: string): number {
+    const digits = intDigits + frac
+    let start = 0
+    while (start < digits.length && digits.charCodeAt(start) === 48) start++
+    let end = digits.length
+    while (end > start && digits.charCodeAt(end - 1) === 48) end--
+    return end - start
+  }
+
   static #parseString(value: string): { i: bigint; e: number } {
     if (value.length > Decimal.MAX_INPUT_LENGTH) {
       throw new ValueError('Decimal input too long')
@@ -434,6 +448,7 @@ export class Decimal {
       const sign = leading[1] === '-' ? '-' : ''
       const intDigits = leading[2] ?? '0'
       const frac = leading[3] ?? ''
+      Decimal.#assertDigitsBound(Decimal.#significantDigitCount(intDigits, frac))
       const exp = Decimal.#parseExponent(leading[4])
       const i = BigInt(sign + intDigits + frac)
       return Decimal.#checked(normalizeIE(i, -frac.length + exp))
@@ -442,6 +457,7 @@ export class Decimal {
     if (dotted) {
       const sign = dotted[1] === '-' ? '-' : ''
       const frac = dotted[2] ?? ''
+      Decimal.#assertDigitsBound(Decimal.#significantDigitCount('', frac))
       const exp = Decimal.#parseExponent(dotted[3])
       const i = BigInt(sign + (frac || '0'))
       return Decimal.#checked(normalizeIE(i, -frac.length + exp))
