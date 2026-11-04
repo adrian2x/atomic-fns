@@ -574,14 +574,14 @@ export function has(obj: unknown, attr: PropertyKey | readonly unknown[]): boole
   const paths = pathSegments(attr)
   if (paths.length === 0) return false
   let cur: unknown = obj
-  for (const k of paths) {
+  for (const [i, k] of paths.entries()) {
     if (cur == null) return false
     const t = typeof cur
     if (t !== 'object' && t !== 'function' && t !== 'string') return false
     const base = Object(cur) as object
     if (isForbiddenPathSegment(base, k)) return false
     if (!Reflect.has(base, k)) return false
-    cur = (cur as Record<PropertyKey, unknown>)[k]
+    if (i < paths.length - 1) cur = (cur as Record<PropertyKey, unknown>)[k]
   }
   return true
 }

@@ -335,6 +335,12 @@ describe('globals', () => {
     assert.equal(has({ a: 1 }, 'a.b'), false)
     assert.equal(has({ 'a.b': 1 }, 'a.b'), false)
     assert.equal(has({ 'a.b': 1 }, ['a.b']), true)
+    class Locked {
+      get secret(): never {
+        throw new Error('locked')
+      }
+    }
+    assert.equal(has(new Locked(), 'secret'), true)
   })
 
   it('SPEC-R24 int truncates numbers and parseInt strings', () => {
