@@ -302,7 +302,8 @@ function deepEqualChildren(a: object, b: object, session: DeepEqualSession): boo
  * `Object.is` on their primitive value. Nesting past 1000 levels throws `RangeError` (the cap
  * is a security bound, not an implementation limit). A pair already under comparison on the
  * current path is treated as equal. Settled pairs are memoized for the rest of the top-level
- * call so shared-reference DAGs stay linear. Collection equality hooks re-enter this function,
+ * call so shared-reference DAGs stay linear up to the memo bounds (2^20 failures, 2^21 proofs);
+ * past them repeated work is recomputed. Collection equality hooks re-enter this function,
  * continue the same nesting count and share that memo. Nesting is counted only for object pairs
  * (after primitive checks), so a 1000-deep structure ending in a primitive is accepted.
  */

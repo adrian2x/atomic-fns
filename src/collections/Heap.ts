@@ -253,7 +253,7 @@ export class Heap<T> extends ValueCollection<T> {
    * leftover impure item is matched pairwise by `deepEqual` against an unmatched leftover of the
    * other side (leftover pures may only be consumed by those matches); any unmatched leftover
    * yields false. All pairwise comparisons share the walk's deepEqual session (settled pairs and
-   * nesting counters), so shared-reference DAGs stay linear. JSON-only heaps never take the pairwise
+   * nesting counters), so shared-reference DAGs stay linear up to its memo bounds. JSON-only heaps never take the pairwise
    * path. Iteration / heap order is not part of equality.
    */
   override [protocol.equals](other: unknown): boolean {
