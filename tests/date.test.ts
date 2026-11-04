@@ -6,6 +6,7 @@ import {
   dayOfYear,
   daysInMonth,
   daysInYear,
+  formatDate,
   IntlDate,
   isLeapYear,
   lastDayOfMonth,
@@ -1401,6 +1402,35 @@ describe('audit regressions', () => {
       '2024-06-'
     ]) {
       expect(asDate(text).getTime()).toBeNaN()
+    }
+  })
+
+  it('asDate reads back offsets with seconds', () => {
+    for (const zone of [
+      'America/New_York',
+      'America/Los_Angeles',
+      'Asia/Kolkata',
+      'Pacific/Apia'
+    ]) {
+      withTz(zone, () => {
+        const meanTime = new Date(1800, 0, 1, 12)
+        const basic = `1800-01-01T12:00:00${formatDate('ZZ', meanTime)}`
+        expect(asDate(formatDate(undefined, meanTime)).getTime()).toBe(meanTime.getTime())
+        expect(asDate(basic).getTime()).toBe(meanTime.getTime())
+      })
+    }
+    expect(asDate('1800-01-01T12:00:00-04:56:02').getTime()).toBe(Date.UTC(1800, 0, 1, 16, 56, 2))
+    expect(asDate('1800-01-01T12:00:00+05:21:10').getTime()).toBe(Date.UTC(1800, 0, 1, 6, 38, 50))
+    expect(asDate('1800-01-01T12:00:00-045602').getTime()).toBe(Date.UTC(1800, 0, 1, 16, 56, 2))
+    for (const offset of [
+      '+05:30:60',
+      '+05:30:',
+      '+05:30:1',
+      '+05:3015',
+      '+0530:15',
+      '+05:30:15x'
+    ]) {
+      expect(asDate(`1800-01-01T12:00:00${offset}`).getTime()).toBeNaN()
     }
   })
 
