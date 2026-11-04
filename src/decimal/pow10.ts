@@ -69,11 +69,9 @@ function squareAt(bit: number): bigint {
 /**
  * Return `10^k` for non-negative `k`.
  * k < 512 uses the linear cache; larger k uses binary decomposition of the
- * squares table and does not store the product. Negative exponents fall back
- * to a one-off `10n ** BigInt(k)`.
+ * squares table and does not store the product.
  */
 export function pow10(k: number): bigint {
-  if (k < 0) return 10n ** BigInt(k)
   if (k < LINEAR_MAX) {
     while (POW10_TABLE.length <= k) {
       const last = POW10_TABLE[POW10_TABLE.length - 1]

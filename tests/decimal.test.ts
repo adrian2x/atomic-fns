@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { decimal, Decimal } from '../src/decimal/index.js'
+import { DECIMAL_BRAND, decimal, Decimal } from '../src/decimal/index.js'
 import { isqrtRoot } from '../src/decimal/isqrt.js'
 import type { RoundingMode } from '../src/decimal/index.js'
 import { ValueError, ZeroDivisionError } from '../src/globals/errors.js'
@@ -287,11 +287,9 @@ describe('Decimal clone and abs', () => {
 })
 
 describe('F-055 linear-time parse and normalize', () => {
-  it('parses a MAX_DIGITS digit run within budget', { timeout: 2000 }, () => {
+  it('parses a MAX_DIGITS digit run', () => {
     const s = '1' + '0'.repeat(Decimal.MAX_DIGITS - 1)
-    expectFast(() => {
-      expect(decimal(s).toString()).toBe(s)
-    }, 1000)
+    expect(decimal(s).toPlainString()).toBe(s)
   })
 
   it(
@@ -396,8 +394,8 @@ describe('isqrt precision-doubling', () => {
   })
 })
 
-describe('R15-D1 exactTerminating linear', () => {
-  /** Pre-fix per-factor loop (baseline for agreement on small inputs). */
+describe('R15-D1 terminating division', () => {
+  /** Per-factor reference for agreement on small inputs. */
   function oldExactTerminating(
     i1: bigint,
     e1: number,
@@ -437,28 +435,30 @@ describe('R15-D1 exactTerminating linear', () => {
     return { i: sign * n, e }
   }
 
-  it('dos-34: div by large 2/5 powers finishes within budget', { timeout: 2000 }, () => {
-    const s2 = (2n ** 16000n).toString()
-    expectFast(() => {
-      expect(() => decimal('1').div(s2)).toThrow(RangeError)
-    }, 1000)
-    const s2big = (2n ** 33000n).toString()
-    expectFast(() => {
-      expect(() => decimal('1').div(s2big)).toThrow(RangeError)
-    }, 1000)
-    const s5 = (5n ** 14000n).toString()
-    expectFast(() => {
-      // Exact coeff fits digits but exponent -14000 exceeds MAX_EXPONENT.
-      expect(() => decimal('1').div(s5)).toThrow(ValueError)
-      expect(() => decimal('1').div(s5)).toThrow(/exponent out of range/)
-    }, 1000)
-    const s3 = (3n * 2n ** 16000n).toString()
-    expectFast(() => {
-      expect(decimal('1').div(s3, { precision: 20 }).toString().length).toBeGreaterThan(0)
-    }, 1000)
+  it('dos-34: div by large 2/5 powers rounds to the requested precision', () => {
+    expect(
+      decimal('1')
+        .div((2n ** 16000n).toString())
+        .toString()
+    ).toBe('0')
+    expect(
+      decimal('1')
+        .div((2n ** 33000n).toString())
+        .toString()
+    ).toBe('0')
+    expect(
+      decimal('1')
+        .div((5n ** 14000n).toString())
+        .toString()
+    ).toBe('0')
+    expect(
+      decimal('1')
+        .div((3n * 2n ** 16000n).toString())
+        .toString()
+    ).toBe('0')
   })
 
-  it('dos-34: exact results match old exactTerminating on 5000 small cases', () => {
+  it('dos-34: exact results match the reference on 5000 small cases', () => {
     let state = 0xdec15d1
     const rand = (): number => {
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0
@@ -498,15 +498,9 @@ describe('R15-D1 exactTerminating linear', () => {
 })
 
 describe('Decimal.MAX_DIGITS', () => {
-  it('R13-F2: probe wide ops throw before bigint work', () => {
-    expectFast(() => {
-      expect(() => new Decimal('1e9999').add('1e-9999')).toThrow(RangeError)
-      expect(() => new Decimal('1e9999').add('1e-9999')).toThrow(/result exceeds 10000 digits/)
-      expect(() => {
-        const a = new Decimal('1e9999').add('1e-9999')
-        a.round(2)
-      }).toThrow(RangeError)
-    }, 1000)
+  it('R13-F2: a sum wider than MAX_DIGITS throws', () => {
+    expect(() => new Decimal('1e9999').add('1e-9999')).toThrow(RangeError)
+    expect(() => new Decimal('1e9999').add('1e-9999')).toThrow(/result exceeds 10000 digits/)
   })
 
   it('R13-F2: digit literal above MAX_DIGITS throws', () => {
@@ -794,73 +788,54 @@ describe('R15-D2 MAX_EXPONENT 10000 and toNumber', () => {
 })
 
 describe('R15-E1 constant-work normalize and digit counts', () => {
-  it('1400-item running totals make no bigint string conversions', { timeout: 2000 }, () => {
-    // Pre-fix (pre-a13d312): normalizeIE/digitLengthAbs called toString per op (~498 ms).
-    // Wall-clock budgets cannot be both load-safe (>= 5x coverage median ~57 ms => 285) and
-    // revert-detecting (<= 1/4 of 498 ms => 124).
+  /** Runs `ops` and returns how many bigints it converted to base 10, the quadratic kind. */
+  function decimalConversions(ops: () => void): number {
+    const bigintToString = vi.spyOn(BigInt.prototype, 'toString')
+    const OrigString = globalThis.String
+    let stringBigintCalls = 0
+    function wrappedString(value?: unknown): string {
+      if (arguments.length === 0) return ''
+      if (typeof value === 'bigint') stringBigintCalls += 1
+      return OrigString(value)
+    }
+    Object.defineProperties(wrappedString, Object.getOwnPropertyDescriptors(OrigString))
+    globalThis.String = wrappedString as StringConstructor
+    try {
+      ops()
+      const base10 = bigintToString.mock.calls.filter(([radix]) => (radix ?? 10) === 10)
+      return base10.length + stringBigintCalls
+    } finally {
+      bigintToString.mockRestore()
+      globalThis.String = OrigString
+    }
+  }
+
+  it('1400-item running totals make no base-10 conversions', () => {
     for (const [hi, lo] of [
       ['1e9980', '1e-9'],
       ['1e9980', '-1e-9'],
       ['-1e9980', '1e-9']
     ] as const) {
       const items = Array.from({ length: 1400 }, (_, i) => (i % 2 ? lo : hi))
-      expectFast(() => {
-        let total = decimal(0)
-        const bigintToString = vi.spyOn(BigInt.prototype, 'toString')
-        const OrigString = globalThis.String
-        let stringBigintCalls = 0
-        function wrappedString(value?: unknown): string {
-          if (arguments.length === 0) return ''
-          if (typeof value === 'bigint') stringBigintCalls += 1
-          return OrigString(value)
-        }
-        Object.defineProperties(wrappedString, Object.getOwnPropertyDescriptors(OrigString))
-        globalThis.String = wrappedString as StringConstructor
-        try {
-          bigintToString.mockClear()
-          stringBigintCalls = 0
-          for (const x of items) total = total.add(x)
-          expect(bigintToString).toHaveBeenCalledTimes(0)
-          expect(stringBigintCalls).toBe(0)
-        } finally {
-          bigintToString.mockRestore()
-          globalThis.String = OrigString
-        }
-        expect(total.toString().length).toBeGreaterThan(0)
-      }, 1000)
+      let total = decimal(0)
+      const conversions = decimalConversions(() => {
+        for (const x of items) total = total.add(x)
+      })
+      expect(conversions).toBe(0)
+      expect(total.toString().length).toBeGreaterThan(0)
     }
   })
 
-  it('add/sub at MAX_DIGITS complete without bigint string conversion', () => {
-    // Pre-fix per-op ~0.16-0.54 ms with toString normalize (R10-1). P/3 << load-safe floor;
-    // deterministic: spy BigInt/String paths over 200 ops (same as the 1400-item total test).
+  it('add/sub at MAX_DIGITS make no base-10 conversions', () => {
     const a = decimal('9'.repeat(Decimal.MAX_DIGITS))
     const b = decimal('1')
-    expectFast(() => {
-      const bigintToString = vi.spyOn(BigInt.prototype, 'toString')
-      const OrigString = globalThis.String
-      let stringBigintCalls = 0
-      function wrappedString(value?: unknown): string {
-        if (arguments.length === 0) return ''
-        if (typeof value === 'bigint') stringBigintCalls += 1
-        return OrigString(value)
+    const conversions = decimalConversions(() => {
+      for (let i = 0; i < 200; i++) {
+        a.add(b)
+        a.sub(b)
       }
-      Object.defineProperties(wrappedString, Object.getOwnPropertyDescriptors(OrigString))
-      globalThis.String = wrappedString as StringConstructor
-      try {
-        bigintToString.mockClear()
-        stringBigintCalls = 0
-        for (let i = 0; i < 200; i++) {
-          a.add(b)
-          a.sub(b)
-        }
-        expect(bigintToString).toHaveBeenCalledTimes(0)
-        expect(stringBigintCalls).toBe(0)
-      } finally {
-        bigintToString.mockRestore()
-        globalThis.String = OrigString
-      }
-    }, 5000)
+    })
+    expect(conversions).toBe(0)
   })
 })
 
@@ -881,5 +856,336 @@ describe('SPEC-R66 decimal edge coverage', () => {
     expect(decimal(2).gt(1)).toBe(true)
     expect(decimal(1).gte(decimal(1))).toBe(true)
     expect(decimal(1).gte(1)).toBe(true)
+  })
+})
+
+/** Fastest of five runs, for comparing two operations on the same runner. */
+function cost(fn: () => unknown): number {
+  let best = Number.POSITIVE_INFINITY
+  for (let run = 0; run < 5; run++) {
+    const start = performance.now()
+    fn()
+    best = Math.min(best, performance.now() - start)
+  }
+  return best
+}
+
+describe('work stays proportional to the operands', () => {
+  it('div at the digit cap costs about what mul does, whatever the operands share', () => {
+    const limit = 10n ** 9999n
+    let [previous, current] = [0n, 1n]
+    // Fibonacci neighbours take Euclid's algorithm the most steps.
+    while (current < limit) [previous, current] = [current, previous + current]
+    const dividend = decimal(current)
+    const divisor = decimal(previous)
+    const half = decimal('7'.repeat(5000))
+    expect(cost(() => dividend.div(divisor))).toBeLessThan(100 * cost(() => half.mul(half)))
+  })
+
+  it('oversized bigints cost time linear in their length', () => {
+    const odd = (bits: number) => (1n << BigInt(bits)) + 1n
+    const refuse = (big: bigint) =>
+      cost(() => {
+        expect(() => new Decimal(big)).toThrow(RangeError)
+      })
+    const order = (big: bigint) => cost(() => decimal(1).compare(big))
+    expect(refuse(odd(2 ** 21))).toBeLessThan(64 * refuse(odd(2 ** 17)))
+    expect(order(odd(2 ** 21))).toBeLessThan(64 * order(odd(2 ** 17)))
+
+    const zeros = (digits: number) => {
+      const big = 10n ** BigInt(digits)
+      return cost(() => {
+        expect(() => new Decimal(big)).toThrow(ValueError)
+      })
+    }
+    expect(zeros(1_000_000)).toBeLessThan(32 * zeros(125_000))
+  })
+
+  it('bigints past every Decimal keep their refusal type', () => {
+    expect(() => new Decimal(10n ** 30000n)).toThrow(/exponent out of range/)
+    expect(() => new Decimal(7n * 10n ** 30000n)).toThrow(/exponent out of range/)
+    expect(() => new Decimal(10n ** 30000n + 1n)).toThrow(/result exceeds 10000 digits/)
+    expect(() => new Decimal(-(10n ** 30000n) - 1n)).toThrow(/result exceeds 10000 digits/)
+    expect(new Decimal(10n ** 10000n).eq('1e10000')).toBe(true)
+  })
+})
+
+describe('toString notation', () => {
+  it('pads at most 64 zeros, then switches to scientific form', () => {
+    expect(decimal('1e64').toString()).toBe('1' + '0'.repeat(64))
+    expect(decimal('1e65').toString()).toBe('1e+65')
+    expect(decimal('-25e64').toString()).toBe('-25' + '0'.repeat(64))
+    expect(decimal('25e65').toString()).toBe('2.5e+66')
+    expect(decimal('1e-65').toString()).toBe('0.' + '0'.repeat(64) + '1')
+    expect(decimal('1e-66').toString()).toBe('1e-66')
+    expect(decimal('-12e-66').toString()).toBe('-0.' + '0'.repeat(64) + '12')
+    expect(decimal('12e-67').toString()).toBe('1.2e-66')
+    expect(decimal('1e10000').toString()).toBe('1e+10000')
+    expect(String(decimal('1e-10000'))).toBe('1e-10000')
+    expect(JSON.stringify(decimal('15e9999'))).toBe('"1.5e+10000"')
+  })
+
+  it('toPlainString always expands', () => {
+    expect(decimal('1e10000').toPlainString()).toBe('1' + '0'.repeat(10000))
+    expect(decimal('-1e-10000').toPlainString()).toBe('-0.' + '0'.repeat(9999) + '1')
+    expect(decimal('-12.5').toPlainString()).toBe('-12.5')
+    expect(decimal(0).toPlainString()).toBe('0')
+  })
+
+  it('every form parses back to the same value', () => {
+    const shapes = [
+      '0',
+      '1e65',
+      '-1.5e-70',
+      '1e10000',
+      '1e-10000',
+      '7'.repeat(Decimal.MAX_DIGITS) + 'e10000',
+      '-' + '7'.repeat(Decimal.MAX_DIGITS) + 'e-10000',
+      '7e-9999'
+    ]
+    for (const shape of shapes) {
+      const d = decimal(shape)
+      expect(decimal(d.toString()).compare(d)).toBe(0)
+      expect(decimal(d.toPlainString()).compare(d)).toBe(0)
+      expect(decimal(JSON.parse(JSON.stringify(d)) as string).compare(d)).toBe(0)
+    }
+  })
+})
+
+describe('toNumber', () => {
+  it('returns the nearest double past 17 significant digits', () => {
+    expect(decimal(2).sqrt().toNumber()).toBe(Math.SQRT2)
+    expect(decimal(846129).div(758829).toNumber()).toBe(846129 / 758829)
+    for (const s of [
+      '1.00000000000000015',
+      '-1.00000000000000015',
+      '9007199254740993.00000000000001',
+      '1.00000000000000011102230246251565404236316680908203126',
+      '2.47032822920623272089e-324',
+      '1.797693134862315807937289714053e308'
+    ]) {
+      expect(decimal(s).toNumber()).toBe(Number(s))
+    }
+    let state = 0x5eed
+    const rand = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+      return state >>> 8
+    }
+    for (let i = 0; i < 2000; i++) {
+      const digits = Array.from({ length: 18 + (rand() % 30) }, () => rand() % 10).join('')
+      const s = `${String(1 + (rand() % 9))}.${digits}e${String((rand() % 600) - 300)}`
+      expect(decimal(s).toNumber()).toBe(Number(s))
+    }
+  })
+})
+
+describe('sqrt rounding and bounds', () => {
+  it('rounds the true root when the scale leaves no guard digit', () => {
+    const cases: [string, number, RoundingMode, string][] = [
+      ['6.2501', 0, 'halfEven', '3'],
+      ['6.2501', 0, 'halfDown', '3'],
+      ['1.0002', 0, 'up', '2'],
+      ['1.0002', 0, 'ceil', '2'],
+      ['1.0002', 0, 'floor', '1'],
+      ['1.96101', 1, 'up', '1.5'],
+      ['250559e-10', 2, 'halfDown', '0.01'],
+      ['1.' + '0'.repeat(49) + '1', 20, 'ceil', '1.00000000000000000001'],
+      ['0.00000000008106025480427652108978860673824341', 20, 'halfEven', '0.00000900334686681995']
+    ]
+    for (const [value, precision, rounding, expected] of cases) {
+      expect(decimal(value).sqrt({ precision, rounding }).toString()).toBe(expected)
+    }
+  })
+
+  it('keeps exact ties on perfect squares', () => {
+    expect(decimal('6.25').sqrt({ precision: 0 }).toString()).toBe('2')
+    expect(decimal('6.25').sqrt({ precision: 0, rounding: 'halfUp' }).toString()).toBe('3')
+    expect(decimal('1e-50').sqrt({ precision: 25 }).toString()).toBe('0.' + '0'.repeat(24) + '1')
+  })
+
+  it('accepts a full-width coefficient with an odd exponent', () => {
+    const digits = '1'.repeat(9999)
+    expect(decimal(`${digits}.1`).sqrt({ precision: 0, rounding: 'down' }).toString()).toBe(
+      String(isqrtRoot(BigInt(digits)).root)
+    )
+  })
+
+  it('returns inexact roots of exactly MAX_DIGITS digits', () => {
+    const two = String(isqrtRoot(2n * 10n ** 19998n).root)
+    expect(decimal(2).sqrt({ precision: 9999, rounding: 'down' }).toString()).toBe(
+      `${two.slice(0, 1)}.${two.slice(1)}`
+    )
+    const half = String(isqrtRoot(5n * 10n ** 19999n).root)
+    expect(decimal('0.5').sqrt({ precision: 10000, rounding: 'down' }).toString()).toBe(`0.${half}`)
+    expect(decimal('0.02').sqrt({ precision: Decimal.MAX_PRECISION }).toString()).toHaveLength(
+      Decimal.MAX_PRECISION + 2
+    )
+    expect(() => decimal(2).sqrt({ precision: 10000 })).toThrow(/result exceeds 10000 digits/)
+  })
+})
+
+describe('bigint operands past MAX_DIGITS', () => {
+  it('compare by value', () => {
+    const big = 12345678901n * 10n ** 10000n
+    const x = decimal('12345678901e10000')
+    expect(x.eq(big)).toBe(true)
+    expect(x.compare(big)).toBe(0)
+    expect(x.negated().compare(-big)).toBe(0)
+    const wide = decimal('1'.repeat(2001) + 'e10000')
+    expect(wide.lt(10n ** 15000n)).toBe(true)
+    expect(wide.negated().gt(-(10n ** 15000n))).toBe(true)
+    expect(wide.gt(10n ** 12000n)).toBe(true)
+    expect(wide.compare(10n ** 30000n)).toBe(-1)
+    expect(wide.compare(-(10n ** 30000n))).toBe(1)
+  })
+})
+
+describe('rounding mode validation', () => {
+  it('throws RangeError for an unknown mode, even when nothing needs rounding', () => {
+    for (const bad of ['HALF_UP', 'nearest', '', null, 0] as unknown as RoundingMode[]) {
+      expect(() => decimal('1.9').round(0, bad)).toThrow(RangeError)
+      expect(() => decimal(1).round(2, bad)).toThrow(/rounding must be one of/)
+    }
+    const rounding = 'nearest' as RoundingMode
+    expect(() => decimal(5).div(2, { precision: 0, rounding })).toThrow(RangeError)
+    expect(() => decimal(2).sqrt({ precision: 0, rounding })).toThrow(RangeError)
+    expect(() => decimal(4).div(2, { rounding })).toThrow(/rounding must be one of/)
+  })
+})
+
+describe('bounds apply to the result, not to an estimate', () => {
+  const third = decimal(1).div(3, { precision: 10000 })
+  const ones = '1'.repeat(10000)
+
+  it('mul accepts every product that fits', () => {
+    expect(decimal(ones).mul(1).eq(ones)).toBe(true)
+    expect(decimal(1).mul(ones).eq(ones)).toBe(true)
+    expect(
+      decimal(ones)
+        .mul(-1)
+        .eq('-' + ones)
+    ).toBe(true)
+    expect(third.mul(2).eq('0.' + '6'.repeat(10000))).toBe(true)
+    expect(
+      decimal(5n ** 10000n)
+        .mul(2n ** 10000n)
+        .eq('1e10000')
+    ).toBe(true)
+    expect(() => decimal('9'.repeat(5001)).mul('9'.repeat(5000))).toThrow(
+      /result exceeds 10000 digits/
+    )
+    expect(() => decimal('7'.repeat(5001) + 'e-9000').mul('7'.repeat(5000) + 'e-9000')).toThrow(
+      /result exceeds 10000 digits/
+    )
+  })
+
+  it('div rounds an exact quotient too long or too small to store', () => {
+    expect(decimal('0.1').div('1e10000').toString()).toBe('0')
+    expect(decimal('1e-10000').div(10).toString()).toBe('0')
+    expect(
+      decimal(1)
+        .div(2n ** 15000n)
+        .toString()
+    ).toBe('0')
+    expect(
+      decimal(1)
+        .div(5n ** 14000n)
+        .toString()
+    ).toBe('0')
+    expect(third.div(2).toString()).toBe('0.16666666666666666667')
+    expect(third.div(4).toString()).toBe('0.08333333333333333333')
+    expect(third.div(5).toString()).toBe('0.06666666666666666667')
+    expect(decimal('1e-10000').div(10, { rounding: 'up' }).toString()).toBe(
+      '0.00000000000000000001'
+    )
+    expect(() => decimal('1e10000').div('0.1')).toThrow(/exponent out of range/)
+    expect(() => decimal('1e10000').div(3)).toThrow(/result exceeds 10000 digits/)
+  })
+
+  it('div rounds a quotient far below the rounding unit', () => {
+    expect(decimal('1e-10000').div('3e10000', { precision: 0 }).toString()).toBe('0')
+    expect(
+      decimal('1e-1000')
+        .div('7'.repeat(10000) + 'e10000')
+        .toString()
+    ).toBe('0')
+    expect(decimal('1e-10000').div('3e10000', { precision: 0, rounding: 'up' }).toString()).toBe(
+      '1'
+    )
+    expect(
+      decimal('-1e-10000').div('3e10000', { precision: 2, rounding: 'floor' }).toString()
+    ).toBe('-0.01')
+  })
+
+  it('add and sub accept sums that shrink through borrow or cancellation', () => {
+    expect(
+      decimal(1)
+        .sub('1e-10000')
+        .eq('0.' + '9'.repeat(10000))
+    ).toBe(true)
+    expect(
+      decimal('4e-10000')
+        .add(-1)
+        .eq('-0.' + '9'.repeat(9999) + '6')
+    ).toBe(true)
+    expect(
+      decimal('1e9999')
+        .sub('9'.repeat(9999) + '.9')
+        .eq('0.1')
+    ).toBe(true)
+    expect(() => decimal(1).add('1e-10000')).toThrow(/result exceeds 10000 digits/)
+  })
+
+  it('the parser bounds the stored exponent, not the written one', () => {
+    expect(decimal('0e10001').toString()).toBe('0')
+    expect(decimal('0e99999999999999999999').toString()).toBe('0')
+    expect(decimal('10e-10001').eq('1e-10000')).toBe(true)
+    expect(decimal('0.1e10001').eq('1e10000')).toBe(true)
+    expect(decimal('1000e-10002').eq('1e-9999')).toBe(true)
+    expect(() => decimal('1e10001')).toThrow(/exponent out of range/)
+    expect(() => decimal('1e' + '9'.repeat(30000))).toThrow(/exponent out of range/)
+    expect(() => decimal('1e-' + '9'.repeat(30000))).toThrow(/exponent out of range/)
+  })
+})
+
+describe('equality and ordering edges', () => {
+  it('eq is false for anything unparsable; ordering keeps throwing', () => {
+    for (const other of [null, undefined, 'x', '', '1e10001', {}, [], true, NaN]) {
+      expect(decimal(1).eq(other)).toBe(false)
+    }
+    expect(decimal(1).eq('1.0')).toBe(true)
+    expect(() => decimal(1).lt(null as never)).toThrow(ValueError)
+    expect(() => decimal(1).gte('x')).toThrow(ValueError)
+    expect(() => decimal(1).lte(NaN)).toThrow(TypeError)
+  })
+
+  it('a number enters as its shortest string but compares as exact binary', () => {
+    expect(decimal(0.1).eq(0.1)).toBe(false)
+    expect(decimal(0.1).lt(0.1)).toBe(true)
+    expect(decimal(0.1).eq('0.1')).toBe(true)
+  })
+})
+
+describe('constructor and statics', () => {
+  it('MAX_* statics are getters that refuse assignment', () => {
+    for (const name of ['MAX_DIGITS', 'MAX_EXPONENT', 'MAX_PRECISION', 'MAX_INPUT_LENGTH']) {
+      expect(Object.getOwnPropertyDescriptor(Decimal, name)).not.toHaveProperty('value')
+      expect(Reflect.set(Decimal, name, 5)).toBe(false)
+    }
+  })
+
+  it('new Decimal converts a branded foreign Decimal like decimal() does', () => {
+    const foreign = {
+      [Symbol.for('atomic-fns.decimal')]() {
+        return '1.5'
+      }
+    } as unknown as Decimal
+    expect(new Decimal(foreign).eq('1.5')).toBe(true)
+    expect(decimal(foreign).eq('1.5')).toBe(true)
+  })
+
+  it('the brand method returns the plain canonical form', () => {
+    const big = decimal('1e100') as unknown as Record<symbol, () => string>
+    expect(big[DECIMAL_BRAND]()).toBe('1' + '0'.repeat(100))
   })
 })

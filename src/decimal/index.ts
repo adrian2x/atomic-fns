@@ -8,7 +8,7 @@ import { ValueError, ZeroDivisionError } from '../globals/errors.js'
 import { assertSameCurrency, compareValueThenUnit, NUMERIC_COMPARE } from '../internal/rank1.js'
 import { truncateForError } from '../internal/truncate.js'
 import { protocol, unitOf, type Rank } from '../operators/protocol.js'
-import { isqrtRoot } from './isqrt.js'
+import { bitLength, isqrtRoot } from './isqrt.js'
 import { pow10, pow10Squares } from './pow10.js'
 
 /** Cross-realm Decimal brand (`Symbol.for` so every copy of the library shares it). */
@@ -35,14 +35,27 @@ function decimalBrandString(v: unknown): string {
   return String((fn as (this: object) => unknown).call(v))
 }
 
-function coerceDecimal(v: unknown): Decimal {
-  if (v instanceof Decimal) return v
-  if (isDecimalBrand(v)) return new Decimal(decimalBrandString(v))
-  return new Decimal(String(v))
-}
-
-/** Rounding mode for {@link Decimal.div}, {@link Decimal.round} and {@link Decimal.sqrt}. */
+/**
+ * Rounding mode for {@link Decimal.div}, {@link Decimal.round} and {@link Decimal.sqrt}.
+ * - `halfEven`: nearest, ties to the even neighbour (the default).
+ * - `halfUp`: nearest, ties away from zero. Note `Math.round` ties toward +Infinity instead.
+ * - `halfDown`: nearest, ties toward zero.
+ * - `up`: away from zero.
+ * - `down`: toward zero.
+ * - `ceil`: toward +Infinity.
+ * - `floor`: toward -Infinity.
+ */
 export type RoundingMode = 'halfEven' | 'halfUp' | 'halfDown' | 'down' | 'up' | 'floor' | 'ceil'
+
+const ROUNDING_MODES: readonly RoundingMode[] = [
+  'halfEven',
+  'halfUp',
+  'halfDown',
+  'down',
+  'up',
+  'floor',
+  'ceil'
+]
 
 /** Options for division and square-root precision. */
 export interface DivOptions {
@@ -63,25 +76,7 @@ const PARSE_LEADING_DOT = /^\s*([+-]?)\.(\d+)(?:e([+-]?\d+))?\s*$/i
  * @param x Value to convert.
  */
 export function decimal(x: DecimalInput): Decimal {
-  if (x instanceof Decimal) return x
-  if (isDecimalBrand(x)) return new Decimal(decimalBrandString(x))
-  return new Decimal(x)
-}
-
-/** Bit length of a positive bigint (no decimal strings). */
-function bitLengthAbs(a: bigint): number {
-  let n = a
-  let bits = 0
-  while (n > 0xffffffffffffffffn) {
-    n >>= 64n
-    bits += 64
-  }
-  if (n > 0xffffffffn) {
-    n >>= 32n
-    bits += 32
-  }
-  bits += 32 - Math.clz32(Number(n))
-  return bits
+  return x instanceof Decimal ? x : new Decimal(x)
 }
 
 /**
@@ -109,17 +104,6 @@ function absBig(n: bigint): bigint {
   return n < 0n ? -n : n
 }
 
-function gcdBig(a: bigint, b: bigint): bigint {
-  let x = absBig(a)
-  let y = absBig(b)
-  while (y !== 0n) {
-    const t = x % y
-    x = y
-    y = t
-  }
-  return x
-}
-
 /** Exact binary value of a finite number as decimal `(i, e)`. */
 function toExact(n: number): { i: bigint; e: number } {
   const dv = new DataView(new ArrayBuffer(8))
@@ -138,15 +122,14 @@ function toExact(n: number): { i: bigint; e: number } {
 
 /**
  * Digit count of a non-zero absolute bigint via bit length + one compare against a cached
- * power of ten (no decimal toString on the arithmetic path).
+ * power of ten (no decimal toString on the arithmetic path). Saturates past
+ * {@link MAX_VALUE_DIGITS}, where the value is already longer than every Decimal.
  */
 function digitLengthAbs(a: bigint): number {
   if (a < 10n) return 1
-  const bits = bitLengthAbs(a)
   // digits ≈ floor(bits * log10(2)) + 1; adjust with one table compare
-  let digits = Math.floor(bits * Math.LOG10E * Math.LN2) + 1
-  if (digits < 1) digits = 1
-  if (digits > 10_002) digits = 10_002
+  const estimate = Math.floor(bitLength(a) * Math.LOG10E * Math.LN2) + 1
+  const digits = Math.min(estimate, MAX_VALUE_DIGITS + 2)
   const bound = pow10(digits - 1)
   if (a >= bound * 10n) return digits + 1
   if (a < bound) return digits - 1
@@ -196,18 +179,15 @@ function compareIE(
   return sign < 0 ? (cmp < 0 ? 1 : -1) : cmp
 }
 
-function roundQuotient(
-  q: bigint,
-  r: bigint,
-  d: bigint,
-  mode: RoundingMode,
-  inexact = false
-): bigint {
-  if (r === 0n && !inexact) return q
+/** `n / d` rounded to an integer. */
+function roundQuotient(n: bigint, d: bigint, mode: RoundingMode): bigint {
+  const q = n / d
+  const r = n % d
+  if (r === 0n) return q
   const s = r < 0n !== d < 0n ? -1n : 1n
   const twice = 2n * absBig(r)
   const ad = absBig(d)
-  const cmpHalf = twice < ad ? -1 : twice > ad || (twice === ad && inexact) ? 1 : 0
+  const cmpHalf = twice < ad ? -1 : twice > ad ? 1 : 0
   let up = false
   switch (mode) {
     case 'halfEven':
@@ -237,24 +217,27 @@ function roundQuotient(
 
 function toDecimalInput(o: unknown): DecimalInput {
   if (
-    o instanceof Decimal ||
     isDecimalBrand(o) ||
     typeof o === 'number' ||
     typeof o === 'bigint' ||
     typeof o === 'string'
   ) {
-    return isDecimalBrand(o) && !(o instanceof Decimal)
-      ? decimalBrandString(o)
-      : (o as DecimalInput)
+    return o as DecimalInput
   }
   throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
 }
 
-/** Module-level bounds so static field initializers never reference the class (ES2023 TDZ). */
+const DEFAULT_PRECISION = 20
 const MAX_EXPONENT = 10_000
 const MAX_PRECISION = 10_000
 const MAX_DIGITS = 10_000
 const MAX_INPUT_LENGTH = 2 * MAX_EXPONENT + MAX_DIGITS + 32
+
+/** No Decimal reaches `10^MAX_VALUE_DIGITS`. */
+const MAX_VALUE_DIGITS = MAX_DIGITS + MAX_EXPONENT
+
+/** Zeros {@link Decimal.toString} pads a coefficient with before it turns scientific. */
+const MAX_PLAIN_PADDING = 64
 
 /**
  * Exact decimal arithmetic with per-operation precision and rounding.
@@ -263,29 +246,30 @@ const MAX_INPUT_LENGTH = 2 * MAX_EXPONENT + MAX_DIGITS + 32
  * untrusted lists before reducing them.
  */
 export class Decimal {
-  /**
-   * Default fractional digit count for {@link Decimal.div} and {@link Decimal.sqrt}.
-   * Getter-only so assignment throws at runtime (a `readonly` field is TypeScript-only).
-   */
-  // eslint-disable-next-line @typescript-eslint/class-literal-property-style -- runtime immutability
+  /** Default fractional digit count for {@link Decimal.div} and {@link Decimal.sqrt}. */
   static get defaultPrecision(): 20 {
-    return 20
+    return DEFAULT_PRECISION
   }
 
   /** Maximum absolute stored exponent; larger values throw {@link ValueError}. */
-  static readonly MAX_EXPONENT = MAX_EXPONENT
+  static get MAX_EXPONENT(): 10000 {
+    return MAX_EXPONENT
+  }
 
   /** Maximum fractional precision for {@link Decimal.div}, {@link Decimal.sqrt}, and {@link Decimal.round}. */
-  static readonly MAX_PRECISION = MAX_PRECISION
+  static get MAX_PRECISION(): 10000 {
+    return MAX_PRECISION
+  }
 
   /**
    * Maximum normalized coefficient decimal digit count (significant digits after stripping leading
-   * and trailing zeros). Work and results of every arithmetic operation are bounded by this (not
-   * by {@link Decimal.MAX_EXPONENT}); larger results throw `RangeError`. Exact terminating /
-   * perfect-square results may still use any allowed exponent when their significant digit count
-   * fits.
+   * and trailing zeros). Results of every arithmetic operation are bounded by this; larger results
+   * throw `RangeError`. Division and square root round first, so only the rounded result counts.
+   * Intermediate work stays within a few multiples of this, because exponents are bounded too.
    */
-  static readonly MAX_DIGITS = MAX_DIGITS
+  static get MAX_DIGITS(): 10000 {
+    return MAX_DIGITS
+  }
 
   /**
    * Maximum raw decimal string length accepted by the parser. Sized for any value within
@@ -293,7 +277,9 @@ export class Decimal {
    * plain notation (`2 * MAX_EXPONENT + MAX_DIGITS + 32`). Longer inputs throw {@link ValueError}
    * before scanning so parsing stays linear in the allowed length.
    */
-  static readonly MAX_INPUT_LENGTH = MAX_INPUT_LENGTH
+  static get MAX_INPUT_LENGTH(): number {
+    return MAX_INPUT_LENGTH
+  }
 
   #i = 0n
   #e = 0
@@ -301,27 +287,36 @@ export class Decimal {
   #digits: number | undefined
 
   static #assertDigitsBound(bound: number): void {
-    if (bound > Decimal.MAX_DIGITS) {
+    if (bound > MAX_DIGITS) {
       throw new RangeError('result exceeds 10000 digits')
     }
   }
 
   static #assertDivPrecision(precision: number): void {
-    if (!Number.isInteger(precision) || precision < 0 || precision > Decimal.MAX_PRECISION) {
+    if (!Number.isInteger(precision) || precision < 0 || precision > MAX_PRECISION) {
       throw new RangeError('precision must be an integer from 0 to 10000')
     }
   }
 
   static #assertRoundPrecision(precision: number): void {
-    if (
-      !Number.isInteger(precision) ||
-      precision < -Decimal.MAX_EXPONENT ||
-      precision > Decimal.MAX_PRECISION
-    ) {
+    if (!Number.isInteger(precision) || precision < -MAX_EXPONENT || precision > MAX_PRECISION) {
       throw new RangeError(
-        `precision must be an integer from ${String(-Decimal.MAX_EXPONENT)} to ${String(Decimal.MAX_PRECISION)}`
+        `precision must be an integer from ${String(-MAX_EXPONENT)} to ${String(MAX_PRECISION)}`
       )
     }
+  }
+
+  static #assertRounding(rounding: RoundingMode): void {
+    if (!ROUNDING_MODES.includes(rounding)) {
+      throw new RangeError(`rounding must be one of ${ROUNDING_MODES.join(', ')}`)
+    }
+  }
+
+  /** Keeps a bigint too long for any Decimal away from the quadratic {@link normalizeIE}. */
+  static #assertBigintSpan(value: bigint): void {
+    if (digitLengthAbs(absBig(value)) <= MAX_VALUE_DIGITS) return
+    if (value % pow10(MAX_EXPONENT + 1) === 0n) throw new ValueError('exponent out of range')
+    throw new RangeError('result exceeds 10000 digits')
   }
 
   /** Digit count of a non-zero bigint; 0 for 0n. */
@@ -340,7 +335,9 @@ export class Decimal {
   }
 
   /**
-   * Creates a Decimal from a number, bigint, string, or another Decimal.
+   * Creates a Decimal from a number, bigint, string, or another Decimal (a foreign library copy's
+   * too). A number enters through its shortest round-trip string, while comparisons with numbers
+   * use its exact binary value, so `decimal(0.1).eq(0.1)` is false.
    * @param value Finite number, bigint, decimal string, or Decimal.
    */
   constructor(value: DecimalInput) {
@@ -357,6 +354,7 @@ export class Decimal {
       return { i: value.#i, e: value.#e }
     }
     if (typeof value === 'bigint') {
+      Decimal.#assertBigintSpan(value)
       return Decimal.#checked(normalizeIE(value, 0))
     }
     if (typeof value === 'number') {
@@ -368,19 +366,10 @@ export class Decimal {
     if (typeof value === 'string') {
       return Decimal.#parseString(value)
     }
+    if (isDecimalBrand(value)) {
+      return Decimal.#parseString(decimalBrandString(value))
+    }
     throw new ValueError('Decimal value must be a number, bigint, string, or Decimal')
-  }
-
-  static #parseExponent(expRaw: string | undefined): number {
-    if (expRaw === undefined) return 0
-    const n = Number(expRaw)
-    if (!Number.isFinite(n) || !Number.isSafeInteger(n)) {
-      throw new ValueError('exponent out of range')
-    }
-    if (Math.abs(n) > Decimal.MAX_EXPONENT) {
-      throw new ValueError('exponent out of range')
-    }
-    return n
   }
 
   /**
@@ -397,42 +386,43 @@ export class Decimal {
   }
 
   static #parseString(value: string): { i: bigint; e: number } {
-    if (value.length > Decimal.MAX_INPUT_LENGTH) {
+    if (value.length > MAX_INPUT_LENGTH) {
       throw new ValueError('Decimal input too long')
     }
     const leading: (string | undefined)[] | null = PARSE_LEADING_DIGITS.exec(value)
     if (leading) {
-      const sign = leading[1] === '-' ? '-' : ''
-      const intDigits = leading[2] ?? '0'
-      const frac = leading[3] ?? ''
-      Decimal.#assertDigitsBound(Decimal.#significantDigitCount(intDigits, frac))
-      const exp = Decimal.#parseExponent(leading[4])
-      const i = BigInt(sign + intDigits + frac)
-      return Decimal.#checked(normalizeIE(i, -frac.length + exp))
+      return Decimal.#parseParts(leading[1], leading[2] ?? '0', leading[3] ?? '', leading[4])
     }
     const dotted: (string | undefined)[] | null = PARSE_LEADING_DOT.exec(value)
     if (dotted) {
-      const sign = dotted[1] === '-' ? '-' : ''
-      const frac = dotted[2] ?? ''
-      Decimal.#assertDigitsBound(Decimal.#significantDigitCount('', frac))
-      const exp = Decimal.#parseExponent(dotted[3])
-      const i = BigInt(sign + (frac || '0'))
-      return Decimal.#checked(normalizeIE(i, -frac.length + exp))
+      return Decimal.#parseParts(dotted[1], '0', dotted[2] ?? '', dotted[3])
     }
     throw new ValueError(`invalid Decimal string: ${truncateForError(value)}`)
   }
 
+  static #parseParts(
+    sign: string | undefined,
+    intDigits: string,
+    frac: string,
+    exponent: string | undefined
+  ): { i: bigint; e: number } {
+    Decimal.#assertDigitsBound(Decimal.#significantDigitCount(intDigits, frac))
+    const i = BigInt((sign === '-' ? '-' : '') + intDigits + frac)
+    return Decimal.#checked(normalizeIE(i, Number(exponent ?? 0) - frac.length))
+  }
+
   static #checked(ie: { i: bigint; e: number }): { i: bigint; e: number } {
-    if (Math.abs(ie.e) > Decimal.MAX_EXPONENT) {
+    if (Math.abs(ie.e) > MAX_EXPONENT) {
       throw new ValueError('exponent out of range')
     }
     return ie
   }
 
   static #fromIE(i: bigint, e: number): Decimal {
-    const n = Decimal.#checked(normalizeIE(i, e))
+    const n = normalizeIE(i, e)
     const digs = Decimal.#digitLength(n.i)
     Decimal.#assertDigitsBound(digs)
+    Decimal.#checked(n)
     const d = new Decimal(0)
     d.#i = n.i
     d.#e = n.e
@@ -440,118 +430,17 @@ export class Decimal {
     return d
   }
 
-  #scaleRound(n0: bigint, d0: bigint, e0: number, precision: number, mode: RoundingMode): Decimal {
-    const k = e0 + precision
-    const nDigits = Decimal.#digitLength(n0)
-    const dDigits = Decimal.#digitLength(d0)
-    // Intermediates may reach about 2 * MAX_DIGITS; quotient significant digits at most MAX_DIGITS+1.
-    const maxWork = 2 * Decimal.MAX_DIGITS
-    const maxSig = Decimal.MAX_DIGITS + 1
-    if (k >= 0) {
-      if (nDigits + k > maxWork || Math.max(1, nDigits + k - dDigits + 1) > maxSig) {
-        throw new RangeError('result exceeds 10000 digits')
-      }
-    } else if (dDigits - k > maxWork || Math.max(1, nDigits - (dDigits - k) + 1) > maxSig) {
-      throw new RangeError('result exceeds 10000 digits')
-    }
-    const n = k >= 0 ? n0 * pow10(k) : n0
-    const d = k >= 0 ? d0 : d0 * pow10(-k)
-    const q = roundQuotient(n / d, n % d, d, mode)
+  /** Rounds `(n / d) * 10^e` to `precision` fractional digits. */
+  static #scaleRound(
+    n: bigint,
+    d: bigint,
+    e: number,
+    precision: number,
+    mode: RoundingMode
+  ): Decimal {
+    const k = e + precision
+    const q = k >= 0 ? roundQuotient(n * pow10(k), d, mode) : roundQuotient(n, d * pow10(-k), mode)
     return Decimal.#fromIE(q, -precision)
-  }
-
-  /** Count trailing zero bits of a positive bigint (factors of 2) without digit strings. */
-  static #trailingZeros2(d: bigint): number {
-    if ((d & 1n) !== 0n) return 0
-    let x = d
-    let tz = 0
-    while ((x & 0xffffn) === 0n) {
-      x >>= 16n
-      tz += 16
-    }
-    if ((x & 0xffn) === 0n) {
-      x >>= 8n
-      tz += 8
-    }
-    if ((x & 0xfn) === 0n) {
-      x >>= 4n
-      tz += 4
-    }
-    if ((x & 0x3n) === 0n) {
-      x >>= 2n
-      tz += 2
-    }
-    if ((x & 1n) === 0n) tz += 1
-    return tz
-  }
-
-  /**
-   * Divide out all factors of 5 from a positive bigint via large powers (repeated squaring).
-   * Returns the cofactor and the factor count.
-   */
-  static #stripFactors5(d: bigint): { rest: bigint; count: number } {
-    if (d % 5n !== 0n) return { rest: d, count: 0 }
-    const powers: bigint[] = [5n]
-    for (;;) {
-      const last = powers[powers.length - 1]
-      const next = last * last
-      if (next > d) break
-      powers.push(next)
-      if (powers.length > 20) break
-    }
-    let rest = d
-    let count = 0
-    for (let k = powers.length - 1; k >= 0; k--) {
-      const pk = powers[k]
-      const step = 1 << k
-      while (rest % pk === 0n) {
-        rest /= pk
-        count += step
-      }
-    }
-    return { rest, count }
-  }
-
-  /**
-   * Exact terminating quotient of coefficients, or `undefined` when the denominator has a
-   * prime factor other than 2 or 5 (after cancelling gcd). Exponent is adjusted; coefficient
-   * growth is capped at {@link Decimal.MAX_DIGITS}. Factors of 2/5 are stripped in bulk and
-   * the result digit count is estimated before a single multiply (no digit counts in a loop).
-   */
-  static #exactTerminating(
-    i1: bigint,
-    e1: number,
-    i2: bigint,
-    e2: number
-  ): { i: bigint; e: number } | undefined {
-    const sign = i1 < 0n !== i2 < 0n ? -1n : 1n
-    let n = absBig(i1)
-    let d = absBig(i2)
-    const g = gcdBig(n, d)
-    n /= g
-    d /= g
-    const twos = Decimal.#trailingZeros2(d)
-    if (twos > 0) d >>= BigInt(twos)
-    const fives = Decimal.#stripFactors5(d)
-    d = fives.rest
-    if (d !== 1n) return undefined
-    const a = twos
-    const b = fives.count
-    const e = e1 - e2 - a - b
-    if (a > 0 || b > 0) {
-      // digits(n * 5^a * 2^b) <= digits(n) + floor(a*log10(5) + b*log10(2)) + 1
-      const nDigits = Decimal.#digitLength(n)
-      const growth = Math.floor(a * Math.log10(5) + b * Math.log10(2)) + 1
-      if (nDigits + growth - 1 > Decimal.MAX_DIGITS) {
-        throw new RangeError('result exceeds 10000 digits')
-      }
-      if (a > 0) n *= 5n ** BigInt(a)
-      if (b > 0) n *= 2n ** BigInt(b)
-      if (Decimal.#digitLength(n) > Decimal.MAX_DIGITS) {
-        throw new RangeError('result exceeds 10000 digits')
-      }
-    }
-    return { i: sign * n, e }
   }
 
   /**
@@ -571,8 +460,7 @@ export class Decimal {
   }
 
   /**
-   * Exact sum of this and `x`. Result significant digits and intermediate alignment work are
-   * bounded by {@link Decimal.MAX_DIGITS} (independent of {@link Decimal.MAX_EXPONENT}).
+   * Exact sum of this and `x`. The result must fit {@link Decimal.MAX_DIGITS} significant digits.
    * Near the digit cap each add is on the order of 0.2 ms; size-limit untrusted running totals.
    * @param x Addend.
    * @example
@@ -582,15 +470,7 @@ export class Decimal {
     const b = decimal(x)
     if (this.#i === 0n) return Decimal.#fromIE(b.#i, b.#e)
     if (b.#i === 0n) return Decimal.#fromIE(this.#i, this.#e)
-    const d1 = this.#digitCount()
-    const d2 = b.#digitCount()
     const e = Math.min(this.#e, b.#e)
-    // Upper bound on aligned sum digits (incl. carry): max(e1+d1, e2+d2) - min(e1,e2) + 1.
-    // Allow one carry digit above MAX_DIGITS; normalize then enforces the hard cap.
-    const span = Math.max(this.#e + d1, b.#e + d2) - e + 1
-    if (span > Decimal.MAX_DIGITS + 1) {
-      throw new RangeError('result exceeds 10000 digits')
-    }
     const ai = this.#i * pow10(this.#e - e)
     const bi = b.#i * pow10(b.#e - e)
     return Decimal.#fromIE(ai + bi, e)
@@ -605,114 +485,64 @@ export class Decimal {
   }
 
   /**
-   * Exact product of this and `x`. Checks `digits(this) + digits(x)` before multiplying.
+   * Exact product of this and `x`. The result must fit {@link Decimal.MAX_DIGITS} significant
+   * digits.
    * @param x Multiplier.
    */
   mul(x: DecimalInput): Decimal {
     const b = decimal(x)
-    Decimal.#assertDigitsBound(this.#digitCount() + b.#digitCount())
     return Decimal.#fromIE(this.#i * b.#i, this.#e + b.#e)
   }
 
   /**
-   * Quotient rounded to `precision` fractional digits. Exponents are factored out so work is
-   * bounded by {@link Decimal.MAX_DIGITS}; an exact terminating result of any allowed exponent
-   * succeeds when its significant digit count fits.
+   * Quotient rounded to `precision` fractional digits (default 20), exact or not:
+   * `decimal('1e-30').div(1)` is 0 unless `precision` reaches 30. Bounds apply to the rounded
+   * result.
    * @param x Divisor.
    * @param opts Precision and rounding mode.
+   * @throws {RangeError} for a `precision` out of range or an unknown rounding mode.
    */
   div(x: DecimalInput, opts?: DivOptions): Decimal {
-    const precision = opts?.precision ?? Decimal.defaultPrecision
+    const precision = opts?.precision ?? DEFAULT_PRECISION
     const rounding = opts?.rounding ?? 'halfEven'
     Decimal.#assertDivPrecision(precision)
+    Decimal.#assertRounding(rounding)
     const b = decimal(x)
     if (b.#i === 0n) {
       throw new ZeroDivisionError('division by zero')
     }
-    const exact = Decimal.#exactTerminating(this.#i, this.#e, b.#i, b.#e)
-    if (exact !== undefined) {
-      return Decimal.#fromIE(exact.i, exact.e).round(precision, rounding)
-    }
-    return this.#scaleRound(this.#i, b.#i, this.#e - b.#e, precision, rounding)
+    return Decimal.#scaleRound(this.#i, b.#i, this.#e - b.#e, precision, rounding)
   }
 
   /**
    * Rounds to `precision` fractional digits (negative precision rounds to tens, hundreds, ...).
-   * `precision` must be an integer in `[-MAX_EXPONENT, MAX_PRECISION]`. When the rounding
-   * unit is larger than this value's magnitude, returns 0 or `±10^(-precision)` without
-   * building a huge power of ten. The digit bound applies to the rounded result (not a looser
-   * pre-estimate).
+   * `precision` must be an integer in `[-MAX_EXPONENT, MAX_PRECISION]`. The digit bound applies to
+   * the rounded result.
    * @param precision Fractional digits (may be negative).
    * @param rounding Rounding mode (default halfEven).
+   * @throws {RangeError} for a `precision` out of range or an unknown rounding mode.
    */
   round(precision: number, rounding: RoundingMode = 'halfEven'): Decimal {
     Decimal.#assertRoundPrecision(precision)
+    Decimal.#assertRounding(rounding)
     if (-this.#e <= precision) {
       return Decimal.#fromIE(this.#i, this.#e)
     }
-    const digs = this.#digitCount()
-    if (digs === 0) return Decimal.#fromIE(0n, 0)
-    const msdExp = this.#e + digs - 1
-    const unitExp = -precision
-    if (msdExp < unitExp) {
-      return this.#roundBelowUnit(precision, rounding)
-    }
-    return this.#scaleRound(this.#i, 1n, this.#e, precision, rounding)
+    return Decimal.#scaleRound(this.#i, 1n, this.#e, precision, rounding)
   }
 
   /**
-   * Round when `|this| < 10^(-precision)`: result is 0 or `±10^(-precision)`.
-   */
-  #roundBelowUnit(precision: number, mode: RoundingMode): Decimal {
-    const sign = this.#i < 0n ? -1n : 1n
-    const absI = this.#i < 0n ? -this.#i : this.#i
-    const p = -precision - this.#e
-    let cmpHalf: -1 | 0 | 1
-    if (p > Decimal.MAX_EXPONENT || p > digitLengthAbs(absI) + 2) {
-      cmpHalf = -1
-    } else {
-      const twice = absI << 1n
-      const threshold = pow10(p)
-      cmpHalf = twice < threshold ? -1 : twice > threshold ? 1 : 0
-    }
-    let up = false
-    switch (mode) {
-      case 'halfEven':
-        up = cmpHalf > 0
-        break
-      case 'halfUp':
-        up = cmpHalf >= 0
-        break
-      case 'halfDown':
-        up = cmpHalf > 0
-        break
-      case 'up':
-        up = true
-        break
-      case 'down':
-        up = false
-        break
-      case 'ceil':
-        up = sign > 0n
-        break
-      case 'floor':
-        up = sign < 0n
-        break
-    }
-    if (!up) return Decimal.#fromIE(0n, 0)
-    return Decimal.#fromIE(sign, -precision)
-  }
-
-  /**
-   * Square root rounded to `precision` fractional digits. Exponents are factored out so work is
-   * bounded by {@link Decimal.MAX_DIGITS}; a perfect-square result of any allowed exponent
-   * succeeds when its significant digit count fits.
+   * Square root rounded to `precision` fractional digits (default 20), exact or not:
+   * `decimal('1e-50').sqrt()` is 0 unless `precision` reaches 25. Bounds apply to the rounded
+   * result.
    * @param opts Precision and rounding mode.
+   * @throws {RangeError} for a `precision` out of range or an unknown rounding mode.
    */
   sqrt(opts?: DivOptions): Decimal {
-    const precision = opts?.precision ?? Decimal.defaultPrecision
+    const precision = opts?.precision ?? DEFAULT_PRECISION
     const rounding = opts?.rounding ?? 'halfEven'
     Decimal.#assertDivPrecision(precision)
+    Decimal.#assertRounding(rounding)
     if (this.#i < 0n) {
       throw new ValueError('square root of a negative number')
     }
@@ -720,37 +550,14 @@ export class Decimal {
       return decimal(0)
     }
     // Factor exponent: i * 10^e = coeff * 10^(2*half) with coeff = i or i*10.
-    let coeff = this.#i
-    let halfExp = this.#e
-    if (halfExp % 2 !== 0) {
-      coeff *= 10n
-      halfExp -= 1
-    }
-    halfExp = halfExp / 2
-    const coeffDigits = Decimal.#digitLength(coeff)
-    Decimal.#assertDigitsBound(coeffDigits)
-    const { root, exact } = isqrtRoot(coeff)
-    if (exact) {
-      return Decimal.#fromIE(root, halfExp).round(precision, rounding)
-    }
-    // s ≈ sqrt(coeff) * 10^(halfExp + precision + 1); round off one guard digit.
-    const g = halfExp + precision + 1
-    if (g < 0) {
-      return Decimal.#fromIE(root, halfExp).round(precision, rounding)
-    }
-    if (coeffDigits + 2 * g > 2 * Decimal.MAX_DIGITS) {
-      throw new RangeError('result exceeds 10000 digits')
-    }
-    if (Math.ceil((coeffDigits + 2 * g) / 2) + 1 > Decimal.MAX_DIGITS + 1) {
-      throw new RangeError('result exceeds 10000 digits')
-    }
-    const N = coeff * pow10(2 * g)
-    const scaled = isqrtRoot(N)
-    const d = 10n
-    return Decimal.#fromIE(
-      roundQuotient(scaled.root / d, scaled.root % d, d, rounding, !scaled.exact),
-      -precision
-    )
+    const odd = this.#e % 2 !== 0
+    const coeff = odd ? this.#i * 10n : this.#i
+    const halfExp = (odd ? this.#e - 1 : this.#e) / 2
+    // Rounding boundaries fall on whole root units, so a sticky digit stands in for the rest.
+    const scale = Math.max(0, halfExp + precision + 1)
+    const { root, exact } = isqrtRoot(coeff * pow10(2 * scale))
+    const sticky = root * 10n + (exact ? 0n : 1n)
+    return Decimal.#scaleRound(sticky, 1n, halfExp - scale - 1, precision, rounding)
   }
 
   /**
@@ -761,44 +568,42 @@ export class Decimal {
   }
 
   /**
-   * Canonical decimal string.
+   * Canonical decimal string: plain notation while that pads at most 64 zeros, scientific form
+   * (`1e+65`, `1.5e-70`) past that, so its length follows the significant digits and not the
+   * exponent. {@link decimal} parses both forms; {@link Decimal.toPlainString} always expands.
    */
   toString(): string {
-    let s = this.#i.toString()
-    let m = ''
-    if (s.startsWith('-')) {
-      s = s.slice(1)
-      m = '-'
-    }
-    if (this.#e > 0) {
-      return m + s + '0'.repeat(this.#e)
-    }
-    if (this.#e < 0) {
-      if (-this.#e >= s.length) {
-        return m + '0.' + '0'.repeat(-this.#e - s.length) + s
-      }
-      return m + s.slice(0, s.length + this.#e) + '.' + s.slice(s.length + this.#e)
-    }
-    return m + s
+    const padding = this.#e > 0 ? this.#e : -this.#e - this.#digitCount()
+    if (padding <= MAX_PLAIN_PADDING) return this.toPlainString()
+    const digits = absBig(this.#i).toString()
+    const fraction = digits.length > 1 ? `.${digits.slice(1)}` : ''
+    const exponent = this.#e + digits.length - 1
+    const sign = this.#i < 0n ? '-' : ''
+    return `${sign}${digits.slice(0, 1)}${fraction}e${exponent < 0 ? '' : '+'}${String(exponent)}`
   }
 
   /**
-   * Number nearest to this Decimal. Builds at most 17 significant digits plus an exponent
-   * (never the full plain `toString()`), so extreme exponents stay cheap.
+   * Plain notation at any magnitude: up to `MAX_DIGITS + MAX_EXPONENT` characters, so a few bytes
+   * of untrusted input can expand 1000 times over. Prefer `toString`.
+   */
+  toPlainString(): string {
+    const digits = absBig(this.#i).toString()
+    const sign = this.#i < 0n ? '-' : ''
+    if (this.#e >= 0) {
+      return sign + digits + '0'.repeat(this.#e)
+    }
+    if (-this.#e >= digits.length) {
+      return sign + '0.' + '0'.repeat(-this.#e - digits.length) + digits
+    }
+    return sign + digits.slice(0, this.#e) + '.' + digits.slice(this.#e)
+  }
+
+  /**
+   * Number nearest to this Decimal, read from the coefficient and exponent, so extreme exponents
+   * stay cheap.
    */
   toNumber(): number {
-    if (this.#i === 0n) return 0
-    const neg = this.#i < 0n
-    const abs = neg ? -this.#i : this.#i
-    const digs = this.#digitCount()
-    const keep = digs > 17 ? 17 : digs
-    const drop = digs - keep
-    const top = drop > 0 ? abs / pow10(drop) : abs
-    const exp = this.#e + drop
-    const body = top.toString()
-    const signed = neg ? '-' + body : body
-    if (exp === 0) return Number(signed)
-    return Number(signed + 'e' + String(exp))
+    return Number(`${String(this.#i)}e${String(this.#e)}`)
   }
 
   /**
@@ -833,6 +638,8 @@ export class Decimal {
    * Equal values of any rank-1 kind return `0` (no unit/kind tie-break). The `compare`
    * operator keeps those tie-breaks for sorted containers.
    * @param x Other value.
+   * @throws {TypeError} for `NaN`.
+   * @throws {ValueError} for anything else that is not a number, bigint, Decimal, or parsable string.
    */
   compare(x: DecimalInput): -1 | 0 | 1 {
     if (typeof x === 'number') {
@@ -847,26 +654,24 @@ export class Decimal {
   }
 
   /**
-   * Semantic equality. Identical to {@link Decimal.protocolEquals} for Decimal, number,
-   * bigint, and branded foreign Decimals; string inputs stay numeric-only.
+   * Semantic equality. Identical to {@link Decimal.protocolEquals} for everything but strings,
+   * which compare numerically with no unit check. Anything unparsable is `false`, while the
+   * ordering methods throw on it, as {@link Decimal.compare} does.
    * @param x Other value.
    */
-  eq(x: DecimalInput): boolean {
-    if (
-      typeof x === 'number' ||
-      typeof x === 'bigint' ||
-      x instanceof Decimal ||
-      isDecimalBrand(x)
-    ) {
-      return this.protocolEquals(x)
+  eq(x: unknown): boolean {
+    if (typeof x !== 'string') return this.protocolEquals(x)
+    try {
+      return this.numericCompare(decimal(x)) === 0
+    } catch {
+      return false
     }
-    const o = decimal(x)
-    return this.#i === o.#i && this.#e === o.#e
   }
 
   /**
    * True when this is strictly less than `x`.
    * @param x Other value.
+   * @throws Whatever {@link Decimal.compare} throws.
    */
   lt(x: DecimalInput): boolean {
     return this.compare(x) < 0
@@ -875,6 +680,7 @@ export class Decimal {
   /**
    * True when this is less than or equal to `x`.
    * @param x Other value.
+   * @throws Whatever {@link Decimal.compare} throws.
    */
   lte(x: DecimalInput): boolean {
     return this.compare(x) <= 0
@@ -883,6 +689,7 @@ export class Decimal {
   /**
    * True when this is strictly greater than `x`.
    * @param x Other value.
+   * @throws Whatever {@link Decimal.compare} throws.
    */
   gt(x: DecimalInput): boolean {
     return this.compare(x) > 0
@@ -904,6 +711,7 @@ export class Decimal {
   /**
    * True when this is greater than or equal to `x`.
    * @param x Other value.
+   * @throws Whatever {@link Decimal.compare} throws.
    */
   gte(x: DecimalInput): boolean {
     return this.compare(x) >= 0
@@ -914,11 +722,8 @@ export class Decimal {
    * exact-binary. Foreign branded Decimals convert via their brand method.
    */
   numericCompare(o: unknown): number | undefined {
-    if (o instanceof Decimal) {
-      return compareIE(this.#i, this.#e, o.#i, o.#e, this.#digitCount(), o.#digitCount())
-    }
     if (isDecimalBrand(o)) {
-      const d = coerceDecimal(o)
+      const d = decimal(o as DecimalInput)
       return compareIE(this.#i, this.#e, d.#i, d.#e, this.#digitCount(), d.#digitCount())
     }
     if (typeof o === 'bigint') {
@@ -978,9 +783,10 @@ export class Decimal {
     return this.add(toDecimalInput(o))
   }
 
-  [protocol.sub](o: unknown): Decimal {
+  [protocol.sub](o: unknown, reflected = false): Decimal {
     assertSameCurrency(this, o)
-    return this.sub(toDecimalInput(o))
+    const input = toDecimalInput(o)
+    return reflected ? this.mul(-1).add(input) : this.sub(input)
   }
 
   [protocol.mul](o: unknown): Decimal {
@@ -988,9 +794,10 @@ export class Decimal {
     return this.mul(toDecimalInput(o))
   }
 
-  [protocol.div](o: unknown): Decimal {
+  [protocol.div](o: unknown, reflected = false): Decimal {
     assertSameCurrency(this, o)
-    return this.div(toDecimalInput(o))
+    const input = toDecimalInput(o)
+    return reflected ? decimal(input).div(this) : this.div(input)
   }
 
   [protocol.abs](): Decimal {
@@ -1001,7 +808,7 @@ export class Decimal {
 Object.defineProperty(Decimal.prototype, DECIMAL_BRAND, {
   value: function decimalBrand(this: Decimal): string {
     // Currency overrides toString for display; brand always returns the plain canonical form.
-    return Decimal.prototype.toString.call(this)
+    return Decimal.prototype.toPlainString.call(this)
   },
   enumerable: false,
   configurable: false,

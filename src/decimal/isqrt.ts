@@ -1,5 +1,5 @@
 /** Bit length of a non-negative bigint (0 for 0n). Hex path avoids a full binary string. */
-function bitLength(n: bigint): number {
+export function bitLength(n: bigint): number {
   if (n === 0n) return 0
   const hex = n.toString(16)
   return (hex.length - 1) * 4 + (32 - Math.clz32(parseInt(hex[0], 16)))
