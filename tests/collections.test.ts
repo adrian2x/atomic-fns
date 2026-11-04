@@ -31,9 +31,11 @@ import {
   getSubsetPairComparisons,
   resetSubsetPairComparisons
 } from '../src/collections/internal.js'
-import { decimal } from '../src/decimal/index.js'
+import { isPlainObject } from '../src/collections/object.js'
+import { Decimal, decimal } from '../src/decimal/index.js'
 import { Currency } from '../src/i18n/currency.js'
 import { IntlDate } from '../src/i18n/date/index.js'
+import { deepEqual } from '../src/operators/equality.js'
 import { expectFast } from './helpers/perf.js'
 
 describe('collections', () => {
@@ -206,6 +208,150 @@ describe('collections', () => {
     expect(matches([[1, 1]])([[1]])).toBe(false)
     expect(matches([[decimal(1), decimal(1)]])([[decimal(1)]])).toBe(false)
     expect(matches([1, 1])([1])).toBe(false)
+  })
+
+  it('R19-A: Date leaf inside array-element object matches', () => {
+    const d = (n: number) => new Date(n)
+    expect(matches({ at: d(5) })({ at: d(5) })).toBe(true)
+    expect(matches({ t: [d(5)] })({ t: [d(5)] })).toBe(true)
+    expect(matches({ t: [{ at: d(5) }] })({ t: [{ at: d(5) }] })).toBe(true)
+    expect(matches({ t: [{ at: d(5) }] })({ t: [{ at: d(6) }] })).toBe(false)
+  })
+
+  it('R19-A: matches agrees with SPEC-R42 reference over 5000 random pairs', () => {
+    // Reference: no index; plain recursion; leaf equality via deepEqual (matchDeep / Lodash
+    // isMatch baseIsEqual; SPEC-R42 names eq, which is false for Date/RegExp pairs).
+    // Arrays: Lodash subset + length rule.
+    function refMatch(shape: unknown, obj: unknown, top = true): boolean {
+      if (Array.isArray(shape)) {
+        if (shape.length === 0) return top || Array.isArray(obj)
+        if (!Array.isArray(obj) || obj.length < shape.length) return false
+        for (const item of shape) {
+          let found = false
+          for (const candidate of obj) {
+            if (refMatch(item, candidate, false)) {
+              found = true
+              break
+            }
+          }
+          if (!found) return false
+        }
+        return true
+      }
+      if (isPlainObject(shape)) {
+        const shapeKeys = Object.keys(shape)
+        if (shapeKeys.length === 0) {
+          return top || (obj !== null && typeof obj === 'object' && !Array.isArray(obj))
+        }
+        if (obj === null || typeof obj !== 'object') return false
+        const record = obj as Record<string, unknown>
+        for (const key of shapeKeys) {
+          const expected = shape[key]
+          if (expected === undefined && !Object.hasOwn(obj, key)) return false
+          if (!refMatch(expected, record[key], false)) return false
+        }
+        return true
+      }
+      return deepEqual(shape, obj)
+    }
+
+    // Deterministic LCG
+    let seed = 0xc0ffee ^ 19
+    const rnd = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return seed / 0x100000000
+    }
+    const pick = <T>(xs: readonly T[]): T => {
+      const v = xs[Math.floor(rnd() * xs.length)]
+      if (v === undefined) throw new Error('empty pool')
+      return v
+    }
+
+    function freshLeaf(): unknown {
+      const kind = Math.floor(rnd() * 12)
+      switch (kind) {
+        case 0:
+          return null
+        case 1:
+          return rnd() < 0.5
+        case 2:
+          return Math.floor(rnd() * 5)
+        case 3:
+          return pick(['a', 'b', 'c'] as const)
+        case 4:
+          return undefined
+        case 5:
+          return new Date(Math.floor(rnd() * 20))
+        case 6:
+          return decimal(Math.floor(rnd() * 5))
+        case 7:
+          return new Currency(Math.floor(rnd() * 3), pick(['USD', 'EUR'] as const))
+        case 8:
+          return new IntlDate(Math.floor(rnd() * 20))
+        case 9:
+          return Object(Math.floor(rnd() * 3))
+        case 10:
+          return Object(pick(['x', 'y'] as const))
+        default:
+          return Object(rnd() < 0.5)
+      }
+    }
+
+    function gen(depth: number): unknown {
+      if (depth <= 0 || rnd() < 0.45) return freshLeaf()
+      if (rnd() < 0.5) {
+        const n = 1 + Math.floor(rnd() * 3)
+        return Array.from({ length: n }, () => gen(depth - 1))
+      }
+      const n = 1 + Math.floor(rnd() * 3)
+      const o: Record<string, unknown> = {}
+      for (let i = 0; i < n; i++) o['k' + String(i)] = gen(depth - 1)
+      return o
+    }
+
+    /** Rebuild a value that deepEqual-matches `v` (fresh instances for class leaves). */
+    function twin(v: unknown): unknown {
+      if (v === null || typeof v !== 'object') return v
+      if (Array.isArray(v)) return v.map(twin)
+      if (v instanceof Date) return new Date(v.getTime())
+      if (v instanceof Currency) return v.clone()
+      if (v instanceof IntlDate) return new IntlDate(v.valueOf())
+      if (v instanceof Decimal) return v.clone()
+      if (isPlainObject(v)) {
+        const o: Record<string, unknown> = {}
+        for (const key of Object.keys(v)) o[key] = twin(v[key])
+        return o
+      }
+      if (v instanceof Number) return Object(Number(v))
+      if (v instanceof String) return Object(String(v))
+      if (v instanceof Boolean) return Object(Boolean(v))
+      return v
+    }
+
+    function refMatches(shape: unknown, obj: unknown): boolean {
+      // matches() short-circuits non-object top-level shapes (incl. null) to false.
+      if (shape === null || typeof shape !== 'object') return false
+      return refMatch(shape, obj, true)
+    }
+
+    let diffs = 0
+    for (let i = 0; i < 5000; i++) {
+      const depth = 1 + Math.floor(rnd() * 4)
+      // Top-level shape must be a container so the pair exercises partial matching.
+      let shape: unknown
+      do {
+        shape = gen(depth)
+      } while (
+        shape === null ||
+        typeof shape !== 'object' ||
+        !(Array.isArray(shape) || isPlainObject(shape))
+      )
+      const value = rnd() < 0.55 ? twin(shape) : gen(depth)
+      const got = matches(shape)(value)
+      const want = refMatches(shape, value)
+      if (got !== want) diffs += 1
+    }
+    expect(diffs).toBe(0)
   })
 
   it('indexOf rejects length-driven array-likes before allocating', () => {

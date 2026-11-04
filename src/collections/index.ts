@@ -423,7 +423,9 @@ function shapeDescendantPureLeafKeys(
 
 /**
  * Pure leaf keys under a target element for posting-list indexing. Each object node is expanded
- * once per session (shared-reference DAGs stay linear).
+ * once per session (shared-reference DAGs stay linear). Date/RegExp/etc leaves are keyed the same
+ * way as on the shape side (SPEC-R42 leaf equality), so a Date nested in an array-element object
+ * posts under its leaf key.
  */
 function collectTargetLeafKeys(el: unknown, keys: CanonicalKeySession): Set<string> {
   if (el === null || typeof el !== 'object') {
@@ -451,7 +453,11 @@ function collectTargetLeafKeys(el: unknown, keys: CanonicalKeySession): Set<stri
     for (const key of Object.keys(el)) {
       for (const k of collectTargetLeafKeys(el[key], keys)) into.add(k)
     }
+    return into
   }
+  // Date/RegExp/etc: same leaf key as shapeDescendantPureLeafKeys.
+  const info = canonicalKeyInfo(el, keys)
+  if (info !== undefined && info.pure && !info.hashed) into.add(info.key)
   return into
 }
 
