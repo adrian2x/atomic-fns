@@ -33,6 +33,28 @@ function nativeMinimalDaysPresent(): boolean {
 }
 
 describe('week calendar math', () => {
+  it('weeksInYear stays 52 or 53 for every safe integer year', () => {
+    expect(weeksInYear(1e15)).toBe(weeksInYear(1e15 % 400))
+    expect(weeksInYear(Number.MAX_SAFE_INTEGER)).toBe(52)
+    expect(weeksInYear(-Number.MAX_SAFE_INTEGER)).toBe(52)
+    expect(() => weeksInYear(2 ** 53)).toThrow(RangeError)
+    expect(() => weeksInYear(1e300)).toThrow(RangeError)
+  })
+
+  it('a -u-rg- override picks the region for minimal days too', () => {
+    expect(localeWeekRule('en-GB-u-rg-uszzzz', () => ({ firstDay: 7 }))).toEqual({
+      firstDay: 0,
+      minimalDays: 1
+    })
+    expect(localeWeekRule('en-US-u-rg-gbzzzz', () => ({ firstDay: 1 }))).toEqual({
+      firstDay: 1,
+      minimalDays: 4
+    })
+    expect(localeWeekRule('en-US-u-rg-gbzzzz', () => undefined).minimalDays).toBe(4)
+    const week = new IntlDate('2024-12-29T12:00:00Z', { locale: 'en-GB-u-rg-uszzzz', utc: true })
+    expect(week.weeksInYear()).toBe(52)
+  })
+
   it('ISO weekOfYear vectors', () => {
     const cases: [number, number, number, number, number][] = [
       [2020, 12, 31, 53, 2020],

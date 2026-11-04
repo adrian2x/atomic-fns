@@ -1,15 +1,21 @@
+import vm from 'node:vm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
+  addDuration,
+  asDate,
   dayOfYear,
   daysInMonth,
   daysInYear,
   IntlDate,
   isLeapYear,
+  lastDayOfMonth,
   maxDate,
   minDate,
   weekOfYear,
-  weeksInYear
+  weeksInYear,
+  type DurationObject
 } from '../src/i18n/date/index.js'
+import { Duration } from '../src/i18n/duration.js'
 import { compare, eq } from '../src/operators/index.js'
 import { protocol } from '../src/operators/protocol.js'
 import { ValueError } from '../src/globals/index.js'
@@ -1072,6 +1078,11 @@ describe('SPEC-R89/R90/R91 Temporal-consistent arithmetic', () => {
         'Pacific/Kiritimati'
       ] as const
       const units = ['days', 'weeks', 'months', 'years'] as const
+      const HOUR = 3_600_000
+      const DAY = 24 * HOUR
+      const offsets = [-25, -24, -2, -1, -0.75, -0.5, 0, 0.5, 0.75, 1, 2, 24, 25].map(
+        (h) => h * HOUR
+      )
 
       function mulberry32(seed: number) {
         let a = seed >>> 0
@@ -1085,79 +1096,438 @@ describe('SPEC-R89/R90/R91 Temporal-consistent arithmetic', () => {
       }
 
       const TemporalApi = globalThis.Temporal
+
+      function transitionsOf(zone: string): number[] {
+        const found: number[] = []
+        let at = TemporalApi.ZonedDateTime.from({ timeZone: zone, year: 1999, month: 1, day: 1 })
+        for (;;) {
+          const next = at.getTimeZoneTransition('next')
+          if (next === null || next.year > 2040) return found
+          found.push(next.epochMilliseconds)
+          at = next
+        }
+      }
+
+      /** The answer from Temporal, or undefined only when Temporal itself throws. */
+      function fromTemporal<T>(ask: () => T): T | undefined {
+        try {
+          return ask()
+        } catch {
+          return undefined
+        }
+      }
+
       let skipped = 0
       let total = 0
+
+      function expectInstantMatches(actual: () => number, temporal: () => number) {
+        total += 1
+        const expected = fromTemporal(temporal)
+        if (expected === undefined) skipped += 1
+        else expect(actual()).toBe(expected)
+      }
+
+      function expectDiffMatches(
+        from: Temporal.ZonedDateTime,
+        to: Temporal.ZonedDateTime,
+        unit: (typeof units)[number]
+      ) {
+        total += 1
+        const options = { largestUnit: unit, smallestUnit: unit, roundingMode: 'trunc' } as const
+        const whole = fromTemporal(() => from.until(to, options)[unit])
+        // A calendar `until` can step past `to` inside a repeated hour; hours are the exact elapsed time
+        const exact = fromTemporal(() =>
+          from.until(to, { largestUnit: 'hours' }).total({ unit, relativeTo: from })
+        )
+        if (whole === undefined || exact === undefined) {
+          skipped += 1
+          return
+        }
+        const target = new IntlDate(to.epochMilliseconds)
+        expect(target.diff(from.epochMilliseconds, unit)).toBe(zeroNegZero(whole))
+        expect(target.diff(from.epochMilliseconds, unit, true)).toBeCloseTo(exact, 9)
+      }
 
       for (const zone of zones) {
         withTz(zone, () => {
           const rand = mulberry32(zone.length * 997 + 42)
-          for (let i = 0; i < 2000; i++) {
-            const t0 =
-              Date.UTC(1999 + Math.floor(rand() * 42), Math.floor(rand() * 12), 1) +
-              Math.floor(rand() * 28) * 86_400_000 +
-              Math.floor(rand() * 86_400_000)
-            const t1 =
-              Date.UTC(1999 + Math.floor(rand() * 42), Math.floor(rand() * 12), 1) +
-              Math.floor(rand() * 28) * 86_400_000 +
-              Math.floor(rand() * 86_400_000)
-            const s = Math.min(t0, t1)
-            const e = Math.max(t0, t1)
-            const a = new IntlDate(new Date(s))
-            const b = new IntlDate(new Date(e))
+          const below = (n: number) => Math.floor(rand() * n)
+          const pick = (list: readonly number[], fallback: number) =>
+            list[below(list.length)] ?? fallback
+          const transitions = transitionsOf(zone)
+          const anywhere = () =>
+            Date.UTC(1999 + below(42), below(12), 1) + below(28) * DAY + below(DAY)
 
-            let zdtS: Temporal.ZonedDateTime
-            let zdtE: Temporal.ZonedDateTime
-            try {
-              zdtS = TemporalApi.Instant.fromEpochMilliseconds(s).toZonedDateTimeISO(zone)
-              zdtE = TemporalApi.Instant.fromEpochMilliseconds(e).toZonedDateTimeISO(zone)
-            } catch {
-              skipped += 1
-              total += 1
-              continue
-            }
+          for (let i = 0; i < 700; i++) {
+            const anchor = pick(transitions, anywhere())
+            const near = () => anchor + pick(offsets, 0) + (rand() < 0.3 ? below(HOUR) : 0)
+            const s = near()
+            const e =
+              [near(), s + (below(81) - 40) * DAY + pick(offsets, 0), anywhere()][i % 3] ?? s
+            const zdtS = TemporalApi.Instant.fromEpochMilliseconds(s).toZonedDateTimeISO(zone)
+            const zdtE = TemporalApi.Instant.fromEpochMilliseconds(e).toZonedDateTimeISO(zone)
 
             for (const unit of units) {
-              total += 1
-              try {
-                const until = zdtS.until(zdtE, { largestUnit: unit })
-                expect(b.diff(a, unit)).toBe(until[unit])
-                if (unit === 'months' || unit === 'years') {
-                  const exact = until.total({ unit, relativeTo: zdtS })
-                  expect(b.diff(a, unit, true)).toBeCloseTo(exact, 3)
-                }
-              } catch {
-                skipped += 1
-              }
+              expectDiffMatches(zdtS, zdtE, unit)
+              expectDiffMatches(zdtE, zdtS, unit)
             }
 
-            total += 1
-            try {
-              expect(a.startOf('day').getTime()).toBe(zdtS.startOfDay().epochMilliseconds)
-            } catch {
-              skipped += 1
-            }
+            const a = new IntlDate(new Date(s))
+            expectInstantMatches(
+              () => a.startOf('day').getTime(),
+              () => zdtS.startOfDay().epochMilliseconds
+            )
 
             const sign = rand() < 0.5 ? -1 : 1
             const dur = {
-              years: sign * Math.floor(rand() * 3),
-              months: sign * Math.floor(rand() * 11),
-              days: sign * Math.floor(rand() * 28),
-              hours: sign * Math.floor(rand() * 48)
+              years: sign * below(3),
+              months: sign * below(11),
+              days: sign * below(28),
+              hours: sign * below(48)
             }
-            total += 1
-            try {
-              const added = zdtS.add(dur)
-              expect(a.add(dur).getTime()).toBe(added.epochMilliseconds)
-            } catch {
-              skipped += 1
-            }
+            expectInstantMatches(
+              () => a.add(dur).getTime(),
+              () => zdtS.add(dur).epochMilliseconds
+            )
           }
         })
       }
 
       expect(skipped / total).toBeLessThanOrEqual(0.01)
-    }
+    },
+    120_000
   )
+})
+
+describe('audit regressions', () => {
+  const utcDate = (value: ConstructorParameters<typeof IntlDate>[0]) =>
+    mockDate(value, { utc: true })
+  const MAX_TIME = 8.64e15
+  // 01:30 EDT, then 01:10 EST forty minutes later, on a fall-back Sunday that is also the 1st
+  const firstPass = '2026-11-01T05:30:00Z'
+  const secondPass = '2026-11-01T06:10:00Z'
+
+  it('diff keeps the sign of elapsed time inside a repeated hour', () => {
+    withTz('America/New_York', () => {
+      const earlier = mockDate(firstPass)
+      const later = mockDate(secondPass)
+      expect(later.diff(earlier, 'minutes')).toBe(40)
+      for (const unit of ['days', 'weeks', 'months', 'quarters', 'years'] as const) {
+        expect(later.diff(earlier, unit)).toBe(0)
+        expect(earlier.diff(later, unit)).toBe(0)
+      }
+      expect(later.from(earlier)).toBe('in 40 minutes')
+      expect(earlier.from(later)).toBe('40 minutes ago')
+      expect(earlier.to(later)).toBe('in 40 minutes')
+      expect(later.to(earlier)).toBe('40 minutes ago')
+    })
+  })
+
+  it('whole units stop at the last anchor that does not pass the end', () => {
+    withTz('America/New_York', () => {
+      const elapsed = mockDate('2024-03-10T03:15:00').diff('2024-03-09T02:30:00', 'hours', true)
+      expect(elapsed).toBe(23.75)
+      expect(mockDate('2024-03-10T03:15:00').diff('2024-03-09T02:30:00', 'days')).toBe(0)
+      expect(mockDate('2024-11-03T06:30:00Z').diff('2024-11-10T01:30:00', 'days')).toBe(-6)
+      expect(mockDate('2024-11-03T06:30:00Z').diff('2024-11-10T01:30:00', 'weeks')).toBe(0)
+      expect(mockDate('2004-04-04T03:00:00').diff('2003-08-04T02:59:59.999', 'months')).toBe(7)
+    })
+  })
+
+  it('exact diff measures from the base instant, not its wall time', () => {
+    withTz('America/New_York', () => {
+      const earlier = mockDate(firstPass)
+      const later = mockDate(secondPass)
+      expect(later.diff(earlier, 'days', true)).toBeCloseTo(40 / 1500, 12)
+      expect(earlier.diff(later, 'days', true)).toBeCloseTo(-40 / 1500, 12)
+    })
+  })
+
+  it('diff across a skipped day counts nothing for the day that never happened', () => {
+    withTz('Pacific/Apia', () => {
+      const noon = mockDate('2011-12-31T12:00:00')
+      expect(noon.diff(noon, 'days')).toBe(0)
+      expect(mockDate('2011-12-31T11:00:00').diff(noon, 'days')).toBe(0)
+      expect(mockDate('2011-12-31T11:00:00').diff(noon, 'days', true)).toBeCloseTo(-1 / 24, 12)
+      expect(mockDate('2011-12-31T11:00:00').diff('2012-01-01T12:00:00', 'days')).toBe(-1)
+      expect(noon.diff('2011-12-28T12:00:00', 'days')).toBe(3)
+    })
+    withTz('Pacific/Kiritimati', () => {
+      // Eight months back from August 31 is the skipped December 31, which resolves to January 1
+      expect(mockDate('1995-01-01T00:45:00').diff('1995-08-31T01:45:00', 'months')).toBe(-8)
+    })
+  })
+
+  it('diff measures anchors past the Date range', () => {
+    withTz('America/New_York', () => {
+      const last = new IntlDate(MAX_TIME)
+      expect(last.diff(-MAX_TIME, 'years')).toBe(547_581)
+      expect(last.diff(-MAX_TIME, 'years', true)).toBeCloseTo(547_581.4, 0)
+      expect(new IntlDate(-MAX_TIME).diff(MAX_TIME, 'months')).toBe(-6_570_976)
+    })
+  })
+
+  it('endOf stays inside a unit that starts in a midnight gap', () => {
+    withTz('America/Havana', () => {
+      const gapDay = mockDate('2026-03-08T12:00:00')
+      expect(gapDay.endOf('day').toISOString()).toBe('2026-03-09T03:59:59.999Z')
+      expect(gapDay.endOf('week').toISOString()).toBe('2026-03-15T03:59:59.999Z')
+      expect(gapDay.add({ days: 1 }).startOf('day').getTime()).toBe(
+        gapDay.endOf('day').getTime() + 1
+      )
+      expect(mockDate('2012-04-15T12:00:00').endOf('month').toISOString()).toBe(
+        '2012-05-01T03:59:59.999Z'
+      )
+    })
+    withTz('Pacific/Apia', () => {
+      expect(mockDate('2010-09-26T12:00:00').endOf('day').toISOString()).toBe(
+        '2010-09-27T09:59:59.999Z'
+      )
+    })
+  })
+
+  it('endOf reaches a representable end whose unit starts before the Date range', () => {
+    const first = utcDate(-MAX_TIME)
+    expect(first.endOf('month').toISOString()).toBe('-271821-04-30T23:59:59.999Z')
+    expect(first.endOf('isoWeek').toISOString()).toBe('-271821-04-25T23:59:59.999Z')
+    expect(first.endOf('year').toISOString()).toBe('-271821-12-31T23:59:59.999Z')
+  })
+
+  it('UTC view reads comparison operands the way diff does', () => {
+    withTz('America/New_York', () => {
+      const view = IntlDate.UTC('2024-01-01T00:00:00')
+      expect(view.diff('2024-01-01T00:00:00')).toBe(0)
+      expect(view.isBefore('2024-01-01T00:00:00')).toBe(false)
+      expect(view.isAfter('2023-12-31T23:59:00')).toBe(true)
+      expect(view.isBetween('2023-12-31T23:59:00', '2024-01-01T00:01:00')).toBe(true)
+      expect(view.isBefore({ year: 2024, month: 1, day: 1 })).toBe(false)
+    })
+  })
+
+  it('values that are not dates are invalid, never the current time', () => {
+    for (const value of [true, false, [], [2024, 1, 1], new Map(), 1n]) {
+      expect(new IntlDate(value as never).isValid()).toBe(false)
+    }
+    expect(IntlDate.max([[] as never, 5])).toBe(5)
+    expect(IntlDate.max([undefined as never, 5])).toBe(5)
+  })
+
+  it('a Date from another realm keeps its instant', () => {
+    const foreign = vm.runInNewContext('new Date(86400000)') as Date
+    expect(new IntlDate(foreign).getTime()).toBe(86_400_000)
+    expect(asDate(foreign).getTime()).toBe(86_400_000)
+    expect(new IntlDate(86_400_000).isSame(foreign)).toBe(true)
+    expect(new IntlDate(0).compare(foreign)).toBe(-1)
+    expect(new IntlDate(new Date(Number.NaN)).compare(foreign)).toBe(1)
+    expect(new IntlDate(0).isSame({} as never)).toBe(false)
+  })
+
+  it('relative formatting of an invalid date says so instead of throwing', () => {
+    const invalid = mockDate(Number.NaN)
+    expect(invalid.fromNow()).toBe('Invalid Date')
+    expect(invalid.toNow()).toBe('Invalid Date')
+    expect(invalid.from(0)).toBe('Invalid Date')
+    expect(invalid.to(0, 'days')).toBe('Invalid Date')
+    expect(mockDate(0).from(null)).toBe('Invalid Date')
+    expect(mockDate(0).to(null)).toBe('Invalid Date')
+  })
+
+  it('toISODate and toISOTime split expanded years at the T', () => {
+    const bce = mockDate('-000001-06-15T12:00:00Z')
+    expect(bce.toISODate()).toBe('-000001-06-15')
+    expect(bce.toISOTime()).toBe('12:00:00.000Z')
+    expect(utcDate(MAX_TIME).toISODate()).toBe('+275760-09-13')
+    expect(utcDate(MAX_TIME).toISOTime()).toBe('00:00:00.000Z')
+  })
+
+  it('minDate and maxDate ignore numbers outside the Date range', () => {
+    expect(minDate([-1e20, 5])).toBe(5)
+    expect(maxDate([1e20, 7])).toBe(7)
+    expect(maxDate([Number.POSITIVE_INFINITY, 5])).toBe(5)
+    expect(minDate([undefined, 5], (value) => value ?? 0)).toBeUndefined()
+  })
+
+  it('toJSON serializes the instant', () => {
+    expect(JSON.stringify({ at: new IntlDate(0) })).toBe('{"at":"1970-01-01T00:00:00.000Z"}')
+    expect(JSON.stringify(new IntlDate(Number.NaN))).toBe('null')
+  })
+
+  it('asDate never lets a sign or padding reach engine parsing', () => {
+    for (const text of ['-2024-01-01', '-0001-01-01', '+2024-01-01', '-1']) {
+      expect(asDate(text).getTime()).toBeNaN()
+    }
+    expect(asDate(' 2024-02-30').getTime()).toBeNaN()
+    expect(asDate('\t2024-13-01\n').getTime()).toBeNaN()
+    expect(asDate('2024-01-01T10:00:00Z ').getTime()).toBe(Date.UTC(2024, 0, 1, 10))
+    withTz('America/New_York', () => {
+      expect(asDate(' 2024-01-01', true).getTime()).toBe(Date.UTC(2024, 0, 1))
+    })
+  })
+
+  it('asDate reads the 24:00 fraction and the year-only time form', () => {
+    expect(asDate('2024-01-01T24:00:00.0001').getTime()).toBeNaN()
+    expect(asDate('2024-01-01T24:00:00.000Z').getTime()).toBe(Date.UTC(2024, 0, 2))
+    withTz('America/New_York', () => {
+      expect(asDate('2024T10:00', true).getTime()).toBe(Date.UTC(2024, 0, 1, 10))
+      expect(asDate('2024 10:00', true).getTime()).toBe(Date.UTC(2024, 0, 1, 10))
+    })
+  })
+
+  it('asDate reads date-prefixed zone, meridiem and month-name forms', () => {
+    withTz('America/New_York', () => {
+      expect(asDate('2022-01-01 10:00:00 +0000').getTime()).toBe(Date.UTC(2022, 0, 1, 10))
+      expect(asDate('2022-01-01 10:00:00 UTC').getTime()).toBe(Date.UTC(2022, 0, 1, 10))
+      expect(asDate('2022-01-01 10:00:00 +0000 UTC').getTime()).toBe(Date.UTC(2022, 0, 1, 10))
+      expect(asDate('2022-01-01 10:00 PM').getTime()).toBe(new Date(2022, 0, 1, 22).getTime())
+      expect(asDate('2022-Jan-01').getTime()).toBe(new Date(2022, 0, 1).getTime())
+      expect(asDate('2022-dec-31T10:00', true).getTime()).toBe(Date.UTC(2022, 11, 31, 10))
+    })
+  })
+
+  it('asDate keeps range failures and word tails away from engine parsing', () => {
+    for (const text of [
+      '2024-02-30 10:00 PM',
+      '2024-13-01 10:00:00 UTC',
+      '2024-01-01 25:00 UTC',
+      '2024-Feb-30',
+      '2021-01-01junk',
+      '2021-01-01 junk',
+      '2021-01-01 10:00 junk',
+      '2021-01-01 10:00 pm junk',
+      '2024 10:00 junk',
+      '2021-Junk-01',
+      '2021-junk',
+      '2024-',
+      '2024-06-'
+    ]) {
+      expect(asDate(text).getTime()).toBeNaN()
+    }
+  })
+
+  it('month length comes from the calendar, not a Date', () => {
+    expect(new IntlDate(MAX_TIME).daysInMonth()).toBe(30)
+    expect(utcDate(MAX_TIME).daysInMonth()).toBe(30)
+    expect(daysInMonth(new Date(MAX_TIME))).toBe(30)
+    expect(lastDayOfMonth(2024, 1)).toBe(29)
+    expect(mockDate(Number.NaN).daysInMonth()).toBeNaN()
+    withTz('Pacific/Kiritimati', () => {
+      expect(mockDate('1994-12-15T12:00:00').daysInMonth()).toBe(31)
+    })
+    withTz('Asia/Manila', () => {
+      expect(mockDate('1844-12-15T12:00:00').daysInMonth()).toBe(31)
+    })
+  })
+
+  it('every year stays literal through local wall resolution', () => {
+    for (const year of [-400, -301, -1, 0, 50, 99, 100, 1900]) {
+      const date = new IntlDate({ year, month: 3, day: 15, hour: 12 })
+      expect(date.year).toBe(year)
+      expect(date.hour).toBe(12)
+      expect(date.add({ years: 1 }).year).toBe(year + 1)
+    }
+    expect(asDate('0050-01-01T24:00:00').getDate()).toBe(2)
+    expect(new IntlDate({ year: 50, month: 13, day: 1 }).year).toBe(51)
+  })
+
+  it('wall times just inside the Date minimum resolve', () => {
+    withTz('America/New_York', () => {
+      expect(new IntlDate(-MAX_TIME).add({ days: 1 }).add({ days: -1 }).getTime()).toBe(-MAX_TIME)
+      expect(asDate('-271821-04-19T23:59:00').getTime()).toBe(-8_639_999_982_298_000)
+    })
+  })
+
+  it('offset preference holds for offsets with seconds', () => {
+    withTz('Pacific/Apia', () => {
+      // 12:00 on the second July 4 of 1892, offset -11:26:56
+      const repeated = mockDate('1892-07-04T23:26:56Z')
+      expect(repeated.set({}).getTime()).toBe(repeated.getTime())
+      expect(repeated.startOf('second').getTime()).toBe(repeated.getTime())
+      expect(repeated.endOf('hour').getTime()).toBe(repeated.getTime() + 3_599_999)
+    })
+    withTz('Asia/Kolkata', () => {
+      expect(new IntlDate(-MAX_TIME).set({}).getTime()).toBe(-MAX_TIME)
+    })
+  })
+
+  it('every method throws RangeError for a result outside the Date range', () => {
+    const first = utcDate(-MAX_TIME)
+    const last = utcDate(MAX_TIME)
+    expect(() => mockDate(0).add({ years: 300_000 })).toThrow(RangeError)
+    expect(() => mockDate(0).set({ year: 300_000 })).toThrow(RangeError)
+    expect(() => mockDate(0).set({ year: 300_000, weekday: 1 })).toThrow('date out of range')
+    expect(() => first.startOf('year')).toThrow(RangeError)
+    expect(() => last.endOf('hour')).toThrow(RangeError)
+    expect(() => last.endOf('day')).toThrow(RangeError)
+    expect(new IntlDate({ year: 300_000 }).isValid()).toBe(false)
+  })
+
+  it('a.to(b) reads the same as b.from(a) on month-end pairs', () => {
+    const start = utcDate('2024-01-31')
+    const end = utcDate('2024-02-29')
+    expect(start.to(end)).toBe('in 1 month')
+    expect(start.to(end)).toBe(end.from(start))
+    expect(end.to(start)).toBe(start.from(end))
+  })
+
+  it('invalid receivers report NaN or a marker and still validate arguments', () => {
+    const invalid = mockDate(Number.NaN)
+    expect(invalid.daysInYear()).toBeNaN()
+    expect(invalid.inspect()).toBe('new IntlDate(NaN)')
+    expect(() => invalid.set({ bogus: 1 } as never)).toThrow(ValueError)
+    expect(() => invalid.diff(0, 'bogus' as 'days')).toThrow(ValueError)
+    expect(invalid.set({ year: 2024 })).not.toBe(invalid)
+    expect(() => mockDate(0).set({ year: 1.5 })).toThrow('date field "year" must be an integer')
+  })
+
+  it('copies keep the locale and clone(null) is invalid', () => {
+    const german = new IntlDate(0, { locale: 'de' })
+    expect(new IntlDate(german).locale).toBe('de')
+    expect(IntlDate.UTC(german).locale).toBe('de')
+    expect(new IntlDate(german, { locale: 'fr' }).locale).toBe('fr')
+    expect(new IntlDate(0).clone(german).locale).toBeUndefined()
+    expect(mockDate(0).clone(null).isValid()).toBe(false)
+    expect(mockDate(5).clone().getTime()).toBe(5)
+  })
+
+  it('constructor objects follow the field rules of set', () => {
+    expect(new IntlDate({ years: 2024 } as never).year).toBe(2024)
+    expect(new IntlDate({ year: 2024, month: 1, day: 1, weekday: 3 }).day).toBe(3)
+    expect(utcDate({ year: 2024, month: 1, day: 31, hour: 24, weekday: 4 }).day).toBe(1)
+    expect(() => new IntlDate({ year: '2024' } as never)).toThrow(ValueError)
+    expect(() => new IntlDate({ year: 1.5 })).toThrow('date field "year" must be an integer')
+    expect(() => new IntlDate({ foo: 1 } as never)).toThrow(/unknown date field/)
+  })
+
+  it('utcOffset never reports negative zero', () => {
+    withTz('Europe/London', () => {
+      expect(mockDate('2024-01-15T12:00:00Z').utcOffset()).toBe(0)
+    })
+  })
+
+  it('IntlDate.min and max reject anything but an array', () => {
+    for (const value of ['2024-01-01', new Date(0), new Set([1])]) {
+      expect(() => IntlDate.max(value as never)).toThrow(TypeError)
+      expect(() => IntlDate.min(value as never)).toThrow(TypeError)
+    }
+  })
+
+  it('addDuration validates fields however they are provided', () => {
+    expect(() => addDuration(new Date(0), new Duration({ days: 1.5 }), 1, true)).toThrow(
+      'calendar unit "days" must be an integer'
+    )
+    expect(() => addDuration(new Date(0), Object.create({ days: '1' }) as DurationObject)).toThrow(
+      'duration field "days" must be a finite number'
+    )
+    expect(addDuration(new Date(0), new Duration({ days: 1 }), 1, true).getTime()).toBe(86_400_000)
+  })
+
+  it('date utilities treat null and booleans as invalid like the constructor', () => {
+    for (const value of [null, undefined, true]) {
+      expect(dayOfYear(value as never)).toBeNaN()
+      expect(daysInMonth(value as never)).toBeNaN()
+      expect(weekOfYear(value as never)).toEqual({ week: Number.NaN, year: Number.NaN })
+    }
+  })
 })
 
 function zeroNegZero(n: number): number {

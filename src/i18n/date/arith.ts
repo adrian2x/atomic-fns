@@ -1,14 +1,7 @@
 import { ValueError } from '../../globals/index.js'
 import { truncateForError } from '../../internal/truncate.js'
 import type { DurationField, DurationObject } from '../duration.js'
-import {
-  civilFromDayNumber,
-  dayNumber,
-  daysInMonthOf,
-  localWallToTime,
-  readWall,
-  utcWallToTime
-} from './calendar.js'
+import { advanceWall, daysInMonthOf, MAX_TIME_MS, readWall, wallToTime } from './calendar.js'
 
 export type { DurationObject }
 
@@ -32,26 +25,25 @@ const CALENDAR_FIELDS: ReadonlySet<string> = new Set([
   'days'
 ])
 
-const DATE_TIME_MAX_MS = 8.64e15
-
 /**
  * Last calendar day of the month for `year` and 0-based `monthIndex`.
  * @param year Calendar year.
  * @param monthIndex Month index 0-11.
- * @param utc When true, use UTC accessors.
  */
-export function lastDayOfMonth(year: number, monthIndex: number, utc: boolean): number {
-  const d = new Date(0)
-  if (utc) {
-    d.setUTCFullYear(year, monthIndex + 1, 0)
-    return d.getUTCDate()
-  }
-  d.setFullYear(year, monthIndex + 1, 0)
-  return d.getDate()
+export function lastDayOfMonth(year: number, monthIndex: number): number {
+  return daysInMonthOf(year, monthIndex + 1)
 }
 
 function readField(dur: DurationObject, key: DurationField): number {
-  return dur[key] ?? 0
+  const value = dur[key]
+  if (value === undefined) return 0
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new ValueError(`duration field ${truncateForError(key)} must be a finite number`)
+  }
+  if (CALENDAR_FIELDS.has(key) && !Number.isInteger(value)) {
+    throw new ValueError(`calendar unit ${truncateForError(key)} must be an integer`)
+  }
+  return value
 }
 
 /**
@@ -66,16 +58,7 @@ export function addDuration(date: Date, dur: DurationObject, sign: 1 | -1 = 1, u
     if (!DURATION_FIELDS.has(key)) {
       throw new ValueError(`unknown duration field ${truncateForError(key)}`)
     }
-    const value = dur[key as DurationField]
-    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
-      throw new ValueError(`duration field ${truncateForError(key)} must be a finite number`)
-    }
-    if (CALENDAR_FIELDS.has(key) && value !== undefined && !Number.isInteger(value)) {
-      throw new ValueError(`calendar unit ${truncateForError(key)} must be an integer`)
-    }
   }
-
-  if (Number.isNaN(date.getTime())) return new Date(Number.NaN)
 
   const years = readField(dur, 'years')
   const quarters = readField(dur, 'quarters')
@@ -87,35 +70,20 @@ export function addDuration(date: Date, dur: DurationObject, sign: 1 | -1 = 1, u
   const seconds = readField(dur, 'seconds')
   const milliseconds = readField(dur, 'milliseconds')
 
+  if (Number.isNaN(date.getTime())) return new Date(Number.NaN)
+
   const months = sign * (12 * years + 3 * quarters + monthsIn)
   const days = sign * (7 * weeks + daysIn)
 
-  let t: number
-  if (months === 0 && days === 0) {
-    t = date.getTime()
-  } else {
-    const w = readWall(date.getTime(), utc)
-    const idx = w.year * 12 + (w.month - 1) + months
-    const ty = Math.floor(idx / 12)
-    const tm = idx - ty * 12 + 1
-    const td = Math.min(w.day, daysInMonthOf(ty, tm))
-    const civil = civilFromDayNumber(dayNumber(ty, tm, td) + days)
-    const wall = {
-      year: civil.year,
-      month: civil.month,
-      day: civil.day,
-      hour: w.hour,
-      minute: w.minute,
-      second: w.second,
-      millisecond: w.millisecond
-    }
-    t = utc ? utcWallToTime(wall) : localWallToTime(wall)
+  let t = date.getTime()
+  if (months !== 0 || days !== 0) {
+    t = wallToTime(advanceWall(readWall(t, utc), months, days), utc)
   }
 
   const timeMs = hours * 3_600_000 + minutes * 60_000 + seconds * 1000 + milliseconds
   t += sign * Math.sign(timeMs) * Math.round(Math.abs(timeMs))
 
-  if (!(Math.abs(t) <= DATE_TIME_MAX_MS)) {
+  if (!(Math.abs(t) <= MAX_TIME_MS)) {
     throw new RangeError('date out of range')
   }
   return new Date(t)

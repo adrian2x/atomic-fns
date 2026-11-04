@@ -1,12 +1,13 @@
 import { asDate } from '../format.js'
 import { lastDayOfMonth } from './arith.js'
-import { dayNumber, readWall, toWeekRule, weekCount, weekDateOf } from './calendar.js'
+import { dayNumber, MAX_TIME_MS, readWall, toWeekRule, weekCount, weekDateOf } from './calendar.js'
 
 /** Calendar fields for IntlDate object construction and `set`. */
 export interface DateObject {
   year?: number
   month?: number
   day?: number
+  /** 1 (Monday) to 7 (Sunday): moves the date within its ISO week. */
   weekday?: number
   hour?: number
   minute?: number
@@ -16,12 +17,14 @@ export interface DateObject {
 
 /**
  * Epoch milliseconds for a date-like value. Strings are parsed as local time via `asDate`,
- * the same parsing `IntlDate` uses. Invalid input yields `NaN`.
+ * the same parsing `IntlDate` uses. Invalid input, including numbers outside the Date range,
+ * yields `NaN`.
  */
 function defaultTime(value: unknown): number {
   if (typeof value === 'string') return asDate(value).getTime()
   if (value === null) return Number.NaN
-  return Number(value)
+  const time = Number(value)
+  return Math.abs(time) <= MAX_TIME_MS ? time : Number.NaN
 }
 
 function pickExtreme<T>(
@@ -29,12 +32,13 @@ function pickExtreme<T>(
   toTime: (value: T) => number,
   better: (candidate: number, current: number) => boolean
 ): T | undefined {
+  if (!Array.isArray(dates)) throw new TypeError('dates must be an array')
   let ans: T | undefined
   let ansTime = Number.NaN
-  for (const value of dates) {
+  for (const value of dates as readonly T[]) {
     const time = toTime(value)
     if (Number.isNaN(time)) continue
-    if (ans === undefined || better(time, ansTime)) {
+    if (Number.isNaN(ansTime) || better(time, ansTime)) {
       ans = value
       ansTime = time
     }
@@ -45,7 +49,7 @@ function pickExtreme<T>(
 /**
  * Returns the minimum (most distant past) of the given date values, or `undefined` when the
  * list has no valid date. Invalid dates are ignored. String input is parsed as local time.
- * @param dates Date-like values.
+ * @param dates Date-like values, as an array (anything else throws `TypeError`).
  * @param toTime Optional converter to epoch milliseconds.
  */
 export function minDate<T>(
@@ -58,7 +62,7 @@ export function minDate<T>(
 /**
  * Returns the maximum (most distant future) of the given date values, or `undefined` when the
  * list has no valid date. Invalid dates are ignored. String input is parsed as local time.
- * @param dates Date-like values.
+ * @param dates Date-like values, as an array (anything else throws `TypeError`).
  * @param toTime Optional converter to epoch milliseconds.
  */
 export function maxDate<T>(
@@ -90,27 +94,28 @@ export function daysInYear(year: number): number {
  * @param date The specified date.
  */
 export function daysInMonth(date: string | number | Date): number {
-  const d = typeof date === 'string' ? asDate(date) : new Date(date)
-  return lastDayOfMonth(d.getFullYear(), d.getMonth(), false)
+  const d = toDate(date)
+  return lastDayOfMonth(d.getFullYear(), d.getMonth())
 }
 
-function toDate(input: string | number | Date, utc = false): Date {
-  if (typeof input === 'string') return asDate(input, utc)
-  return new Date(input)
+/** `asDate` for a required argument: a missing value is invalid, not the current time. */
+function toDate(input: string | number | Date | null | undefined, utc = false): Date {
+  return asDate(input ?? null, utc)
 }
 
 /**
  * Number of weeks in a week-numbering year under a CLDR week rule.
  * Defaults are ISO 8601 (`firstDay` Monday, `minimalDays` 4).
- * @param weekYear Week-numbering year (integer)
+ * @param weekYear Week-numbering year (safe integer)
  * @param firstDay First day of week, 0..7 (0 or 7 = Sunday, default 1 = Monday)
  * @param minimalDays Days of the new year required in week 1 (1..7, default 4)
  */
 export function weeksInYear(weekYear: number, firstDay = 1, minimalDays = 4): number {
-  if (!Number.isInteger(weekYear)) {
-    throw new RangeError('weekYear must be an integer')
+  if (!Number.isSafeInteger(weekYear)) {
+    throw new RangeError('weekYear must be a safe integer')
   }
-  return weekCount(weekYear, toWeekRule(firstDay, minimalDays))
+  // 400 Gregorian years are a whole number of weeks, and day numbers stay exact below that
+  return weekCount(weekYear % 400, toWeekRule(firstDay, minimalDays))
 }
 
 /**

@@ -1,6 +1,9 @@
 /** Milliseconds in one civil day. */
 export const MS_PER_DAY = 86_400_000
 
+/** Largest absolute time value a `Date` holds. */
+export const MAX_TIME_MS = 8.64e15
+
 /** Wall-clock fields in a local or UTC view. */
 export interface WallFields {
   year: number
@@ -93,15 +96,27 @@ export function utcWallToTime(f: WallFields): number {
  * (gap -> forward by the gap, overlap -> earlier offset).
  */
 export function localWallToTime(f: WallFields): number {
-  const d = new Date(0)
-  d.setFullYear(f.year, f.month - 1, f.day)
-  d.setHours(f.hour, f.minute, f.second, f.millisecond)
-  return d.getTime()
+  // `Date` reads a year argument of 0-99 as 19xx; the same month counted from 400 years on is literal.
+  const shift = f.year >= 0 && f.year <= 99 ? 400 : 0
+  return new Date(
+    f.year + shift,
+    f.month - 1 - shift * 12,
+    f.day,
+    f.hour,
+    f.minute,
+    f.second,
+    f.millisecond
+  ).getTime()
+}
+
+/** Epoch ms of wall fields in the UTC or local view. */
+export function wallToTime(f: WallFields, utc: boolean): number {
+  return utc ? utcWallToTime(f) : localWallToTime(f)
 }
 
 /** UTC offset of an instant in milliseconds (local minus UTC). UTC view is 0. */
 export function offsetMsAt(time: number, utc: boolean): number {
-  return utc ? 0 : Math.round(-new Date(time).getTimezoneOffset() * 60_000)
+  return utc ? 0 : utcWallToTime(readWall(time, false)) - time
 }
 
 /**
@@ -177,6 +192,25 @@ export function daysInMonthOf(year: number, month: number): number {
   return dayNumber(year, month + 1, 1) - dayNumber(year, month, 1)
 }
 
+/** Wall fields `months` on (day clamped to the target month), then `days` on. */
+export function advanceWall(w: WallFields, months: number, days: number): WallFields {
+  const index = w.year * 12 + w.month - 1 + months
+  const year = Math.floor(index / 12)
+  const month = index - year * 12 + 1
+  const day = Math.min(w.day, daysInMonthOf(year, month))
+  return { ...w, ...civilFromDayNumber(dayNumber(year, month, day) + days) }
+}
+
+/** True for a `Date` from any realm, which `instanceof` misses. */
+export function isDateBrand(value: unknown): value is Date {
+  try {
+    Date.prototype.getTime.call(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
  * Validates and normalizes a week rule. `firstDay` 7 is Sunday (same as 0).
  * @param firstDay 0..7 (0 or 7 = Sunday, 1 = Monday, ...)
@@ -242,7 +276,7 @@ type WeekInfoReader = (
 /**
  * Locale week rule from `Intl.Locale` week info when available, else CLDR fallback tables.
  * `minimalDays` comes from the engine when present; otherwise from {@link MIN_DAYS_4_REGIONS}
- * (CLDR snapshot - not observable on current engines).
+ * (CLDR snapshot - not observable on current engines). A `-u-rg-` override picks the table region.
  * @param locale BCP 47 tag, or the host default when omitted
  * @param readInfo Injectable week-info reader (tests only)
  */
@@ -253,7 +287,8 @@ export function localeWeekRule(
   const tag = locale ?? new Intl.DateTimeFormat().resolvedOptions().locale
   const loc = new Intl.Locale(tag)
   const info = readInfo(loc)
-  const region = loc.maximize().region ?? '001'
+  const override = /-rg-([a-z]{2})[a-z0-9]{1,4}(?=-|$)/.exec(loc.toString())?.[1]
+  const region = override?.toUpperCase() ?? loc.maximize().region ?? '001'
 
   let firstDay: number
   if (
