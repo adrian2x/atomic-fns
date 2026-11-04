@@ -87,15 +87,40 @@ export function createCanonicalKeySession(): CanonicalKeySession {
   }
 }
 
-/** Per-process random seed so structural hashes cannot be precomputed against. */
-const HASH_SEED = crypto.getRandomValues(new Uint32Array(2))
+/**
+ * Per-process random seed so structural hashes cannot be precomputed against.
+ * Created on first use: `globalThis.crypto` may be missing (Hermes without a polyfill) or throw
+ * when read. Math.random fallback only weakens bucket-collision resistance, never correctness.
+ */
+let hashSeed: Uint32Array | undefined
+
+function getHashSeed(): Uint32Array {
+  if (hashSeed !== undefined) return hashSeed
+  try {
+    const c = globalThis.crypto as Partial<typeof globalThis.crypto> | undefined
+    if (c && typeof c.getRandomValues === 'function') {
+      hashSeed = c.getRandomValues(new Uint32Array(2))
+      return hashSeed
+    }
+  } catch {
+    // Throwing crypto getter / getRandomValues: fall through to Math.random.
+  }
+  hashSeed = new Uint32Array([
+    (Math.random() * 0x100000000) >>> 0,
+    (Math.random() * 0x100000000) >>> 0
+  ])
+  return hashSeed
+}
 
 /** Streaming 64-bit structural hash (two 32-bit multiply-xor lanes). Collisions only cost time. */
 class StructuralHasher {
-  #h1 = (0xdeadbeef ^ HASH_SEED[0]) | 0
-  #h2 = (0x41c6ce57 ^ HASH_SEED[1]) | 0
+  #h1: number
+  #h2: number
 
   constructor(label: string) {
+    const seed = getHashSeed()
+    this.#h1 = (0xdeadbeef ^ seed[0]) | 0
+    this.#h2 = (0x41c6ce57 ^ seed[1]) | 0
     this.text(label)
   }
 

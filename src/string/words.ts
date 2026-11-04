@@ -4,7 +4,13 @@
  * @module
  */
 
-const WORD_SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'word' })
+/** Lazy: Intl.Segmenter at module load fails where Intl is incomplete. */
+let wordSegmenter: Intl.Segmenter | undefined
+
+function getWordSegmenter(): Intl.Segmenter {
+  wordSegmenter ??= new Intl.Segmenter(undefined, { granularity: 'word' })
+  return wordSegmenter
+}
 
 const IS_UPPER = /^[\p{Lu}\p{Lt}]$/u
 const IS_LOWER = /^\p{Ll}$/u
@@ -249,7 +255,7 @@ function splitRun(s: string, cache: Map<number, CharClass>): string[] {
 function fromSegments(s: string): string[] {
   const out: string[] = []
   const cache = new Map<number, CharClass>()
-  for (const { segment, isWordLike } of WORD_SEGMENTER.segment(s)) {
+  for (const { segment, isWordLike } of getWordSegmenter().segment(s)) {
     if (isWordLike) {
       const parts = isAsciiString(segment) ? splitRunAscii(segment) : splitRun(segment, cache)
       for (const part of parts) out.push(part)
