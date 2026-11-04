@@ -52,6 +52,8 @@ export function round(x: number, digits = 0): number {
   if (!Number.isInteger(digits)) {
     throw new RangeError('digits must be an integer')
   }
+  // SPEC-R61: every finite return is 0 instead of -0.
+  if (Object.is(x, -0)) return 0
   if (digits >= fractionalDigitCount(x)) return x
   const absX = Math.abs(x)
   // unit = 10^(-digits) exceeds |x| by more than a factor of 10 -> 0.

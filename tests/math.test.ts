@@ -57,6 +57,12 @@ describe('math', () => {
     expect(round(123.456, 2)).toBe(123.46)
   })
 
+  it('SPEC-R61 round normalizes -0 to 0', () => {
+    expect(Object.is(round(-0), -0)).toBe(false)
+    expect(Object.is(round(-0), 0)).toBe(true)
+    expect(Object.is(round(-0, 5), 0)).toBe(true)
+  })
+
   it('SPEC-R60 divmod floor quotient and matching remainder', () => {
     expect(divmod(-7, 2)).toEqual([-4, 1])
     expect(divmod(7, -2)).toEqual([-4, -1])
