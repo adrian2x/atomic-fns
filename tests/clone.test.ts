@@ -1,3 +1,4 @@
+import vm from 'node:vm'
 import { describe, it, expect } from 'vitest'
 import { clone, Deque, Heap, LRUCache, SortedMap, Trie } from '../src/collections/index.js'
 import { deepEqual, protocol } from '../src/operators/index.js'
@@ -184,5 +185,87 @@ describe('clone', () => {
     const mc = clone(m)
     expect(mc.index).toBe(1)
     expect(mc.input).toBe('abc')
+  })
+})
+
+describe('clone of builtin subclasses', () => {
+  class Registry extends Map<string, number> {}
+  class Tags extends Set<string> {}
+  class Moment extends Date {}
+  class Pattern extends RegExp {}
+  class Stack extends Array<number> {}
+  class Amount extends Number {}
+
+  it.each([
+    ['Map', new Registry([['a', 1]])],
+    ['Set', new Tags(['a'])],
+    ['Date', new Moment(0)],
+    ['RegExp', new Pattern('a')],
+    ['Array', Stack.from([1])],
+    ['Number', new Amount(1)]
+  ])('a %s subclass stays by reference, shallow, deep and nested', (_name, instance) => {
+    expect(clone(instance)).toBe(instance)
+    expect(clone(instance, true)).toBe(instance)
+    expect(clone([instance], true)[0]).toBe(instance)
+  })
+})
+
+describe('clone brand checks', () => {
+  it.each(['Date', 'RegExp', 'Map', 'Set', 'ArrayBuffer', 'DataView', 'Number'])(
+    'an object tagged %s is no builtin',
+    (tag) => {
+      const tagged = { [Symbol.toStringTag]: tag, a: 1 }
+      class Tagged {
+        get [Symbol.toStringTag](): string {
+          return tag
+        }
+      }
+      const instance = new Tagged()
+      expect(clone(tagged)).toBe(tagged)
+      expect(clone(tagged, true)).toBe(tagged)
+      expect(clone(instance)).toBe(instance)
+      expect(clone(instance, true)).toBe(instance)
+    }
+  )
+})
+
+describe('clone of Dates', () => {
+  it('copies own enumerable keys', () => {
+    const s = Symbol('s')
+    const when = Object.assign(new Date(0), { x: 1, nested: { y: 2 }, [s]: 3 })
+    const shallow = clone(when)
+    expect(shallow).not.toBe(when)
+    expect(shallow.x).toBe(1)
+    expect(shallow[s]).toBe(3)
+    expect(shallow.nested).toBe(when.nested)
+    const deep = clone(when, true)
+    expect(deep.getTime()).toBe(0)
+    expect(deep.nested).toEqual({ y: 2 })
+    expect(deep.nested).not.toBe(when.nested)
+  })
+})
+
+describe('clone across realms', () => {
+  const foreign = (source: string): object => vm.runInNewContext(source) as object
+
+  it.each([
+    ['plain object', '({ a: { b: 1 } })'],
+    ['array', '[{ a: 1 }]'],
+    ['Date', 'new Date(0)'],
+    ['Map', 'new Map([[1, {}]])']
+  ])('copies a foreign %s', (_name, source) => {
+    const value = foreign(source)
+    expect(clone(value)).not.toBe(value)
+    expect(clone(value, true)).not.toBe(value)
+  })
+
+  it('a deep copy of a foreign object shares nothing with it', () => {
+    const value = foreign('({ a: { b: 1 } })') as { a: object }
+    expect(clone(value, true).a).not.toBe(value.a)
+  })
+
+  it('a foreign subclass stays by reference', () => {
+    const value = foreign('new (class Sub extends Map {})()')
+    expect(clone(value)).toBe(value)
   })
 })

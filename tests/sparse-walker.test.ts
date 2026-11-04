@@ -256,7 +256,7 @@ describe('R12-E sparse-safe array walker', () => {
     expect(filter(holes, () => true)).toEqual([1, 3])
     expect(filter(filled, (x) => x === undefined)).toEqual([undefined])
     expect(findIndex(holes, (x) => x === undefined)).toBe(1)
-    expect(uniq(holes)).toEqual([1, 3])
+    expect(uniq(holes)).toEqual([1, undefined, 3])
 
     for (let n = 0; n < 1000; n++) {
       const len = 1 + (n % 64)

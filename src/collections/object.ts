@@ -1,7 +1,9 @@
 /**
- * Object utilities: merge, pick, omit, clone.
+ * Object utilities: merge, defaults, pick, omit, clone.
  */
 
+import { unbox } from '../globals/brand.js'
+import { isDate, isMap, isRegExp, isSet } from '../globals/index.js'
 import { assertNotHugeSparse, isCanonicalArrayIndex, walkArray } from '../internal/arrayKeys.js'
 import {
   assertNestingDepth,
@@ -13,18 +15,14 @@ import {
   walkSession,
   withHookNesting
 } from '../internal/nesting.js'
+import { parsePath } from '../internal/path.js'
 import { truncateForError } from '../internal/truncate.js'
 import { hasMethod, protocol } from '../operators/index.js'
 
-const DEFINE_DATA_DANGEROUS = new Set<PropertyKey>(['__proto__', 'constructor', 'prototype'])
+const UNASSIGNABLE_KEYS = new Set<PropertyKey>(['__proto__', 'constructor', 'prototype'])
 
 /** Define an own enumerable writable configurable data property. */
 export function defineData(target: object, key: PropertyKey, value: unknown): void {
-  // Safe string keys: assignment is an own data property and much faster than defineProperty.
-  if (typeof key === 'string' && !DEFINE_DATA_DANGEROUS.has(key)) {
-    ;(target as Record<string, unknown>)[key] = value
-    return
-  }
   Object.defineProperty(target, key, {
     value,
     enumerable: true,
@@ -33,11 +31,49 @@ export function defineData(target: object, key: PropertyKey, value: unknown): vo
   })
 }
 
-/** True when `x` is a plain object (`Object.prototype` or `null` prototype). */
+/**
+ * Write `key` by plain assignment, much faster than {@link defineData}. On an object just created
+ * here that is an own data property; on a `merge` target setters run. Keys that could reach a
+ * prototype are defined instead.
+ */
+export function assignData(target: object, key: PropertyKey, value: unknown): void {
+  if (typeof key === 'string' && !UNASSIGNABLE_KEYS.has(key)) {
+    ;(target as Record<string, unknown>)[key] = value
+  } else {
+    defineData(target, key, value)
+  }
+}
+
+const OBJECT_SOURCE = Function.prototype.toString.call(Object)
+
+/** True for `Object.prototype` of any realm. */
+function isObjectPrototype(proto: object | null): boolean {
+  if (proto === Object.prototype) return true
+  if (proto === null || Object.getPrototypeOf(proto) !== null) return false
+  const ctor: unknown = Object.getOwnPropertyDescriptor(proto, 'constructor')?.value
+  return typeof ctor === 'function' && Function.prototype.toString.call(ctor) === OBJECT_SOURCE
+}
+
+/**
+ * True when `x` is a plain object: its tag is `[object Object]` and its prototype is `null` or
+ * `Object.prototype` of any realm. `Math`, `JSON` and `arguments` are not plain, and neither is an
+ * object with its own `Symbol.toStringTag`.
+ */
 export function isPlainObject(x: unknown): x is Record<string, unknown> {
   if (x === null || typeof x !== 'object') return false
-  const proto: unknown = Object.getPrototypeOf(x)
-  return proto === Object.prototype || proto === null
+  if (Object.prototype.toString.call(x) !== '[object Object]') return false
+  const proto = Object.getPrototypeOf(x) as object | null
+  return proto === null || isObjectPrototype(proto)
+}
+
+/** True for an array whose prototype is `Array.prototype` of any realm. */
+function isUnsubclassedArray(x: unknown): x is unknown[] {
+  if (!Array.isArray(x)) return false
+  const proto = Object.getPrototypeOf(x) as object | null
+  return (
+    proto === Array.prototype ||
+    (Array.isArray(proto) && isObjectPrototype(Object.getPrototypeOf(proto) as object | null))
+  )
 }
 
 /** True when `toJSON` is an own function or an own accessor (getter/setter). */
@@ -49,13 +85,9 @@ function hasCallableOrAccessorToJSON(x: object): boolean {
   return typeof desc.value === 'function'
 }
 
-/** Array with prototype exactly `Array.prototype` and no callable/accessor `toJSON`. */
+/** Array with an `Array.prototype` prototype and no callable/accessor `toJSON`. */
 function isPlainArray(x: unknown): x is unknown[] {
-  return (
-    Array.isArray(x) &&
-    Object.getPrototypeOf(x) === Array.prototype &&
-    !hasCallableOrAccessorToJSON(x)
-  )
+  return isUnsubclassedArray(x) && !hasCallableOrAccessorToJSON(x)
 }
 
 /**
@@ -88,20 +120,21 @@ function mergeKey(
   sv: unknown,
   seen: WeakMap<object, object>,
   pairs: MergedPairs,
-  depth: number,
-  prepaid: boolean
+  depth: number
 ): void {
   assertArrayWriteInRange(t, key, sv)
   const tv = Object.hasOwn(t, key) ? (t as Record<PropertyKey, unknown>)[key] : undefined
-  if (key === 'constructor' && typeof tv === 'function') return
-  if (sv === undefined && tv !== undefined) return
+  if (key === 'constructor' && typeof tv === 'function' && sv !== null && typeof sv === 'object') {
+    return
+  }
+  if (sv === undefined && key in t) return
   if (isPlainObject(sv) || Array.isArray(sv)) {
     // Same container kind: merge into target. Differing array vs plain object: source replaces.
     const intoExisting =
       (Array.isArray(sv) && Array.isArray(tv)) || (isPlainObject(sv) && isPlainObject(tv))
     // Path-scoped cycle protection only: a hit means this source is already on the active path.
     if (!intoExisting && seen.has(sv)) {
-      defineData(t, key, seen.get(sv))
+      assignData(t, key, seen.get(sv))
       return
     }
     let base: object
@@ -116,17 +149,17 @@ function mergeKey(
       seen.set(sv, base)
       try {
         // Fresh copy targets are unique - skip pair tracking (nothing can hit).
-        mergeInto(base, sv, seen, pairs, depth, false, prepaid)
+        mergeInto(base, sv, seen, pairs, depth, false)
       } finally {
         // Drop after this key so a sibling key with the same shared source gets its own copy.
         seen.delete(sv)
       }
     } else {
-      mergeInto(base, sv, seen, pairs, depth, true, prepaid)
+      mergeInto(base, sv, seen, pairs, depth, true)
     }
-    defineData(t, key, base)
+    assignData(t, key, base)
   } else {
-    defineData(t, key, sv)
+    assignData(t, key, sv)
   }
 }
 
@@ -136,8 +169,7 @@ function mergeInto(
   seen: WeakMap<object, object>,
   pairs: MergedPairs,
   depth: number,
-  trackPairs: boolean,
-  prepaid = false
+  trackPairs: boolean
 ): void {
   enterNesting()
   try {
@@ -152,36 +184,24 @@ function mergeInto(
       targets.add(t)
     }
 
-    const charged = noteExpanded(s, prepaid)
-    const childPrepaid = prepaid || charged
+    const keys = Object.keys(s)
+    noteExpanded(s, keys.length)
     assertNestingDepth(depth)
     if (t === Object.prototype) return
-    const rec = s as Record<string, unknown>
     if (Array.isArray(s) && Array.isArray(t)) {
       // Refuse huge sparse sources before extending the target (caller's array would hang on map/forEach).
       assertNotHugeSparse(s)
       // Extend first so source indices never trip the beyond-length rule; holes stay holes.
       if (t.length < s.length) t.length = s.length
-      walkArray(s, (ev) => {
-        if (ev.kind === 'value') {
-          mergeKey(t, String(ev.index), ev.value, seen, pairs, depth + 1, childPrepaid)
-        }
-      })
-      for (const key of Object.keys(s)) {
-        if (isCanonicalArrayIndex(key)) continue
-        mergeKey(t, key, rec[key], seen, pairs, depth + 1, childPrepaid)
-      }
-    } else {
-      for (const key of Object.keys(s)) {
-        mergeKey(t, key, rec[key], seen, pairs, depth + 1, childPrepaid)
-      }
     }
-    const syms = Object.getOwnPropertySymbols(s)
-    if (syms.length === 0) return
-    for (const sym of syms) {
+    const rec = s as Record<string, unknown>
+    for (const key of keys) {
+      mergeKey(t, key, rec[key], seen, pairs, depth + 1)
+    }
+    for (const sym of Object.getOwnPropertySymbols(s)) {
       const desc = Object.getOwnPropertyDescriptor(s, sym)
       if (!desc?.enumerable) continue
-      mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, pairs, depth + 1, childPrepaid)
+      mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, pairs, depth + 1)
     }
   } finally {
     exitNesting()
@@ -190,7 +210,11 @@ function mergeInto(
 
 /**
  * Recursively merge own enumerable string and symbol keys of `sources` into `target`.
- * Writes via defineProperty. Skips undefined source values when the target already has a defined value.
+ * Writes by assignment, so target setters run as in `_.merge`; `__proto__`, `constructor`,
+ * `prototype` and symbol keys are defined as own data properties instead. An own function
+ * `constructor` is never replaced by an object. Skips undefined source values when the key is in
+ * the target, own or inherited. `target` must be a non-function object, else
+ * `TypeError('merge target must be an object')`; nullish and scalar sources are skipped.
  * Recurses when both sides are plain objects or both are arrays; when array and plain object
  * kinds differ, the source value replaces the target. Other values are assigned by reference.
  * Array sources extend the target array to at least the source length (holes preserved) before
@@ -205,9 +229,9 @@ function mergeInto(
  * shared source (the seen map is path-scoped for cycle protection only). Within one top-level
  * source argument, (source, target) pairs already merged are skipped (merging the same source
  * into the same target again changes nothing); each later source argument gets a fresh pair
- * cache so a source re-applied later is merged again. Re-expanding shared sources beyond
- * 500000 copied nodes throws
- * `RangeError('input repeats shared objects beyond 500000 copied nodes')`.
+ * cache so a source re-applied later is merged again. Expanding a source again costs one work unit
+ * per 16 keys, plus one once repeats outnumber the input's keys, on a cycle as on a shared row; past
+ * 500000 units it throws `RangeError('input repeats shared objects beyond 500000 copied nodes')`.
  * On either throw, `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.
@@ -222,10 +246,10 @@ export function merge<T extends object>(target: T, ...sources: (object | null | 
       }
       const seen = new WeakMap<object, object>()
       for (const s of sources) {
-        if (s != null) {
+        if (Object(s) === s) {
           // Fresh pair cache per top-level source so a later re-applied source is not skipped.
           const pairs: MergedPairs = new WeakMap()
-          mergeInto(target, s, seen, pairs, 1, true)
+          mergeInto(target, s as object, seen, pairs, 1, true)
         }
       }
       return target
@@ -233,22 +257,93 @@ export function merge<T extends object>(target: T, ...sources: (object | null | 
   )
 }
 
-const MISSING = Symbol('MISSING')
-
-/** A dotted string path, or an array of literal key segments (no dot splitting). */
-export type PropertyPath = string | readonly string[]
-
-function normalizePath(path: PropertyPath): string[] {
-  if (typeof path === 'string') return path.split('.')
-  return path.map(String)
+function propertyDescriptorAlongChain(object: object, key: string): PropertyDescriptor | undefined {
+  let cur: object | null = object
+  while (cur) {
+    const desc = Object.getOwnPropertyDescriptor(cur, key)
+    if (desc) return desc
+    cur = Object.getPrototypeOf(cur) as object | null
+  }
+  return undefined
 }
 
-function getAtPath(obj: unknown, parts: string[]): unknown {
+/**
+ * Assigns own enumerable string keyed properties of source objects onto the destination for keys
+ * whose own value is `undefined`, or that are missing as own properties and whose current value
+ * is exactly `Object.prototype[key]` (fills names like `toString` that are only inherited from
+ * Object.prototype). Inherited getters and methods from a class prototype are never overridden.
+ * `__proto__` is never filled on an ordinary target (its value is the prototype, not
+ * `Object.prototype.__proto__`). Writes use plain assignment so inherited setters run, except
+ * `__proto__` which is defined as an own data property (reachable only on null-prototype targets).
+ * Source objects are applied from left to right, and nullish ones are skipped. Once a property is
+ * set, additional values of the same property are ignored. A nullish or scalar `object` throws
+ * `TypeError('defaults target must be an object')`.
+ * When `object` is an array, a canonical array-index key from a non-array source beyond
+ * `object.length` throws `RangeError('array index beyond length')` (e.g.
+ * `defaults([], { 0: 1, 2: 3 })`). Unlike `merge`, `defaults` does not extend array length from
+ * a holey array source.
+ * **Note:** This method mutates `object`.
+
+ * @param {Object} object The destination object.
+ * @param {...Object} [sources] The source objects.
+ * @returns Returns `object`.
+ * @example
+```js
+defaults({ 'a': 1 }, { 'b': 2 }, { 'a': 3 })
+// { 'a': 1, 'b': 2 }
+```
+ */
+export function defaults<T extends object>(
+  object: T,
+  ...sources: (object | null | undefined)[]
+): T {
+  if (Object(object) !== object) throw new TypeError('defaults target must be an object')
+  const target = object as Record<string, unknown>
+  for (const source of sources) {
+    if (source == null) continue
+    for (const key of Object.keys(source)) {
+      if (Array.isArray(object) && isCanonicalArrayIndex(key)) {
+        const idx = Number(key)
+        if (idx > object.length) throw new RangeError('array index beyond length')
+      }
+      const value = target[key]
+      const fill =
+        value === undefined ||
+        (!Object.hasOwn(object, key) &&
+          value === (Object.prototype as Record<string, unknown>)[key])
+      if (!fill) continue
+      const desc = propertyDescriptorAlongChain(object, key)
+      if (desc && 'get' in desc && desc.set === undefined) continue
+      const srcVal = (source as Record<string, unknown>)[key]
+      if (key === '__proto__') {
+        defineData(target, key, srcVal)
+      } else {
+        target[key] = srcVal
+      }
+    }
+  }
+  return object
+}
+
+const MISSING = Symbol('MISSING')
+
+/** A dotted string path, one number or symbol key, or an array of literal key segments. */
+export type PropertyPath = PropertyKey | readonly PropertyKey[]
+
+/** One path, or a list or Set of them, as segment arrays. */
+function toPathList(paths: unknown): PropertyKey[][] {
+  if (Array.isArray(paths) || paths instanceof Set) {
+    return Array.from(paths as Iterable<unknown>, (path) => parsePath(path))
+  }
+  return [parsePath(paths)]
+}
+
+function getAtPath(obj: unknown, parts: PropertyKey[]): unknown {
   let cur: unknown = obj
   for (const p of parts) {
     if (cur === null || (typeof cur !== 'object' && typeof cur !== 'function')) return MISSING
     if (!Object.hasOwn(cur, p)) return MISSING
-    cur = (cur as Record<string, unknown>)[p]
+    cur = (cur as Record<PropertyKey, unknown>)[p]
   }
   return cur
 }
@@ -257,7 +352,7 @@ function getAtPath(obj: unknown, parts: string[]): unknown {
 function copyOwnEnumerable(src: object): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const key of Object.keys(src)) {
-    defineData(out, key, (src as Record<string, unknown>)[key])
+    assignData(out, key, (src as Record<string, unknown>)[key])
   }
   return out
 }
@@ -272,7 +367,7 @@ function copyKeptProperty(src: object, dest: object, key: string): void {
   if (desc.get !== undefined || desc.set !== undefined) {
     Object.defineProperty(dest, key, desc)
   } else {
-    defineData(dest, key, (src as Record<string, unknown>)[key])
+    assignData(dest, key, (src as Record<string, unknown>)[key])
   }
 }
 
@@ -282,7 +377,7 @@ function copyKeptProperty(src: object, dest: object, key: string): void {
  */
 function setPickedPath(
   root: object,
-  parts: string[],
+  parts: PropertyKey[],
   value: unknown,
   source: object,
   created: WeakSet<object>
@@ -291,18 +386,20 @@ function setPickedPath(
   let srcCur: unknown = source
   for (let i = 0; i < parts.length - 1; i++) {
     const p = parts[i]
-    const existing = Object.hasOwn(cur, p) ? (cur as Record<string, unknown>)[p] : undefined
+    const existing = Object.hasOwn(cur, p) ? (cur as Record<PropertyKey, unknown>)[p] : undefined
     const srcNext =
       srcCur !== null &&
       (typeof srcCur === 'object' || typeof srcCur === 'function') &&
       Object.hasOwn(srcCur, p)
-        ? (srcCur as Record<string, unknown>)[p]
+        ? (srcCur as Record<PropertyKey, unknown>)[p]
         : undefined
     if (created.has(existing as object)) {
       cur = existing as object
     } else {
-      const next = Array.isArray(srcNext) ? [] : {}
-      defineData(cur, p, next)
+      const segment = parts[i + 1]
+      const indexed = typeof segment === 'string' && isCanonicalArrayIndex(segment)
+      const next = Array.isArray(srcNext) && indexed ? [] : {}
+      assignData(cur, p, next)
       created.add(next)
       cur = next
     }
@@ -317,16 +414,16 @@ function setPickedPath(
     leaf = copyOwnEnumerable(value)
     created.add(leaf as object)
   }
-  defineData(cur, parts[parts.length - 1], leaf)
+  assignData(cur, parts[parts.length - 1], leaf)
 }
 
 /** Trie of omit paths: O(keys + total path length) walks. */
 interface OmitTrie {
   drop?: boolean
-  kids?: Map<string, OmitTrie>
+  kids?: Map<PropertyKey, OmitTrie>
 }
 
-function buildOmitTrie(paths: string[][]): OmitTrie {
+function buildOmitTrie(paths: PropertyKey[][]): OmitTrie {
   const root: OmitTrie = {}
   for (const parts of paths) {
     let node = root
@@ -388,7 +485,7 @@ function omitFromObject(
     if (!child?.kids) {
       copyKeptProperty(src, result, key)
     } else {
-      defineData(
+      assignData(
         result,
         key,
         omitWithTrie((src as Record<string, unknown>)[key], child, pathPrefix.concat(key))
@@ -400,65 +497,69 @@ function omitFromObject(
 
 /**
  * Create an object with only the selected paths or predicate matches from `obj`.
- * String paths split on `.`; an array of segments addresses literal keys (including dots).
- * Intermediate containers mirror the source (array stays array). Keys are written with
- * defineProperty. Never mutates `obj` or any object reachable from it. A path that copies a huge
- * sparse array (`length > 2^24` and `length > 2 * filled + 1024`) throws
- * `RangeError('sparse array too large')`.
+ * `paths` is one path, a list or `Set` of paths, or a `(value, key)` predicate. A string path splits
+ * on `.` and on numeric brackets (`a[0].b`); a number or symbol is one key; an array of segments
+ * addresses literal keys (including dots). Anything else throws
+ * `TypeError('path segments must be strings, numbers or symbols')`.
+ * Paths read own properties only, so an inherited getter is not picked. Intermediate containers
+ * mirror the source (array stays array) when the next segment is an index. Never mutates `obj` or
+ * any object reachable from it. A path that copies a huge sparse array
+ * (`length > 2^24` and `length > 2 * filled + 1024`) throws `RangeError('sparse array too large')`.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
 export function pick<T extends object>(
   obj: T | null | undefined,
-  paths: readonly PropertyPath[] | ((v: unknown, k: string) => boolean)
+  paths:
+    | PropertyPath
+    | readonly PropertyPath[]
+    | ReadonlySet<PropertyPath>
+    | ((v: unknown, k: string) => boolean)
 ): Partial<T> {
   const result: object = {}
   if (obj == null) return result
   if (typeof paths === 'function') {
     for (const key of Object.keys(obj)) {
       const v = (obj as Record<string, unknown>)[key]
-      if (paths(v, key)) defineData(result, key, v)
+      if (paths(v, key)) assignData(result, key, v)
     }
     return result
   }
   const created = new WeakSet<object>([result])
-  const seen = new Set<string>()
-  const pickedTrie: PickPathTrie = {}
-  for (const path of paths) {
-    const parts = normalizePath(path)
-    if (parts.length === 0) continue
-    const key = JSON.stringify(parts)
-    if (seen.has(key)) continue
-    if (hasPickedAncestor(parts, pickedTrie)) continue
+  const picked: PickPathTrie = {}
+  for (const parts of toPathList(paths)) {
+    if (parts.length === 0 || hasPickedAncestor(parts, picked)) continue
     const value = getAtPath(obj, parts)
     if (value === MISSING) continue
-    seen.add(key)
+    const node = pickPathNode(parts, picked)
+    if (node.picked) continue
+    node.picked = true
+    node.ancestor = Object(value) === value
     setPickedPath(result, parts, value, obj, created)
-    if (value !== null && typeof value === 'object') {
-      markPickedObject(parts, pickedTrie)
-    }
   }
   return result
 }
 
-/** Nested map of picked object paths; ancestor checks walk segment by segment. */
+/** Nested map of picked paths; ancestor checks walk segment by segment. */
 interface PickPathTrie {
-  kids?: Map<string, PickPathTrie>
-  object?: boolean
+  kids?: Map<PropertyKey, PickPathTrie>
+  picked?: boolean
+  /** A picked object or function, which already holds everything below it. */
+  ancestor?: boolean
 }
 
-function hasPickedAncestor(parts: string[], root: PickPathTrie): boolean {
+function hasPickedAncestor(parts: PropertyKey[], root: PickPathTrie): boolean {
   let node = root
   for (let i = 0; i < parts.length - 1; i++) {
     const next = node.kids?.get(parts[i])
     if (!next) return false
-    if (next.object) return true
+    if (next.ancestor) return true
     node = next
   }
   return false
 }
 
-function markPickedObject(parts: string[], root: PickPathTrie): void {
+function pickPathNode(parts: PropertyKey[], root: PickPathTrie): PickPathTrie {
   let node = root
   for (const part of parts) {
     node.kids ??= new Map()
@@ -469,30 +570,36 @@ function markPickedObject(parts: string[], root: PickPathTrie): void {
     }
     node = next
   }
-  node.object = true
+  return node
 }
 
 /**
- * Create a deep copy of `obj` with the given paths omitted, or keep values where the predicate is falsy.
- * Never mutates `obj`. Builds a path trie once so cost is O(keys + total path length). Never
- * invokes getters of omitted keys. Kept own enumerable string-keyed data values are copied with a
- * normal `[[Get]]` read (Proxy get traps that mask values still apply); accessors are re-defined.
- * Symbol-keyed properties (e.g. `util.inspect.custom`) are not copied. String paths split on `.`;
- * an array of segments addresses literal keys. An omit path that ends at an array index leaves a
+ * Create a copy of `obj` with the given paths omitted, or keep values where the predicate is falsy.
+ * Containers on a path are copied; values not on any path are kept by reference.
+ * Never mutates `obj`. Builds a path trie once so cost is O(keys + total path length). With paths,
+ * never invokes getters of omitted object keys, and kept accessors are re-defined; a predicate
+ * reads every value, so its kept accessors become data. Kept own enumerable string-keyed data
+ * values are copied with a normal `[[Get]]` read (Proxy get traps that mask values still apply).
+ * Symbol-keyed properties (e.g. `util.inspect.custom`) are not copied. `paths` takes the same forms
+ * as {@link pick}. An omit path that ends at an array index leaves a
  * hole (`delete` semantics) on the copy. Top-level input and every descended container must be a
  * plain object (`Object.prototype` or `null` prototype) or a plain array (`Array.prototype`)
  * without a callable or accessor own `toJSON`. A function or accessor `toJSON`, Array subclass,
  * class instance, Map, Date, collection, or function throws
  * `TypeError('omit requires a plain object or array')` at the top level, or `TypeError` naming
  * the path when nested, before any output. A data property holding a non-function `toJSON` is
- * ordinary data. Primitives / null / undefined along a path are a no-op. Values not on any path
- * are kept by reference.
+ * ordinary data. Primitives / null / undefined along a path are a no-op. A path descending past
+ * 1000 levels of nesting throws `RangeError`.
  * @param obj Source object.
  * @param paths Property paths or a `(value, key)` predicate.
  */
 export function omit<T extends object>(
   obj: T | null | undefined,
-  paths: readonly PropertyPath[] | ((v: unknown, k: string) => boolean)
+  paths:
+    | PropertyPath
+    | readonly PropertyPath[]
+    | ReadonlySet<PropertyPath>
+    | ((v: unknown, k: string) => boolean)
 ): Partial<T> {
   return guardNesting((): Partial<T> => {
     if (obj == null) return {}
@@ -502,25 +609,19 @@ export function omit<T extends object>(
     if (typeof paths === 'function') {
       return pick(obj, (v, k) => !paths(v, k))
     }
-    const trie = buildOmitTrie(paths.map(normalizePath))
+    const trie = buildOmitTrie(toPathList(paths))
     return omitWithTrie(obj, trie, []) as Partial<T>
   })
 }
-
-const BOXED_TAGS = new Set([
-  '[object Number]',
-  '[object String]',
-  '[object Boolean]',
-  '[object BigInt]',
-  '[object Symbol]'
-])
 
 /**
  * Clone `value`. When `deep` is true, recurse into plain objects, arrays, Map and Set entries.
  * Own enumerable symbol keys are copied. Node `Buffer` is copied (not a shared view). `DataView`
  * keeps `byteOffset` / `byteLength` over a copy of the whole backing buffer. Deep `Map` clone
  * keeps key identity and deep-clones values. RegExp match arrays keep `index` / `input` /
- * `groups`. Class instances stay by reference. Symbol `protocol.clone` is honored and
+ * `groups`. A Date keeps its own enumerable keys. Class instances stay by reference, subclasses of
+ * Map, Set, Date, RegExp, Array and the other builtins included, as does any object whose
+ * `Symbol.toStringTag` claims a builtin it is not. Symbol `protocol.clone` is honored and
  * receives the `deep` flag; a string-named `clone` method is ignored. Collection classes
  * deep-clone their values when `deep` is true (map-like keys stay by reference). Within one
  * top-level deep clone, an object reached twice is copied once and stays shared in the result,
@@ -560,6 +661,19 @@ function copyEnumerableSymbols(
   }
 }
 
+function copyOwnKeys(
+  src: object,
+  dest: object,
+  deep: boolean,
+  map: WeakMap<object, unknown>
+): void {
+  const rec = src as Record<string, unknown>
+  for (const key of Object.keys(rec)) {
+    assignData(dest, key, deep ? cloneInner(rec[key], true, map) : rec[key])
+  }
+  copyEnumerableSymbols(src, dest, deep, map)
+}
+
 function isNodeBuffer(v: unknown): v is Uint8Array {
   return (
     typeof Buffer !== 'undefined' &&
@@ -568,12 +682,28 @@ function isNodeBuffer(v: unknown): v is Uint8Array {
   )
 }
 
+function isArrayBuffer(v: object): v is ArrayBuffer {
+  if (Object.prototype.toString.call(v) !== '[object ArrayBuffer]') return false
+  try {
+    Reflect.get(ArrayBuffer.prototype, 'byteLength', v)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** False for a subclass instance: `Sub.prototype` sits between `v` and its builtin prototype. */
+function isDirectInstance(v: object): boolean {
+  const proto = Object.getPrototypeOf(v) as object | null
+  return proto !== null && isObjectPrototype(Object.getPrototypeOf(proto) as object | null)
+}
+
 function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): unknown {
   if (v === null || typeof v !== 'object') return v
   if (map.has(v)) return map.get(v)
   if (!deep) {
     if (hasMethod(v, protocol.clone)) return v[protocol.clone](false)
-    return cloneShallow(v, map)
+    return cloneObject(v, false, map)
   }
   if (hasMethod(v, protocol.clone)) {
     // Half of HOOK_NESTING_COST at dispatch; collection clone hooks charge the other half.
@@ -583,150 +713,78 @@ function cloneInner(v: unknown, deep: boolean, map: WeakMap<object, unknown>): u
   }
   enterNesting()
   try {
-    return cloneDeepBody(v, map)
+    return cloneObject(v, true, map)
   } finally {
     exitNesting()
   }
 }
 
-function cloneShallow(v: object, map: WeakMap<object, unknown>): unknown {
-  const tag = Object.prototype.toString.call(v)
-  let r: unknown
-
-  if (tag === '[object Date]') {
-    r = new Date((v as Date).getTime())
-  } else if (tag === '[object RegExp]') {
-    const re = v as RegExp
-    r = new RegExp(re.source, re.flags)
-    ;(r as RegExp).lastIndex = re.lastIndex
-  } else if (tag === '[object Map]') {
-    const out = new Map(v as Map<unknown, unknown>)
-    map.set(v, out)
-    return out
-  } else if (tag === '[object Set]') {
-    const out = new Set(v as Set<unknown>)
-    map.set(v, out)
-    return out
-  } else if (tag === '[object ArrayBuffer]') {
-    r = (v as ArrayBuffer).slice(0)
-  } else if (tag === '[object DataView]') {
-    const dv = v as DataView
-    const buf = dv.buffer.slice(0)
-    r = new DataView(buf, dv.byteOffset, dv.byteLength)
-  } else if (isNodeBuffer(v)) {
-    r = Buffer.from(v)
-  } else if (isSliceableView(v)) {
-    r = v.slice()
-  } else if (BOXED_TAGS.has(tag)) {
-    r = Object((v as { valueOf(): unknown }).valueOf())
-  }
-
-  if (r !== undefined) {
-    map.set(v, r)
-    return r
-  }
-
-  if (Array.isArray(v)) {
-    assertNotHugeSparse(v)
-    const out = v.slice() as unknown[] & { index?: number; input?: string; groups?: unknown }
-    map.set(v, out)
-    const arr = v as unknown[] & { index?: number; input?: string; groups?: unknown }
-    if ('index' in arr) out.index = arr.index
-    if ('input' in arr) out.input = arr.input
-    if ('groups' in arr) out.groups = arr.groups
-    copyEnumerableSymbols(v, out, false, map)
-    return out
-  }
-
+function cloneObject(v: object, deep: boolean, map: WeakMap<object, unknown>): unknown {
+  if (Array.isArray(v)) return isUnsubclassedArray(v) ? cloneArray(v, deep, map) : v
   if (isPlainObject(v)) {
-    const out = Object.create(Object.getPrototypeOf(v) as object | null) as Record<string, unknown>
+    const out = Object.create(Object.getPrototypeOf(v) as object | null) as object
     map.set(v, out)
-    for (const k of Object.keys(v)) {
-      defineData(out, k, v[k])
-    }
-    copyEnumerableSymbols(v, out, false, map)
+    copyOwnKeys(v, out, deep, map)
     return out
   }
-
-  return v
+  const copy = cloneBuiltin(v, deep, map)
+  map.set(v, copy)
+  return copy
 }
 
-function cloneDeepBody(v: object, map: WeakMap<object, unknown>): unknown {
-  const tag = Object.prototype.toString.call(v)
-  let r: unknown
-
-  if (tag === '[object Date]') {
-    r = new Date((v as Date).getTime())
-  } else if (tag === '[object RegExp]') {
-    const re = v as RegExp
-    r = new RegExp(re.source, re.flags)
-    ;(r as RegExp).lastIndex = re.lastIndex
-  } else if (tag === '[object Map]') {
-    const out = new Map()
-    map.set(v, out)
-    for (const [k, x] of v as Map<unknown, unknown>) {
-      // Deep clone keeps Map key identity (Lodash); values are deep-cloned.
-      out.set(k, cloneInner(x, true, map))
+function cloneArray(v: unknown[], deep: boolean, map: WeakMap<object, unknown>): unknown[] {
+  type MatchArray = unknown[] & { index?: number; input?: string; groups?: unknown }
+  if (!deep) assertNotHugeSparse(v)
+  const out: MatchArray = deep ? new Array(v.length) : v.slice()
+  map.set(v, out)
+  if (deep && v.length > 1024) {
+    walkArray(v, (ev) => {
+      if (ev.kind === 'value') out[ev.index] = cloneInner(ev.value, true, map)
+    })
+  } else if (deep) {
+    for (let i = 0; i < v.length; i++) {
+      if (i in v) out[i] = cloneInner(v[i], true, map)
     }
-    return out
-  } else if (tag === '[object Set]') {
-    const out = new Set()
-    map.set(v, out)
-    for (const x of v as Set<unknown>) {
-      out.add(cloneInner(x, true, map))
-    }
-    return out
-  } else if (tag === '[object ArrayBuffer]') {
-    r = (v as ArrayBuffer).slice(0)
-  } else if (tag === '[object DataView]') {
-    const dv = v as DataView
-    const buf = dv.buffer.slice(0)
-    r = new DataView(buf, dv.byteOffset, dv.byteLength)
-  } else if (isNodeBuffer(v)) {
-    r = Buffer.from(v)
-  } else if (isSliceableView(v)) {
-    r = v.slice()
-  } else if (BOXED_TAGS.has(tag)) {
-    r = Object((v as { valueOf(): unknown }).valueOf())
   }
+  const match = v as MatchArray
+  if ('index' in match) out.index = match.index
+  if ('input' in match) out.input = match.input
+  if ('groups' in match) out.groups = deep ? cloneInner(match.groups, true, map) : match.groups
+  copyEnumerableSymbols(v, out, deep, map)
+  return out
+}
 
-  if (r !== undefined) {
-    map.set(v, r)
-    return r
-  }
-
-  if (Array.isArray(v)) {
-    const out: unknown[] = new Array(v.length)
+/** A copy of a builtin, or `v` itself when it is anything else. */
+function cloneBuiltin(v: object, deep: boolean, map: WeakMap<object, unknown>): unknown {
+  if (isNodeBuffer(v)) return Buffer.from(v)
+  if (isSliceableView(v)) return v.slice()
+  if (!isDirectInstance(v)) return v
+  if (isDate(v)) {
+    const out = new Date(v.getTime())
     map.set(v, out)
-    const len = v.length
-    if (len > 1024) {
-      walkArray(v, (ev) => {
-        if (ev.kind === 'value') out[ev.index] = cloneInner(ev.value, true, map)
-      })
-    } else {
-      for (let i = 0; i < len; i++) {
-        if (i in v) out[i] = cloneInner(v[i], true, map)
-      }
-    }
-    const arr = v as unknown[] & { index?: number; input?: string; groups?: unknown }
-    if ('index' in arr) (out as { index?: number }).index = arr.index
-    if ('input' in arr) (out as { input?: string }).input = arr.input
-    if ('groups' in arr) {
-      ;(out as { groups?: unknown }).groups = cloneInner(arr.groups, true, map)
-    }
-    copyEnumerableSymbols(v, out, true, map)
+    copyOwnKeys(v, out, deep, map)
     return out
   }
-
-  if (isPlainObject(v)) {
-    const out = Object.create(Object.getPrototypeOf(v) as object | null) as Record<string, unknown>
-    map.set(v, out)
-    for (const k of Object.keys(v)) {
-      defineData(out, k, cloneInner(v[k], true, map))
-    }
-    copyEnumerableSymbols(v, out, true, map)
+  if (isRegExp(v)) {
+    const out = new RegExp(v.source, v.flags)
+    out.lastIndex = v.lastIndex
     return out
   }
-
-  return v
+  if (isMap<unknown, unknown>(v)) {
+    const out = new Map<unknown, unknown>()
+    map.set(v, out)
+    // Deep clone keeps Map key identity (Lodash); values are deep-cloned.
+    for (const [key, x] of v) out.set(key, deep ? cloneInner(x, true, map) : x)
+    return out
+  }
+  if (isSet(v)) {
+    const out = new Set<unknown>()
+    map.set(v, out)
+    for (const x of v) out.add(deep ? cloneInner(x, true, map) : x)
+    return out
+  }
+  if (isArrayBuffer(v)) return v.slice(0)
+  if (ArrayBuffer.isView(v)) return new DataView(v.buffer.slice(0), v.byteOffset, v.byteLength)
+  const primitive = unbox(v)
+  return primitive === v ? v : Object(primitive)
 }

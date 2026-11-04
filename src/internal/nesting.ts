@@ -1,22 +1,14 @@
 /** Max structural nesting for deepEqual, clone, merge, matches, flatten, omit, and related walks. */
 export const MAX_NESTING_DEPTH = 1000
 
-/**
- * Max shared-object work units per top-level merge call.
- * Each re-expansion of an already-expanded container charges that container's subtree
- * size (see {@link subtreeContainerCount}, cached per source node for the call). First visits
- * are free.
- */
-export const MAX_SHARED_WORK = 500_000
+/** Work units one merge call may spend expanding containers again; see {@link noteExpanded}. */
+const MAX_SHARED_WORK = 500_000
 
 /** Keys in one container that cost one extra work unit, so a wide row weighs what it copies. */
 const KEYS_PER_WORK_UNIT = 16
 
-/**
- * Max shared-object work units per top-level flatten call (lower than merge: each re-expanded
- * leaf emits an output key string).
- */
-export const MAX_FLATTEN_SHARED_WORK = 250_000
+/** The same allowance for flatten, lower than merge's: each repeated leaf emits an output key. */
+const MAX_FLATTEN_SHARED_WORK = 250_000
 
 /**
  * Levels charged per nested collection hop (dispatch + hook body together).
@@ -28,7 +20,7 @@ export const HOOK_NESTING_COST = 8
 
 const NESTING_ERROR = 'nesting deeper than 1000 levels'
 const SHARED_REVISIT_ERROR = 'input repeats shared objects beyond 500000 copied nodes'
-const FLATTEN_SHARED_REVISIT_ERROR = 'input repeats shared objects beyond 250000 output keys'
+const FLATTEN_SHARED_REVISIT_ERROR = 'input repeats shared objects beyond 250000 containers'
 
 /** Shared across re-entrant deepEqual/clone/merge/matches (collection hooks continue the count). */
 let currentDepth = 0
@@ -51,12 +43,11 @@ export function walkSession<T extends object>(create: () => T): T {
 }
 
 let sharedWork = 0
-let lastSharedWork = 0
+let freeRepeats = 0
 let revisitGuardDepth = 0
 let sharedWorkLimit = MAX_SHARED_WORK
 let sharedWorkError = SHARED_REVISIT_ERROR
 let expanded = new WeakSet<object>()
-let subtreeCache = new WeakMap<object, number>()
 
 /**
  * Enter `cost` nesting levels (default 1). Throws `RangeError` past {@link MAX_NESTING_DEPTH}.
@@ -91,11 +82,9 @@ export function withHookNesting<T>(fn: () => T): T {
 }
 
 function isNativeStackOverflow(e: unknown): boolean {
-  return (
-    e instanceof RangeError &&
-    typeof e.message === 'string' &&
-    e.message.includes('Maximum call stack size exceeded')
-  )
+  if (!(e instanceof Error)) return false
+  if (e instanceof RangeError) return e.message.includes('Maximum call stack size exceeded')
+  return e.name === 'InternalError' && e.message.includes('too much recursion')
 }
 
 /**
@@ -133,67 +122,19 @@ export function getNestingDepth(): number {
   return currentDepth
 }
 
-function isExpandableContainer(v: unknown): v is object {
-  if (v === null || typeof v !== 'object') return false
-  if (Array.isArray(v)) return true
-  const proto: unknown = Object.getPrototypeOf(v)
-  return proto === Object.prototype || proto === null
-}
-
-/**
- * Tree-multiplicity count of plain objects / arrays under `obj` (shared children counted once
- * per edge), each weighing one unit plus one per {@link KEYS_PER_WORK_UNIT} keys. Cached for the
- * active revisit guard. Not a public API.
- */
-export function subtreeContainerCount(obj: object): number {
-  const hit = subtreeCache.get(obj)
-  if (hit !== undefined) return hit
-  return computeSubtreeCount(obj, new Set<object>())
-}
-
-function computeSubtreeCount(obj: object, stack: Set<object>): number {
-  const hit = subtreeCache.get(obj)
-  if (hit !== undefined) return hit
-  if (stack.has(obj)) return 0
-  stack.add(obj)
-  const keys = Object.keys(obj)
-  let n = 1 + Math.floor(keys.length / KEYS_PER_WORK_UNIT)
-  const rec = obj as Record<string, unknown>
-  for (const key of keys) {
-    const v = rec[key]
-    if (isExpandableContainer(v)) n += computeSubtreeCount(v, stack)
-  }
-  for (const sym of Object.getOwnPropertySymbols(obj)) {
-    const desc = Object.getOwnPropertyDescriptor(obj, sym)
-    if (!desc?.enumerable) continue
-    const v = (obj as Record<symbol, unknown>)[sym]
-    if (isExpandableContainer(v)) n += computeSubtreeCount(v, stack)
-  }
-  stack.delete(obj)
-  subtreeCache.set(obj, n)
-  return n
-}
-
 function withRevisitGuard<T>(fn: () => T, limit: number, error: string): T {
   if (revisitGuardDepth === 0) {
     sharedWork = 0
+    freeRepeats = 0
     sharedWorkLimit = limit
     sharedWorkError = error
     expanded = new WeakSet<object>()
-    subtreeCache = new WeakMap<object, number>()
   }
   revisitGuardDepth++
   try {
     return fn()
   } finally {
     revisitGuardDepth--
-    if (revisitGuardDepth === 0) {
-      sharedWork = 0
-      sharedWorkLimit = MAX_SHARED_WORK
-      sharedWorkError = SHARED_REVISIT_ERROR
-      expanded = new WeakSet<object>()
-      subtreeCache = new WeakMap<object, number>()
-    }
   }
 }
 
@@ -214,47 +155,21 @@ export function guardFlattenSharedRevisits<T>(fn: () => T): T {
 }
 
 /**
- * Work charged against the budget at the last budget trip (or the running total snapshotted
- * on the last charge). Survives guard cleanup so tests can assert after a throw. Not exported
- * from any public barrel.
+ * Record that container `obj`, holding `keys` own keys, is being expanded under the active
+ * revisit guard. A first expansion is free, and each of its keys pays for one later expansion, so
+ * a walk linear in the input never trips. Any other expansion costs one unit, whatever led there,
+ * so a cycle pays like a shared row. Every repeat costs one more unit per
+ * {@link KEYS_PER_WORK_UNIT} keys, so a wide shared row pays for what it copies.
  */
-export function getSharedWorkCharged(): number {
-  return lastSharedWork
-}
-
-/**
- * Record that container `obj` is being expanded under the active revisit guard
- * (no-op outside a guard). The first expansion is free. Each later expansion charges the
- * subtree container count of `obj` against the active guard's budget
- * ({@link MAX_SHARED_WORK} or {@link MAX_FLATTEN_SHARED_WORK}), unless `prepaid` is set
- * because an ancestor already paid for this subtree on the current walk.
- *
- * @returns `true` when this call charged a subtree (descendants on this walk are prepaid).
- */
-export function noteExpanded(obj: object, prepaid = false): boolean {
-  if (revisitGuardDepth === 0) return false
-  if (prepaid) return false
+export function noteExpanded(obj: object, keys: number): void {
   if (!expanded.has(obj)) {
     expanded.add(obj)
-    return false
+    freeRepeats += keys
+    return
   }
-  const cost = subtreeContainerCount(obj)
-  sharedWork += cost
-  lastSharedWork = sharedWork
-  if (sharedWork > sharedWorkLimit) {
-    throw new RangeError(sharedWorkError)
-  }
-  return true
-}
-
-/**
- * Charge `cost` units against the active shared-work budget (no-op outside a revisit guard).
- * Used by walks that count distinct nodes rather than re-expansions (e.g. matches leaf-key index).
- */
-export function chargeSharedWork(cost = 1): void {
-  if (revisitGuardDepth === 0) return
-  sharedWork += cost
-  lastSharedWork = sharedWork
+  if (freeRepeats > 0) freeRepeats--
+  else sharedWork++
+  sharedWork += Math.floor(keys / KEYS_PER_WORK_UNIT)
   if (sharedWork > sharedWorkLimit) {
     throw new RangeError(sharedWorkError)
   }

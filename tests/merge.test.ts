@@ -47,15 +47,11 @@ describe('merge', () => {
     expect(r.constructor).toBe('Ford')
     expect(r.prototype).toBe('p')
 
-    const withFn = merge(
-      {
-        constructor: function C() {
-          return undefined
-        }
-      },
-      { constructor: 'x' }
-    )
-    expect(typeof withFn.constructor).toBe('function')
+    const own = function C(): undefined {
+      return undefined
+    }
+    expect(merge({ constructor: own }, { constructor: { a: 1 } }).constructor).toBe(own)
+    expect(merge({ constructor: own }, { constructor: 'x' }).constructor).toBe('x')
   })
 
   it('SPEC-R31 cycle preserved via seen', () => {
@@ -249,5 +245,83 @@ describe('merge of one wide row shared many times', () => {
     expect(merged).toHaveLength(1000)
     expect(merged[999]).toEqual(shared)
     expect(merged[0]).not.toBe(merged[1])
+  })
+})
+
+describe('merge input', () => {
+  it('skips scalar sources, as it skips nullish ones', () => {
+    for (const scalar of [5, 'x', true, 0, '', false, 1n] as never[]) {
+      expect(merge({ keep: 1 }, scalar)).toEqual({ keep: 1 })
+    }
+    expect(merge({ keep: 1 }, JSON.parse('5') as object, { b: 2 })).toEqual({ keep: 1, b: 2 })
+  })
+
+  it('a target that is no object throws the named error', () => {
+    const named = new TypeError('merge target must be an object')
+    expect(() => merge(undefined as never, { a: 1 })).toThrow(named)
+    expect(() => merge(5 as never, { a: 1 })).toThrow(named)
+    expect(() => merge((() => undefined) as never, { a: 1 })).toThrow(named)
+  })
+
+  it('an undefined source value keeps an inherited target value', () => {
+    const target = Object.create({ a: 1 }) as { a?: number }
+    merge(target, { a: undefined })
+    expect(target.a).toBe(1)
+    expect(Object.keys(target)).toEqual([])
+    expect(Object.keys(merge({}, { a: undefined }))).toEqual(['a'])
+  })
+
+  it('runs target setters, as _.merge does', () => {
+    const written: unknown[] = []
+    const target = Object.create({
+      set a(value: unknown) {
+        written.push(value)
+      }
+    }) as object
+    merge(target, { a: 1 })
+    expect(written).toEqual([1])
+    expect(Object.keys(target)).toEqual([])
+  })
+})
+
+describe('merge of a cycle-rich graph', () => {
+  /** Every object points at every other: the path-scoped walk re-expands every simple path. */
+  function linkedObjects(size: number, onRead: () => void): object {
+    const nodes = Array.from({ length: size }, (): Record<string, unknown> => ({}))
+    nodes.forEach((node, i) => {
+      nodes.forEach((other, j) => {
+        if (i !== j) node[`k${String(j)}`] = other
+      })
+    })
+    Object.defineProperty(nodes[size - 1], 'probe', {
+      enumerable: true,
+      get() {
+        onRead()
+        return 1
+      }
+    })
+    return nodes[0]
+  }
+
+  it('throws the budget error after a bounded number of copies', () => {
+    let reads = 0
+    const start = linkedObjects(11, () => {
+      if (++reads > 600_000) throw new Error('walked past the budget')
+    })
+    expect(() => merge({}, start)).toThrow(
+      new RangeError('input repeats shared objects beyond 500000 copied nodes')
+    )
+  })
+
+  it('still copies a small cycle', () => {
+    const a: Record<string, unknown> = { name: 'a' }
+    const b = { name: 'b', a }
+    a.b = b
+    const merged = merge({}, { first: a, second: a }) as {
+      first: { b: { a: unknown } }
+      second: unknown
+    }
+    expect(merged.first.b.a).toBe(merged.first)
+    expect(merged.second).not.toBe(merged.first)
   })
 })
