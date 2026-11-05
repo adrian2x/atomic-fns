@@ -31,7 +31,8 @@ import {
   type,
   uniqueId,
   noop,
-  isGenerator
+  isGenerator,
+  has
 } from '../src/globals/index.js'
 import { enumerate, take } from '../src/itertools/index.js'
 
@@ -291,5 +292,14 @@ describe('globals', () => {
     const obj = { a: { b: () => 1 }, 'a.b': () => 2 }
     assert(call(obj, 'a.b') === 2)
     assert(call({ a: { b: () => 1 } }, 'a.b') === undefined)
+  })
+
+  it('has returns a boolean and accepts primitives', () => {
+    assert(has('abc', 'length') === true)
+    assert(has(5, 'toFixed') === true)
+    assert(has(5, 'missing') === false)
+    assert(has(null, 'a') === false)
+    assert(has(0, 'a') === false)
+    assert(has({ a: undefined }, 'a') === true)
   })
 })
