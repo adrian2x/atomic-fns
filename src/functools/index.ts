@@ -83,22 +83,6 @@ export function memoize<T>(func: Function<T>, resolver?: Function): Function<T> 
 }
 
 /**
- * Can be used as a decorator on any function or method to memoize its results.
- * **NOTE:** By default the given function is memoized using it's first argument, regardless of others.
- * @param target
- * @param name
- * @param descriptor
- * @returns A memoized version of the given function
- */
-export function cache(target, name, descriptor): any {
-  const original = descriptor.value
-  if (typeof original === 'function') {
-    descriptor.value = memoize(original)
-  }
-  return descriptor
-}
-
-/**
  * Creates a debounced function that delays invoking `func` until after `wait` milliseconds have elapsed since the last time the debounced function was invoked. Subsequent calls to the debounced function return the result of the last successful invocation. Provide options to set the `maxWait` milliseconds, regardless of when the function was last invoked.
  *
  * @param {Function} func The function to debounce.
