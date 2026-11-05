@@ -815,12 +815,16 @@ uniq([2.1, 1.2, 2.3], Math.floor)
 export function uniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
 export function uniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
 export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
-  const keys = new Set<T>()
+  const keys = new Set()
+  const results: T[] = []
   const it = isFunction(fn) ? fn : (x) => get(fn, x)
   for (const x of arr) {
-    keys.add(it(x))
+    const key = it(x)
+    if (keys.has(key)) continue
+    keys.add(key)
+    results.push(Object.is(x, -0) ? (0 as T) : x)
   }
-  return Array.from(keys.values())
+  return results
 }
 
 /**

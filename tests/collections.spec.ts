@@ -550,7 +550,12 @@ describe('collections', () => {
   it('uniqBy', () => {
     let arr = [4, 7, 1, 1, 9, 4, 7]
     let distinct = uniq(arr, (x) => x * 2)
-    assert.deepEqual(distinct, [8, 14, 2, 18])
+    assert.deepEqual(distinct, [4, 7, 1, 9])
+    assert.deepEqual(uniq([2.1, 1.2, 2.3], Math.floor), [2.1, 1.2])
+    const first = { a: 1, b: 1 }
+    assert.deepEqual(uniq([first, { a: 1, b: 2 }], 'a'), [first])
+    assert.deepEqual(sortedUniq([2.3, 1.2, 2.1], Math.floor), [1.2, 2.3])
+    assert(Object.is(uniq([-0])[0], 0))
   })
 
   it('binarySearch', () => {
