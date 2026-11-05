@@ -16,7 +16,7 @@ function padZoneStr(instance: Date) {
   const minutes = Math.abs(negMinutes)
   const hourOffset = Math.floor(minutes / 60)
   const minuteOffset = minutes % 60
-  return `${negMinutes <= 0 ? '+' : '-'}${padStart(hourOffset, 2, '0')}:${padStart(
+  return `${negMinutes >= 0 ? '+' : '-'}${padStart(hourOffset, 2, '0')}:${padStart(
     minuteOffset,
     2,
     '0'
@@ -154,8 +154,6 @@ const TOKENS = {
   NNN: { era: s, year: dd },
   NNNN: { era: l, year: dd },
   // timeZoneName
-  ZZ: { timeZoneName: 'longOffset', year: dd },
-  Z: { timeZoneName: 'shortOffset', year: dd },
   zzz: { timeZoneName: l, year: dd },
   z: { timeZoneName: s, year: dd }
 }
@@ -229,8 +227,8 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     d: date.getDay(),
     ddd: formatter(locale, TOKENS.ddd).format(date),
     dddd: formatter(locale, TOKENS.dddd).format(date),
-    Z: formatPart(locale, 'Z', date),
-    ZZ: formatPart(locale, 'ZZ', date),
+    Z: zoneStr,
+    ZZ: zoneStr.replace(':', ''),
     z: formatPart(locale, 'z', date),
     zzz: formatPart(locale, 'zzz', date),
     LT: `${time.h}:${time.mm} ${time.A}`,
