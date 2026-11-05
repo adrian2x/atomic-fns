@@ -97,6 +97,23 @@ describe('collections', () => {
     assert(clone(buffer, true).byteLength === 3)
   })
 
+  it('clone and merge keep a DataView', () => {
+    const view = new DataView(new Uint8Array([1, 2, 3, 4]).buffer, 1, 2)
+    const shallow = clone(view)
+    assert(shallow.buffer === view.buffer)
+    assert(shallow.byteOffset === 1)
+    assert(shallow.byteLength === 2)
+
+    const deep = clone(view, true)
+    assert(deep.buffer !== view.buffer)
+    assert(deep.byteLength === 2)
+    assert(deep.getUint8(0) === 2)
+
+    const merged = merge({}, { view }) as { view: DataView }
+    assert(merged.view !== view)
+    assert(merged.view.getUint8(1) === 3)
+  })
+
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]

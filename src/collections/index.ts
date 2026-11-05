@@ -753,6 +753,10 @@ function cloneArray<T>(arr: T[], deep = false): T[] {
  * @see {@link clone}
  */
 function cloneTypedArray(typedArray, isDeep = false) {
+  if (typedArray instanceof DataView) {
+    const viewed = isDeep ? typedArray.buffer.slice(0) : typedArray.buffer
+    return new DataView(viewed, typedArray.byteOffset, typedArray.byteLength)
+  }
   const buffer = isDeep ? structuredClone(typedArray) : typedArray.buffer
   return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length)
 }
