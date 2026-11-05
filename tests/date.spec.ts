@@ -617,6 +617,11 @@ it('strftime %-H accepts a timestamp and no date', () => {
 })
 
 describe('Duration', () => {
+  it('toISOString counts quarters as months', () => {
+    assert.strictEqual(new Duration({ quarters: 1 }).toISOString(), 'P3M')
+    assert.strictEqual(new Duration({ years: 1, quarters: 1, months: 1 }).toISOString(), 'P1Y4M')
+  })
+
   it('reads its getters whatever it was built from', () => {
     assert.strictEqual(new Duration(NaN).years, 0)
     assert.strictEqual(new Duration(NaN).toISOString(), 'PT0S')
