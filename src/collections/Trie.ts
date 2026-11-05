@@ -79,12 +79,17 @@ export class Trie extends Collection {
   /**
    * Generates all results that start with the given string.
    * @param word A prefix string
-   * @param {number} [limit=20] The number of results to return.
+   * @param {number} [limit] The number of results to return. Defaults to every result.
    */
-  matches = function* (word: string, limit = 20): Generator<string> {
+  matches = function* (word: string, limit?: number): Generator<string> {
     const node = this.findNode(word)
     if (node) {
-      yield* traverse(node, word)
+      const most = limit ?? Infinity
+      let count = 0
+      for (const match of traverse(node, word)) {
+        if (++count > most) return
+        yield match
+      }
     }
   }
 
