@@ -362,4 +362,16 @@ describe('BTree', () => {
     tree.set(replacement, 'new')
     assert(tree.maxKey() === replacement)
   })
+
+  it('add keeps the value of an existing key', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, i * 2)
+    }
+    assert(tree.add(9) === false)
+    assert(tree.get(9) === 18)
+    assert(tree.add(100) === true)
+    assert(tree.get(100) === null)
+    assert(tree.size === 11)
+  })
 })
