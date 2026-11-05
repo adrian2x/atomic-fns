@@ -218,7 +218,7 @@ export class Duration {
    * @return {number}
    */
   get(unit: string): number {
-    return this[UNITS_PLURAL[unit.toLowerCase()]]
+    return this.values[UNITS_PLURAL[unit.toLowerCase()]] ?? 0
   }
 
   add(duration: TDuration) {
