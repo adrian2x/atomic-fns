@@ -321,6 +321,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   /** Returns the timezone GMT offset as a string  */
   zone(): string {
+    if (!this.isValid()) return INVALID_DATE_STRING
     const zoneFormat = new Intl.DateTimeFormat(this.locale, { timeZoneName: 'longOffset' })
     return zoneFormat.formatToParts(this._date).find((part) => part.type === 'timeZoneName').value
   }
@@ -523,7 +524,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
   }
 
   inspect() {
-    return `new IntlDate("${this.toISOString()}")`
+    return this.isValid() ? `new IntlDate("${this.toISOString()}")` : 'new IntlDate(NaN)'
   }
 }
 
