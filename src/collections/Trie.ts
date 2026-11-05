@@ -94,7 +94,7 @@ export class Trie extends Collection {
    */
   contains(word: string): boolean {
     const node = this.findNode(word)
-    return node?.isWord
+    return !!node?.isWord
   }
 
   /**
