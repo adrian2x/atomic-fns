@@ -385,12 +385,8 @@ export function sorted<T>(
     args = Object.keys(args) as T[]
   }
   if (typeof key === 'boolean') {
-    if (typeof reverse === 'function') {
-      compareFn = reverse
-      reverse = false
-    } else {
-      reverse = true
-    }
+    if (typeof reverse === 'function') compareFn = reverse
+    reverse = key || reverse === true
     key = identity
   }
   const copy = Array.from(args as T[])
