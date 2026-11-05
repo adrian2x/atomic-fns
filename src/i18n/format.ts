@@ -70,13 +70,16 @@ export function asDate(date: string | number | Date, utc = false): Date {
 
   const fromDate = new Date(date)
   if (utc) {
-    fromDate.setFullYear(fromDate.getUTCFullYear())
-    fromDate.setMonth(fromDate.getUTCMonth())
-    fromDate.setDate(fromDate.getUTCDate())
-    fromDate.setHours(fromDate.getUTCHours())
-    fromDate.setMinutes(fromDate.getUTCMinutes())
-    fromDate.setSeconds(fromDate.getUTCSeconds())
-    fromDate.setMilliseconds(fromDate.getUTCMilliseconds())
+    return fromFields(
+      false,
+      fromDate.getUTCFullYear(),
+      fromDate.getUTCMonth(),
+      fromDate.getUTCDate(),
+      fromDate.getUTCHours(),
+      fromDate.getUTCMinutes(),
+      fromDate.getUTCSeconds(),
+      fromDate.getUTCMilliseconds()
+    )
   }
   return fromDate
 }
