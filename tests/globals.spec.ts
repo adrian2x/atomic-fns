@@ -32,7 +32,7 @@ import {
   uniqueId,
   noop
 } from '../src/globals/index.js'
-import { enumerate } from '../src/itertools/index.js'
+import { enumerate, take } from '../src/itertools/index.js'
 
 describe('globals', () => {
   it('CustomError', () => {
@@ -247,5 +247,24 @@ describe('globals', () => {
     assert(isEmpty(0))
     assert(isEmpty(false))
     assert(!isEmpty(1))
+  })
+
+  it('isFunction accepts async and generator functions', () => {
+    assert(isFunction(async () => {}))
+    assert(isFunction(function* () {}))
+    assert(!isFunction({ constructor: Function }))
+
+    class Bag {
+      *[Symbol.iterator]() {
+        yield 1
+        yield 2
+      }
+
+      async load() {
+        return 'loaded'
+      }
+    }
+    assert.deepEqual(take(2, new Bag()), [1, 2])
+    assert(call(new Bag(), 'load') instanceof Promise)
   })
 })
