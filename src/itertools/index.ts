@@ -235,8 +235,8 @@ export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, 
   if (stop != null && start > stop) throw new ValueError(`start parameter can't be after stop`)
   if (step < 0) throw new ValueError(`step parameter can't be negative`)
   for (const [i, value] of enumerate(iterable)) {
+    if (stop != null && i >= stop) return
     if (i === start) {
-      if (stop && start + step > stop) return value
       yield value
       start += step
     }
