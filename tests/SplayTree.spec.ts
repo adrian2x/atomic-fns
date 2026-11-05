@@ -233,4 +233,16 @@ describe('SplayTree', () => {
     assert(tree.contains(1))
     assert(tree.top() === 2)
   })
+
+  it('delete reports whether the key was there', () => {
+    let tree = new SplayTree()
+    assert(tree.delete(1) === false)
+    tree.set(1, 'a')
+    tree.set(2, undefined)
+    assert(tree.delete(3) === false)
+    assert(tree.delete(1) === true)
+    assert(tree.delete(1) === false)
+    assert(tree.delete(2) === true)
+    assert(tree.empty())
+  })
 })
