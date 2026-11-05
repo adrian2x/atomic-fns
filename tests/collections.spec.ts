@@ -841,4 +841,12 @@ describe('collections', () => {
     assert.deepEqual(sortedUniq([{ id: 2 }, { id: 1 }, { id: 2 }], 'id'), [{ id: 1 }, { id: 2 }])
     assert.deepEqual(sortedUniq([3.2, 1.1, 3.9], Math.floor), [1.1, 3.2])
   })
+
+  it('pick keeps __proto__ out when the key is an array', () => {
+    const body = JSON.parse('{"__proto__": {"inherited": 1}, "a": 2}')
+    const picked: any = pick(body, JSON.parse('[["__proto__"], "a"]'))
+    assert(Object.getPrototypeOf(picked) === Object.prototype)
+    assert(picked.inherited === undefined)
+    assert(picked.a === 2)
+  })
 })

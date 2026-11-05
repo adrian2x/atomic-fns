@@ -518,8 +518,9 @@ export function pick<T>(obj: T, paths: Iteratee | PropertyKey[]): Partial<T> {
     return result
   }
 
-  for (const key of paths) {
-    const value = get(key, obj)
+  for (const path of paths) {
+    const key = typeof path === 'symbol' ? path : String(path)
+    const value = get(path, obj)
     if (key !== '__proto__' && (value !== undefined || key in Object(obj))) result[key] = value
   }
   return result
