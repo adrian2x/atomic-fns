@@ -318,4 +318,13 @@ describe('BTree', () => {
     assert(tree.get(1) === 'c')
     assert(tree.size === 2)
   })
+
+  it('rangeForEach counts nothing when low is above high', () => {
+    const tree = new BTree()
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, i)
+    }
+    assert(tree.rangeForEach(5, 2, true) === 0)
+    assert(tree.rangeForEach(5, 2, true, undefined, 3) === 3)
+  })
 })
