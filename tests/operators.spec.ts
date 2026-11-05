@@ -115,4 +115,31 @@ describe('operators', () => {
     assert(shallowEqual(new Date(1), new Date(1)))
     assert(!shallowEqual(/a/, /b/))
   })
+
+  it('deepEqual keeps shared references equal and survives cycles', () => {
+    const left = { x: 1 }
+    const right = { x: 1 }
+    assert(deepEqual({ a: left, b: left }, { a: right, b: right }))
+    assert(deepEqual([left, left], [right, right]))
+
+    const a: any[] = [1]
+    a.push(a)
+    const b: any[] = [1]
+    b.push(b)
+    assert(deepEqual(a, b))
+
+    const c: any = { n: 1 }
+    c.self = c
+    const d: any = { n: 2 }
+    d.self = d
+    assert(!deepEqual(c, d))
+
+    let wideLeft: any = { leaf: true }
+    let wideRight: any = { leaf: true }
+    for (let i = 0; i < 40; i++) {
+      wideLeft = { a: wideLeft, b: wideLeft }
+      wideRight = { a: wideRight, b: wideRight }
+    }
+    assert(deepEqual(wideLeft, wideRight))
+  })
 })
