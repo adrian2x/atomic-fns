@@ -703,6 +703,23 @@ describe('IntlDate', () => {
     })
   })
 
+  it('keeps years under 100', () => {
+    const day = (date: IntlDate) => date.format('YYYY-MM-DD')
+    assert.strictEqual(day(mockDate({ year: 50, month: 6, day: 15 })), '0050-06-15')
+    assert.strictEqual(day(mockDate({ year: 0, month: 2, day: 29 })), '0000-02-29')
+    assert.strictEqual(
+      mockDate({ year: 50, month: 6, day: 15 }, { utc: true }).toISOString(),
+      '0050-06-15T00:00:00.000Z'
+    )
+
+    const date = mockDate('0050-06-15T13:05:09')
+    assert.strictEqual(day(date.startOf('month')), '0050-06-01')
+    assert.strictEqual(day(date.endOf('month')), '0050-06-30')
+    assert.strictEqual(day(date.set({ day: 1 })), '0050-06-01')
+    assert.strictEqual(day(date.add({ days: 1 })), '0050-06-16')
+    assert.strictEqual(day(mockDate({ year: 1950, month: 6, day: 15 })), '1950-06-15')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
