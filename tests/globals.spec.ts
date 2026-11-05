@@ -286,4 +286,10 @@ describe('globals', () => {
     assert(!isAsyncFunction(Object.create(null)))
     assert(!isGenerator(Object.create(null)))
   })
+
+  it('call treats a dotted key as one key', () => {
+    const obj = { a: { b: () => 1 }, 'a.b': () => 2 }
+    assert(call(obj, 'a.b') === 2)
+    assert(call({ a: { b: () => 1 } }, 'a.b') === undefined)
+  })
 })
