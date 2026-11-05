@@ -59,4 +59,24 @@ describe('Trie', () => {
     tree.clear()
     assert(tree.size === 0)
   })
+
+  it('remove returns false for an absent word', () => {
+    let tree = new Trie(['cat'])
+    assert(tree.remove('cab') === false)
+    assert(tree.remove('cats') === false)
+    assert(tree.remove('ca') === false)
+    assert(tree.remove('dog') === false)
+    assert(new Trie().remove('a') === false)
+    assert(tree.size === 1)
+    assert(tree.contains('cat'))
+  })
+
+  it('remove the empty string', () => {
+    let tree = new Trie(['', 'a'])
+    assert(tree.contains(''))
+    assert(tree.remove(''))
+    assert(!tree.contains(''))
+    assert(tree.remove('') === false)
+    assert(tree.size === 1)
+  })
 })
