@@ -79,6 +79,14 @@ describe('random', () => {
     }
   })
 
+  it('shuffle does not grow the array when size is past the end', () => {
+    for (const size of [3, 5]) {
+      const arr = [1, 2, 3]
+      assert(shuffle(arr, size) === arr)
+      assert.deepEqual(arr.slice().sort(), [1, 2, 3])
+    }
+  })
+
   it('shuffle returns the values of an object', () => {
     const values = shuffle({ a: 1, b: 2, c: 3 })
     assert(Array.isArray(values))
