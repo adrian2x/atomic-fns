@@ -148,4 +148,37 @@ describe('deque', () => {
     assert.deepEqual(Array.from(deque.toArray()), [2, 3, 4, 5])
     assert.deepEqual(Array.from(new Deque(new Int32Array([1, 2, 3]), 2).toArray()), [2, 3])
   })
+
+  it('get across the end of the buffer', () => {
+    let deque = new Deque([], 4)
+    for (const value of [1, 2, 3, 4, 5, 6]) {
+      deque.append(value)
+    }
+    assert.deepEqual(
+      [0, 1, 2, 3].map((i) => deque.get(i)),
+      [3, 4, 5, 6]
+    )
+    assert.deepEqual(
+      [-1, -2, -3, -4].map((i) => deque.get(i)),
+      [6, 5, 4, 3]
+    )
+  })
+
+  it('get with a negative index after popleft', () => {
+    let deque = new Deque([1, 2, 3, 4])
+    deque.popleft()
+    deque.popleft()
+    assert(deque.get(-1) === 4)
+    assert(deque.get(-2) === 3)
+  })
+
+  it('get out of range', () => {
+    let deque = new Deque([1, 2, 3])
+    deque.pop()
+    assert(deque.get(2) === undefined)
+    assert(deque.get(-3) === undefined)
+    deque.popleft()
+    assert(deque.get(1) === undefined)
+    assert(deque.get(-2) === undefined)
+  })
 })

@@ -158,14 +158,10 @@ export class Deque<T = any> extends Sequence<T> {
    * @returns {?T} The element if exists
    */
   get(index): T | undefined {
-    if (this.count === 0) return
-
-    index = this.start + index
     if (index < 0) index += this.count
+    if (index < 0 || index >= this.count) return
 
-    if (index > this.capacity) index -= this.capacity
-
-    return this.items[index]
+    return this.items[(this.start + index) % this.capacity]
   }
 
   /**
