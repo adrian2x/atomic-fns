@@ -104,4 +104,21 @@ describe('deque', () => {
     assert(deque.size === values.length)
     assert.deepEqual(deque.toArray(), values)
   })
+
+  it('set after popleft and wrap-around', () => {
+    let deque = new Deque([1, 2, 3])
+    deque.popleft()
+    deque.set(0, 9)
+    assert.deepEqual(deque.toArray(), [9, 3])
+    deque.set(-1, 8)
+    assert.deepEqual(deque.toArray(), [9, 8])
+
+    let ring = new Deque([], 4)
+    for (const value of [1, 2, 3, 4, 5, 6]) {
+      ring.append(value)
+    }
+    ring.set(0, 9)
+    ring.set(3, 8)
+    assert.deepEqual(ring.toArray(), [9, 4, 5, 8])
+  })
 })

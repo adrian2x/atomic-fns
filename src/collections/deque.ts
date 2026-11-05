@@ -173,7 +173,7 @@ export class Deque<T = any> extends Sequence<T> {
   set(index: number, value: T): void {
     if (index < 0) index += this.count
     if (index > this.count) throw new KeyError(`Invalid index: ${index} not in Deque.`)
-    this.items[index] = value
+    this.items[(this.start + index) % this.capacity] = value
   }
 
   /**
