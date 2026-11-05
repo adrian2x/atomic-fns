@@ -830,6 +830,7 @@ function baseMergeDeep(obj, source, key, stack) {
 function baseMerge(obj, source, stack?) {
   if (obj === source) return obj
   for (const key of Object.keys(source)) {
+    if (key === '__proto__') continue
     const srcValue = source[key]
     const objValue = obj[key]
     if (typeof srcValue === 'object' && srcValue !== null) {
