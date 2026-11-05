@@ -203,4 +203,14 @@ describe('BTree', () => {
       assert.deepEqual(nextSeen, [4, 2])
     }
   })
+
+  it('keeps its size when the comparator cannot order a key', () => {
+    const tree = new BTree(undefined, (x, y) => x - y)
+    tree.set(Number.NaN, 'nan')
+    assert(tree.set(1, 'one') === true)
+    assert(tree.size === 2)
+    assert(tree.get(0, 'none') === 'none')
+    assert(tree.remove(0) === false)
+    assert(tree.size === 2)
+  })
 })
