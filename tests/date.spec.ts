@@ -661,6 +661,32 @@ describe('IntlDate', () => {
     assert.strictEqual(day(mockDate('2021-01-31').set({ month: 2, day: 31 })), '2021-03-03')
   })
 
+  it('startOf week and set weekday move within this week', () => {
+    const full = (date: IntlDate) => date.format('YYYY-MM-DD HH:mm:ss.SSS')
+    const friday = mockDate('2021-01-15T13:05:09')
+    assert.strictEqual(full(friday.startOf('week')), '2021-01-11 00:00:00.000')
+    assert.strictEqual(full(friday.endOf('week')), '2021-01-17 23:59:59.999')
+    assert.strictEqual(
+      full(mockDate('2021-01-17T13:00:00').startOf('week')),
+      '2021-01-11 00:00:00.000'
+    )
+    assert.strictEqual(
+      full(mockDate('2021-01-11T13:00:00').startOf('week')),
+      '2021-01-11 00:00:00.000'
+    )
+    assert.strictEqual(
+      full(mockDate('2021-01-01T00:00:00').startOf('week')),
+      '2020-12-28 00:00:00.000'
+    )
+    assert.strictEqual(full(friday.set({ weekday: 1 })), '2021-01-11 13:05:09.000')
+    assert.strictEqual(full(friday.set({ weekday: 7 })), '2021-01-17 13:05:09.000')
+
+    inZone('America/Havana', () => {
+      assert.strictEqual(full(at(2021, 2, 14, 12).startOf('week')), '2021-03-08 00:00:00.000')
+      assert.strictEqual(full(at(2021, 2, 7, 12).endOf('week')), '2021-03-07 23:59:59.999')
+    })
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
