@@ -1,5 +1,13 @@
 import assert from 'assert'
-import { bool, identity, isinstance, not, compare, shallowEqual } from '../src/operators/index.js'
+import {
+  bool,
+  identity,
+  isinstance,
+  not,
+  compare,
+  shallowEqual,
+  eq
+} from '../src/operators/index.js'
 
 describe('operators', () => {
   it('identity', () => {
@@ -36,5 +44,12 @@ describe('operators', () => {
     assert(shallowEqual({}, {}))
     assert(shallowEqual([], []))
     assert(shallowEqual({ test: true }, { test: true }))
+  })
+
+  it('eq honors a hook that answers false', () => {
+    const one = { eq: (other) => other === 1 }
+    assert(eq(one, 1))
+    assert(!eq(one, 2))
+    assert(compare(one, 2) !== 0)
   })
 })
