@@ -8,7 +8,9 @@
  */
 export class FrozenSet<T = any> extends Set<T> {
   constructor(iterable: Iterable<T>) {
-    super(iterable)
+    super()
+    // The Set constructor would call the no-op add below and drop every item
+    for (const item of iterable ?? []) super.add(item)
     return this.freeze()
   }
 
