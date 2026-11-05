@@ -196,4 +196,22 @@ describe('SplayTree', () => {
     tree.add(2)
     assert(tree.get(2) === null)
   })
+
+  it('remove uses the comparator', () => {
+    let tree = new SplayTree((x, y) => x.id - y.id)
+    tree.set({ id: 1 }, 'a')
+    tree.set({ id: 2 }, 'b')
+    assert(tree.remove({ id: 1 }) === 'a')
+    assert(tree.size === 1)
+    assert(!tree.contains({ id: 1 }))
+    assert(tree.contains({ id: 2 }))
+  })
+
+  it('remove treats 0 and -0 as one key', () => {
+    let tree = new SplayTree()
+    tree.set(0, 'a')
+    assert(tree.get(-0) === 'a')
+    assert(tree.remove(-0) === 'a')
+    assert(tree.empty())
+  })
 })
