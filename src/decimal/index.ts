@@ -268,10 +268,12 @@ a.div(b)  // 0.333333333333333333333333333333
    * Remove zeroes in the least-significant digit of this `Decimal`
    */
   private _normalize(): this {
-    while (this.i % 10n === 0n && this.i !== 0n) {
-      this.i /= 10n
-      this.e++
-    }
+    if (this.i === 0n || this.i % 10n !== 0n) return this
+    const digits = this.i.toString()
+    let end = digits.length
+    while (digits[end - 1] === '0') end--
+    this.i = BigInt(digits.slice(0, end))
+    this.e += digits.length - end
     return this
   }
 
