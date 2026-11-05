@@ -121,6 +121,22 @@ describe('collections', () => {
     assert(clone(tree, true) instanceof BTree)
   })
 
+  it('clone keeps a plain object with a length key', () => {
+    assert.deepEqual(clone({ length: 10, width: 5 }), { length: 10, width: 5 })
+    assert.deepEqual(clone({ length: 0, width: 5 }), { length: 0, width: 5 })
+    assert.deepEqual(clone({ length: 2 ** 32 }), { length: 2 ** 32 })
+  })
+
+  it('clone turns a real array-like into an array', () => {
+    const args = function (..._items) {
+      // biome-ignore lint/complexity/noArguments: this spec needs a real arguments object
+      return arguments
+    }
+    assert.deepEqual(clone(args(1, 2)), [1, 2])
+    assert.deepEqual(clone(args()), [])
+    assert.deepEqual(clone({ 0: 'a', 1: 'b', length: 2 }), ['a', 'b'])
+  })
+
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]
