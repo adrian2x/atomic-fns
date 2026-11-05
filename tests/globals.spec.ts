@@ -30,7 +30,8 @@ import {
   True,
   type,
   uniqueId,
-  noop
+  noop,
+  isGenerator
 } from '../src/globals/index.js'
 import { enumerate, take } from '../src/itertools/index.js'
 
@@ -279,5 +280,10 @@ describe('globals', () => {
       }) === 'object'
     )
     assert(isObject(Object.create(null)))
+  })
+
+  it('isAsyncFunction and isGenerator accept null-prototype objects', () => {
+    assert(!isAsyncFunction(Object.create(null)))
+    assert(!isGenerator(Object.create(null)))
   })
 })
