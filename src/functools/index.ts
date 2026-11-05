@@ -240,14 +240,3 @@ export function promisify<T>(fun: Function, thisArg?): Function<Promise<T>> {
     )
   }
 }
-
-/**
- * Invokes a given function that accepts callback arguments for success, error and returns a `Promise` of the results.
- * @param {Function} fn A function that accepts callback arguments for success, error.
- * @returns {Promise<T>} A `Promise` that will be resolved when `successCallback` is called or rejected when `errorCallback` is called.
- */
-export async function callAsync<T = any>(
-  fn: (successCallback: (data: T) => any, errorCallback: Function) => any
-): Promise<T> {
-  return await new Promise<T>(fn)
-}
