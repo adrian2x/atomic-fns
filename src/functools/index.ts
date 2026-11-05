@@ -194,10 +194,10 @@ export function result<T = any, E = unknown>(fn: Function<T>): Function<Result<T
 export function resultAsync<T = any, E = unknown>(
   fn: Function<Promise<T>>
 ): Function<Promise<Result<T, E>>> {
-  return async (...args) => {
+  return async function (...args) {
     let value, err
     try {
-      value = await fn(...args)
+      value = await fn.apply(this, args)
     } catch (error) {
       err = error
     }
