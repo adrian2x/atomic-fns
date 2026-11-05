@@ -30,7 +30,8 @@ import {
   True,
   type,
   uniqueId,
-  noop
+  noop,
+  isGenerator
 } from '../src/globals/index.js'
 import { enumerate, take } from '../src/itertools/index.js'
 
@@ -266,5 +267,23 @@ describe('globals', () => {
     }
     assert.deepEqual(take(2, new Bag()), [1, 2])
     assert(call(new Bag(), 'load') instanceof Promise)
+  })
+
+  it('type reads objects without a usable toString', () => {
+    assert(type(Object.create(null)) === 'object')
+    assert(type({ toString: null }) === 'object')
+    assert(
+      type({
+        toString() {
+          throw new Error('no text form')
+        }
+      }) === 'object'
+    )
+    assert(isObject(Object.create(null)))
+  })
+
+  it('isAsyncFunction and isGenerator accept null-prototype objects', () => {
+    assert(!isAsyncFunction(Object.create(null)))
+    assert(!isGenerator(Object.create(null)))
   })
 })

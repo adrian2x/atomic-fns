@@ -94,7 +94,7 @@ export function type(value: any): string {
       if (value instanceof Error) return 'error'
       if (value[Symbol.toStringTag]) return value[Symbol.toStringTag]
 
-      const className = str(value)
+      const className = Object.prototype.toString.call(value)
       if (className === '[object Window]') return 'object'
       if (className.endsWith('Array]') || Array.isArray(value)) {
         return 'array'
@@ -189,12 +189,12 @@ export function isFunction(x): x is Function {
 
 /** Check if value is an async function type. */
 export function isAsyncFunction(x): boolean {
-  return x?.constructor.name === 'AsyncFunction'
+  return x?.constructor?.name === 'AsyncFunction'
 }
 
 /** Check if value is a generator function type. */
 export function isGenerator(x): x is Generator {
-  return x?.constructor.constructor?.name === 'GeneratorFunction'
+  return x?.constructor?.constructor?.name === 'GeneratorFunction'
 }
 
 /** Check if value is `null` or `undefined`. */
