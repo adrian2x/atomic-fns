@@ -1,6 +1,6 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
-import { asDate, formatDate, strftime } from '../format.js'
+import { asDate, formatDate, fromFields, strftime } from '../format.js'
 import {
   asNumber,
   DateObject,
@@ -80,28 +80,16 @@ export class IntlDate {
       // NOTE month is from 1-12, not from 0-11
       month = (month ?? 1) - 1
 
-      // Date reads the years 0 to 99 as 1900 to 1999, 400 years later the leap years still match
-      const shift = year >= 0 && year < 100 ? 400 : 0
-      year += shift
-
-      if (utc) {
-        // from UTC to current
-        this._date = new Date(
-          Date.UTC(year, month, day || 1, hour || 0, minute || 0, second || 0, millisecond || 0)
-        )
-        this._date.setUTCFullYear(this._date.getUTCFullYear() - shift)
-      } else {
-        this._date = new Date(
-          year,
-          month,
-          day || 1,
-          hour || 0,
-          minute || 0,
-          second || 0,
-          millisecond || 0
-        )
-        this._date.setFullYear(this._date.getFullYear() - shift)
-      }
+      this._date = fromFields(
+        utc,
+        Number(year),
+        month,
+        day || 1,
+        hour || 0,
+        minute || 0,
+        second || 0,
+        millisecond || 0
+      )
     } else {
       this._date = asDate(obj, utc)
     }

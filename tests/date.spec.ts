@@ -878,4 +878,7 @@ describe('Duration', () => {
       minutes: 5
     })
   })
+  it('IntlDate reads a year given as a string', () => {
+    assert(new IntlDate({ year: '2024', month: 3, day: 1 } as any).year === 2024)
+  })
 })
