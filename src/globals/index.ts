@@ -401,6 +401,8 @@ export function set(
 
 export const HASH_KEY = Symbol.for('HASH_KEY')
 
+const sealedHashes = new WeakMap<object, any>()
+
 /**
  * Return a hash value for a given object. The hash will be the same for subsequent invocations.
  * @param obj The given object.
@@ -413,9 +415,13 @@ export function hash<T>(obj: T): T | number {
     return hashCode(obj)
   }
 
-  if (typeof obj === 'object') {
+  if (typeof obj === 'object' && obj !== null) {
     if (get(HASH_KEY, obj) != null) {
       return obj[HASH_KEY]
+    }
+    if (!Object.isExtensible(obj)) {
+      if (!sealedHashes.has(obj)) sealedHashes.set(obj, uniqueId())
+      return sealedHashes.get(obj)
     }
     obj[HASH_KEY] = uniqueId()
     return obj[HASH_KEY]
