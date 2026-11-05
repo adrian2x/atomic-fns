@@ -90,4 +90,15 @@ describe('Trie', () => {
     let tree = new Trie(['b', 'ba', 'a', 'bc', 'bab', 'bb'])
     assert.deepEqual([...tree.matches('')], ['b', 'ba', 'bab', 'bc', 'bb', 'a'])
   })
+
+  it('size counts a repeated word once', () => {
+    let tree = new Trie(['a', 'a'])
+    tree.add('a')
+    assert(tree.size === 1)
+    assert(tree.remove('a'))
+    assert(tree.size === 0)
+    assert(tree.empty())
+    tree.add('a')
+    assert(tree.size === 1)
+  })
 })
