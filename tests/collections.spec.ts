@@ -454,4 +454,16 @@ describe('collections', () => {
       b: { q: 2, r: 3 }
     })
   })
+  it('merge walks a shared source object once per target', () => {
+    let reads = 0
+    let shared: any = {
+      get leaf() {
+        reads++
+        return 1
+      }
+    }
+    for (let i = 0; i < 12; i++) shared = { a: shared, b: shared }
+    merge({}, { root: shared }, { root: shared })
+    assert(reads === 2)
+  })
 })
