@@ -1,10 +1,14 @@
 import assert from 'assert'
+import { dayOfYear, weekOfYear } from '../src/i18n/date/utils.js'
 import {
   addDuration,
   asDate,
+  daysInMonth,
   Duration,
   formatDate,
   IntlDate,
+  maxDate,
+  minDate,
   strftime,
   subDuration
 } from '../src/i18n/index.js'
@@ -766,6 +770,11 @@ describe('IntlDate', () => {
     })
   })
 
+  it('toISODate and toISOTime split an expanded year', () => {
+    assert.strictEqual(mockDate(new Date(8.64e15)).toISODate(), '+275760-09-13')
+    assert.strictEqual(mockDate(new Date(8.64e15)).toISOTime(), '00:00:00.000Z')
+    assert.strictEqual(mockDate(new Date(-8.64e15)).toISODate(), '-271821-04-20')
+  })
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
@@ -834,6 +843,41 @@ it('strftime %-H accepts a timestamp and no date', () => {
   assert(/^\d+$/.test(strftime('%-H', undefined as any)))
 
   assert(strftime('%-H', null as any) === '0')
+})
+
+describe('date utilities', () => {
+  it('minDate and maxDate do not stop at an invalid first date', () => {
+    const early = new Date(0)
+    const late = new Date(5)
+    const invalid = new Date(NaN)
+    assert.strictEqual(minDate([invalid, late, early]), early)
+    assert.strictEqual(maxDate([invalid, early, late]), late)
+    assert.strictEqual(minDate([late, invalid, early]), early)
+    assert.strictEqual(maxDate([early, invalid, late]), late)
+    assert.strictEqual(IntlDate.min(mockDate('garbage'), late), late)
+    assert.strictEqual(minDate([invalid]), invalid)
+  })
+
+  it('dayOfYear and week keep years under 100', () => {
+    assert.strictEqual(dayOfYear('0050-06-15'), 166)
+    assert.strictEqual(dayOfYear('0004-12-31'), 366)
+    assert.strictEqual(mockDate('0050-06-15').dayOfYear(), 166)
+    assert.strictEqual(mockDate('0050-06-15').isoWeek(), 24)
+  })
+
+  it('read a date string as local time', () => {
+    inZone('America/New_York', () => {
+      assert.strictEqual(daysInMonth('2021-03-01'), 31)
+      assert.strictEqual(daysInMonth('2021-02-01'), 28)
+      assert.strictEqual(dayOfYear('2021-01-01'), 1)
+      assert.strictEqual(dayOfYear('2021-12-31'), 365)
+      assert.deepStrictEqual(weekOfYear('2021-01-04', 1, 4), { week: 1, year: 2021 })
+      assert.strictEqual(
+        addDuration('2021-03-01', { months: 1 }).toISOString(),
+        '2021-04-01T04:00:00.000Z'
+      )
+    })
+  })
 })
 
 describe('Duration', () => {

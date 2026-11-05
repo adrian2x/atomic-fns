@@ -267,7 +267,7 @@ new IntlDate().toISODate() // '2022-10-31'
 ```
    */
   toISODate(): string {
-    return this._date.toISOString().slice(0, 10)
+    return this._date.toISOString().split('T')[0]
   }
 
   /** Returns the time part formatted as ISO8601.
@@ -277,7 +277,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 ```
    */
   toISOTime(): string {
-    return this._date.toISOString().slice(11)
+    return this._date.toISOString().split('T')[1]
   }
 
   /**
@@ -550,7 +550,7 @@ export function addDuration(
   duration: number | Duration | TDuration,
   exact = false
 ): Date {
-  const newDate = new Date(date)
+  const newDate = asDate(date)
   const { values } = new Duration(duration, exact)
   const {
     years = 0,

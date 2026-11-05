@@ -1,3 +1,5 @@
+import { asDate } from '../format.js'
+
 export interface DateObject {
   year?: number
   month?: number
@@ -61,7 +63,7 @@ export function minDate<T>(...dates: Array<T>): T {
     ans = ans[0]
   }
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i].valueOf() < ans.valueOf()) {
+    if (dates[i].valueOf() < ans.valueOf() || Number.isNaN(ans.valueOf())) {
       ans = dates[i]
     }
   }
@@ -82,7 +84,7 @@ export function maxDate<T>(...dates: Array<T>): T {
     ans = ans[0]
   }
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i].valueOf() > ans.valueOf()) {
+    if (dates[i].valueOf() > ans.valueOf() || Number.isNaN(ans.valueOf())) {
       ans = dates[i]
     }
   }
@@ -113,7 +115,7 @@ export function daysInYear(year: number): number {
  * @returns {number} Number of days in month
  */
 export function daysInMonth(date: string | number | Date): number {
-  const d = new Date(date),
+  const d = asDate(date),
     year = d.getFullYear(),
     month = d.getMonth() + 1
   const modMonth = floorMod(month - 1, 12) + 1,
@@ -337,7 +339,7 @@ export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1
  * @returns
  */
 export function weekOfYear(date: string | number | Date, firstDayOfWeek = 1, firstDayOfYear = 1) {
-  const year = new Date(date).getFullYear()
+  const year = asDate(date).getFullYear()
   const doy = dayOfYear(date)
   let weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),
     week = Math.floor((doy - weekOffset - 1) / 7) + 1,
@@ -366,11 +368,12 @@ export function isoWeeksInYear(year: number): number {
 }
 
 export function dayOfYear(input: string | number | Date): number {
-  input = new Date(input)
+  input = asDate(input)
   input.setHours(0)
   input.setMinutes(0)
   input.setSeconds(0)
   input.setMilliseconds(0)
-  let start = new Date(input.getFullYear(), 0, 1, 0, 0, 0, 0)
+  const start = new Date(input)
+  start.setMonth(0, 1)
   return Math.round((+input - start.getTime()) / 864e5) + 1
 }
