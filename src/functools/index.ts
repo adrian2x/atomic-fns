@@ -74,8 +74,7 @@ export function memoize<T>(func: Function<T>, resolver?: Function): Function<T> 
   const cache = new Map<any, T>()
   return (...args) => {
     const key = resolver ? resolver(...args) : args[0]
-    const prev = cache.get(key)
-    if (prev !== undefined) return prev
+    if (cache.has(key)) return cache.get(key)
     const value = func(...args)
     cache.set(key, value)
     return value
