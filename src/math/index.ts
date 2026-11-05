@@ -31,7 +31,9 @@ export function abs(x: any): number {
  */
 export function round(x: number, digits = 0): number {
   const base = 10 ** digits
-  return Math.round(x * base) / base
+  const scaled = x * base
+  // A number too large to scale has no digits left to round.
+  return Number.isFinite(scaled) ? Math.round(scaled) / base : Number(x)
 }
 
 /**
