@@ -158,4 +158,39 @@ describe('LRUCache', () => {
     assert(!cache.contains(1))
     assert(cache.delete(2))
   })
+
+  it('iteration ends when the loop calls get or set', () => {
+    let cache = new LRUCache(3)
+    for (const value of [1, 2, 3]) {
+      cache.set(value, value)
+    }
+
+    let keys: any[] = []
+    for (const key of cache.keys()) {
+      keys.push(key)
+      if (keys.length > 3) break
+      cache.get(key)
+    }
+    assert.deepEqual(keys, [1, 2, 3])
+
+    let values: any[] = []
+    for (const value of cache.values()) {
+      values.push(value)
+      if (values.length > 3) break
+      cache.set(value, value)
+    }
+    assert.deepEqual(values, [1, 2, 3])
+
+    let entries: any[] = []
+    for (const entry of cache) {
+      entries.push(entry)
+      if (entries.length > 3) break
+      cache.get(entry[0])
+    }
+    assert.deepEqual(entries, [
+      [1, 1],
+      [2, 2],
+      [3, 3]
+    ])
+  })
 })

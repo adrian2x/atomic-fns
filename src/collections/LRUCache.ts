@@ -116,7 +116,8 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @returns {IterableIterator<K>}
    */
   keys(): IterableIterator<K> {
-    return this.items.keys()
+    // A snapshot: get and set re-insert keys, so a live Map iterator would never reach the end
+    return [...this.items.keys()].values()
   }
 
   /**
@@ -124,7 +125,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @returns {IterableIterator<V>}
    */
   values(): IterableIterator<V> {
-    return this.items.values()
+    return [...this.items.values()].values()
   }
 
   /**
@@ -132,7 +133,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @returns {IterableIterator<[K, V]>}
    */
   entries(): IterableIterator<[K, V]> {
-    return this.items.entries()
+    return [...this.items.entries()].values()
   }
 
   [Symbol.iterator](): IterableIterator<[K, V]> {
