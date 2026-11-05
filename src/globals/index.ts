@@ -300,7 +300,7 @@ uuid()
  */
 export function uuid(): string {
   const u = Date.now().toString(16) + Math.random().toString(16) + '0'.repeat(16)
-  return [u.slice(0, 8), u.slice(8, 12), '4000-8' + u.slice(13, 16), u.slice(16, 28)].join('-')
+  return [u.slice(0, 8), u.slice(8, 12), `4000-8${u.slice(13, 16)}`, u.slice(16, 28)].join('-')
 }
 
 /**

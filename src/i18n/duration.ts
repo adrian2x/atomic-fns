@@ -389,18 +389,18 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   toISOString() {
     let s = 'P'
     const months = this.get('quarters') * 3 + this.months
-    if (this.years !== 0) s += this.years + 'Y'
-    if (months !== 0) s += months + 'M'
-    if (this.weeks !== 0) s += this.weeks + 'W'
-    if (this.days !== 0) s += this.days + 'D'
+    if (this.years !== 0) s += `${this.years}Y`
+    if (months !== 0) s += `${months}M`
+    if (this.weeks !== 0) s += `${this.weeks}W`
+    if (this.days !== 0) s += `${this.days}D`
     if (this.hours !== 0 || this.minutes !== 0 || this.seconds !== 0 || this.milliseconds !== 0)
       s += 'T'
-    if (this.hours !== 0) s += this.hours + 'H'
-    if (this.minutes !== 0) s += this.minutes + 'M'
+    if (this.hours !== 0) s += `${this.hours}H`
+    if (this.minutes !== 0) s += `${this.minutes}M`
     if (this.seconds !== 0 || this.milliseconds !== 0)
       // this will handle "floating point madness" by removing extra decimal places
       // https://stackoverflow.com/questions/588004/is-floating-point-math-broken
-      s += round(this.seconds + this.milliseconds / 1000, 3) + 'S'
+      s += `${round(this.seconds + this.milliseconds / 1000, 3)}S`
     if (s === 'P') s += 'T0S'
     return s
   }
