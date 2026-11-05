@@ -6,6 +6,7 @@ const REGEX_FORMAT =
   /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|Do|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
+const INVALID_DATE_STRING = 'Invalid Date'
 const ORDINAL_SUFFIXES = { one: 'st', two: 'nd', few: 'rd', other: 'th' }
 
 function padStart(string, length, pad) {
@@ -201,6 +202,8 @@ formatDate(new Date(), 'MM/DD/YYYY') // '10/31/2022'
 ```
   */
 export function formatDate(formatStr: string, date: Date, locale?: string): string {
+  if (Number.isNaN(date.getTime())) return INVALID_DATE_STRING
+
   const str = formatStr || FORMAT_DEFAULT
   const zoneStr = padZoneStr(date)
 
@@ -272,6 +275,8 @@ strftime('%A, %d/%m/%y', new Date())
 ```
  */
 export function strftime(fmt: string, date: Date, locale?: string): string {
+  if (date != null && Number.isNaN(+date)) return INVALID_DATE_STRING
+
   const results: string[] = []
   let dayPeriod: string = ''
   let dayPeriodIndex = -1
