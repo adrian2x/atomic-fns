@@ -793,10 +793,9 @@ function hasElements(x): boolean {
 }
 
 /**
- * Clones an array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used, and each item is cloned in turn when it rejects the array.
+ * Clones an array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used.
  * @param arr The array to clone
  * @param [deep=false] Creates a deep clone using `structuredClone` if true.
- * @param copies The copy of each object seen so far.
  * @returns The new array
  * @see {@link clone}
  */
