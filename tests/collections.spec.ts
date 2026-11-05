@@ -14,8 +14,10 @@ import {
   findLastIndex,
   flatten,
   forEach,
+  forEachRight,
   FrozenSet,
   groupBy,
+  groupByMap,
   insort,
   insortLeft,
   intersection,
@@ -338,6 +340,20 @@ describe('collections', () => {
     assert(find(users, (o) => o.active) === users[0])
   })
 
+  it('find walks iterables', () => {
+    assert(find(new Set([1, 2]), (x) => x > 1) === 2)
+    assert(find('ab', (x) => x === 'b') === 'b')
+    const first = { a: 1 }
+    assert(find(new Set([first]), 'a') === first)
+    assert(find(new Set([first]), { a: 1 }) === first)
+
+    function* numbers() {
+      let n = 0
+      while (true) yield n++
+    }
+    assert(find(numbers(), (x) => x === 3) === 3)
+  })
+
   it('find matches', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
@@ -372,6 +388,28 @@ describe('collections', () => {
     assert(findLast(users, { age: 36 }) === users[2])
   })
 
+  it('findLast accepts a property name', () => {
+    const users = [
+      { user: 'barney', active: true },
+      { user: 'fred', active: false },
+      { user: 'pebbles', active: true }
+    ]
+    assert(findLast(users, 'active') === users[2])
+  })
+
+  it('forEachRight and findLast walk iterables', () => {
+    const seen = [] as unknown[]
+    forEachRight(new Set(['a', 'b']), (value, index) => {
+      seen.push([index, value])
+    })
+    assert.deepEqual(seen, [
+      [1, 'b'],
+      [0, 'a']
+    ])
+    assert(findLast(new Set([1, 2, 3]), (x) => x < 3) === 2)
+    assert(findLast('abc', (x) => x < 'c') === 'b')
+  })
+
   it('forEach', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
@@ -383,6 +421,15 @@ describe('collections', () => {
       result,
       users.map((x, i) => [i, x])
     )
+  })
+
+  it('forEach ignores null and undefined', () => {
+    forEach(null, () => assert.fail('called'))
+    forEach(undefined, () => assert.fail('called'))
+    const identity = (x) => x
+    assert.deepEqual(count(null, identity), {})
+    assert.deepEqual(groupBy(undefined, identity), {})
+    assert(groupByMap(null, identity).size === 0)
   })
 
   it('forEach object key', () => {
@@ -458,6 +505,20 @@ describe('collections', () => {
     assert.deepEqual(map([4, 8], square), [16, 64])
     assert.deepEqual(map({ a: 4, b: 8 }, square), [16, 64])
     assert.deepEqual(map(users, 'user'), ['barney', 'fred'])
+  })
+
+  it('map walks iterables', () => {
+    const double = (x) => x * 2
+    assert.deepEqual(map(new Set([1, 2]), double), [2, 4])
+    assert.deepEqual(map(new Set([{ a: 1 }]), 'a'), [1])
+    assert.deepEqual(
+      map('ab', (x, i) => x + i),
+      ['a0', 'b1']
+    )
+    assert.deepEqual(
+      map(new BTree([[1, 2]]), (x) => x),
+      [[1, 2]]
+    )
   })
 
   it('merge', () => {

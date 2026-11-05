@@ -172,6 +172,10 @@ export function find<T>(arr: T[] | Object, fn: Iteratee<T> | Object | PropertyKe
   const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
   if (Array.isArray(arr)) {
     return arr.find(it)
+  } else if (isIterable(arr)) {
+    for (const [index, value] of enumerate(arr)) {
+      if (it(value, index, arr)) return value
+    }
   } else if (isObject(arr)) {
     for (const key of Object.keys(arr)) {
       if (it(arr[key], key, arr)) {
@@ -260,6 +264,7 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
 export function forEach<T>(collection: Iterable<T>, fn: Iteratee<T>): void
 export function forEach<T>(collection: Object, fn: Iteratee<T>): void
 export function forEach<T>(collection: Iterable<T> | Object, fn: Iteratee<T>): void {
+  if (collection == null) return
   if (Array.isArray(collection)) {
     for (let i = 0; i < collection.length; i++) {
       const res = fn(collection[i], i, collection)
@@ -296,7 +301,7 @@ export function findLast<T>(arr: Object, fn: Iteratee<T>): T | undefined
 export function findLast<T>(arr: Object, fn: Object): T | undefined
 export function findLast<T>(arr: Iterable<T> | Object, fn: Iteratee<T> | Object): T | undefined {
   let result
-  const it = isFunction(fn) ? fn : matches(fn)
+  const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
   forEachRight(arr, (val, key) => {
     if (it(val, key, arr)) {
       result = val
@@ -329,6 +334,12 @@ export function forEachRight<T>(collection: T[] | Object, fn: Iteratee<T>): void
     for (let i = collection.length - 1; i >= 0; i--) {
       const value = collection[i]
       const res = fn(value, i, collection)
+      if (res === false) return
+    }
+  } else if (isIterable(collection)) {
+    const items = Array.from(collection)
+    for (let i = items.length - 1; i >= 0; i--) {
+      const res = fn(items[i] as T, i, collection)
       if (res === false) return
     }
   } else if (isObject(collection)) {
@@ -464,6 +475,9 @@ export function map<T, TResult>(
   const it = isFunction(fn) ? fn : (obj) => get(fn, obj)
   if (Array.isArray(arr)) {
     return arr.map((x, i) => it(x, i, arr))
+  }
+  if (isIterable(arr)) {
+    return Array.from(arr, (x, i) => it(x, i, arr))
   }
   if (isObject(arr)) {
     return Object.keys(arr).map((key) => it(arr[key], key, arr))
