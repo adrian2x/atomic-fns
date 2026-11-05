@@ -58,6 +58,7 @@ export function compare(x, y): number {
   if (x === y || eq(x, y)) return 0
   const op = call(x, 'compare', y)
   if (typeof op === 'number') return op
+  if (x instanceof Date && y instanceof Date) return Math.sign(x.getTime() - y.getTime()) || 0
   if (x < y || lt(x, y)) return -1
   return 1
 }
