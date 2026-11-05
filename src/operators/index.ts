@@ -258,8 +258,7 @@ export function shallowEqual(obj, other): boolean {
 export function deepEqual(obj, other, checker?: Function, seen?): boolean
 export function deepEqual(obj, other, checker = eq, seen = new WeakSet()): boolean {
   if (checker(obj, other)) return true
-  if (!obj || !other) return false
-  if (obj.prototype !== other.prototype) return false
+  if (!sameKind(obj, other)) return false
   if (seen.has(obj) && seen.has(other)) return false
 
   if (Array.isArray(obj)) {
