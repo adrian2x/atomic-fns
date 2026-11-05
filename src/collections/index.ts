@@ -751,10 +751,7 @@ function cloneValue(value, deep, ancestors) {
   if (isObject(value) && isFunction(value.clone)) {
     return value.clone()
   }
-  if (
-    Array.isArray(value) ||
-    (isArrayLike(value) && (isIterable(value) || value.length - 1 in value))
-  ) {
+  if (Array.isArray(value) || hasElements(value)) {
     return cloneArray(value, deep, ancestors)
   }
   if (value?.constructor === Map) {
@@ -791,6 +788,11 @@ function cloneValue(value, deep, ancestors) {
     return copy
   }
   return value
+}
+
+/** `isArrayLike` accepts any numeric `length`, so this also looks for the elements. */
+function hasElements(x): boolean {
+  return isArrayLike(x) && (isIterable(x) || x.length - 1 in x)
 }
 
 /**
@@ -907,7 +909,7 @@ function baseMergeDeep(obj, source, key, stack, copies, merged) {
   if (isArray || isTyped) {
     if (Array.isArray(objValue)) {
       newValue = objValue
-    } else if (isArrayLike(objValue)) {
+    } else if (hasElements(objValue)) {
       newValue = Array.from(objValue)
     } else if (isTyped) {
       isCommon = false
