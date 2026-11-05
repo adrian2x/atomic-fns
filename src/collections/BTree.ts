@@ -447,7 +447,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    * @description Computational complexity: O(log size)
    */
   contains(key: K): boolean {
-    return this.get(key) !== undefined
+    return this.rangeForEach(key, key, true) !== 0
   }
 
   /**
