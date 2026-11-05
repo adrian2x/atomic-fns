@@ -802,7 +802,7 @@ function isPlainObject(x): boolean {
   return proto === null || Object.getPrototypeOf(proto) === null
 }
 
-function baseMergeDeep(obj, source, key, stack) {
+function baseMergeDeep(obj, source, key, stack, copies) {
   const objValue = obj[key]
   const srcValue = source[key]
   const stacked = stack.get(srcValue)
@@ -813,6 +813,7 @@ function baseMergeDeep(obj, source, key, stack) {
 
   let newValue: any
   let isCommon = newValue === undefined
+  let isCopy = false
   const isArray = Array.isArray(srcValue)
   const isTyped = ArrayBuffer.isView(srcValue)
 
@@ -826,29 +827,36 @@ function baseMergeDeep(obj, source, key, stack) {
       newValue = cloneTypedArray(srcValue, true)
     } else {
       newValue = []
+      isCopy = true
     }
   } else if (isPlainObject(srcValue)) {
-    newValue = isObject(objValue) ? objValue : {}
+    isCopy = !isObject(objValue)
+    newValue = isCopy ? {} : objValue
   } else {
     isCommon = false
     newValue = srcValue
   }
+  if (isCopy && copies.has(srcValue)) {
+    obj[key] = copies.get(srcValue)
+    return
+  }
   if (isCommon) {
     stack.set(srcValue, newValue)
-    baseMerge(newValue, srcValue, stack)
+    baseMerge(newValue, srcValue, stack, copies)
     stack.delete(srcValue)
   }
+  if (isCopy) copies.set(srcValue, newValue)
   obj[key] = newValue
 }
 
-function baseMerge(obj, source, stack?) {
+function baseMerge(obj, source, stack, copies) {
   if (obj === source) return obj
   for (const key of Object.keys(source)) {
     if (key === '__proto__') continue
     const srcValue = source[key]
     const objValue = obj[key]
     if (typeof srcValue === 'object' && srcValue !== null) {
-      baseMergeDeep(obj, source, key, stack || new WeakMap())
+      baseMergeDeep(obj, source, key, stack, copies)
     } else {
       if (srcValue !== undefined && objValue !== srcValue) {
         obj[key] = srcValue
@@ -883,7 +891,7 @@ merge(object, other)
  */
 export function merge(object: Object, ...sources: Object[]): Object {
   for (const source of sources) {
-    if (source != null) baseMerge(object, source)
+    if (source != null) baseMerge(object, source, new WeakMap(), new WeakMap())
   }
   return object
 }
