@@ -352,4 +352,14 @@ describe('BTree', () => {
     assert.deepStrictEqual([...new BTree([[undefined, 'only']]).reversed()], [[undefined, 'only']])
     assert.deepStrictEqual([...new BTree().reversed()], [])
   })
+
+  it('maxKey returns the key object set last', () => {
+    const tree = new BTree(undefined, (x, y) => x.id - y.id, 4)
+    for (let id = 0; id < 10; id++) {
+      tree.set({ id }, id)
+    }
+    const replacement = { id: 9 }
+    tree.set(replacement, 'new')
+    assert(tree.maxKey() === replacement)
+  })
 })

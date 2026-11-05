@@ -1165,8 +1165,8 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     }
 
     const result = child.set(key, value, overwrite, tree)
-    if (result === false) return false
     this.keys[i] = child.maxKey()
+    if (result === false) return false
     if (result === true) return true
 
     // The child has split and `result` is a new right child... does it fit?
