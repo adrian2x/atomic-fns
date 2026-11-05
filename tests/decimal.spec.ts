@@ -227,6 +227,14 @@ describe('Decimal', () => {
     assert(!decimal('0.00').eq('0.01'))
   })
 
+  it('sqrt rejects a negative value', () => {
+    for (const value of [-1, -4, '-0.5']) {
+      assert.throws(() => decimal(value).sqrt(), ValueError, String(value))
+      assert(Decimal.PRECISION === 20)
+    }
+    assert(decimal(1).div(3).toString() === '0.33333333333333333333')
+  })
+
   it('lt', () => {
     let a = decimal('0.0000000000000000000025')
     let b = decimal('0.00000000000000000000255')
