@@ -414,7 +414,10 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
       mixed.day = Math.min(daysInMonth(target), mixed.day)
     }
 
-    return this.clone(mixed)
+    const result = this.clone(mixed)
+    return normalized.weekday === undefined
+      ? result
+      : result.add({ days: normalized.weekday - result.dayOfWeek })
   }
 
   get relativeFormat() {
@@ -494,7 +497,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     }
 
     if (normalizedUnit === 'weeks') {
-      obj.weekday = 1
+      return this.subtract({ days: this.dayOfWeek - 1 }).startOf('days')
     }
 
     if (normalizedUnit === 'quarters') {
@@ -645,7 +648,7 @@ function normalizeUnit(unit: keyof typeof UNITS_SINGULAR) {
 }
 
 function normalizeObject(obj, normalizer) {
-  const normalized = {} as Record<DurationUnit, number>
+  const normalized = {} as DateObject
   for (const key of Object.keys(obj)) {
     const value = obj[key]
     if (value == null) continue
