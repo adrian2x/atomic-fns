@@ -216,4 +216,16 @@ describe('LRUCache', () => {
       ]
     )
   })
+
+  it('never holds more than its capacity', () => {
+    for (const capacity of [0, -1, 2.5]) {
+      let cache = new LRUCache(capacity)
+      for (let i = 0; i < 100; i++) {
+        cache.set(i, i)
+        assert(cache.size <= Math.max(capacity, 0))
+      }
+    }
+    assert(new LRUCache(0).set(1, 1).get(1) === undefined)
+    assert.deepEqual([...new LRUCache(2.5).set(1, 1).set(2, 2).set(3, 3).keys()], [2, 3])
+  })
 })
