@@ -70,6 +70,22 @@ describe('operators', () => {
     assert(!contains([4, 7, 1, 9], NaN))
   })
 
+  it('contains searches the values of a plain object', () => {
+    assert(contains({ a: 1, b: 2 }, 1))
+    assert(!contains({ a: 1, b: 2 }, 3))
+    assert(!contains({ a: 1, b: 2 }, 'a'))
+    assert(!contains({}, 1))
+  })
+
+  it('contains still iterates a class instance', () => {
+    class Bag {
+      hidden = 1;
+      [Symbol.iterator] = () => [2][Symbol.iterator]()
+    }
+    assert(contains(new Bag(), 2))
+    assert(!contains(new Bag(), 1))
+  })
+
   it('dropWhile', () => {
     let it = dropWhile([false, 0, '', true, '', []], Falsy)
     assert.deepEqual([...it], [true, '', []])
