@@ -193,4 +193,27 @@ describe('LRUCache', () => {
       [3, 3]
     ])
   })
+
+  it('overwriting a key at capacity evicts nothing', () => {
+    let cache = new LRUCache(2)
+    cache.set(1, 'foo')
+    cache.set(2, 'bar')
+    cache.set(2, 'baz')
+    assert(cache.size === 2)
+    assert.deepEqual(
+      [...cache.entries()],
+      [
+        [1, 'foo'],
+        [2, 'baz']
+      ]
+    )
+    cache.set(1, 'qux')
+    assert.deepEqual(
+      [...cache.entries()],
+      [
+        [2, 'baz'],
+        [1, 'qux']
+      ]
+    )
+  })
 })
