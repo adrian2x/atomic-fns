@@ -323,4 +323,11 @@ describe('globals', () => {
     assert(chr(ord('😀')) === '😀')
     assert(Number.isNaN(ord('')))
   })
+
+  it('CustomError keeps its cause', () => {
+    const cause = new Error('disk full')
+    class SaveError extends CustomError {}
+    assert(new SaveError('save failed', { cause }).cause === cause)
+    assert(new SaveError('save failed').cause === undefined)
+  })
 })
