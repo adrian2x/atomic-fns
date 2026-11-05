@@ -210,8 +210,8 @@ a.div(b)  // 0.333333333333333333333333333333
 
     // In order for the integer quotient to have the correct precision, a.e - b.e must be greater than that precision.
     // So we need only to increase a.e.
-    // TODO: Revisit the value of increaseA. Is it correct in every circumstance?
-    const increaseA = Math.max(Decimal.precision - (a.e + b.e), 0)
+    // The quotient needs precision + a.e - b.e, and a negative a.e keeps the digits it always had
+    const increaseA = Math.max(Decimal.precision + Math.abs(a.e) - b.e, 0)
 
     const intIncrease = new Decimal()
     intIncrease.i = exp(a.i, increaseA)
