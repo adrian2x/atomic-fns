@@ -1506,3 +1506,356 @@ describe('session lifetime', () => {
     expect(deepEqual(owner(), owner())).toBe(true)
   })
 })
+
+describe('structural hash', () => {
+  const ids = Array.from({ length: 2000 }, (_, i) => i)
+  /** A session that fits `units` of work a few times over, far below all-to-all pairing. */
+  function tight(units: number): DeepEqualSession {
+    const session = new DeepEqualSession()
+    session.visitRoom = 16 * units
+    return session
+  }
+
+  it('Sets and Maps hash by their members', () => {
+    const sets = (order: number[]): Set<unknown> => new Set(order.map((i) => new Set([i])))
+    const maps = (order: number[]): Set<unknown> => new Set(order.map((i) => new Map([[i, i]])))
+    const reversed = ids.toReversed()
+    expect(deepEqualInSession(sets(ids), sets(reversed), tight(ids.length))).toBe(true)
+    expect(deepEqualInSession(maps(ids), maps(reversed), tight(ids.length))).toBe(true)
+  })
+
+  it('a wide Set hashes by every member', () => {
+    const wide = (i: number): Set<number> => new Set(ids.slice(0, 40).map((k) => i * 40 + k))
+    const sets = (order: number[]): Set<unknown> => new Set(order.map(wide))
+    expect(deepEqualInSession(sets(ids), sets(ids.toReversed()), tight(40 * ids.length))).toBe(true)
+  })
+
+  it('a wide record hashes by every key and primitive value', () => {
+    const record = (i: number): object =>
+      Object.fromEntries(Array.from({ length: 33 }, (_, k) => [`k${String(k)}`, i * 33 + k]))
+    const wide = (i: number): unknown[] => [...new Array<number>(40).fill(0), i]
+    const heap = (rows: unknown[]): Heap<unknown> => new Heap(rows, tied)
+    const reversed = ids.toReversed()
+    expect(
+      deepEqualInSession(heap(ids.map(record)), heap(reversed.map(record)), tight(33 * ids.length))
+    ).toBe(true)
+    expect(
+      deepEqualInSession(heap(ids.map(wide)), heap(reversed.map(wide)), tight(40 * ids.length))
+    ).toBe(true)
+  })
+
+  it('a hook anywhere in an item can still equal a plain value', () => {
+    class Five {
+      [protocol.equals](other: unknown): boolean {
+        return other === 5 || other instanceof Five
+      }
+    }
+    const wide = (value: unknown): object => ({
+      ...Object.fromEntries(ids.slice(0, 40).map((k) => [`k${String(k)}`, 0])),
+      value
+    })
+    expect(deepEqual(new Set([wide(new Five())]), new Set([wide(5)]))).toBe(true)
+    expect(deepEqual(new Set([new Set([new Five()])]), new Set([new Set([5])]))).toBe(true)
+    expect(deepEqual(new Set([new Map([[1, new Five()]])]), new Set([new Map([[1, 5]])]))).toBe(
+      true
+    )
+  })
+
+  it('a narrow record hashes alike wherever the walk meets it', () => {
+    const filler = new Array<number>(30).fill(0)
+    const [left, right] = [{ a: 1 }, { a: 1 }]
+    const late = (record: object): unknown[] => [...filler, record]
+    expect(deepEqual(new Set([late(left), [left]]), new Set([[right], late(right)]))).toBe(true)
+  })
+
+  it('a record with keys in another order hashes alike', () => {
+    const forward = Object.fromEntries(Array.from({ length: 40 }, (_, k) => [`k${String(k)}`, k]))
+    const backward = Object.fromEntries(Object.entries(forward).toReversed())
+    expect(deepEqual(new Set([forward]), new Set([backward]))).toBe(true)
+  })
+
+  it('an array hashes by what deepEqual reads: its indices, a hole as undefined', () => {
+    const holed = new Array<number>(2)
+    holed[1] = 1
+    expect(deepEqual(new Set([holed]), new Set([[undefined, 1]]))).toBe(true)
+    expect(deepEqual(new Set([Object.assign([1], { x: 1 })]), new Set([[1]]))).toBe(true)
+  })
+
+  it('a sparse item hashes by its own elements, not its length', () => {
+    let probes = 0
+    const lastOnly = (): unknown[] => {
+      const array = new Array<unknown>(2 ** 24)
+      array[2 ** 24 - 1] = 1
+      const probe = (): void => {
+        probes++
+        if (probes > 5000) throw new Error('walked the holes')
+      }
+      return new Proxy(array, {
+        get(target, key) {
+          probe()
+          return Reflect.get(target, key) as unknown
+        },
+        has(target, key) {
+          probe()
+          return Reflect.has(target, key)
+        }
+      })
+    }
+
+    expect(deepEqual(new Set([lastOnly()]), new Set([lastOnly()]))).toBe(true)
+  })
+
+  it('a Date and an IntlDate at one instant hash alike wherever they sit', () => {
+    const at = 1_700_000_000_000
+    const [date, intl] = [new Date(at), new IntlDate(at)]
+    const wrappers: ((x: unknown) => unknown)[] = [
+      (x) => x,
+      (x) => [x],
+      (x) => ({ at: x }),
+      (x) => new Map([['at', x]]),
+      (x) => new Set([x]),
+      (x) => ({ a: { at: x } })
+    ]
+    for (const wrap of wrappers) {
+      expect(deepEqual(wrap(date), wrap(intl))).toBe(true)
+      expect(deepEqual(new Set([wrap(date)]), new Set([wrap(intl)]))).toBe(true)
+      expect(deepEqual(new Heap([wrap(date)], tied), new Heap([wrap(intl)], tied))).toBe(true)
+    }
+  })
+
+  it('views separate by their first and last bytes', () => {
+    const distinct = ids.filter((i) => i < 1500)
+    const reversed = distinct.toReversed()
+    const [low, high] = [(i: number): number => i % 251, (i: number): number => Math.floor(i / 251)]
+    const first = (i: number): Uint8Array =>
+      new Uint8Array(64).fill(low(i), 0, 1).fill(high(i), 1, 2)
+    const last = (i: number): Uint8Array =>
+      new Uint8Array(64).fill(low(i), 63).fill(high(i), 62, 63)
+    const float = (i: number): Float64Array => new Float64Array([i, -0])
+    const buffer = (i: number): ArrayBuffer => new Uint16Array([i]).buffer
+    const makers: ((i: number) => object)[] = [first, last, float, buffer]
+    for (const make of makers) {
+      const set = (order: number[]): Set<unknown> => new Set(order.map(make))
+      expect(deepEqualInSession(set(distinct), set(reversed), tight(1500))).toBe(true)
+    }
+  })
+
+  it('float views that are equal hash alike though their bytes differ', () => {
+    const payload = new Float32Array(new Uint32Array([0x7fc0_0001]).buffer)
+    expect(deepEqual(new Set([new Float64Array([-0])]), new Set([new Float64Array([0])]))).toBe(
+      true
+    )
+    expect(deepEqual(new Set([payload]), new Set([new Float32Array([NaN])]))).toBe(true)
+  })
+
+  it('a wide record below many items is listed once', () => {
+    let listed = 0
+    const wide = (): object =>
+      new Proxy(Object.fromEntries(ids.slice(0, 40).map((k) => [`k${String(k)}`, k])), {
+        ownKeys(target) {
+          listed++
+          return Reflect.ownKeys(target)
+        }
+      })
+    const rows = (shared: object, order: number[]): Set<object> =>
+      new Set(order.map((id) => ({ id, shared })))
+
+    expect(deepEqual(rows(wide(), ids), rows(wide(), ids.toReversed()))).toBe(true)
+    expect(listed).toBeLessThan(10)
+  })
+
+  it('a record repeated by reference is hashed once', () => {
+    let reads = 0
+    const record = (): object => ({
+      get read(): number {
+        reads++
+        return 0
+      }
+    })
+    const [left, right] = [record(), record()]
+
+    expect(
+      deepEqual(
+        new Heap(new Array(100).fill(left), tied),
+        new Heap(new Array(100).fill(right), tied)
+      )
+    ).toBe(true)
+    expect(reads).toBeLessThan(10)
+  })
+})
+
+describe('what a comparison costs', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const LIMIT = new RangeError('deepEqual exceeded 33554432 comparisons')
+  /** Below the levels a hash reads, so these items pair all-to-all. */
+  const buried = (x: unknown): unknown => ({ a: { b: { c: { d: { e: x } } } } })
+  /** Compares two Heaps of `make(i)` in opposite orders, no item shared, with `room` to spend. */
+  function compareHeaps(make: (i: number) => unknown, count: number, room: number): void {
+    const ids = Array.from({ length: count }, (_, i) => i)
+    const session = new DeepEqualSession()
+    session.visitRoom = room
+    const [left, right] = [ids, ids.toReversed()].map((order) => new Heap(order.map(make), tied))
+    deepEqualInSession(left, right, session)
+  }
+  const wideRecord = (last: number, keys: number): object => ({
+    ...Object.fromEntries(Array.from({ length: keys }, (_, k) => [`k${String(k)}`, 0])),
+    last
+  })
+
+  const ROOM = 200_000
+  const zeros = new Array<number>(1000).fill(0)
+
+  it('a trial pays per element', () => {
+    const row = (i: number): unknown => buried([...zeros, i])
+    expect(() => {
+      compareHeaps(row, 100, ROOM)
+    }).toThrow(LIMIT)
+  })
+
+  it('a trial pays per key, read or only listed', () => {
+    const last = (i: number): unknown => buried(wideRecord(i, 1000))
+    const first = (i: number): unknown => buried({ first: i, ...wideRecord(0, 1000) })
+    for (const record of [last, first]) {
+      expect(() => {
+        compareHeaps(record, 100, ROOM)
+      }).toThrow(LIMIT)
+    }
+  })
+
+  it('a trial pays per 32 bytes', () => {
+    const view = (i: number): Uint8Array => new Uint8Array(16_384).fill(i, 8192, 8193)
+    expect(() => {
+      compareHeaps(view, 100, ROOM)
+    }).toThrow(LIMIT)
+  })
+
+  it('a trial pays per float', () => {
+    const view = (i: number): Float64Array => new Float64Array(512).fill(i, 256, 257)
+    expect(() => {
+      compareHeaps(view, 100, ROOM)
+    }).toThrow(LIMIT)
+  })
+
+  it('a trial pays for the members of a Set, a Map or a Heap that it reads', () => {
+    const entries = zeros.map((_, k): [number, number] => [k, 0])
+    const set = (i: number): unknown => buried({ set: new Set(entries.keys()), last: i })
+    const map = (i: number): unknown => buried(new Map([[-1, i], ...entries]))
+    const heap = (i: number): unknown => buried(new Heap([...zeros, i + 1], tied))
+    for (const make of [set, map, heap]) {
+      expect(() => {
+        compareHeaps(make, 100, ROOM)
+      }).toThrow(LIMIT)
+    }
+  })
+
+  it('a trial pays for the length of a string', () => {
+    const marked = (mark: string, i: number): string =>
+      `${'a'.repeat(50_000)}${mark}${String(1000 + i)}${'a'.repeat(50_000)}`
+    const strings = (mark: string): Set<string> =>
+      new Set(Array.from({ length: 100 }, (_, i) => marked(mark, i)))
+    const session = new DeepEqualSession()
+    session.visitRoom = 1000
+
+    expect(() => deepEqualInSession(strings('x'), strings('y'), session)).toThrow(LIMIT)
+  })
+
+  it('a trial pays for the elements a sparse array lists', () => {
+    const sparse = (first: number): unknown => {
+      const array = new Array<unknown>(1_000_000)
+      for (let k = 0; k < 2000; k++) array[1000 + 7 * k] = 0
+      array[1000] = first
+      return buried(array)
+    }
+    expect(() => {
+      compareHeaps(sparse, 20, 100_000)
+    }).toThrow(LIMIT)
+  })
+
+  it('a nested multiset pays for its members and for its hash', () => {
+    const record = (i: number): unknown => buried(new Set([wideRecord(i, 1000)]))
+    const row = (i: number): unknown => buried(new Set([[...zeros, i]]))
+    for (const member of [record, row]) {
+      expect(() => {
+        compareHeaps(member, 40, 300_000)
+      }).toThrow(LIMIT)
+    }
+  })
+
+  it('what failed inside a trial stays paid though the trial holds', () => {
+    const ids = Array.from({ length: 20 }, (_, i) => i)
+    const rows = (order: number[]): Set<unknown> => new Set(order.map(buried))
+    const session = new DeepEqualSession()
+    const room = session.visitRoom
+
+    expect(deepEqualInSession(rows(ids), rows(ids.toReversed()), session)).toBe(true)
+    expect(room - session.visitRoom).toBeGreaterThan(ids.length ** 2 / 2)
+  })
+
+  it('a trial that holds outside any other pays nothing, as its work cannot repeat', () => {
+    const row = (): object => ({ cells: [1, 2, 3], bytes: new Uint8Array(64) })
+    const session = new DeepEqualSession()
+    const room = session.visitRoom
+
+    expect(deepEqualInSession(row(), row(), session)).toBe(true)
+    expect(session.visitRoom).toBe(room)
+  })
+
+  it('a trial inside another keeps paying, as the outer one can still fail', () => {
+    const session = new DeepEqualSession()
+    session.trials = 1
+    const room = session.visitRoom
+
+    expect(deepEqualInSession([1, 2, 3], [1, 2, 3], session)).toBe(true)
+    expect(session.visitRoom).toBeLessThan(room)
+  })
+
+  it('a shuffled Set of wide rows pays one comparison per row', () => {
+    const count = vi.spyOn(DeepEqualSession.prototype, 'count')
+    const ids = Array.from({ length: 500 }, (_, i) => i)
+    const rows = (order: number[]): Set<object> => new Set(order.map((i) => wideRecord(i, 50)))
+
+    expect(deepEqual(rows(ids), rows(ids.toReversed()))).toBe(true)
+    const [session] = count.mock.contexts as DeepEqualSession[]
+    expect(session.visitRoom).toBe(2 ** 25 - ids.length)
+  })
+
+  it('a plain walk pays nothing, so huge arrays cannot reach the limit', () => {
+    const count = vi.spyOn(DeepEqualSession.prototype, 'count')
+    const rows = (): unknown[] =>
+      Array.from({ length: 5000 }, (_, i) => ({ i, row: [i, new Uint8Array(64).fill(i % 251)] }))
+
+    expect(deepEqual(rows(), rows())).toBe(true)
+    expect(count).not.toHaveBeenCalled()
+  })
+
+  it('a pair past the tracking bound pays even outside a trial', () => {
+    const session = new DeepEqualSession()
+    session.trackingRoom = 0
+    session.visitRoom = 0
+
+    expect(() => session.enter({}, {})).toThrow(LIMIT)
+  })
+
+  it('a hook that goes on after a false pays, so its failures are remembered', () => {
+    let calls = 0
+    class Fork {
+      constructor(readonly next: Fork | number) {}
+      [protocol.equals](other: unknown): boolean {
+        calls++
+        if (calls > 5000) throw new Error('doubled')
+        const peer = (other as Fork).next
+        return deepEqual(this.next, peer) || deepEqual(this.next, peer)
+      }
+    }
+    const chain = (end: number): Fork | number => {
+      let node: Fork | number = end
+      for (let i = 0; i < 40; i++) node = new Fork(node)
+      return node
+    }
+
+    expect(deepEqual(chain(1), chain(2))).toBe(false)
+  })
+})

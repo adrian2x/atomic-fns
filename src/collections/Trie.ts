@@ -115,7 +115,8 @@ export class Trie extends ValueCollection<string> {
 
   /**
    * Yield words that start with `prefix`, in child insertion order, at most `limit`. A fractional
-   * limit truncates, zero or less yields nothing, and `null` means no limit.
+   * limit truncates, zero or less yields nothing, and `null` means no limit. A `clear` ends the
+   * iterator, started or not.
    * @throws {TypeError} when `limit` is not a number or is `NaN`.
    */
   matches(prefix: string, limit: number | null = Infinity): IteratorObject<string> {
@@ -126,23 +127,19 @@ export class Trie extends ValueCollection<string> {
     if (typeof prefix !== 'string' || most <= 0) return Iterator.from([])
     const start = this.#locate(prefix)
     if (!start) return Iterator.from([])
-    return this.#walk(start).take(most)
+    return this.#walk(start, this.#generation).take(most)
   }
 
-  *#walk(start: TrieNode): Generator<string> {
-    const generation = this.#generation
+  *#walk(start: TrieNode, generation: number): Generator<string> {
     const stack: Iterator<TrieNode>[] = [[start].values()]
-    while (stack.length > 0) {
+    while (stack.length > 0 && generation === this.#generation) {
       const next = stack[stack.length - 1].next()
       if (next.done) {
         stack.pop()
         continue
       }
       const node = next.value
-      if (node.isWord) {
-        yield node.path
-        if (generation !== this.#generation) return
-      }
+      if (node.isWord) yield node.path
       if (node.children) stack.push(node.children.values())
     }
   }

@@ -236,6 +236,13 @@ describe('Trie', () => {
       cleared.clear()
     }
     expect(first).toEqual(['a'])
+
+    const unstarted = new Trie(['a', 'b'])
+    const words = unstarted.matches('')
+    const values = unstarted.values()
+    unstarted.clear()
+    expect([...words]).toEqual([])
+    expect([...values]).toEqual([])
   })
 
   it('constructor rejects every non-iterable', () => {

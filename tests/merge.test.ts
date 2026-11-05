@@ -326,3 +326,29 @@ describe('merge of a cycle-rich graph', () => {
     expect(merged.second).not.toBe(merged.first)
   })
 })
+
+describe('merge budget', () => {
+  const overBudget = new RangeError('input repeats shared objects beyond 500000 copied nodes')
+
+  it('a repeated row pays however narrow it is', () => {
+    expect(() => merge({}, { rows: new Array<object>(600_000).fill({ a: 1 }) })).toThrow(overBudget)
+  })
+
+  it('symbol keys pay as string keys do', () => {
+    const row = { [Symbol('s')]: 1 }
+    expect(() => merge({}, { rows: new Array<object>(600_000).fill(row) })).toThrow(overBudget)
+  })
+
+  it('a repeated empty container is free and still gets its own copy', () => {
+    const merged = merge({}, { r: new Array<object>(600_000).fill({}) }) as { r: object[] }
+    expect(merged.r).toHaveLength(600_000)
+    expect(merged.r[0]).not.toBe(merged.r[1])
+  })
+
+  it('a non-enumerable symbol is neither copied nor charged', () => {
+    const hidden = Symbol('hidden')
+    const row = Object.defineProperty({}, hidden, { value: 1 })
+    const merged = merge({}, { rows: new Array<object>(600_000).fill(row) }) as { rows: object[] }
+    expect(Object.getOwnPropertySymbols(merged.rows[0])).toEqual([])
+  })
+})

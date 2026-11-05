@@ -4,7 +4,9 @@
 
 import { isHugeSparse, walkArray } from '../internal/arrayKeys.js'
 import { enterNesting, exitNesting, guardNesting } from '../internal/nesting.js'
-import { deepEqual, eq, hasMethod, protocol } from '../operators/index.js'
+import { DeepEqualSession, deepEqualInSession } from '../operators/equality.js'
+import { eq } from '../operators/index.js'
+import { hasHook } from '../operators/multiset.js'
 import { isPlainObject } from './object.js'
 
 /** A hard stop: past the memo bound work can multiply per level, and a page must not hang. */
@@ -34,8 +36,8 @@ const MAX_HASHED_ENTRIES = 2 ** 24
 /** Positions in {@link ArrayView.elements} that can equal a primitive. */
 interface ValueIndex {
   readonly byValue: Map<unknown, number[]>
-  /** Positions holding a hook, which `eq` may equate with a primitive. */
-  readonly hooked: number[]
+  /** Positions a lookup cannot rule out: hooks `eq` may equate, and reads that threw. */
+  readonly unsure: number[]
 }
 
 /** What one call knows about an array: built once, however many depths the array is met at. */
@@ -77,6 +79,8 @@ interface MatchSession {
   readonly views: WeakMap<unknown[], ArrayView>
   fieldIndexRoom: number
   visits: number
+  /** One session for every leaf, so their work shares a budget and is not repeated. */
+  leaves?: DeepEqualSession
 }
 
 function createMatchSession(): MatchSession {
@@ -106,10 +110,6 @@ function isPrimitive(v: unknown): boolean {
   return v === null || (typeof v !== 'object' && typeof v !== 'function')
 }
 
-function hasEqualityHook(v: unknown): boolean {
-  return hasMethod(v, protocol.equals) || hasMethod(v, protocol.compare)
-}
-
 function viewOf(arr: unknown[], session: MatchSession): ArrayView {
   let view = session.views.get(arr)
   if (view === undefined) {
@@ -134,18 +134,23 @@ function viewOf(arr: unknown[], session: MatchSession): ArrayView {
 
 function indexValues(positions: Iterable<number>, read: (position: number) => unknown): ValueIndex {
   const byValue = new Map<unknown, number[]>()
-  const hooked: number[] = []
+  const unsure: number[] = []
   for (const position of positions) {
-    const value = read(position)
-    if (hasEqualityHook(value)) {
-      hooked.push(position)
-    } else if (isPrimitive(value)) {
-      const group = byValue.get(value)
-      if (group === undefined) byValue.set(value, [position])
-      else group.push(position)
+    try {
+      const value = read(position)
+      if (hasHook(value)) {
+        unsure.push(position)
+      } else if (isPrimitive(value)) {
+        const group = byValue.get(value)
+        if (group === undefined) byValue.set(value, [position])
+        else group.push(position)
+      }
+    } catch {
+      // The walk surfaces this only if it gets here, as a scan that stops at a match would.
+      unsure.push(position)
     }
   }
-  return { byValue, hooked }
+  return { byValue, unsure }
 }
 
 function readPath(record: unknown, path: string[]): unknown {
@@ -177,9 +182,9 @@ function fieldIndexOf(
 /** Candidates for primitive `value`, in target order so that claims stay greedy. */
 function positionsOf(value: unknown, index: ValueIndex, session: MatchSession): number[] {
   const hits = index.byValue.get(value) ?? []
-  if (index.hooked.length === 0) return hits
-  countVisit(session, hits.length + index.hooked.length)
-  return [...hits, ...index.hooked].sort((a, b) => a - b)
+  if (index.unsure.length === 0) return hits
+  countVisit(session, hits.length + index.unsure.length)
+  return [...hits, ...index.unsure].sort((a, b) => a - b)
 }
 
 /**
@@ -227,6 +232,15 @@ function candidatesOf(item: unknown, target: ArrayView, session: MatchSession): 
   if (isPlainObject(item)) return fieldCandidates(item, target, session) ?? target.records
   target.everything ??= [...target.elements.keys()]
   return target.everything
+}
+
+/** A non-plain shape value against `obj`, charging what the comparison did to this call. */
+function leafEqual(shape: object, obj: unknown, session: MatchSession): boolean {
+  session.leaves ??= new DeepEqualSession()
+  const room = session.leaves.visitRoom
+  const equal = deepEqualInSession(shape, obj, session.leaves)
+  session.visits += room - session.leaves.visitRoom
+  return equal
 }
 
 function isTaken(claims: Claims, position: number): boolean {
@@ -404,7 +418,7 @@ function matchDeep(
     } else if (isPlainObject(shape)) {
       ok = matchPlainObject(shape, obj, top, depth, session)
     } else {
-      ok = deepEqual(shape, obj)
+      ok = leafEqual(shape, obj, session)
     }
     if (value !== undefined) settleMatch(session, shape, value, ok, depth, tentativeMark)
     return ok
@@ -426,19 +440,21 @@ function matchDeep(
  * Arrays in the shape match as subsets. As in Lodash each target element serves at most one shape
  * element, claimed greedily in order, so `matches([1, 1])([1, 2])` is false; a hole reads as
  * `undefined`. Non-plain shape values (Date, RegExp, Map, Set, typed arrays, class instances)
- * compare with {@link deepEqual}. Nesting deeper than 1000 levels throws `RangeError`.
+ * compare with `deepEqual`. Nesting deeper than 1000 levels throws `RangeError`.
  * Unlike Lodash, a top-level array shape is a subset rather than compared by index, a
- * class-instance shape compares with {@link deepEqual} rather than key by key, a primitive shape
+ * class-instance shape compares with `deepEqual` rather than key by key, a primitive shape
  * compares with {@link eq} rather than matching anything, an `undefined` shape value needs an own
  * key rather than any key, Map and Set leaves must be exact rather than subsets, and a nested `{}`
  * accepts a Date or RegExp.
  * Each array is indexed once per call, however deep it recurs. A primitive shape element is one
- * lookup, and a plain-object shape element with a primitive field, up to 4 keys deep through plain
- * objects, only walks the target elements that field selects. Any other shape element scans the
- * target, as does a primitive one against an array past 2^24 elements, which costs
- * O(shape x target) comparisons. A call remembers up to 2^20 (shape, value) pairs and throws
- * `RangeError` after 2^25 comparisons, so memory and time stay bounded on any input. Untrusted
- * shapes should be size-limited.
+ * lookup. A plain-object shape element with a primitive field, up to 4 keys deep through plain
+ * objects, reads that field once on every record to index them and then only walks the records it
+ * selects; a record whose read throws is left for the walk, so its error surfaces only if a scan
+ * would have reached it. Any other shape element scans the target, as does a primitive one against
+ * an array past 2^24 elements, which costs O(shape x target) comparisons. A call remembers up to
+ * 2^20 (shape, value) pairs and throws `RangeError` after 2^25 comparisons, `deepEqual`
+ * leaves included, so memory and time stay bounded on any input. Untrusted shapes should be
+ * size-limited.
  * @example
 ```js
 const objects = [

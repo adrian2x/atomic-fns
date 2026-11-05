@@ -30,7 +30,7 @@ const CYCLE_ERROR = 'cyclic structure'
  * object stays an object even with a `length` key, and any other value returns unchanged.
  * Structural nesting deeper than 1000 levels throws `RangeError`. A cycle within `depth` throws
  * `ValueError('cyclic structure')`. Walking a shared container again costs one work unit per 16
- * keys, plus one once repeats outnumber the input's keys; past 250000 units it throws
+ * keys, rounded up, so an empty one is free; past 250000 units it throws
  * `RangeError('input repeats shared objects beyond 250000 containers')` (flatten's own cap; merge
  * keeps 500000). Output keys over 2^27 characters in total throw `RangeError`, a key over 16383
  * characters counting 16 times. A `depth` of 0 or less copies the array, so a huge sparse array

@@ -530,6 +530,22 @@ describe('matches work stays bounded', () => {
     expect(matches([{ meta: [5] }])([{ meta: [1, 5] }])).toBe(true)
   })
 
+  it('a record without the path is ruled out once, not walked per shape element', () => {
+    const rows = 100
+    let reads = 0
+    const missing = {
+      get meta() {
+        reads++
+        return undefined
+      }
+    }
+    const shape = Array.from({ length: rows }, (_, id) => ({ meta: { id } }))
+    const target = [missing, ...Array.from({ length: rows }, (_, id) => ({ meta: { id } }))]
+
+    expect(matches(shape)(target)).toBe(true)
+    expect(reads).toBe(1)
+  })
+
   it('a key with a dot in it is not a path', () => {
     const shape = [{ 'a.b': 1 }, { a: { b: 2 } }]
 
@@ -541,6 +557,19 @@ describe('matches work stays bounded', () => {
       Object.fromEntries(Array.from({ length: 300 }, (_, i) => ['k' + String(i), child]))
 
     expect(matches([wide(wide(wide({})))])([{}])).toBe(false)
+  })
+
+  it('a field read that throws only matters if the walk reaches that record', () => {
+    const throwing = {
+      get a(): number {
+        throw new Error('read failed')
+      }
+    }
+
+    expect(matches([{ a: 1 }])([{ a: 1 }, throwing])).toBe(true)
+    expect(matches([{ m: { a: 1 } }])([{ m: { a: 1 } }, { m: throwing }])).toBe(true)
+    expect(() => matches([{ a: 2 }])([{ a: 1 }, throwing])).toThrow('read failed')
+    expect(() => matches([{ a: 1 }])([throwing, { a: 1 }])).toThrow('read failed')
   })
 
   it('a run of duplicates claims in linear time', () => {
@@ -616,6 +645,75 @@ describe('matches work stays bounded', () => {
     expect(matches([7])(large)).toBe(true)
     expect(matches(large)(copy)).toBe(true)
     expect(() => matches(large)(copy.reverse())).toThrow(LIMIT_ERROR)
+  })
+
+  it('leaves share one comparison session across the call', () => {
+    class Box {
+      constructor(readonly inner: object) {}
+    }
+    const { leaf, reads } = readCounter({})
+    const rows = 50
+    const deep = { v: {} }
+    const shape = Array.from({ length: rows }, () => new Box({ deep }))
+    const target = Array.from({ length: rows }, () => new Box({ deep: leaf }))
+
+    expect(matches(shape)(target)).toBe(true)
+    expect(reads()).toBe(1)
+  })
+
+  it('failed leaf comparisons pay for what they read', LONG, () => {
+    class Cells {
+      constructor(readonly cells: object[]) {}
+    }
+    /** The shape's rows in reverse, so most pairs read a whole leaf before they differ. */
+    function leafRows(leaf: (id: number) => object): boolean {
+      const rows = 100
+      const flood = memoFlood(3300)
+      return matches({
+        flood: flood.shape,
+        rows: Array.from({ length: rows }, (_, i) => leaf(i))
+      })({
+        flood: flood.target,
+        rows: Array.from({ length: rows }, (_, i) => leaf(rows - 1 - i))
+      })
+    }
+    const bytes = (size: number, id: number) => {
+      const view = new Uint8Array(size)
+      view[size - 1] = id
+      return view
+    }
+    const numbers = Array.from({ length: 1e5 }, (_, i) => i)
+
+    expect(leafRows((id) => bytes(16, id))).toBe(true)
+    expect(() => leafRows((id) => bytes(2 ** 20, id))).toThrow(LIMIT_ERROR)
+    expect(() =>
+      leafRows(
+        (id) =>
+          new Map<string, unknown>([
+            ['cells', numbers.slice()],
+            ['id', id]
+          ])
+      )
+    ).toThrow(LIMIT_ERROR)
+    expect(() =>
+      leafRows((id) => new Cells([...Array.from({ length: 4000 }, () => ({})), { id }]))
+    ).toThrow(LIMIT_ERROR)
+  })
+
+  it('a long primitive shape against many hook values ends in the limit error', LONG, () => {
+    const hook = { [protocol.equals]: () => false }
+    const items = Array.from({ length: 2 ** 12 }, (_, i) => i)
+    function againstHooks(count: number): boolean {
+      const flood = memoFlood(3300)
+      const hooks = new Array<unknown>(count).fill(hook)
+      return matches({ flood: flood.shape, items })({
+        flood: flood.target,
+        items: [...items, ...hooks]
+      })
+    }
+
+    expect(againstHooks(1)).toBe(true)
+    expect(() => againstHooks(2 ** 16)).toThrow(LIMIT_ERROR)
   })
 
   it('a full memo keeps what it holds and stops adding', () => {

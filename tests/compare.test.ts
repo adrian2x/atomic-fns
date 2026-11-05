@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import vm from 'node:vm'
-import { compare, eq, adaptProtocol, protocol } from '../src/operators/index.js'
+import { compare, eq, gt, gte, lt, lte, adaptProtocol, protocol } from '../src/operators/index.js'
 import { compareSlow } from '../src/operators/order.js'
 import { sorted } from '../src/itertools/index.js'
 import { decimal } from '../src/decimal/index.js'
@@ -110,6 +110,15 @@ describe('SPEC-R14 arrays order by content', () => {
     pastLastRead[32] = 1
     // Identity, first compared first: index 32 would have said 1.
     expect(compare(pastLastRead, zeros(33))).toBe(-1)
+  })
+
+  it('the relational checks tie arrays past the last level, as compare does', () => {
+    const relations = (x: unknown, y: unknown) => [lt(x, y), lte(x, y), gt(x, y), gte(x, y)]
+    const equal = [false, true, false, true]
+    expect(relations([[1]], [[1]])).toEqual(equal)
+    expect(relations([[[1]]], [[[1]]])).toEqual(equal)
+    expect(relations([[[1]]], [[[2]]])).toEqual(equal)
+    expect(relations([[[1]], 1], [[[2]], 2])).toEqual([true, true, false, false])
   })
 
   it('breaks a content tie by identity, so distinct arrays stay distinct', () => {

@@ -1065,6 +1065,8 @@ describe('search start', () => {
     expect(findLastIndex([1, 2, 1], (x) => x === 1, NaN)).toBe(0)
     expect(indexOf([1, 2], 1, -Infinity)).toBe(0)
     expect(indexOf([1, 2], 1, Infinity)).toBe(-1)
+    expect(lastIndexOf([1, 2, 3], 3, 9)).toBe(2)
+    expect(findLastIndex([1, 2, 3], () => true, Infinity)).toBe(2)
   })
 
   it('the predicate sees every index of a hole run', () => {
@@ -1346,11 +1348,13 @@ describe('flatten cycles and budgets', () => {
     expect(flatten([shared, [shared]], true)).toEqual([1, 1])
   })
 
-  it('linear input passes however often it repeats a container', () => {
+  it('a repeat within depth pays for its keys, and an empty container for nothing', () => {
     const rows = Array.from({ length: 300_000 }, () => [1])
     expect(flatten([rows, rows])).toHaveLength(600_000)
     expect(flatten(new Array<number[]>(300_000).fill([]))).toEqual([])
-    expect(flatten(new Array<number[]>(300_000).fill([0]))).toHaveLength(300_000)
+    const repeated = new RangeError('input repeats shared objects beyond 250000 containers')
+    expect(() => flatten(new Array<number[]>(300_000).fill([0]))).toThrow(repeated)
+    expect(() => flatten({ rows: new Array<object>(300_000).fill({ a: 1 }) })).toThrow(repeated)
   })
 
   it('a wide row shared many times trips the budget', { timeout: 60_000 }, () => {
@@ -1532,6 +1536,12 @@ describe('pick and omit paths', () => {
   it('take a Set of paths', () => {
     expect(pick({ a: 1, b: 2 }, new Set(['a']))).toEqual({ a: 1 })
     expect(omit({ a: 1, b: 2 }, new Set(['a']))).toEqual({ b: 2 })
+  })
+
+  it('take a Set from another realm', () => {
+    const paths = vm.runInNewContext("new Set(['a'])") as Set<string>
+    expect(pick({ a: 1, b: 2 }, paths)).toEqual({ a: 1 })
+    expect(omit({ a: 1, b: 2 }, paths)).toEqual({ b: 2 })
   })
 
   it('name the error for anything else', () => {

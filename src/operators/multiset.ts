@@ -3,21 +3,32 @@
  */
 
 import { isDate, isError, isMap, isRegExp, isSet, unbox } from '../globals/brand.js'
+import { walkArray } from '../internal/arrayKeys.js'
 import { isRank1 } from '../internal/rank1.js'
 import { hasMethod, protocol, unitOf } from './protocol.js'
 
-/** Most nodes and levels one hash reads, so its cost does not grow with the item. */
+/** Most nodes and levels one hash reads below the entries of the item itself. */
 const MAX_NODES = 32
 const MAX_DEPTH = 4
-/** Characters read from each end of a string. */
-const STRING_SAMPLE = 16
+/** Characters, bytes or floats read from each end of a sequence. */
+const SAMPLE = 16
 
 /** Outside the 32-bit hash range: the group of items that can equal items of any other group. */
 const HOOKED = 2 ** 32
 const NONE = -1
 
+const FLOAT_ARRAY_TAGS = ['[object Float16Array]', '[object Float32Array]', '[object Float64Array]']
+
 /** What `deepEqual` compares an object by. `opaque` is identity only. */
 export type Kind = ReturnType<typeof kindOf>
+
+/** What hashing keeps in the session of its comparison. */
+interface HashSession {
+  /** Pay for the width of an item, which one comparison does not cover. */
+  charge(units: number): void
+  /** Key counts of records past {@link MAX_NODES} keys, so that each is listed once. */
+  wideRecords?: Map<object, number>
+}
 
 /** The {@link Kind} of `value`, from internal slots, so it holds across realms. */
 export function kindOf(value: object) {
@@ -47,17 +58,27 @@ export function bytesOf(value: ArrayBuffer | SharedArrayBuffer | ArrayBufferView
   }
 }
 
+/** Whether `deepEqual` compares `view` by element and not by byte. */
+export function isFloatView(view: ArrayBufferView): view is Float64Array {
+  return FLOAT_ARRAY_TAGS.includes(Object.prototype.toString.call(view))
+}
+
 function mix(hash: number, value: number): number {
   return Math.imul(hash ^ value, 0x01000193)
 }
 
-function hashString(text: string): number {
-  const head = Math.min(text.length, STRING_SAMPLE)
-  const tail = Math.max(head, text.length - STRING_SAMPLE)
-  let hash = text.length
-  for (let i = 0; i < head; i++) hash = mix(hash, text.charCodeAt(i))
-  for (let i = tail; i < text.length; i++) hash = mix(hash, text.charCodeAt(i))
+/** Hash of a sequence, by its length and what `at` reads at each end of it. */
+function sampleHash(length: number, at: (index: number) => number): number {
+  const head = Math.min(length, SAMPLE)
+  const tail = Math.max(head, length - SAMPLE)
+  let hash = length
+  for (let i = 0; i < head; i++) hash = mix(hash, at(i))
+  for (let i = tail; i < length; i++) hash = mix(hash, at(i))
   return hash
+}
+
+function hashString(text: string): number {
+  return sampleHash(text.length, (index) => text.charCodeAt(index))
 }
 
 /** By `Number`, which numbers of any kind share when equal, and by unit, which they must share. */
@@ -65,7 +86,7 @@ function numericHash(value: number, unit = ''): number {
   return mix(hashString(unit), (value | 0) === value ? value : hashString(String(value)))
 }
 
-function hasHook(value: unknown): boolean {
+export function hasHook(value: unknown): boolean {
   return hasMethod(value, protocol.equals) || hasMethod(value, protocol.compare)
 }
 
@@ -90,36 +111,76 @@ function scalarHash(value: unknown): number {
     case 'boolean':
       return value ? 1 : 2
     default:
-      return hasHook(value) ? hookHash(value as object) : 0
+      if (hasHook(value)) return hookHash(value as object)
+      return isDate(value) ? numericHash(value.getTime()) : 0
   }
 }
 
-/** Members in any order give one hash, because equal Sets and Maps need not agree on order. */
-function membersHash(members: Map<unknown, unknown> | Set<unknown>, room: number): number {
-  let sum = members.size
-  if (members.size > room) return sum
-  for (const [key, value] of members.entries()) {
+/** Entries in any order give one hash, because equal Sets and Maps need not agree on order. */
+function entriesHash(entries: Iterable<readonly [unknown, unknown]>): number {
+  let sum = 0
+  for (const [key, value] of entries) {
     const [keyHash, valueHash] = [scalarHash(key), scalarHash(value)]
     if (keyHash === HOOKED || valueHash === HOOKED) return HOOKED
-    sum = (sum + mix(keyHash, valueHash)) | 0
+    sum = (sum + mix(mix(1, keyHash), valueHash)) | 0
   }
   return sum
 }
 
+/** By what `deepEqual` compares: float views have values that are equal in different bytes. */
+function contentHash(content: ArrayBuffer | ArrayBufferView): number {
+  if (ArrayBuffer.isView(content) && isFloatView(content)) {
+    return sampleHash(content.length, (index) => numericHash(content[index]))
+  }
+  const bytes = bytesOf(content)
+  return sampleHash(bytes.length, (index) => bytes[index])
+}
+
+/** A hook or a Date hashes whole, as {@link scalarHash} does, since either can equal the other. */
+function isWalkable(node: unknown): node is object {
+  return typeof node === 'object' && node !== null && !hasHook(node) && !isDate(node)
+}
+
+/** Own elements by index, without `undefined`, which a hole equals and has no element for. */
+function elementsOf(array: unknown[]): [number, unknown][] {
+  const elements: [number, unknown][] = []
+  walkArray(array, (event) => {
+    if (event.kind === 'value' && event.value !== undefined) {
+      elements.push([event.index, event.value])
+    }
+  })
+  return elements
+}
+
+/** The entries of `item` itself, the one place a hash reads all of, so width costs linear time. */
+function ownEntries(item: unknown): readonly (readonly [unknown, unknown])[] {
+  if (!isWalkable(item)) return []
+  switch (kindOf(item)) {
+    case 'map':
+    case 'set':
+      return [...(item as Map<unknown, unknown>).entries()]
+    case 'keyed':
+      return Object.entries(item)
+    case 'array':
+      return elementsOf(item as unknown[])
+    default:
+      return []
+  }
+}
+
 /** Hash of `node` alone. Queues its children on `below`, in an order equal nodes agree on. */
-function objectHash(node: object, room: number, below: unknown[]): number {
+function objectHash(node: object, room: number, below: unknown[], session: HashSession): number {
   const kind = kindOf(node)
   let hash = hashString(kind)
   switch (kind) {
-    case 'date':
-      return numericHash((node as Date).getTime())
     case 'buffer':
     case 'view':
-      return mix(hash, bytesOf(node as ArrayBufferView).length)
+      return mix(hash, contentHash(node as ArrayBufferView))
     case 'map':
     case 'set': {
-      const members = membersHash(node as Set<unknown>, room)
-      return members === HOOKED ? HOOKED : mix(hash, members)
+      const members = node as Set<unknown>
+      const sum = members.size > room ? 0 : entriesHash(members.entries())
+      return sum === HOOKED ? HOOKED : mix(mix(hash, members.size), sum)
     }
     case 'array': {
       const array = node as unknown[]
@@ -127,7 +188,10 @@ function objectHash(node: object, room: number, below: unknown[]): number {
       return mix(hash, array.length)
     }
     case 'keyed': {
+      const wide = session.wideRecords?.get(node)
+      if (wide !== undefined) return mix(hash, wide)
       const keys = Object.keys(node)
+      if (keys.length > MAX_NODES) (session.wideRecords ??= new Map()).set(node, keys.length)
       hash = mix(hash, keys.length)
       if (below.length + keys.length > room) return hash
       for (const key of keys.sort()) {
@@ -146,8 +210,11 @@ function objectHash(node: object, room: number, below: unknown[]): number {
  * numeric identity in reach is: a hook can equal other kinds. Level by level, so an id counts before
  * a deep subtree.
  */
-function structuralHash(item: unknown): number {
-  let hash = 0
+function structuralHash(item: unknown, session: HashSession): number {
+  const entries = ownEntries(item)
+  session.charge(entries.length)
+  let hash = entriesHash(entries)
+  if (hash === HOOKED) return HOOKED
   let room = MAX_NODES
   let level = [item]
   for (let depth = 0; depth < MAX_DEPTH && level.length > 0; depth++) {
@@ -155,14 +222,24 @@ function structuralHash(item: unknown): number {
     for (const node of level) {
       if (room === 0) return hash
       room--
-      const walkable = typeof node === 'object' && node !== null && !hasHook(node)
-      const own = walkable ? objectHash(node, room, below) : scalarHash(node)
+      const own = isWalkable(node) ? objectHash(node, room, below, session) : scalarHash(node)
       if (own === HOOKED) return HOOKED
       hash = mix(hash, own)
     }
     level = below
   }
   return hash
+}
+
+/** Each distinct object once, because one wide record can fill a whole list. */
+function hashesOf(items: readonly unknown[], session: HashSession): number[] {
+  const hashes = new Map<object, number>()
+  return items.map((item) => {
+    if (!isWalkable(item)) return structuralHash(item, session)
+    const hash = hashes.get(item) ?? structuralHash(item, session)
+    hashes.set(item, hash)
+    return hash
+  })
 }
 
 /**
@@ -172,7 +249,8 @@ function structuralHash(item: unknown): number {
 export function multisetEqual<T>(
   a: readonly T[],
   b: readonly T[],
-  equal: (x: T, y: T) => boolean
+  equal: (x: T, y: T) => boolean,
+  session: HashSession
 ): boolean {
   if (a.length !== b.length) return false
   const partnerOfA = new Int32Array(a.length).fill(NONE)
@@ -192,8 +270,8 @@ export function multisetEqual<T>(
   const open = unpaired(partnerOfA)
   if (open.length === 0) return true
 
-  const hashA = a.map((item) => structuralHash(item))
-  const hashB = b.map((item) => structuralHash(item))
+  const hashA = hashesOf(a, session)
+  const hashB = hashesOf(b, session)
   const byHash = (j: number): number => hashB[j]
   const groups = Map.groupBy(hashB.keys(), byHash)
   // Last index first: lists in the same order pair at the first try.

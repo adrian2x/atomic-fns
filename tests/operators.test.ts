@@ -170,7 +170,7 @@ describe('relational checks use content, never identity', () => {
     expect(relations([1], ['a'])).toEqual(UNRELATED)
     expect(relations([NaN], [1])).toEqual(UNRELATED)
     expect(relations([{}], [{}])).toEqual(UNRELATED)
-    expect(relations([[[1]]], [[[2]]])).toEqual(UNRELATED)
+    expect(relations([[[1]]], [[[2]]])).toEqual(EQUAL)
   })
 
   it('a hook decides, and undefined from it means incomparable', () => {
@@ -622,6 +622,40 @@ describe('deepEqual kinds', () => {
     expect(deepEqual(new Array<unknown>(size), sparse(5, 1))).toBe(false)
     expect(deepEqual(sparse(5, 1), sparse(6, 1))).toBe(false)
     expect(deepEqual(sparse(5, 1), sparse(5, 1))).toBe(true)
+  })
+
+  it('sparse arrays cost their own elements, not their length', () => {
+    const counted = (array: unknown[]): unknown[] => {
+      let probes = 0
+      const probe = (): void => {
+        probes++
+        if (probes > 5000) throw new Error('walked the holes')
+      }
+      return new Proxy(array, {
+        get(target, key) {
+          probe()
+          return Reflect.get(target, key) as unknown
+        },
+        has(target, key) {
+          probe()
+          return Reflect.has(target, key)
+        }
+      })
+    }
+    const lastOnly = (value: unknown): unknown[] => {
+      const array = new Array<unknown>(2 ** 24)
+      array[2 ** 24 - 1] = value
+      return array
+    }
+    expect(deepEqual(counted(lastOnly(1)), counted(lastOnly(1)))).toBe(true)
+    expect(deepEqual(counted(lastOnly(1)), counted(lastOnly(2)))).toBe(false)
+    expect(deepEqual(counted(lastOnly(undefined)), counted(new Array(2 ** 24)))).toBe(true)
+  })
+
+  it('arrays compare by index only, as in Lodash isEqual', () => {
+    const key = Symbol('key')
+    expect(deepEqual(Object.assign([1], { x: 1 }), [1])).toBe(true)
+    expect(deepEqual(Object.assign([1], { [key]: 1 }), [1])).toBe(true)
   })
 
   it('float typed arrays compare elements by SameValueZero', () => {

@@ -235,7 +235,7 @@ export function eq(x: unknown, y: unknown): boolean {
   return sameValueZero(x, y)
 }
 
-function isNumericPrimitive(v: unknown): v is number | bigint {
+export function isNumericPrimitive(v: unknown): v is number | bigint {
   return typeof v === 'number' || typeof v === 'bigint'
 }
 
@@ -256,7 +256,8 @@ function contentOrder(x: unknown, y: unknown, level: number): number | undefined
   if (hasMethod(x, protocol.compare) || hasMethod(y, protocol.compare)) {
     return hookOrder(x, y, protocol.compare)
   }
-  if (Array.isArray(x) && Array.isArray(y) && level <= ARRAY_ORDER_LEVELS) {
+  if (Array.isArray(x) && Array.isArray(y)) {
+    if (level > ARRAY_ORDER_LEVELS) return 0
     return arrayOrder(x, y, (a, b) => relationalCompare(a, b, level + 1))
   }
   return nativeOrder(x, y, rank)
@@ -281,11 +282,11 @@ function relationalCompare(x: unknown, y: unknown, level = 1): number {
 /**
  * Strict less-than, with `<` semantics that do not coerce. Rank-1 values compare numerically only
  * (equal kinds/units are equal). Dates compare by time, strings, booleans and symbols within their
- * kind, arrays by content (see {@link compare}, with no identity tie-break), wrapper objects as
- * their primitive, and values with a `protocol.compare` hook by that hook. NaN makes all four
- * checks false, and so does an Invalid Date against anything but itself. Operands of different
- * kinds, or with no order such as plain objects, are incomparable: {@link lt} and {@link gt} are
- * false, {@link lte} and {@link gte} equal `eq`.
+ * kind, arrays by content (see {@link compare}, with no identity tie-break, so arrays past the
+ * last level read tie), wrapper objects as their primitive, and values with a `protocol.compare`
+ * hook by that hook. NaN makes all four checks false, and so does an Invalid Date against anything
+ * but itself. Operands of different kinds, or with no order such as plain objects, are
+ * incomparable: {@link lt} and {@link gt} are false, {@link lte} and {@link gte} equal `eq`.
  * @throws {ValueError} when both operands carry different unit codes.
  */
 export function lt(x: unknown, y: unknown): boolean {

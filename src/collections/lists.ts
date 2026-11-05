@@ -70,8 +70,7 @@ export function forwardStart(start: unknown, length: number): number {
 /** Where a backward search of `length` elements starts, the last element by default. */
 export function backwardStart(start: unknown, length: number): number {
   if (start === undefined) return length - 1
-  const from = toInteger(start)
-  return Math.min(from < 0 ? Math.max(length + from, 0) : from, length - 1)
+  return Math.min(forwardStart(start, length), length - 1)
 }
 
 type IndexTest<T> = (value: T, index: number) => unknown

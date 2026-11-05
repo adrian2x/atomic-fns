@@ -3,22 +3,25 @@
  */
 
 import { unbox } from '../globals/brand.js'
-import { isHugeSparse, walkArray } from '../internal/arrayKeys.js'
+import { walkArray } from '../internal/arrayKeys.js'
 import { enterNesting, exitNesting, guardNesting, withHookNesting } from '../internal/nesting.js'
-import { bytesOf, kindOf, multisetEqual, type Kind } from './multiset.js'
-import { eq, sameValueZero } from './order.js'
+import { bytesOf, isFloatView, kindOf, multisetEqual, type Kind } from './multiset.js'
+import { eq, isNumericPrimitive, sameValueZero } from './order.js'
 import { hasMethod, protocol, unitOf } from './protocol.js'
 
 /** A `Map` holds at most 2^24 entries; objects past that go unremembered, which only costs time. */
 const MAX_TRACKED_OBJECTS = 2 ** 24 - 2
 
-/** Pairs a failed comparison must have walked before it is remembered; the rest are cheap to redo. */
+/** Comparisons a failure must have cost before it is remembered; the rest are cheap to redo. */
 const MIN_VISITS_TO_REMEMBER_FAILURE = 32
 const MAX_REMEMBERED_FAILURES = 2 ** 20
 
-/** Comparisons one call may make, so candidates that pair all-to-all end in a catchable error. */
+/** Comparisons one call may repeat, so candidates that pair all-to-all end in a catchable error. */
 const MAX_COMPARISONS = 2 ** 25
 const COMPARISONS_ERROR = `deepEqual exceeded ${String(MAX_COMPARISONS)} comparisons`
+/** What one comparison covers: bytes read one by one, and characters the engine compares in bulk. */
+const BYTES_PER_COMPARISON = 32
+const CHARS_PER_COMPARISON = 1024
 
 /**
  * What one outermost call has taken to be equal, shared with its hooks and multiset matching.
@@ -30,10 +33,21 @@ const COMPARISONS_ERROR = `deepEqual exceeded ${String(MAX_COMPARISONS)} compari
  * difference ends a plain walk, while multiset matching catches it and tries the next candidate, so
  * a failed candidate rolls back its unions: union by rank without path compression makes that O(1)
  * each. A false is final, since taking more pairs to be equal can only skip a difference.
+ *
+ * So a plain walk repeats nothing and pays nothing, at any size. A trial, a comparison whose false
+ * does not end the walk, is what can repeat: it pays its real cost as it goes. One that holds outside
+ * any other gets back all but what failed inside it, as its unions stay and that work is never done
+ * again.
  */
 export class DeepEqualSession {
-  /** Comparisons the walk may still make before it gives up. */
+  /** Comparisons the walk may still repeat before it gives up. */
   visitRoom = MAX_COMPARISONS
+  /** Trials running, one inside the other. */
+  trials = 0
+  /** Comparisons spent on trials that failed. */
+  wasted = 0
+  /** Key counts of the records a hash found too wide to read. */
+  wideRecords?: Map<object, number>
   /** Failures the session may still store. */
   failureRoom = MAX_REMEMBERED_FAILURES
   /** Objects the session may still track. */
@@ -46,24 +60,32 @@ export class DeepEqualSession {
   /** Pairs of ids known unequal. */
   readonly #unequal = new Set<number>()
 
-  count(): void {
-    if (this.visitRoom-- <= 0) throw new RangeError(COMPARISONS_ERROR)
+  /** Pay for work that can repeat, wherever it runs. */
+  count(units = 1): void {
+    this.visitRoom -= units
+    if (this.visitRoom < 0) throw new RangeError(COMPARISONS_ERROR)
+  }
+
+  /** Pay for work only a trial can repeat. */
+  charge(units = 1): void {
+    if (this.trials > 0) this.count(units)
   }
 
   /** The answer a pair already has, or `undefined` once it is taken to be equal. */
   enter(a: object, b: object): boolean | undefined {
     const [idA, idB] = [this.#id(a), this.#id(b)]
-    if (idA !== undefined && idB !== undefined) {
-      if (this.#unequal.has(pairKey(idA, idB))) return false
-      const [x, y] = [this.#root(idA), this.#root(idB)]
-      if (x === y) return true
-      const [low, high] = this.#rank[x] < this.#rank[y] ? [x, y] : [y, x]
-      const tied = this.#rank[low] === this.#rank[high]
-      this.#parent[low] = high
-      if (tied) this.#rank[high]++
-      this.#unions.push(tied ? ~low : low)
+    if (idA === undefined || idB === undefined) {
+      this.count()
+      return undefined
     }
-    this.count()
+    if (this.#unequal.has(pairKey(idA, idB))) return false
+    const [x, y] = [this.#root(idA), this.#root(idB)]
+    if (x === y) return true
+    const [low, high] = this.#rank[x] < this.#rank[y] ? [x, y] : [y, x]
+    const tied = this.#rank[low] === this.#rank[high]
+    this.#parent[low] = high
+    if (tied) this.#rank[high]++
+    this.#unions.push(tied ? ~low : low)
     return undefined
   }
 
@@ -156,18 +178,22 @@ function sameClass(a: object, b: object): boolean {
   return x === null && y === null
 }
 
-const FLOAT_ARRAY_TAGS = ['[object Float16Array]', '[object Float32Array]', '[object Float64Array]']
-
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  return a.length === b.length && a.every((byte, i) => byte === b[i])
+function bytesEqual(a: Uint8Array, b: Uint8Array, session: DeepEqualSession): boolean {
+  if (a.length !== b.length) return false
+  return a.every((byte, i) => {
+    if (i % BYTES_PER_COMPARISON === 0) session.charge()
+    return byte === b[i]
+  })
 }
 
-function viewsEqual(a: ArrayBufferView, b: ArrayBufferView): boolean {
-  if (!FLOAT_ARRAY_TAGS.includes(Object.prototype.toString.call(a))) {
-    return bytesEqual(bytesOf(a), bytesOf(b))
-  }
-  const [x, y] = [a as Float64Array, b as Float64Array]
-  return x.length === y.length && x.every((value, i) => sameValueZero(value, y[i]))
+function viewsEqual(a: ArrayBufferView, b: ArrayBufferView, session: DeepEqualSession): boolean {
+  if (!isFloatView(a)) return bytesEqual(bytesOf(a), bytesOf(b), session)
+  const floats = b as Float64Array
+  if (a.length !== floats.length) return false
+  return a.every((value, i) => {
+    session.charge()
+    return sameValueZero(value, floats[i])
+  })
 }
 
 /** A value with `protocol.rank` 1 or 5 has no children to share and no cycle to close. */
@@ -188,7 +214,6 @@ function callHook(a: unknown, b: unknown, session: DeepEqualSession): boolean {
 
 function hookEqual(a: unknown, b: unknown, session: DeepEqualSession): boolean {
   if (a === b || !isObject(a) || !isObject(b) || (isScalar(a) && isScalar(b))) {
-    session.count()
     return callHook(a, b, session)
   }
   const room = session.visitRoom
@@ -200,18 +225,15 @@ function sameFields(a: object, b: object, ...keys: string[]): boolean {
   return keys.every((key) => x[key] === y[key])
 }
 
-function isNumber(v: unknown): v is number | bigint {
-  return typeof v === 'number' || typeof v === 'bigint'
-}
-
 // The pair walk below stays inline: a shared wrapper adds stack frames per nesting level.
 function deepEqualInner(a: unknown, b: unknown, session: DeepEqualSession): boolean {
+  session.charge(typeof a === 'string' ? 1 + Math.floor(a.length / CHARS_PER_COMPARISON) : 1)
   if (unitOf(a) !== unitOf(b)) return false
   if (hasMethod(a, protocol.equals) || hasMethod(b, protocol.equals)) {
     return hookEqual(a, b, session)
   }
   if (eq(a, b)) return true
-  if (isNumber(a) && isNumber(b)) return a == b
+  if (isNumericPrimitive(a) && isNumericPrimitive(b)) return a == b
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
 
   enterNesting()
@@ -254,6 +276,7 @@ function sparseArraysEqual(
   from: number,
   session: DeepEqualSession
 ): boolean {
+  if (session.trials > 0) session.charge(Object.keys(a).length + Object.keys(b).length)
   const ownEqual = (array: unknown[], skip?: unknown[]): boolean => {
     let equal = true
     walkArray(array, (ev) => {
@@ -273,21 +296,15 @@ function arraysEqual(a: unknown[], b: unknown[], session: DeepEqualSession): boo
   for (; i < len && i in a && i in b; i++) {
     if (!deepEqualInner(a[i], b[i], session)) return false
   }
-  if (i < len && (isHugeSparse(a) || isHugeSparse(b))) {
-    return sparseArraysEqual(a, b, i, session)
-  }
-  for (; i < len; i++) {
-    if (!deepEqualInner(a[i], b[i], session)) return false
-  }
-  return true
+  return i === len || sparseArraysEqual(a, b, i, session)
 }
 
 function childrenEqual(a: object, b: object, kind: Kind, session: DeepEqualSession): boolean {
   switch (kind) {
     case 'view':
-      return viewsEqual(a as ArrayBufferView, b as ArrayBufferView)
+      return viewsEqual(a as ArrayBufferView, b as ArrayBufferView, session)
     case 'buffer':
-      return bytesEqual(bytesOf(a as ArrayBuffer), bytesOf(b as ArrayBuffer))
+      return bytesEqual(bytesOf(a as ArrayBuffer), bytesOf(b as ArrayBuffer), session)
     case 'map':
       return mapsEqual(a as Map<unknown, unknown>, b as Map<unknown, unknown>, session)
     case 'set':
@@ -297,6 +314,7 @@ function childrenEqual(a: object, b: object, kind: Kind, session: DeepEqualSessi
   }
   const keys = enumerableKeys(a)
   if (keys.length !== enumerableKeys(b).length) return false
+  session.charge(keys.length)
   for (const key of keys) {
     if (!isEnumerableKey(b, key)) return false
     const [x, y] = [a as Record<PropertyKey, unknown>, b as Record<PropertyKey, unknown>]
@@ -310,14 +328,17 @@ function membersEqual(
   b: readonly unknown[],
   session: DeepEqualSession
 ): boolean {
-  return multisetEqual(a, b, (x, y) => {
+  session.charge(a.length)
+  const equal = (x: unknown, y: unknown): boolean => {
     session.count()
     return deepEqualInSession(x, y, session)
-  })
+  }
+  return multisetEqual(a, b, equal, session)
 }
 
 function setsEqual(a: Set<unknown>, b: Set<unknown>, session: DeepEqualSession): boolean {
   if (a.size !== b.size) return false
+  session.charge(a.size)
   return a.isSubsetOf(b) || withHookNesting(() => membersEqual([...a], [...b], session))
 }
 
@@ -332,6 +353,7 @@ function mapsEqual(
   session: DeepEqualSession
 ): boolean {
   if (a.size !== b.size) return false
+  session.charge(a.size)
   if (!a.keys().every((key) => isLookupKey(key) && b.has(key))) {
     return withHookNesting(() => membersEqual([...a], [...b], session))
   }
@@ -356,28 +378,43 @@ export function deepMapEqual(a: Map<unknown, unknown>, b: Map<unknown, unknown>)
  *
  * Numbers of any kind (number, bigint, Decimal) are equal when their exact values are, NaN equals
  * NaN and -0 equals 0. Units must match exactly: unlike `eq`, `deepEqual(new Currency(5, 'USD'), 5)`
- * is false. Arrays, plain objects and class instances compare by own enumerable keys, symbols
- * included, and an explicit `undefined` equals an array hole. Boxed primitives compare by `Object.is`,
- * Dates by time, RegExps by source and flags, Errors by name and message, buffers and views by
- * bytes, float typed arrays by element under SameValueZero. Set members and Map entries compare as
- * multisets. Other kinds (URL, Promise, WeakMap, generators, ...) equal only themselves, as in Lodash
- * `isEqual`. Both sides must be of one class or its twin from another realm; null-prototype and
- * `Object.prototype` objects are one plain kind.
+ * is false. Arrays compare by index and ignore other keys, as in Lodash `isEqual`, and an explicit
+ * `undefined` equals a hole. Plain objects and class instances compare by own enumerable keys,
+ * symbols included. Boxed primitives compare by `Object.is`, Dates by time, RegExps by source and
+ * flags, Errors by name and message, buffers and views by bytes, float typed arrays by element under
+ * SameValueZero. Set members and Map entries compare as multisets. Other kinds (URL, Promise,
+ * WeakMap, generators, ...) equal only themselves, as in Lodash `isEqual`. Both sides must be of one
+ * class or its twin from another realm; null-prototype and `Object.prototype` objects are one plain
+ * kind.
  *
  * Each shared object is compared once, so time and memory stay proportional to the distinct objects
  * however they share. Nesting past 1000 levels of object pairs throws `RangeError` (a security
- * bound), as do candidates that pair all-to-all past 2^25 comparisons.
+ * bound), as do candidates that fail past 2^25 comparisons, which count what they read: each element
+ * and key, every 32 bytes of a view and every 1024 characters of a string.
  */
 export function deepEqual(a: unknown, b: unknown): boolean {
-  return inSession((session) => deepEqualInSession(a, b, session))
+  if (hookSession !== undefined) return inSession((session) => deepEqualInSession(a, b, session))
+  const session = new DeepEqualSession()
+  return guardNesting(() => deepEqualInner(a, b, session))
 }
 
-/** `deepEqual` in a given session, undoing what a failed comparison assumed. Internal. */
+/** `deepEqual` as a trial in a given session, undoing what a failed comparison assumed. Internal. */
 export function deepEqualInSession(a: unknown, b: unknown, session: DeepEqualSession): boolean {
   const mark = session.mark()
-  const equal = guardNesting(() => deepEqualInner(a, b, session))
-  if (!equal) session.rollback(mark)
-  return equal
+  const [room, wasted] = [session.visitRoom, session.wasted]
+  session.trials++
+  try {
+    const equal = guardNesting(() => deepEqualInner(a, b, session))
+    if (!equal) {
+      session.rollback(mark)
+      session.wasted = wasted + room - session.visitRoom
+    } else if (session.trials === 1) {
+      session.visitRoom = room - (session.wasted - wasted)
+    }
+    return equal
+  } finally {
+    session.trials--
+  }
 }
 
 /**

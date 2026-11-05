@@ -539,6 +539,10 @@ function isUnsafeWriteSegment(base: object, key: PropertyKey): boolean {
   )
 }
 
+function writeRefusal(key: PropertyKey): TypeError {
+  return new TypeError(`refusing to write through "${String(key)}"`)
+}
+
 function isContainer(v: unknown): v is object {
   return (typeof v === 'object' && v !== null) || typeof v === 'function'
 }
@@ -634,7 +638,8 @@ export function get<T = unknown, D = T>(
  *
  * Paths walk like {@link get}. A `__proto__`, `constructor`, or `prototype` segment that is not an
  * own data property of a plain object or array is a no-op (the object is returned unchanged).
- * Descending through an inherited (non-own) property is also a no-op.
+ * Descending through an inherited (non-own) property, or into a builtin prototype such as
+ * `Object.prototype`, is also a no-op.
  * @param attr The property name or path.
  * @param x The given object.
  * @returns The modified object.
@@ -654,6 +659,7 @@ export function del<T extends object | null | undefined>(
     if (isForbiddenPathSegment(cur, seg) || isUnsafeWriteSegment(cur, seg)) return x
     if (isInheritedKey(cur, seg)) return x
     cur = (cur as Record<PropertyKey, unknown>)[seg]
+    if (isContainer(cur) && isIntrinsicPrototype(cur)) return x
   }
   const last = paths[paths.length - 1]
   if (!isContainer(cur) || isUnsafeWriteSegment(cur, last)) return x
@@ -665,6 +671,12 @@ function isIndexSegment(key: PropertyKey): key is string {
   return typeof key === 'string' && isCanonicalArrayIndex(key)
 }
 
+function growsArray(target: unknown[], key: PropertyKey, value: unknown): boolean {
+  // Coercing an object to a length could run its valueOf or join a huge array, so objects are out.
+  if (key === 'length') return Object(value) === value || Number(value) > target.length
+  return isIndexSegment(key) && Number(key) > target.length
+}
+
 /** Assigns `key`, so setters run, unless a flag asks for `defineProperty`. */
 function writeSegment(
   target: object,
@@ -673,10 +685,8 @@ function writeSegment(
   writable?: boolean,
   enumerable?: boolean
 ): void {
-  if (isUnsafeWriteSegment(target, key)) {
-    throw new TypeError(`refusing to write through "${String(key)}"`)
-  }
-  if (Array.isArray(target) && isIndexSegment(key) && Number(key) > target.length) {
+  if (isUnsafeWriteSegment(target, key)) throw writeRefusal(key)
+  if (Array.isArray(target) && growsArray(target, key, value)) {
     throw new RangeError('array index beyond length')
   }
   if (writable === undefined && enumerable === undefined) {
@@ -704,10 +714,11 @@ function writeSegment(
  *
  * Writing to or through a `__proto__`, `constructor`, or `prototype` segment that is not an own
  * data property of a plain object or array throws
- * `TypeError('refusing to write through "<segment>"')`. Descending through an inherited (non-own)
- * property throws `TypeError('refusing to write through inherited "<segment>"')`. An array index
- * past the end throws `RangeError('array index beyond length')`. None of these leave a partial
- * write behind.
+ * `TypeError('refusing to write through "<segment>"')`, and so does a segment that reaches a
+ * builtin prototype such as `Object.prototype`. Descending through an inherited (non-own) property
+ * throws `TypeError('refusing to write through inherited "<segment>"')`. An array index past the
+ * end, or a `length` that would grow the array, throws
+ * `RangeError('array index beyond length')`. None of these leave a partial write behind.
  * @param attr The name, Symbol, or path of the property to be defined or modified.
  * @param obj The container object. A `null`, `undefined` or primitive root is returned as is.
  * @param value The value associated with the property
@@ -731,14 +742,13 @@ export function set<T extends object | null | undefined>(
   let depth = 0
   for (; depth < last; depth++) {
     const seg = paths[depth]
-    if (isUnsafeWriteSegment(cur, seg)) {
-      throw new TypeError(`refusing to write through "${String(seg)}"`)
-    }
+    if (isUnsafeWriteSegment(cur, seg)) throw writeRefusal(seg)
     if (isInheritedKey(cur, seg)) {
       throw new TypeError(`refusing to write through inherited "${String(seg)}"`)
     }
     const next = (cur as Record<PropertyKey, unknown>)[seg]
     if (!isContainer(next)) break
+    if (isIntrinsicPrototype(next)) throw writeRefusal(seg)
     cur = next
   }
 

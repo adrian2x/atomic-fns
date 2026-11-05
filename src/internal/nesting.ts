@@ -4,7 +4,7 @@ export const MAX_NESTING_DEPTH = 1000
 /** Work units one merge call may spend expanding containers again; see {@link noteExpanded}. */
 const MAX_SHARED_WORK = 500_000
 
-/** Keys in one container that cost one extra work unit, so a wide row weighs what it copies. */
+/** Keys one work unit covers, so a wide row weighs what it copies. */
 const KEYS_PER_WORK_UNIT = 16
 
 /** The same allowance for flatten, lower than merge's: each repeated leaf emits an output key. */
@@ -43,7 +43,6 @@ export function walkSession<T extends object>(create: () => T): T {
 }
 
 let sharedWork = 0
-let freeRepeats = 0
 let revisitGuardDepth = 0
 let sharedWorkLimit = MAX_SHARED_WORK
 let sharedWorkError = SHARED_REVISIT_ERROR
@@ -125,7 +124,6 @@ export function getNestingDepth(): number {
 function withRevisitGuard<T>(fn: () => T, limit: number, error: string): T {
   if (revisitGuardDepth === 0) {
     sharedWork = 0
-    freeRepeats = 0
     sharedWorkLimit = limit
     sharedWorkError = error
     expanded = new WeakSet<object>()
@@ -156,20 +154,16 @@ export function guardFlattenSharedRevisits<T>(fn: () => T): T {
 
 /**
  * Record that container `obj`, holding `keys` own keys, is being expanded under the active
- * revisit guard. A first expansion is free, and each of its keys pays for one later expansion, so
- * a walk linear in the input never trips. Any other expansion costs one unit, whatever led there,
- * so a cycle pays like a shared row. Every repeat costs one more unit per
- * {@link KEYS_PER_WORK_UNIT} keys, so a wide shared row pays for what it copies.
+ * revisit guard. A first expansion is free. A later one costs one unit per
+ * {@link KEYS_PER_WORK_UNIT} keys, rounded up, whatever led there: a cycle pays like a shared row,
+ * a wide row pays for what it copies, and an empty container, with nothing to copy, costs nothing.
  */
 export function noteExpanded(obj: object, keys: number): void {
   if (!expanded.has(obj)) {
     expanded.add(obj)
-    freeRepeats += keys
     return
   }
-  if (freeRepeats > 0) freeRepeats--
-  else sharedWork++
-  sharedWork += Math.floor(keys / KEYS_PER_WORK_UNIT)
+  sharedWork += Math.ceil(keys / KEYS_PER_WORK_UNIT)
   if (sharedWork > sharedWorkLimit) {
     throw new RangeError(sharedWorkError)
   }

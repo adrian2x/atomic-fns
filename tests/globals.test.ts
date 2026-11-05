@@ -841,6 +841,66 @@ describe('set follows _.set with its own argument order', () => {
     assert.equal(Object.getPrototypeOf(target), Object.prototype)
   })
 
+  it('a length write cannot grow an array', () => {
+    const err = { name: 'RangeError', message: 'array index beyond length' }
+    const doc = { tags: ['a', 'b'] }
+    assert.throws(() => set('tags.length', doc, 4294967295), err)
+    assert.throws(() => set('tags.length', doc, '3'), err)
+    assert.throws(() => set('tags.length', doc, [9]), err)
+    assert.throws(() => set('tags.length', doc, { valueOf: () => 1 }), err)
+    assert.throws(() => set('tags.length', doc, 3, true), err)
+    assert.equal(doc.tags.length, 2)
+
+    assert.equal(set('tags.length', doc, 2).tags.length, 2)
+    assert.equal(set('tags.length', doc, 1).tags.length, 1)
+    assert.deepEqual(set('a.length', {}, 5), { a: { length: 5 } })
+  })
+
+  it('refuses to write into a builtin prototype reached through a path', () => {
+    const prototypes = [
+      Object.prototype,
+      Function.prototype,
+      Array.prototype,
+      foreign('Object.prototype') as object
+    ]
+    try {
+      for (const p of prototypes) {
+        assert.throws(() => set('p.polluted', { p }, 1), {
+          name: 'TypeError',
+          message: 'refusing to write through "p"'
+        })
+        assert.equal(Object.hasOwn(p, 'polluted'), false)
+      }
+    } finally {
+      for (const p of prototypes) Reflect.deleteProperty(p, 'polluted')
+    }
+
+    class Own {
+      label = 'own'
+    }
+    set('p.x', { p: Own.prototype }, 1)
+    assert.equal(Object.hasOwn(Own.prototype, 'x'), true)
+  })
+
+  it('del leaves a builtin prototype reached through a path alone', () => {
+    for (const p of [Object.prototype, Function.prototype, foreign('Object.prototype') as object]) {
+      Object.defineProperty(p, 'delProbe', { value: 1, configurable: true })
+      try {
+        del('p.delProbe', { p })
+        assert.equal(Object.hasOwn(p, 'delProbe'), true)
+      } finally {
+        Reflect.deleteProperty(p, 'delProbe')
+      }
+    }
+
+    class Own {
+      label = 'own'
+    }
+    Object.defineProperty(Own.prototype, 'x', { value: 1, configurable: true })
+    del('p.x', { p: Own.prototype })
+    assert.equal(Object.hasOwn(Own.prototype, 'x'), false)
+  })
+
   it('assigns the last segment, so keys stay enumerable and writable and setters run', () => {
     assert.equal(JSON.stringify(set('a', { a: 1, b: 2 }, 9)), '{"a":9,"b":2}')
     assert.deepEqual(Object.getOwnPropertyDescriptor(set('n', {}, 1), 'n'), {

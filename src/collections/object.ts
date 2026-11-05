@@ -163,6 +163,15 @@ function mergeKey(
   }
 }
 
+/** The own enumerable string and symbol keys `merge` copies. */
+function mergeableKeys(s: object): PropertyKey[] {
+  const keys: PropertyKey[] = Object.keys(s)
+  for (const sym of Object.getOwnPropertySymbols(s)) {
+    if (Object.getOwnPropertyDescriptor(s, sym)?.enumerable) keys.push(sym)
+  }
+  return keys
+}
+
 function mergeInto(
   t: object,
   s: object,
@@ -184,7 +193,7 @@ function mergeInto(
       targets.add(t)
     }
 
-    const keys = Object.keys(s)
+    const keys = mergeableKeys(s)
     noteExpanded(s, keys.length)
     assertNestingDepth(depth)
     if (t === Object.prototype) return
@@ -194,14 +203,9 @@ function mergeInto(
       // Extend first so source indices never trip the beyond-length rule; holes stay holes.
       if (t.length < s.length) t.length = s.length
     }
-    const rec = s as Record<string, unknown>
+    const rec = s as Record<PropertyKey, unknown>
     for (const key of keys) {
       mergeKey(t, key, rec[key], seen, pairs, depth + 1)
-    }
-    for (const sym of Object.getOwnPropertySymbols(s)) {
-      const desc = Object.getOwnPropertyDescriptor(s, sym)
-      if (!desc?.enumerable) continue
-      mergeKey(t, sym, (s as Record<symbol, unknown>)[sym], seen, pairs, depth + 1)
     }
   } finally {
     exitNesting()
@@ -230,8 +234,9 @@ function mergeInto(
  * source argument, (source, target) pairs already merged are skipped (merging the same source
  * into the same target again changes nothing); each later source argument gets a fresh pair
  * cache so a source re-applied later is merged again. Expanding a source again costs one work unit
- * per 16 keys, plus one once repeats outnumber the input's keys, on a cycle as on a shared row; past
- * 500000 units it throws `RangeError('input repeats shared objects beyond 500000 copied nodes')`.
+ * per 16 keys, symbol keys included and rounded up, on a cycle as on a shared row, so an empty
+ * container is free; past 500000 units it throws
+ * `RangeError('input repeats shared objects beyond 500000 copied nodes')`.
  * On either throw, `target` may already hold a partial merge of earlier keys at shallower levels.
  * @param target Destination object (mutated).
  * @param sources Source objects applied left to right.
@@ -332,7 +337,7 @@ export type PropertyPath = PropertyKey | readonly PropertyKey[]
 
 /** One path, or a list or Set of them, as segment arrays. */
 function toPathList(paths: unknown): PropertyKey[][] {
-  if (Array.isArray(paths) || paths instanceof Set) {
+  if (Array.isArray(paths) || isSet(paths)) {
     return Array.from(paths as Iterable<unknown>, (path) => parsePath(path))
   }
   return [parsePath(paths)]
@@ -417,31 +422,7 @@ function setPickedPath(
   assignData(cur, parts[parts.length - 1], leaf)
 }
 
-/** Trie of omit paths: O(keys + total path length) walks. */
-interface OmitTrie {
-  drop?: boolean
-  kids?: Map<PropertyKey, OmitTrie>
-}
-
-function buildOmitTrie(paths: PropertyKey[][]): OmitTrie {
-  const root: OmitTrie = {}
-  for (const parts of paths) {
-    let node = root
-    for (const p of parts) {
-      node.kids ??= new Map()
-      let next = node.kids.get(p)
-      if (!next) {
-        next = {}
-        node.kids.set(p, next)
-      }
-      node = next
-    }
-    node.drop = true
-  }
-  return root
-}
-
-function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unknown {
+function omitWithTrie(value: unknown, trie: PickPathTrie, pathPrefix: string[]): unknown {
   if (value === null || typeof value !== 'object') return value
   enterNesting()
   try {
@@ -475,7 +456,7 @@ function omitWithTrie(value: unknown, trie: OmitTrie, pathPrefix: string[]): unk
 
 function omitFromObject(
   src: object,
-  trie: OmitTrie,
+  trie: PickPathTrie,
   pathPrefix: string[]
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {}
@@ -540,12 +521,14 @@ export function pick<T extends object>(
   return result
 }
 
-/** Nested map of picked paths; ancestor checks walk segment by segment. */
+/** Nested map of paths, walked segment by segment: O(keys + total path length). */
 interface PickPathTrie {
   kids?: Map<PropertyKey, PickPathTrie>
   picked?: boolean
   /** A picked object or function, which already holds everything below it. */
   ancestor?: boolean
+  /** A path `omit` removes. */
+  drop?: boolean
 }
 
 function hasPickedAncestor(parts: PropertyKey[], root: PickPathTrie): boolean {
@@ -609,7 +592,8 @@ export function omit<T extends object>(
     if (typeof paths === 'function') {
       return pick(obj, (v, k) => !paths(v, k))
     }
-    const trie = buildOmitTrie(toPathList(paths))
+    const trie: PickPathTrie = {}
+    for (const parts of toPathList(paths)) pickPathNode(parts, trie).drop = true
     return omitWithTrie(obj, trie, []) as Partial<T>
   })
 }
