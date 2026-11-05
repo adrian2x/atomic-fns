@@ -795,6 +795,13 @@ export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = 
   return values
 }
 
+/** True for an object made by `{}`, `JSON.parse` or `Object.create(null)`, in any realm. */
+function isPlainObject(x): boolean {
+  if (Object.prototype.toString.call(x) !== '[object Object]') return false
+  const proto = Object.getPrototypeOf(x)
+  return proto === null || Object.getPrototypeOf(proto) === null
+}
+
 function baseMergeDeep(obj, source, key, stack) {
   const objValue = obj[key]
   const srcValue = source[key]
@@ -823,7 +830,7 @@ function baseMergeDeep(obj, source, key, stack) {
   } else if (isObject(srcValue)) {
     newValue = objValue
     if (!isObject(objValue)) {
-      newValue = srcValue
+      newValue = isPlainObject(srcValue) ? {} : srcValue
     }
   } else {
     isCommon = false
