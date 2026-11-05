@@ -751,6 +751,21 @@ describe('IntlDate', () => {
     assert(Number.isNaN(mockDate('garbage').diff(start, 'months')))
   })
 
+  it('diff counts calendar days and weeks across DST', () => {
+    inZone('America/New_York', () => {
+      assert.strictEqual(at(2021, 2, 15).diff(at(2021, 2, 14), 'days'), 1)
+      assert.strictEqual(at(2021, 2, 15).diff(at(2021, 2, 13), 'days'), 2)
+      assert.strictEqual(at(2021, 2, 14).diff(at(2021, 2, 15), 'days'), -1)
+      assert.strictEqual(at(2021, 10, 8).diff(at(2021, 10, 7), 'days'), 1)
+      assert.strictEqual(at(2021, 2, 21).diff(at(2021, 2, 14), 'weeks'), 1)
+      assert.strictEqual(at(2021, 2, 15).diff(at(2021, 2, 14), 'days', true), 1)
+      assert.strictEqual(at(2021, 2, 15).diff(at(2021, 2, 14), 'hours'), 23)
+
+      const start = at(2021, 2, 14)
+      assert.strictEqual(start.add({ days: 1 }).diff(start, 'days'), 1)
+    })
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
