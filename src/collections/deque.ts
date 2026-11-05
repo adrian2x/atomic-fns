@@ -1,8 +1,16 @@
 import { KeyError, ValueError } from '../globals/index.js'
-import { IterableIterator } from '../itertools/index.js'
 import { eq } from '../operators/index.js'
 import { Iteratee } from '../types.js'
 import { Sequence } from './abc.js'
+
+function IterableIterator<T>(next: Iterator<T>['next']): IterableIterator<T> {
+  return {
+    next,
+    [Symbol.iterator]() {
+      return this
+    }
+  }
+}
 
 /**
  * Fixed capacity double-ended queue implemented as ring deque.
