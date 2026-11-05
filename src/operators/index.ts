@@ -206,6 +206,8 @@ export function pow(x, y) {
 /** Class names tell kinds apart across realms, where prototypes differ. */
 function sameKind(x, y): boolean {
   if (!x || !y || typeof x !== 'object' || typeof y !== 'object') return false
+  const tag = Object.prototype.toString
+  if (tag.call(x) !== tag.call(y)) return false
   return (x.constructor?.name ?? 'Object') === (y.constructor?.name ?? 'Object')
 }
 

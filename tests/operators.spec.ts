@@ -92,4 +92,13 @@ describe('operators', () => {
     assert(deepEqual(new Point(), new Point()))
     assert(deepEqual(Object.create(null), {}))
   })
+  it('a forged class name is not a built-in', () => {
+    const date = JSON.parse('{"constructor":{"name":"Date"}}')
+    assert(!deepEqual(new Date(0), date))
+    assert(!deepEqual(date, new Date(0)))
+    assert(!shallowEqual(new Date(0), date))
+    assert(!deepEqual(/a/, JSON.parse('{"constructor":{"name":"RegExp"},"toString":1}')))
+    const bytes = JSON.parse('{"constructor":{"name":"Uint8Array"},"length":1,"0":1}')
+    assert(!deepEqual(new Uint8Array([1]), bytes))
+  })
 })
