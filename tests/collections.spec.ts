@@ -874,4 +874,14 @@ describe('collections', () => {
     assert(picked.inherited === undefined)
     assert(picked.a === 2)
   })
+
+  it('flatten keeps __proto__ as data', () => {
+    const flat: any = flatten(JSON.parse('{"__proto__": 1, "a": 2}'))
+    assert.deepEqual(Object.keys(flat), ['__proto__', 'a'])
+    assert(Object.getPrototypeOf(flat) === Object.prototype)
+    const date = new Date(0)
+    const leaf = { a: 1 }
+    Object.defineProperty(leaf, '__proto__', { value: date, enumerable: true })
+    assert(Object.getPrototypeOf(flatten(leaf)) === Object.prototype)
+  })
 })
