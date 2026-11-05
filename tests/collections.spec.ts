@@ -483,6 +483,20 @@ describe('collections', () => {
     assert.deepEqual(map(users, 'user'), ['barney', 'fred'])
   })
 
+  it('map walks iterables', () => {
+    const double = (x) => x * 2
+    assert.deepEqual(map(new Set([1, 2]), double), [2, 4])
+    assert.deepEqual(map(new Set([{ a: 1 }]), 'a'), [1])
+    assert.deepEqual(
+      map('ab', (x, i) => x + i),
+      ['a0', 'b1']
+    )
+    assert.deepEqual(
+      map(new BTree([[1, 2]]), (x) => x),
+      [[1, 2]]
+    )
+  })
+
   it('merge', () => {
     let object = {
       a: [{ b: 2 }, { d: 4 }]

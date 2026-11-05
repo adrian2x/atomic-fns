@@ -471,6 +471,9 @@ export function map<T, TResult>(
   if (Array.isArray(arr)) {
     return arr.map((x, i) => it(x, i, arr))
   }
+  if (isIterable(arr)) {
+    return Array.from(arr, (x, i) => it(x, i, arr))
+  }
   if (isObject(arr)) {
     return Object.keys(arr).map((key) => it(arr[key], key, arr))
   }
