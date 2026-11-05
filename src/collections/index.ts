@@ -215,11 +215,23 @@ filter(objects, matches({ a: 4, c: 6 }))
 export function matches(shape): (obj) => boolean {
   return function (obj) {
     if (!shape || !obj) return false
+    const seen = new Map()
     for (const key in shape) {
-      if (obj[key] !== shape[key]) return false
+      if (!isPartialMatch(shape[key], obj[key], seen)) return false
     }
     return true
   }
+}
+
+function isPartialMatch(shape, value, seen: Map<unknown, Set<unknown>>): boolean {
+  if (shape === value) return true
+  const isList = Array.isArray(shape)
+  if (!isList && !isPlainObject(shape)) return false
+  if (value === null || typeof value !== 'object' || isList !== Array.isArray(value)) return false
+  const visited = seen.get(shape) ?? new Set()
+  if (visited.has(value)) return true
+  seen.set(shape, visited.add(value))
+  return Object.keys(shape).every((key) => isPartialMatch(shape[key], value[key], seen))
 }
 
 /**
