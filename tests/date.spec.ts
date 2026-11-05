@@ -607,6 +607,24 @@ it('strftime %-H accepts a timestamp and no date', () => {
 })
 
 describe('Duration', () => {
+  it('reads quarters like any other unit', () => {
+    assert.strictEqual(new Duration({ quarters: 2 }).get('quarters'), 2)
+    assert.strictEqual(new Duration({ quarter: 2 }).get('quarter'), 2)
+    assert.strictEqual(new Duration({ hours: 1 }).get('quarters'), 0)
+    assert.strictEqual(new Duration({ years: 1 }).total('quarters'), 4)
+    assert.strictEqual(new Duration({ months: 3 }).total('quarters'), 1)
+
+    const sum = new Duration({ quarters: 1 }).add({ quarters: 1 })
+    assert.deepStrictEqual(sum.toObject(), { quarters: 2 })
+    const difference = new Duration({ quarters: 2 }).subtract({ quarters: 1 })
+    assert.deepStrictEqual(difference.toObject(), { quarters: 1 })
+
+    const start = mockDate('2021-01-01')
+    assert.strictEqual(mockDate('2021-12-01').from(start, 'quarters'), 'in 3 quarters')
+    assert.strictEqual(mockDate('2021-12-01').to(start, 'quarter'), '3 quarters ago')
+    assert.strictEqual(mockDate('2021-12-01').diff(start, 'quarters'), 3)
+  })
+
   it('fromISO keeps only the units in the text', () => {
     assert.deepStrictEqual(Duration.fromISO('PT23H').toObject(), { hours: 23 })
     assert.deepStrictEqual(Duration.fromISO('P5Y3M').toObject(), { years: 5, months: 3 })
