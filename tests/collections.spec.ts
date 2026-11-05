@@ -72,6 +72,23 @@ describe('collections', () => {
     assert.deepEqual(clone(target), target)
   })
 
+  it('clone copies Date and RegExp', () => {
+    const date = new Date(5)
+    const dateCopy = clone(date)
+    assert(dateCopy !== date)
+    assert(dateCopy instanceof Date)
+    assert(dateCopy.getTime() === 5)
+    assert(clone({ date }, true).date.getTime() === 5)
+
+    const regex = /a/gi
+    regex.lastIndex = 3
+    const regexCopy = clone(regex)
+    assert(regexCopy !== regex)
+    assert(regexCopy.source === 'a')
+    assert(regexCopy.flags === 'gi')
+    assert(regexCopy.lastIndex === 3)
+  })
+
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]

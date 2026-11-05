@@ -9,12 +9,14 @@ import {
   get,
   isArrayLike,
   isBool,
+  isDate,
   isEmpty,
   isFunction,
   isIterable,
   isNull,
   isNumber,
   isObject,
+  isRegExp,
   isString,
   set
 } from '../globals/index.js'
@@ -710,6 +712,12 @@ export function clone(value, deep = false) {
   if (isObject(value)) {
     if (isFunction(value.clone)) {
       return value.clone()
+    }
+    if (isDate(value)) return new Date(value.getTime())
+    if (isRegExp(value)) {
+      const regex = new RegExp(value.source, value.flags)
+      regex.lastIndex = value.lastIndex
+      return regex
     }
     const copy = {}
     for (const key in value) {
