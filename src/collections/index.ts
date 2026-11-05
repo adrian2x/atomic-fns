@@ -90,7 +90,7 @@ export function count<T>(obj: T[] | Object, func: Iteratee<T>): Record<string, n
   const counters = {}
   forEach(obj, (value, key) => {
     const result = func(value as T, key)
-    counters[result] = get(result, counters, 0) + 1
+    setOwn(counters, result, Object.hasOwn(counters, result) ? counters[result] + 1 : 1)
   })
   return counters
 }

@@ -64,6 +64,17 @@ describe('collections', () => {
     assert(Object.getPrototypeOf(pick(source, ['__proto__'])) === Object.prototype)
   })
 
+  it('count keeps keys with dots or inherited names', () => {
+    const identity = (x) => x
+    assert.deepEqual(count(['1.5', '1.5'], identity), { '1.5': 2 })
+    assert.deepEqual(count(['constructor', 'constructor'], identity), { constructor: 2 })
+    assert.deepEqual(count([1, '1'], identity), { '1': 2 })
+
+    const counters = count(['__proto__', '__proto__'], identity)
+    assert(Object.getPrototypeOf(counters) === Object.prototype)
+    assert.deepEqual(Object.entries(counters), [['__proto__', 2]])
+  })
+
   it('clone array', () => {
     let arr = [4, 7, 1, 9]
     assert.deepEqual(clone(arr), arr)
