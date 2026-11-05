@@ -827,6 +827,7 @@ function baseMergeDeep(obj, source, key, stack) {
     }
   } else {
     isCommon = false
+    newValue = srcValue
   }
   if (isCommon) {
     stack.set(srcValue, newValue)
