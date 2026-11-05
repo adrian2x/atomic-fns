@@ -298,7 +298,7 @@ class BNode<K, V = any> {
         const result = onFound(key, this.values[i], count++)
         if (result !== undefined) {
           if (editMode) {
-            if (key !== keys[i] || this.isShared)
+            if (!Object.is(key, keys[i]) || this.isShared)
               throw new Error('BTree illegally changed or cloned in editRange')
             if (result.delete) {
               this.keys.splice(i, 1)
