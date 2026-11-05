@@ -26,8 +26,13 @@ class Node<K = any, V = any> {
 
 // In-order traversal of a tree
 function* traverse(node?: Node) {
-  while (node) {
-    yield* traverse(node.left)
+  const stack: Node[] = []
+  while (node || stack.length) {
+    while (node) {
+      stack.push(node)
+      node = node.left
+    }
+    node = stack.pop()
     yield node
     node = node.right
   }

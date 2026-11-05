@@ -118,4 +118,16 @@ describe('SplayTree', () => {
       ]
     )
   })
+
+  it('iterates 1e5 sorted keys', () => {
+    let tree = new SplayTree()
+    let expected: number[] = []
+    for (let i = 0; i < 1e5; i++) {
+      tree.set(i, i)
+      expected.push(i)
+    }
+    assert.deepEqual([...tree.keys()], expected)
+    assert.deepEqual([...tree.values()], expected)
+    assert(tree.size === [...tree.entries()].length)
+  })
 })
