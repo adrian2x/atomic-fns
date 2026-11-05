@@ -163,10 +163,14 @@ export class Duration {
     } else if (isObject(dur)) {
       this.values = normalizeUnits(dur)
     }
-    if (exact) {
+    if (exact || (dur instanceof Duration && dur.matrix === exactMatrix)) {
       // Set the conversion matrix to use
       this.matrix = exactMatrix
     }
+  }
+
+  private withValues(values: TDuration) {
+    return new Duration(values, this.matrix === exactMatrix)
   }
 
   /** Get the years. */
@@ -231,7 +235,7 @@ export class Duration {
       }
     }
 
-    return new Duration(result)
+    return this.withValues(result)
   }
 
   /**
@@ -258,7 +262,7 @@ new Duration({ hours: 1, seconds: 30 }).negated().toObject()
     for (const k of Object.keys(this.values)) {
       negated[k] = this.values[k] === 0 ? 0 : -this.values[k]
     }
-    return new Duration(negated)
+    return this.withValues(negated)
   }
 
   /**
@@ -275,7 +279,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
     for (const k of Object.keys(this.values)) {
       parts[k] = Math.abs(this.values[k])
     }
-    return new Duration(parts)
+    return this.withValues(parts)
   }
 
   private shiftToAll() {
@@ -343,7 +347,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
       }
     }
 
-    return new Duration(built)
+    return this.withValues(built)
   }
 
   total(unit: DurationUnit) {
@@ -363,13 +367,13 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   normalize() {
     const values = this.toObject()
     normalizeValues(this.matrix, values)
-    return new Duration(values)
+    return this.withValues(values)
   }
 
   rescale() {
     const dur = this.normalize().shiftToAll()
     const vals = removeZeroes(dur.values)
-    return new Duration(vals)
+    return this.withValues(vals)
   }
 
   /**
