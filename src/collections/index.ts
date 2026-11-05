@@ -1178,7 +1178,7 @@ export function bisect(arr: any[], x: any, lo = 0, hi?, comp = compare): number 
     const mid = (lo + hi) >> 1
     const check = comp(x, arr[mid])
     if (check >= 0) lo = mid + 1
-    else hi = mid - 1
+    else hi = mid
   }
   return lo
 }
@@ -1197,7 +1197,7 @@ export function bisectLeft(arr: any[], x: any, lo = 0, hi?, comp = compare): num
   while (lo < hi) {
     const mid = (lo + hi) >> 1
     const check = comp(x, arr[mid])
-    if (check <= 0) hi = mid - 1
+    if (check <= 0) hi = mid
     else lo = mid + 1
   }
   return lo
