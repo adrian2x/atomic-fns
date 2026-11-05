@@ -286,6 +286,22 @@ describe('collections', () => {
     assert.deepEqual(merge({ a: [1, 2] }, { a: [undefined, 3] }), { a: [1, 3] })
   })
 
+  it('merge handles a cycle the target already has', () => {
+    const source = { a: [] as unknown[] }
+    source.a.push(source.a)
+    const target: { a?: unknown[] } = {}
+    merge(target, source)
+    merge(target, source)
+    assert(target.a[0] === target.a)
+
+    const cyclic = { a: { self: null } }
+    cyclic.a.self = cyclic.a
+    const other = { a: { self: null } }
+    other.a.self = other.a
+    merge(other, cyclic)
+    assert(other.a.self === other.a)
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })

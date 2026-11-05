@@ -799,7 +799,7 @@ function baseMergeDeep(obj, source, key, stack) {
   const objValue = obj[key]
   const srcValue = source[key]
   const stacked = stack.get(srcValue)
-  if (stacked && (objValue !== stacked || !(key in obj))) {
+  if (stacked) {
     obj[key] = stacked
     return
   }
