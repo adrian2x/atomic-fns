@@ -223,6 +223,14 @@ describe('operators', () => {
     assert.deepEqual(sorted([3, 1, 2], true), [3, 2, 1])
   })
 
+  it('sorted honors the reverse flag', () => {
+    const byValue = (x, y) => x - y
+    assert.deepEqual(sorted([3, 1, 2], false), [1, 2, 3])
+    assert.deepEqual(sorted([3, 1, 2], true, byValue), [3, 2, 1])
+    assert.deepEqual(sorted([3, 1, 2], false, byValue), [1, 2, 3])
+    assert.deepEqual(sorted([3, 1, 2], false, true), [3, 2, 1])
+  })
+
   it('sorted by key', () => {
     let users = [
       { user: 'fred', age: 40 },
