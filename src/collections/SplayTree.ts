@@ -24,8 +24,9 @@ class Node<K = any, V = any> {
   }
 }
 
-// In-order traversal of a tree
-function* traverse(node?: Node) {
+// In-order snapshot of a tree: reads splay it, so a live walk would lose its place
+function traverse(node?: Node): Node[] {
+  const nodes: Node[] = []
   const stack: Node[] = []
   while (node || stack.length) {
     while (node) {
@@ -33,9 +34,10 @@ function* traverse(node?: Node) {
       node = node.left
     }
     node = stack.pop()
-    yield node
+    nodes.push(node)
     node = node.right
   }
+  return nodes
 }
 
 /**
