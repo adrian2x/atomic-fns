@@ -21,7 +21,7 @@ import {
   set
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
-import { compare, eq, id } from '../operators/index.js'
+import { compare, eq, identity } from '../operators/index.js'
 import { Iteratee } from '../types.js'
 
 export * from './abc.js'
@@ -761,7 +761,7 @@ uniq([2.1, 1.2, 2.3], Math.floor)
  */
 export function uniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
 export function uniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
-export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = id): T[] {
+export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
   const keys = new Set<T>()
   const it = isFunction(fn) ? fn : (x) => get(fn, x)
   for (const x of arr) {
@@ -784,7 +784,7 @@ uniq([2, 1, 2])
  */
 export function sortedUniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
 export function sortedUniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
-export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = id): T[] {
+export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
   const values = uniq(arr, fn as Iteratee<T>)
   values.sort(compare)
   return values
@@ -983,7 +983,7 @@ export function* union<T>(...args: Array<Iterable<T>>): Generator<T> {
  * Creates an object composed of keys generated from the results of running each element of `arr` thru `func`. The order of grouped values is determined by the order they occur in `arr`. The corresponding value of each key is an array of elements responsible for generating the key.
  *
  * @param arr The collection to iterate over.
- * @param [func=id] The iteratee to transform keys.
+ * @param [func=identity] The iteratee to transform keys.
  * @returns Returns the aggregated object.
  *
  * @example
@@ -1002,7 +1002,7 @@ export function groupBy<T>(arr: Object, fn: Iteratee<T>): Record<PropertyKey, T[
 export function groupBy<T>(arr: Object, fn: PropertyKey): Record<PropertyKey, T[]>
 export function groupBy<T>(
   arr: Iterable<T> | Object,
-  func: Iteratee<T> | PropertyKey = id
+  func: Iteratee<T> | PropertyKey = identity
 ): Record<PropertyKey, T[]> {
   const useKey = isFunction(func) ? func : (obj) => get(func, obj)
   const results: Record<PropertyKey, T[]> = {}
@@ -1019,7 +1019,7 @@ export function groupBy<T>(
  * Similar to {@link groupBy} but it returns a {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map Map} object with the results.
  *
  * @param arr The collection to iterate over.
- * @param {Function | PropertyKey} [func=id] The iteratee to transform keys.
+ * @param {Function | PropertyKey} [func=identity] The iteratee to transform keys.
  * @returns {Map} Returns the aggregated map object.
  * @template K, V
  *
@@ -1039,7 +1039,7 @@ export function groupByMap<V>(arr: Object, fn: Iteratee<V>): Map<any, V[]>
 export function groupByMap<V>(arr: Object, fn: PropertyKey): Map<any, V[]>
 export function groupByMap<V = any>(
   arr: Iterable<V> | Object,
-  func: Iteratee | PropertyKey = id
+  func: Iteratee | PropertyKey = identity
 ): Map<any, V[]> {
   const results = new Map<any, V[]>()
   const useKey = isFunction(func) ? func : (obj) => get(func, obj)
