@@ -1080,9 +1080,8 @@ export function groupBy<T>(
   const results: Record<PropertyKey, T[]> = {}
   forEach(arr, (value: T) => {
     const groupKey = useKey(value)
-    const values = results[groupKey] || []
-    values.push(value)
-    results[groupKey] = values
+    if (!Object.hasOwn(results, groupKey)) setOwn(results, groupKey, [])
+    results[groupKey].push(value)
   })
   return results
 }
