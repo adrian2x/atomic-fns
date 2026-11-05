@@ -990,7 +990,7 @@ export function* difference<T>(...args: Array<Iterable<T>>): Generator<T> {
 
   for (let i = 1; i < sets.length; i++) {
     for (const x of sets[i].values()) {
-      if (!setA.delete(x)) setA.add(x)
+      setA.delete(x)
     }
   }
 
