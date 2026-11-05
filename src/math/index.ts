@@ -45,13 +45,6 @@ export function divmod(x: number, y: number): [number, number] {
   return [Math.floor(x / y), x % y]
 }
 
-export function log2(x: number): number {
-  if (x > 0) {
-    return Math.log(x) * 1.442695
-  }
-  return Number.NaN
-}
-
 export function logBase(x: number, y: number): number {
   if (x > 0 && y > 0) {
     return Math.log(y) / Math.log(x)
