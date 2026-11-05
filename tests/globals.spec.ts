@@ -32,7 +32,8 @@ import {
   uniqueId,
   noop,
   isGenerator,
-  has
+  has,
+  set
 } from '../src/globals/index.js'
 import { enumerate, take } from '../src/itertools/index.js'
 
@@ -301,5 +302,12 @@ describe('globals', () => {
     assert(has(null, 'a') === false)
     assert(has(0, 'a') === false)
     assert(has({ a: undefined }, 'a') === true)
+  })
+
+  it('set can redefine a property', () => {
+    const obj = {}
+    set('a', obj, 1)
+    set('a', obj, 2)
+    assert(obj['a'] === 2)
   })
 })
