@@ -803,8 +803,8 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   keysRange(low: K, high: K, includeHigh?: boolean, maxLength: number = 0x3ffffff): Array<[K, V]> {
     const results: Array<[K, V]> = []
     this.root.forRange(low, high, includeHigh, false, this, 0, (k, v) => {
+      if (results.length >= maxLength) return Break
       results.push([k, v])
-      return results.length > maxLength ? Break : undefined
     })
     return results
   }
