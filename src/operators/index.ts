@@ -81,7 +81,7 @@ export function eq(x, y): boolean {
  * @returns {boolean} `true` if `x` is strictly less than `y` or `false` otherwise.
  */
 export function lt(x, y): boolean {
-  return x < y || call(x, 'lt', y) != null
+  return x < y || !!call(x, 'lt', y)
 }
 
 /**
@@ -108,7 +108,7 @@ export function lte(x, y): boolean {
  * @returns {boolean} `true` if `x` is strictly greater than `y` or `false` otherwise.
  */
 export function gt(x, y): boolean {
-  return x > y || call(x, 'gt', y)
+  return x > y || !!call(x, 'gt', y)
 }
 
 /**
