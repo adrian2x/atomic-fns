@@ -368,7 +368,7 @@ a.div(b)  // 0.333333333333333333333333333333
     } catch {
       return false
     }
-    return this.i === other.i && this.e === other.e
+    return this.i === other.i && (this.e === other.e || this.i === 0n)
   }
 
   /**
