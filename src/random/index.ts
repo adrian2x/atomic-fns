@@ -23,7 +23,9 @@ export function random(min = 0, max = 1) {
  * @returns {number}
  */
 export function randomInt(min = 0, max = 1) {
-  return Math.round(random(min, max))
+  const low = Math.ceil(Math.min(min, max))
+  const high = Math.floor(Math.max(min, max))
+  return low + Math.floor(random(0, high - low + 1))
 }
 
 /**
