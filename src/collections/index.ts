@@ -172,6 +172,10 @@ export function find<T>(arr: T[] | Object, fn: Iteratee<T> | Object | PropertyKe
   const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
   if (Array.isArray(arr)) {
     return arr.find(it)
+  } else if (isIterable(arr)) {
+    for (const [index, value] of enumerate(arr)) {
+      if (it(value, index, arr)) return value
+    }
   } else if (isObject(arr)) {
     for (const key of Object.keys(arr)) {
       if (it(arr[key], key, arr)) {
