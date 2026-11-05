@@ -11,6 +11,7 @@ import {
   filter,
   find,
   findLast,
+  findLastIndex,
   flatten,
   forEach,
   FrozenSet,
@@ -553,6 +554,31 @@ describe('collections', () => {
     assert(lastIndexOf([1, 2, 1, 2], 2, 2) === 1)
     assert(lastIndexOf(new Uint8Array([1, 2, 1]), 1) === 2)
     assert(lastIndexOf('abca', 'a') === 3)
+  })
+
+  it('findLastIndex and lastIndexOf clamp a start past the end', () => {
+    let calls = 0
+    const bounded = () => {
+      calls++
+      assert(calls < 10)
+      return false
+    }
+    assert(findLastIndex([1, 2], bounded, Infinity) === -1)
+    assert(findLastIndex([{ a: 1 }], (x) => x.a === 1, 5) === 0)
+    assert(findLastIndex([1], (x) => x === undefined, 5) === -1)
+
+    let reads = 0
+    const arrayLike = {
+      length: 1,
+      0: 1,
+      get Infinity() {
+        reads++
+        assert(reads < 10)
+        return undefined
+      }
+    }
+    assert(lastIndexOf(arrayLike, 2, Infinity) === -1)
+    assert(lastIndexOf({ length: 1, 0: 1 }, undefined, 5) === -1)
   })
 
   it('sortedUniq', () => {
