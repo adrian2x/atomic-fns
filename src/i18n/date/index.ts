@@ -553,18 +553,25 @@ export function addDuration(
   return fixOffset(new Date(date), newDate)
 }
 
+function addMonths(date: Date, months: number) {
+  const target = new Date(date)
+  target.setFullYear(date.getFullYear(), date.getMonth() + months, 1)
+  const day = Math.min(date.getDate(), daysInMonth(target))
+  date.setFullYear(target.getFullYear(), target.getMonth(), day)
+}
+
 function setDateUnit(date: Date, unit: string, value: number) {
   switch (unit) {
     case 'years':
-      date.setFullYear(date.getFullYear() + value)
+      addMonths(date, value * 12)
       break
 
     case 'quarters':
-      date.setMonth(date.getMonth() + value * 3)
+      addMonths(date, value * 3)
       break
 
     case 'months':
-      date.setMonth(date.getMonth() + value)
+      addMonths(date, value)
       break
 
     case 'weeks':
