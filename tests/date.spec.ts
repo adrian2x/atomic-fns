@@ -446,6 +446,15 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%%d', date), '%d')
   })
 
+  it('strftime reads a repeated letter after a directive as text', () => {
+    const date = new Date(2020, 1, 1)
+    assert.strictEqual(strftime('%dd', date), '01d')
+    assert.strictEqual(strftime('%mm/%dd', date), '02m/01d')
+    assert.strictEqual(strftime('%bbb', date), '2b')
+    assert.strictEqual(strftime('%ZZ', date), 'Coordinated Universal TimeZ')
+    assert.strictEqual(strftime('%d%d', date), '0101')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })

@@ -166,7 +166,7 @@ const TOKENS = {
 
 const HOUR_PARTS = { '%I': 1, '%-I': 1, '%K': 1, '%k': 1 }
 const ERA_PARTS = { '%n': 1, '%N': 1, '%nn': 1 }
-const TZ_PARTS = { '%ZZ': 1, '%-ZZ': 1, '%-z': 1, '%z': 1, '%-Z': 1, '%Z': 1 }
+const TZ_PARTS = { '%-z': 1, '%z': 1, '%-Z': 1, '%Z': 1 }
 
 function formatter(locale: string, opts) {
   return new Intl.DateTimeFormat(locale, opts)
@@ -297,8 +297,8 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
       }
 
       part += fmt[i] ?? ''
-      // add any repeated characters that come after
-      while (i < fmt.length - 1 && fmt[i + 1] === fmt[i]) part += fmt[++i]
+      // a doubled letter is a directive of its own only when the table lists it
+      if (fmt[i + 1] === fmt[i] && STRFTIME[part + fmt[i]]) part += fmt[++i]
 
       if (!STRFTIME[part]) {
         results.push(part)
