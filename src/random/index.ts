@@ -48,7 +48,7 @@ export function choice<T>(arr: T[]): T {
  */
 export function sample<T>(arr: T[], size: number): T[] {
   if (!arr?.length || arr.length < size) return []
-  return shuffle(arr.slice()).slice(-size)
+  return shuffle(arr.slice()).slice(0, size)
 }
 
 /**

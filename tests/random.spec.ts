@@ -87,4 +87,8 @@ describe('random', () => {
       assert(s.some((x, i) => x !== arr[i]))
     }
   })
+
+  it('sample of size 0 is empty', () => {
+    assert.deepEqual(sample([1, 2, 3], 0), [])
+  })
 })
