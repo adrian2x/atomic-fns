@@ -174,10 +174,10 @@ export type Optional<T> = Maybe<T>
  * @returns {Function} A new function that wraps `fn` and returns the result tuple.
  */
 export function result<T = any, E = unknown>(fn: Function<T>): Function<Result<T, E>> {
-  return (...args) => {
+  return function (...args) {
     let value, err
     try {
-      value = fn(...args)
+      value = fn.apply(this, args)
     } catch (error) {
       err = error
     }
