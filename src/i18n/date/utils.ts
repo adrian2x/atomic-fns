@@ -63,7 +63,7 @@ export function minDate<T>(...dates: Array<T>): T {
     ans = ans[0]
   }
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i].valueOf() < ans.valueOf()) {
+    if (dates[i].valueOf() < ans.valueOf() || Number.isNaN(ans.valueOf())) {
       ans = dates[i]
     }
   }
@@ -84,7 +84,7 @@ export function maxDate<T>(...dates: Array<T>): T {
     ans = ans[0]
   }
   for (let i = 1; i < dates.length; i++) {
-    if (dates[i].valueOf() > ans.valueOf()) {
+    if (dates[i].valueOf() > ans.valueOf() || Number.isNaN(ans.valueOf())) {
       ans = dates[i]
     }
   }
