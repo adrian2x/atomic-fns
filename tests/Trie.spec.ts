@@ -130,6 +130,13 @@ describe('Trie', () => {
     const trie = new Trie(JSON.parse('[["__proto__", "polluted"]]'))
     assert(({} as any).polluted === undefined)
     assert(trie.size === 1)
+
+    trie.add(JSON.parse('["a", "__proto__", "polluted"]'))
+    assert(({} as any).polluted === undefined)
+
+    trie.clear()
+    trie.add(JSON.parse('["__proto__", "polluted"]'))
+    assert(({} as any).polluted === undefined)
     delete (Object.prototype as any).polluted
   })
 })
