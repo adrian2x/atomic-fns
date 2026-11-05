@@ -279,4 +279,15 @@ describe('BTree', () => {
     assert(tree.rangeUpdate(1, 1, true, () => 1) === 1)
     assert(tree.get(1) === 'old')
   })
+
+  it('a range callback that returns null changes nothing', () => {
+    const tree = new BTree([
+      [1, 'one'],
+      [2, 'two']
+    ])
+    assert(tree.rangeForEach(1, 2, true, () => null) === 2)
+    assert(tree.rangeUpdate(1, 2, true, () => null) === 2)
+    assert(tree.get(1) === 'one')
+    assert(tree.size === 2)
+  })
 })
