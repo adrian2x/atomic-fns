@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { debounce, memoize, once, result, throttle } from '../src/functools/index.js'
+import { debounce, memoize, once, result, resultAsync, throttle } from '../src/functools/index.js'
 
 describe('functools', () => {
   beforeEach(() => {
@@ -97,5 +97,15 @@ describe('functools', () => {
       })
     }
     assert.deepEqual(counter.read(), [2, undefined])
+  })
+
+  it('resultAsync keeps this', async () => {
+    const counter = {
+      step: 2,
+      read: resultAsync(async function () {
+        return this.step
+      })
+    }
+    assert.deepEqual(await counter.read(), [2, undefined])
   })
 })
