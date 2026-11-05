@@ -255,4 +255,14 @@ describe('BTree', () => {
     assert(tree.get(-1, 'none') === 'none')
     assert(tree.get(99, 'none') === 'none')
   })
+
+  it('contains finds a key whose value is undefined', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, undefined)
+    }
+    assert(tree.contains(5) === true)
+    assert(tree.contains(5.5) === false)
+    assert(tree.contains(99) === false)
+  })
 })
