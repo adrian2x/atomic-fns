@@ -331,7 +331,10 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
           : formatter(locale, STRFTIME[part]).format(date)
       // fix bugs in time formatter
       if ((part === '%S' || part === '%M') && res.length === 1) res = '0' + res
-      if (part === '%-H') res = new Intl.NumberFormat(locale).format(asDate(date).getHours())
+      if (part === '%-H') {
+        const hours = (date === undefined ? new Date() : new Date(date)).getHours()
+        res = new Intl.NumberFormat(locale).format(hours)
+      }
       results.push(res)
     } else {
       // output as literal
