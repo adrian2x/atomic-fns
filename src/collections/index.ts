@@ -1141,7 +1141,7 @@ export function remove<T>(arr: T[], func: T | T[] | Iteratee<T>): T[] {
 
 /**
  * Returns the index of `x` in a **sorted** array if found, in `O(log n)` using binary search.
- * If the element is not found, returns a negative integer.
+ * If the element is not found, returns `-n - 1`, where `n` is the index to insert `x` at.
  * @param arr The array to sort
  * @param x The element to find
  * @param lo The starting index
@@ -1158,9 +1158,10 @@ export function binarySearch(arr: any[], x: any, lo = 0, hi?, comp = compare): n
     if (check > 0) lo = mid + 1
     else hi = mid - 1
   }
-  if (comp(x, arr[lo]) === 0) return lo
-  // Returns (-lo - 1) where n is the insertion point for new element in the range
-  return -lo - 1
+  const check = lo <= hi ? comp(x, arr[lo]) : -1
+  if (check === 0) return lo
+  // Returns (-n - 1) where n is the insertion point for new element in the range
+  return check > 0 ? -lo - 2 : -lo - 1
 }
 
 /**
