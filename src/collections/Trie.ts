@@ -59,15 +59,11 @@ export class Trie extends Collection {
    * @returns {boolean} Returns `true` if the string was found and removed.
    */
   remove(word: string): boolean {
-    for (let i = 0, node = this.root; i < word.length && node; i++) {
-      node = node[word[i]]
-      if (i === word.length - 1 && node.isWord) {
-        node.isWord = false
-        this.count--
-        return true
-      }
-    }
-    return false
+    const node = this.findNode(word)
+    if (!node?.isWord) return false
+    node.isWord = false
+    this.count--
+    return true
   }
 
   private findNode(word: string): TrieNode | undefined {
