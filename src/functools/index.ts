@@ -7,18 +7,6 @@
 import { Function } from '../globals/index.js'
 
 /**
- * Creates a function that invokes `fn` with the this binding of `thisArg` and `partials` as partially applied arguments.
- * @param {Function} fn The function to bind.
- * @param {*} thisArg The `this` value of `fn`.
- * @param {...*} [partials] The arguments to prepend to `fn`.
- * @returns {Function} Returns the new bound function.
- * @see {@link partial}
- */
-export function bind(fn: Function, thisArg, ...partials): Function {
-  return fn.bind(thisArg, ...partials)
-}
-
-/**
  * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least arity number of arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on. The arity of `func` may be specified if `func.length` is not sufficient.
  * @param {Function} func The function to curry.
  * @returns Returns the new curried function.
@@ -37,13 +25,13 @@ export function curry(func: Function): Function<ReturnType<typeof func>> {
 
 /**
  * Creates a function that invokes `fn` with partials prepended to the arguments it receives.
- * **Note:** The given function will have `this` bound to `undefined`. If using `this` inside `fn`, consider {@link bind} instead.
+ * **Note:** The given function will have `this` bound to `undefined`. If using `this` inside `fn`, consider `Function.prototype.bind` instead.
  * @param {Function} fn The function to bind.
  * @param {...*} [args] The arguments to apply to `fn`.
  * @returns {Function} Returns the new partially applied function
  */
 export function partial(fn: Function, ...args): Function<ReturnType<typeof fn>> {
-  return bind(fn, undefined, ...args)
+  return fn.bind(undefined, ...args)
 }
 
 /**
