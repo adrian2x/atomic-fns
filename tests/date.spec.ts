@@ -844,6 +844,13 @@ it('strftime %-H accepts a timestamp and no date', () => {
 })
 
 describe('date utilities', () => {
+  it('dayOfYear and week keep years under 100', () => {
+    assert.strictEqual(dayOfYear('0050-06-15'), 166)
+    assert.strictEqual(dayOfYear('0004-12-31'), 366)
+    assert.strictEqual(mockDate('0050-06-15').dayOfYear(), 166)
+    assert.strictEqual(mockDate('0050-06-15').isoWeek(), 24)
+  })
+
   it('read a date string as local time', () => {
     inZone('America/New_York', () => {
       assert.strictEqual(daysInMonth('2021-03-01'), 31)
