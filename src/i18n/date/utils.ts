@@ -332,11 +332,10 @@ export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1
 
 /**
  * Returns the week of the year for the specified date
- * @param year
- * @param dayOfYear
- * @param firstDayOfWeek
- * @param firstDayOfYear
- * @returns
+ * @param date The date value
+ * @param firstDayOfWeek The weekday a week starts on, where Sunday is 0
+ * @param firstDayOfYear Picks week 1: the week holding January `7 + firstDayOfWeek - firstDayOfYear`, so `1, 4` gives ISO weeks
+ * @returns The week and the year that week belongs to
  */
 export function weekOfYear(date: string | number | Date, firstDayOfWeek = 1, firstDayOfYear = 1) {
   const year = asDate(date).getFullYear()
