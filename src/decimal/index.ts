@@ -351,7 +351,12 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {boolean}
    */
   eq(x: any): boolean {
-    const other = decimal(x)
+    let other: Decimal
+    try {
+      other = decimal(x)
+    } catch {
+      return false
+    }
     return this.i === other.i && this.e === other.e
   }
 

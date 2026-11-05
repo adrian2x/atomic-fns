@@ -117,6 +117,12 @@ describe('Decimal', () => {
     assert(a.div(b).toString() === '0.333333333333333333333333333333', a.div(b).toString())
   })
 
+  it('eq is false for values that are not numbers', () => {
+    for (const value of ['abc', '', NaN, Infinity, -Infinity, {}, Symbol('x')]) {
+      assert(decimal(1).eq(value) === false, String(value))
+    }
+  })
+
   it('lt', () => {
     let a = decimal('0.0000000000000000000025')
     let b = decimal('0.00000000000000000000255')
