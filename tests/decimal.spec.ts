@@ -182,6 +182,18 @@ describe('Decimal', () => {
     }
   })
 
+  it('zero equals zero at any scale', () => {
+    assert(decimal('0.00').eq(0))
+    assert(decimal(0).eq('0.00'))
+    assert(decimal('0.0').eq('0.00'))
+    assert(decimal('1.5').sub('1.5').eq(0))
+    assert(decimal(0).div(3).eq(0))
+    assert(decimal('0.00').compare(0) === 0)
+    assert(!decimal('0.00').gt(0))
+    assert(decimal('0.00').lte(0))
+    assert(!decimal('0.00').eq('0.01'))
+  })
+
   it('lt', () => {
     let a = decimal('0.0000000000000000000025')
     let b = decimal('0.00000000000000000000255')
