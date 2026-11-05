@@ -114,13 +114,14 @@ The rest of 1.2 fixes bugs. These fixes change results that code may have worked
 - `deepEqual` and `shallowEqual` tell kinds apart, and compare Dates, RegExps and typed arrays by value.
 - `merge` copies plain objects from its sources and skips `__proto__`, so it no longer changes a source or `Object.prototype`.
 - `difference` removes the values of the other arrays, where it returned a symmetric difference.
-- `uniq` with an iteratee returns the original elements, not the computed keys.
+- `uniq` with an iteratee returns the original elements, not the computed keys, and `sortedUniq` sorts them by that key.
 - `memoize` caches an `undefined` result.
 - `divmod` follows Python, so the quotient and remainder add back up to the input.
 - `bisect` and `insort` find the right position in every case.
 - `Deque.set` throws `KeyError` past the end, where the value was lost.
 - A frozen `BTree` refuses `remove`, as it does `set`.
 - `IntlDate` adds months with a clamp to the last day of the month, keeps the wall clock across DST for calendar units, and `diff` counts calendar months, quarters and years. `exact` keeps the averaged result.
+- `addDuration` and `subDuration` read a date-only string as local time, as `IntlDate` does.
 - `format('Z')` prints the numeric offset, such as `-05:00`.
 
 ## Contributing
