@@ -31,7 +31,7 @@ export class Currency extends Decimal {
 
   // @ts-expect-error overrides
   clone(n: Currency): Currency {
-    return new Currency(n, this.currency, this.locale, this.options)
+    return new Currency(n === undefined ? this : n, this.currency, this.locale, this.options)
   }
 
   // @ts-expect-error overrides
