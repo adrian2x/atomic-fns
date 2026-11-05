@@ -21,6 +21,7 @@ import {
   intersection,
   lastIndexOf,
   map,
+  matches,
   merge,
   omit,
   pick,
@@ -289,6 +290,44 @@ describe('collections', () => {
       { user: 'fred', age: 40, active: false }
     ]
     assert.deepEqual(filter(users, 'active'), [users[0]])
+  })
+
+  it('matches compares nested objects and arrays', () => {
+    assert(matches({ a: { b: 1 } })({ a: { b: 1 } }))
+    assert(matches({ a: { b: 1 } })({ a: { b: 1, c: 2 } }))
+    assert(matches({ a: [1, { b: 2 }] })({ a: [1, { b: 2, c: 3 }], d: 4 }))
+    assert(matches({ a: {} })({ a: { b: 1 } }))
+    assert(matches({ a: [] })({ a: [1] }))
+
+    assert(!matches({ a: { b: 1 } })({ a: { b: 2 } }))
+    assert(!matches({ a: { b: 1 } })({ a: 1 }))
+    assert(!matches({ a: { b: 1 } })({ a: null }))
+    assert(!matches({ a: { b: 1 } })({}))
+    assert(!matches({ a: [1] })({ a: { 0: 1 } }))
+    assert(!matches({ a: {} })({ a: [] }))
+    assert(!matches({ date: new Date(0) })({ date: new Date(1) }))
+
+    const users = [{ address: { city: 'a' } }, { address: { city: 'b' } }]
+    assert.deepEqual(filter(users, { address: { city: 'b' } }), [users[1]])
+    assert(find(users, { address: { city: 'b' } }) === users[1])
+  })
+
+  it('matches finishes on cycles and shared objects', () => {
+    const shape = { a: 1, self: null }
+    shape.self = shape
+    const value = { a: 1, self: null }
+    value.self = value
+    assert(matches(shape)(value))
+    value.a = 2
+    assert(!matches(shape)(value))
+
+    let wide = {}
+    let other = {}
+    for (let i = 0; i < 40; i++) {
+      wide = { a: wide, b: wide }
+      other = { a: other, b: other }
+    }
+    assert(matches(wide)(other))
   })
 
   it('find', () => {
