@@ -92,6 +92,10 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @returns {?V} The value for the key or `undefined`.
    */
   get(key: K): V | undefined {
+    return this.findNode(key)?.value
+  }
+
+  private findNode(key: K): Node<K, V> | undefined {
     if (!this.root) return
 
     // Note: deterministic splaying (always moves key to front):
@@ -103,7 +107,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     // Values of `p` closer to 1 tend to perform well.
     if (Math.random() <= this.randSplay) {
       this.splay(key)
-      if (this.cmp(key, this.root.key) === 0) return this.root.value
+      if (this.cmp(key, this.root.key) === 0) return this.root
       else return undefined
     }
 
@@ -111,7 +115,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     let current = this.root as any
     while (current) {
       const rank = this.cmp(key, current.key)
-      if (rank === 0) return current.value
+      if (rank === 0) return current
       if (rank < 0) current = current.left
       else current = current.right
     }
@@ -318,7 +322,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @returns `true` if found.
    */
   contains(key: K): boolean {
-    return this.get(key) !== undefined
+    return this.findNode(key) !== undefined
   }
 
   /** Alias of remove but just returns `true` instead of the deleted value. */

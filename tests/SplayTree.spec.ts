@@ -214,4 +214,23 @@ describe('SplayTree', () => {
     assert(tree.remove(-0) === 'a')
     assert(tree.empty())
   })
+
+  it('contains a key whose value is undefined', () => {
+    for (const p of [0, 1]) {
+      let tree = new SplayTree(undefined, p)
+      tree.set(1, undefined)
+      tree.set(2, undefined)
+      assert(tree.contains(1))
+      assert(tree.contains(2))
+      assert(!tree.contains(3))
+    }
+  })
+
+  it('contains leaves the tree alone when p is 0', () => {
+    let tree = new SplayTree(undefined, 0)
+    tree.set(1, 1)
+    tree.set(2, 2)
+    assert(tree.contains(1))
+    assert(tree.top() === 2)
+  })
 })
