@@ -441,4 +441,17 @@ describe('collections', () => {
     assert.deepEqual(insortLeft([1, 1, 4, 4, 7, 7, 9], 5), [1, 1, 4, 4, 5, 7, 7, 9])
     assert.deepEqual(insortLeft([1, 1, 4, 4, 7, 7, 9], 10), [1, 1, 4, 4, 7, 7, 9, 10])
   })
+  it('merge copies a shared source object once', () => {
+    let shared: any = { leaf: 1 }
+    for (let i = 0; i < 20; i++) shared = { a: shared, b: shared }
+    const result: any = merge({}, { root: shared })
+    assert(result.root !== shared)
+    assert(result.root.a === result.root.b)
+
+    const part = { r: 3 }
+    assert.deepEqual(merge({ a: { p: 1 }, b: { q: 2 } }, { a: part, b: part }), {
+      a: { p: 1, r: 3 },
+      b: { q: 2, r: 3 }
+    })
+  })
 })
