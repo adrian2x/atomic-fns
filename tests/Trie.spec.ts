@@ -109,4 +109,21 @@ describe('Trie', () => {
     assert(tree.contains('dog') === false)
     assert(new Trie().contains('') === false)
   })
+
+  it('matches honors the limit', () => {
+    let words = ['a', 'ab', 'abc', 'abd']
+    let tree = new Trie(words)
+    assert.deepEqual([...tree.matches('a', 2)], ['a', 'ab'])
+    assert.deepEqual([...tree.matches('a', 2.5)], ['a', 'ab'])
+    assert.deepEqual([...tree.matches('a', 0)], [])
+    assert.deepEqual([...tree.matches('a', -1)], [])
+    assert.deepEqual([...tree.matches('a', 100)], words)
+  })
+
+  it('matches without a limit returns every word', () => {
+    let words = Array.from({ length: 25 }, (_, i) => `w${String.fromCharCode(97 + i)}`)
+    let tree = new Trie(words)
+    assert.deepEqual([...tree.matches('w')], words)
+    assert.deepEqual([...tree.matches('w', null)], words)
+  })
 })
