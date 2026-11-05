@@ -636,6 +636,22 @@ describe('IntlDate', () => {
     assert.strictEqual(day(mockDate('2020-02-29').add({ years: 1, months: 1 })), '2021-03-29')
   })
 
+  it('add and subtract treat a fraction the same in both directions', () => {
+    const time = (date: IntlDate) => date.format('YYYY-MM-DD HH:mm')
+    const noon = mockDate('2021-01-15T12:00:00')
+    assert.strictEqual(time(noon.add({ hours: 1.5 })), '2021-01-15 13:30')
+    assert.strictEqual(time(noon.subtract({ hours: 1.5 })), '2021-01-15 10:30')
+    assert.strictEqual(time(noon.add({ hours: -0.5 })), '2021-01-15 11:30')
+    assert.strictEqual(noon.add({ milliseconds: '5' }).millisecond, 5)
+    assert.strictEqual(time(noon.add({ weeks: 1, days: '1' })), '2021-01-23 12:00')
+    assert.strictEqual(time(noon.add({ days: 1.5 })), '2021-01-16 12:00')
+    assert.strictEqual(time(noon.subtract({ days: 1.5 })), '2021-01-14 12:00')
+    assert.strictEqual(time(noon.add({ weeks: 1.5 })), '2021-01-25 12:00')
+    assert.strictEqual(time(noon.add({ years: 1.5 })), '2022-07-15 12:00')
+    assert.strictEqual(time(noon.subtract({ months: 1.5 })), '2020-12-15 12:00')
+    assert.strictEqual(noon.add({ days: NaN }).isValid(), false)
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })

@@ -535,11 +535,18 @@ export function addDuration(
 ): Date {
   const newDate = new Date(date)
   const { values } = new Duration(duration, exact)
-  const { years = 0, quarters = 0, months = 0 } = values as Record<string, number>
+  const {
+    years = 0,
+    quarters = 0,
+    months = 0,
+    weeks = 0,
+    days = 0
+  } = values as Record<string, number>
   // largest unit first and all the months in one step, so a clamped day cannot carry over
-  setDateUnit(newDate, 'months', Math.floor(years * 12 + quarters * 3 + Number(months)))
-  for (const unit of ['weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds']) {
-    setDateUnit(newDate, unit, Math.floor(values[unit] ?? 0))
+  setDateUnit(newDate, 'months', Math.trunc(years * 12 + quarters * 3 + Number(months)))
+  setDateUnit(newDate, 'days', Math.trunc(weeks * 7 + Number(days)))
+  for (const unit of ['hours', 'minutes', 'seconds', 'milliseconds']) {
+    setDateUnit(newDate, unit, Number(values[unit] ?? 0))
   }
   return newDate
 }
@@ -558,10 +565,6 @@ function setDateUnit(date: Date, unit: string, value: number) {
   switch (unit) {
     case 'months':
       addMonths(date, value)
-      break
-
-    case 'weeks':
-      date.setDate(date.getDate() + value * 7)
       break
 
     case 'days':
