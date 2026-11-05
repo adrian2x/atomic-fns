@@ -455,6 +455,12 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%d%d', date), '0101')
   })
 
+  it('strftime does not throw on %aa and %nn', () => {
+    const date = new Date(2020, 1, 1)
+    assert.strictEqual(strftime('%aa', date), 'Sata')
+    assert.strictEqual(strftime('%nn', date), 'ADn')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
