@@ -254,7 +254,6 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     if (!this.root) return
 
     let stub, left, right
-    // eslint-disable-next-line
     stub = left = right = new Node(null, null)
 
     let root = this.root
