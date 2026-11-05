@@ -125,13 +125,15 @@ export function debounce(
  */
 export function throttle(func: Function, wait: number): Function {
   let pending = false
+  let lastResult
   return function (...args) {
-    if (pending) return
-    func.apply(this, args)
+    if (pending) return lastResult
+    lastResult = func.apply(this, args)
     pending = true
     setTimeout(() => {
       pending = false
     }, wait)
+    return lastResult
   }
 }
 
