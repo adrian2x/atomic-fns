@@ -1,5 +1,6 @@
 import assert from 'assert'
 import { Deque } from '../src/collections/deque.js'
+import { KeyError } from '../src/globals/index.js'
 
 describe('deque', () => {
   const print = (x) => console.log(x.toArray())
@@ -120,5 +121,13 @@ describe('deque', () => {
     ring.set(0, 9)
     ring.set(3, 8)
     assert.deepEqual(ring.toArray(), [9, 4, 5, 8])
+  })
+
+  it('set rejects an index out of range', () => {
+    let deque = new Deque([1, 2, 3])
+    assert.throws(() => deque.set(3, 9), KeyError)
+    assert.throws(() => deque.set(-4, 9), KeyError)
+    assert.throws(() => new Deque().set(0, 9), KeyError)
+    assert.deepEqual(deque.toArray(), [1, 2, 3])
   })
 })
