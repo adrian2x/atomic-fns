@@ -79,6 +79,16 @@ describe('Money', () => {
     assert(a.displayName() === '1.00 US dollars')
   })
 
+  it('leaves the options object alone', () => {
+    const opts = { currencyDisplay: 'code' } as const
+    const copy = { ...opts }
+    assert(new Currency(1, 'USD', locale, opts).toString() === 'USD\u00a01.00')
+    assert(new Currency(1, 'EUR', locale, opts).toString() === 'EUR\u00a01.00')
+    assert(Money(1).format(opts) === 'USD\u00a01.00')
+    assert(new Currency(1, 'EUR', locale).format(opts) === 'EUR\u00a01.00')
+    assert.deepStrictEqual(opts, copy)
+  })
+
   it('accounting', () => {
     assert(Money(0).accounting() === '$0.00')
     assert(Money(1).accounting() === '$1.00')

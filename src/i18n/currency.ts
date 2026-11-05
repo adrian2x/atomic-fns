@@ -21,7 +21,10 @@ export class Currency extends Decimal {
       opts = locale as any
       locale = undefined
     }
-    const systemLocale = new Intl.NumberFormat(locale, defaults(opts, { currency }, this.options))
+    const systemLocale = new Intl.NumberFormat(
+      locale,
+      defaults({}, opts, { currency }, this.options)
+    )
     const resolved = systemLocale.resolvedOptions()
     this.numberFormat = systemLocale
     this.options.currency = currency
@@ -75,7 +78,7 @@ export class Currency extends Decimal {
 
   format(opts: Intl.NumberFormatOptions = {}, locale?: string): string {
     const number = this.toNumber()
-    opts = defaults(opts, this.options)
+    opts = defaults({}, opts, this.options)
     return new Intl.NumberFormat(locale ?? this.locale, opts).format(number)
   }
 
