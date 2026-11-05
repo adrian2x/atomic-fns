@@ -313,7 +313,7 @@ class BNode<K, V = any> {
           if (result.done !== undefined) return result
         }
       }
-    } else count += iHigh - iLow
+    } else count += Math.max(iHigh - iLow, 0)
     return count
   }
 
