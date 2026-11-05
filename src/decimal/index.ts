@@ -385,8 +385,9 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {number}
    */
   compare(x): 0 | 1 | -1 {
-    if (this.eq(x)) return 0
-    if (this.lt(x)) return -1
+    const other = decimal(x)
+    if (this.eq(other)) return 0
+    if (this.lt(other)) return -1
     return 1
   }
 
