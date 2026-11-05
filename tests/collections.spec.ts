@@ -330,6 +330,20 @@ describe('collections', () => {
     assert(merged.point === source.point)
   })
 
+  it('merge assigns objects that are not plain over existing values', () => {
+    class Point {
+      x = 1
+    }
+    const source = { date: new Date(0), regex: /b/, point: new Point() }
+    const target = { date: new Date(1), regex: /a/, point: { y: 1 } }
+    const merged = merge(target, source) as typeof source
+    assert(merged.date === source.date)
+    assert(merged.regex === source.regex)
+    assert(merged.point === source.point)
+    const overObject = merge({ date: { x: 1 } }, source) as typeof source
+    assert(overObject.date === source.date)
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })
