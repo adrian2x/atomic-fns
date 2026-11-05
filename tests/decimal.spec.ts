@@ -103,6 +103,15 @@ describe('Decimal', () => {
     assert(decimal('0.1').add('0.1').add('0.1').toNumber() === 0.3)
   })
 
+  it('adds across a wide gap in scale in one step', () => {
+    const tiny = decimal(`0.${'0'.repeat(300000)}1`)
+    const start = performance.now()
+    const sum = tiny.add(1)
+    assert(tiny.lt(1))
+    assert(performance.now() - start < 500)
+    assert(sum.toString() === `1.${'0'.repeat(300000)}1`)
+  })
+
   it('sub', () => {
     let a = decimal('1')
     let b = decimal('0.0000000000000000001')

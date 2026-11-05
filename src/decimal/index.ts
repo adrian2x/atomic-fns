@@ -423,11 +423,5 @@ a.div(b)  // 0.333333333333333333333333333333
 
 /** Returns a BigInt that is equal to `i` times `10^e` */
 function exp(i: bigint, e: number): bigint {
-  // TODO: Make this better
-  // The implementation is faster than 10n ** BigInt(e). But could we make it faster still?
-  let ii = i
-  for (let j = 0; j < e; j++) {
-    ii *= 10n
-  }
-  return ii
+  return i * 10n ** BigInt(e)
 }
