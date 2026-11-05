@@ -7,6 +7,8 @@ import {
   Duration,
   formatDate,
   IntlDate,
+  maxDate,
+  minDate,
   strftime,
   subDuration
 } from '../src/i18n/index.js'
@@ -844,6 +846,18 @@ it('strftime %-H accepts a timestamp and no date', () => {
 })
 
 describe('date utilities', () => {
+  it('minDate and maxDate do not stop at an invalid first date', () => {
+    const early = new Date(0)
+    const late = new Date(5)
+    const invalid = new Date(NaN)
+    assert.strictEqual(minDate([invalid, late, early]), early)
+    assert.strictEqual(maxDate([invalid, early, late]), late)
+    assert.strictEqual(minDate([late, invalid, early]), early)
+    assert.strictEqual(maxDate([early, invalid, late]), late)
+    assert.strictEqual(IntlDate.min(mockDate('garbage'), late), late)
+    assert.strictEqual(minDate([invalid]), invalid)
+  })
+
   it('dayOfYear and week keep years under 100', () => {
     assert.strictEqual(dayOfYear('0050-06-15'), 166)
     assert.strictEqual(dayOfYear('0004-12-31'), 366)
