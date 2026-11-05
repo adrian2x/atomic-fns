@@ -409,7 +409,9 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     // if we didn't set the day but we ended up on an overflow date,
     // use the last day of the right month
     if (normalized.day === undefined) {
-      mixed.day = Math.min(daysInMonth(this._date), mixed.day)
+      const target = new Date(this._date)
+      target.setFullYear(mixed.year, mixed.month - 1, 1)
+      mixed.day = Math.min(daysInMonth(target), mixed.day)
     }
 
     return this.clone(mixed)

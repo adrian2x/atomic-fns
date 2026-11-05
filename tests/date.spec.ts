@@ -652,6 +652,15 @@ describe('IntlDate', () => {
     assert.strictEqual(noon.add({ days: NaN }).isValid(), false)
   })
 
+  it('set clamps the day to the target month', () => {
+    const day = (date: IntlDate) => date.format('YYYY-MM-DD')
+    assert.strictEqual(day(mockDate('2021-01-31').set({ month: 2 })), '2021-02-28')
+    assert.strictEqual(day(mockDate('2021-03-31').set({ month: 4 })), '2021-04-30')
+    assert.strictEqual(day(mockDate('2020-02-29').set({ year: 2021 })), '2021-02-28')
+    assert.strictEqual(day(mockDate('2021-02-28').set({ month: 3 })), '2021-03-28')
+    assert.strictEqual(day(mockDate('2021-01-31').set({ month: 2, day: 31 })), '2021-03-03')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
