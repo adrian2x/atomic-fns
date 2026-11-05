@@ -328,6 +328,7 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
       let res = formatter(locale, STRFTIME[part]).format(date)
       // fix bugs in time formatter
       if ((part === '%S' || part === '%M') && res.length === 1) res = '0' + res
+      if (part === '%-H') res = new Intl.NumberFormat(locale).format(date.getHours())
       results.push(res)
     } else {
       // output as literal

@@ -469,6 +469,14 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%P %I', date), 'PM 01')
   })
 
+  it('strftime %-H drops the leading zero', () => {
+    assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 1)), '1')
+    assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 0)), '0')
+    assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 13)), '13')
+    assert.strictEqual(strftime('%H', new Date(2020, 1, 1, 1)), '01')
+    assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 1), 'ar-EG'), '١')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
