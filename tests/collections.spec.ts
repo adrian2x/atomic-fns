@@ -476,6 +476,31 @@ describe('collections', () => {
     })
   })
 
+  it('flatten Object keeps leaf values', () => {
+    const date = new Date(0)
+    const regex = /x/
+    const map = new Map()
+    const fn = () => 1
+    assert.deepStrictEqual(
+      flatten({ date, nan: NaN, big: 1n, nested: { regex, map }, list: [fn], text: '', no: false }),
+      {
+        date,
+        nan: NaN,
+        big: 1n,
+        'nested.regex': regex,
+        'nested.map': map,
+        'list[0]': fn,
+        text: '',
+        no: false
+      }
+    )
+    assert(flatten(date) === date)
+  })
+
+  it('flatten Object drops null, undefined and empty containers', () => {
+    assert.deepStrictEqual(flatten({ a: null, b: undefined, c: {}, d: [], e: 1 }), { e: 1 })
+  })
+
   it('groupBy', () => {
     assert.deepEqual(groupBy([6.1, 4.2, 6.3], Math.floor), { '4': [4.2], '6': [6.1, 6.3] })
   })
@@ -848,5 +873,15 @@ describe('collections', () => {
     assert(Object.getPrototypeOf(picked) === Object.prototype)
     assert(picked.inherited === undefined)
     assert(picked.a === 2)
+  })
+
+  it('flatten keeps __proto__ as data', () => {
+    const flat: any = flatten(JSON.parse('{"__proto__": 1, "a": 2}'))
+    assert.deepEqual(Object.keys(flat), ['__proto__', 'a'])
+    assert(Object.getPrototypeOf(flat) === Object.prototype)
+    const date = new Date(0)
+    const leaf = { a: 1 }
+    Object.defineProperty(leaf, '__proto__', { value: date, enumerable: true })
+    assert(Object.getPrototypeOf(flatten(leaf)) === Object.prototype)
   })
 })

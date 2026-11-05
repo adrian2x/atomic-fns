@@ -8,16 +8,13 @@ import {
   call,
   get,
   isArrayLike,
-  isBool,
   isDate,
   isEmpty,
   isFunction,
   isIterable,
   isNull,
-  isNumber,
   isObject,
   isRegExp,
-  isString,
   set
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
@@ -395,7 +392,7 @@ export function flatten<T>(arr: Object, depth?: boolean | number): Object
 export function flatten<T>(arr: T[] | Object, depth = 1): T[] | Object {
   if (!depth) return arr
   if (Array.isArray(arr)) return flattenArray(arr, depth, []) as T[]
-  if (isObject(arr)) return flattenObj(arr)
+  if (isFlattenable(arr)) return flattenObj(arr)
   return arr
 }
 
@@ -410,9 +407,14 @@ function flattenArray(arr: any[], depth: boolean | number = 1, result: any[] = [
   return result
 }
 
+/** A `Date` or `RegExp` has no keys to walk, so `flatten` keeps it as a leaf. */
+function isFlattenable(x): boolean {
+  return Array.isArray(x) || (isObject(x) && !isDate(x) && !isRegExp(x))
+}
+
 function flattenObj(obj, prefix = '', result = {}, keepNull = false) {
-  if (isString(obj) || isNumber(obj) || isBool(obj) || (keepNull && isNull(obj))) {
-    result[prefix] = obj
+  if (isNull(obj) ? keepNull : !isFlattenable(obj)) {
+    setOwn(result, prefix, obj)
     return result
   }
 
