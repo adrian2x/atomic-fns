@@ -72,10 +72,10 @@ export function compose(...args: Function[]): Function {
  */
 export function memoize<T>(func: Function<T>, resolver?: Function): Function<T> {
   const cache = new Map<any, T>()
-  return (...args) => {
-    const key = resolver ? resolver(...args) : args[0]
+  return function (...args) {
+    const key = resolver ? resolver.apply(this, args) : args[0]
     if (cache.has(key)) return cache.get(key)
-    const value = func(...args)
+    const value = func.apply(this, args)
     cache.set(key, value)
     return value
   }
