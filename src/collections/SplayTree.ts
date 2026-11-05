@@ -1,4 +1,4 @@
-import { compare, Comparer, eq } from '../operators/index.js'
+import { compare, Comparer } from '../operators/index.js'
 import { Mapping } from './abc.js'
 
 /**
@@ -166,7 +166,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
       return
     }
     this.splay(key)
-    if (!eq(key, this.root.key)) {
+    if (this.cmp(key, this.root.key) !== 0) {
       return
     }
     const removed = this.root
