@@ -296,7 +296,7 @@ export function findLast<T>(arr: Object, fn: Iteratee<T>): T | undefined
 export function findLast<T>(arr: Object, fn: Object): T | undefined
 export function findLast<T>(arr: Iterable<T> | Object, fn: Iteratee<T> | Object): T | undefined {
   let result
-  const it = isFunction(fn) ? fn : matches(fn)
+  const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
   forEachRight(arr, (val, key) => {
     if (it(val, key, arr)) {
       result = val

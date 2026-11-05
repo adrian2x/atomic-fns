@@ -372,6 +372,15 @@ describe('collections', () => {
     assert(findLast(users, { age: 36 }) === users[2])
   })
 
+  it('findLast accepts a property name', () => {
+    const users = [
+      { user: 'barney', active: true },
+      { user: 'fred', active: false },
+      { user: 'pebbles', active: true }
+    ]
+    assert(findLast(users, 'active') === users[2])
+  })
+
   it('forEach', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
