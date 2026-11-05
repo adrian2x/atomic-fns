@@ -6,7 +6,10 @@
 
 import { ValueError } from '../globals/index.js'
 
-const NUMBER_REGEX = /^(-?)([0-9]+)(\.([0-9]+))?$/
+const NUMBER_REGEX = /^\s*([+-]?)(?=\.?[0-9])([0-9]*)(\.([0-9]*))?(?:[eE]([+-]?[0-9]+))?\s*$/
+
+/** Largest power of ten an exponent may reach, so a short string cannot freeze the page. */
+const MAX_EXPONENT = 10_000
 
 /**
  * Casts the given value as a {@link Decimal}.
@@ -53,8 +56,13 @@ export class Decimal {
       if (typeof result[2] === 'undefined') result[2] = ''
       if (typeof result[4] === 'undefined') result[4] = ''
       this.i = BigInt(result[1] + result[2] + result[4])
-      this.e = result[4] ? -result[4].length : 0
+      this.e = Number(result[5] ?? 0) - result[4].length
       this._normalize()
+      if (result[5]) {
+        const magnitude = this.e + (this.i < 0n ? -this.i : this.i).toString().length - 1
+        if (this.i === 0n) this.e = 0
+        else if (Math.abs(magnitude) > MAX_EXPONENT) throw new RangeError('exponent out of range')
+      }
     } else {
       // Conversion to string failed, so construct from number
       value = Number(value)

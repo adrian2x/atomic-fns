@@ -81,6 +81,48 @@ describe('Decimal', () => {
     assert.throws(() => decimal(-Infinity), RangeError)
   })
 
+  it('reads exponents exactly', () => {
+    assert(decimal('1e22').toString() === `1${'0'.repeat(22)}`)
+    assert(decimal('1e23').eq(`1${'0'.repeat(23)}`))
+    assert(decimal('1.5e300').toString() === `15${'0'.repeat(299)}`)
+    assert(decimal('-1.5E+3').toString() === '-1500')
+    assert(decimal(' +.5e1 ').toString() === '5')
+    assert(decimal('5.e1').toString() === '50')
+    assert(decimal('1e-308').toString() === `0.${'0'.repeat(307)}1`)
+    assert(decimal('1e-400').toString() === `0.${'0'.repeat(399)}1`)
+    assert(decimal('1234e-2').toString() === '12.34')
+    assert(
+      decimal('123456789012345678901234567890e0').toString() === '123456789012345678901234567890'
+    )
+    assert(decimal('1.2345678901234567890123e5').toString() === '123456.78901234567890123')
+    assert(decimal('0e1000000').toString() === '0')
+    assert(decimal('0e-1000000').toString() === '0')
+  })
+
+  it('reads numbers in exponent form as they print', () => {
+    assert(decimal(1e21).toString() === `1${'0'.repeat(21)}`)
+    assert(decimal(-1e21).toString() === `-1${'0'.repeat(21)}`)
+    assert(decimal(1e23).toString() === `1${'0'.repeat(23)}`)
+    assert(decimal(1.5e300).toString() === `15${'0'.repeat(299)}`)
+    assert(decimal(1e23).eq('1e23'))
+    assert(decimal(1.5e-7).toString() === '0.00000015')
+    assert(decimal(5e-324).toString() === `0.${'0'.repeat(323)}5`)
+    assert(decimal(Number.MAX_VALUE).toNumber() === Number.MAX_VALUE)
+    assert(decimal(Number.MIN_VALUE).toNumber() === Number.MIN_VALUE)
+  })
+
+  it('bounds the exponent without rejecting long digit strings', () => {
+    assert(decimal('1e10000').toString() === `1${'0'.repeat(10000)}`)
+    assert(decimal('-1e10000').eq(`-1${'0'.repeat(10000)}`))
+    assert(decimal('1e-10000').toString() === `0.${'0'.repeat(9999)}1`)
+    for (const text of ['1e10001', '-1e10001', '1e-10001', '1e1000000', `1e${'9'.repeat(400)}`]) {
+      assert.throws(() => decimal(text), RangeError, text)
+    }
+    assert(decimal(`0.${'0'.repeat(20000)}1e20001`).toString() === '1')
+    assert(decimal(`1.${'1'.repeat(20000)}e0`).toString() === `1.${'1'.repeat(20000)}`)
+    assert(decimal(`1${'0'.repeat(20000)}`).toString() === `1${'0'.repeat(20000)}`)
+  })
+
   it('reads a long run of trailing zeros in linear time', () => {
     const start = performance.now()
     const value = decimal(`-1${'0'.repeat(100000)}`)
