@@ -112,7 +112,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
   }
 
   /**
-   * Returns an iterable of all the keys in the cache, in insertion order.
+   * Returns an iterable of all the keys in the cache, from least to most recently used.
    * @returns {IterableIterator<K>}
    */
   keys(): IterableIterator<K> {
@@ -121,7 +121,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
   }
 
   /**
-   * Returns an iterable of all the values in the cache, in insertion order.
+   * Returns an iterable of all the values in the cache, from least to most recently used.
    * @returns {IterableIterator<V>}
    */
   values(): IterableIterator<V> {
@@ -129,7 +129,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
   }
 
   /**
-   * Returns an iterable of all the [key, value] pairs in the cache, in insertion order.
+   * Returns an iterable of all the [key, value] pairs in the cache, from least to most recently used.
    * @returns {IterableIterator<[K, V]>}
    */
   entries(): IterableIterator<[K, V]> {
