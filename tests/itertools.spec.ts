@@ -275,4 +275,8 @@ describe('operators', () => {
     assert(second1 === users1[1])
     assert(second2 === users2[1])
   })
+
+  it('zip yields nothing without iterables', () => {
+    assert.deepEqual(take(1, zip()), [])
+  })
 })

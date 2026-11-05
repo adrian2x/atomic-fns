@@ -463,6 +463,7 @@ for item of zip([1, 2, 3], ['sugar', 'spice', 'nice'])
 ```
  */
 export function* zip(...args: Array<Iterable<any>>) {
+  if (args.length === 0) return
   const iterables = args.map(iter)
   while (true) {
     const items = [] as any[]
