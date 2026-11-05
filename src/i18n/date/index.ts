@@ -550,7 +550,7 @@ export function addDuration(
   duration: number | Duration | TDuration,
   exact = false
 ): Date {
-  const newDate = new Date(date)
+  const newDate = asDate(date)
   const { values } = new Duration(duration, exact)
   const {
     years = 0,

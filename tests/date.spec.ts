@@ -1,7 +1,9 @@
 import assert from 'assert'
+import { dayOfYear, weekOfYear } from '../src/i18n/date/utils.js'
 import {
   addDuration,
   asDate,
+  daysInMonth,
   Duration,
   formatDate,
   IntlDate,
@@ -839,6 +841,22 @@ it('strftime %-H accepts a timestamp and no date', () => {
   assert(/^\d+$/.test(strftime('%-H', undefined as any)))
 
   assert(strftime('%-H', null as any) === '0')
+})
+
+describe('date utilities', () => {
+  it('read a date string as local time', () => {
+    inZone('America/New_York', () => {
+      assert.strictEqual(daysInMonth('2021-03-01'), 31)
+      assert.strictEqual(daysInMonth('2021-02-01'), 28)
+      assert.strictEqual(dayOfYear('2021-01-01'), 1)
+      assert.strictEqual(dayOfYear('2021-12-31'), 365)
+      assert.deepStrictEqual(weekOfYear('2021-01-04', 1, 4), { week: 1, year: 2021 })
+      assert.strictEqual(
+        addDuration('2021-03-01', { months: 1 }).toISOString(),
+        '2021-04-01T04:00:00.000Z'
+      )
+    })
+  })
 })
 
 describe('Duration', () => {
