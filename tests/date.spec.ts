@@ -390,6 +390,30 @@ describe('IntlDate', () => {
     assert.strictEqual(inYear(-1), '-0001 01')
   })
 
+  it('format Do prints an ordinal day', () => {
+    const ordinals = {
+      1: '1st',
+      2: '2nd',
+      3: '3rd',
+      4: '4th',
+      11: '11th',
+      12: '12th',
+      13: '13th',
+      21: '21st',
+      22: '22nd',
+      23: '23rd',
+      30: '30th',
+      31: '31st'
+    }
+    for (const [day, ordinal] of Object.entries(ordinals)) {
+      assert.strictEqual(mockDate(new Date(2021, 0, Number(day))).format('Do'), ordinal)
+    }
+    const date = new Date(2021, 0, 2)
+    assert.strictEqual(mockDate(date).format('MMMM Do, YYYY'), 'January 2nd, 2021')
+    assert.strictEqual(mockDate(date).format('[Do] DD'), 'Do 02')
+    assert.strictEqual(mockDate(date, { locale: 'de-DE' }).format('Do'), '2')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })

@@ -3,9 +3,10 @@ const NATIVE_DATE =
 const REGEX_PARSE =
   /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
 const REGEX_FORMAT =
-  /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
+  /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|Do|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
+const ORDINAL_SUFFIXES = { one: 'st', two: 'nd', few: 'rd', other: 'th' }
 
 function padStart(string, length, pad) {
   return String(string).padStart(length, pad)
@@ -179,6 +180,12 @@ function formatMeridiem(hour, isLowercase?) {
   return isLowercase ? m.toLowerCase() : m
 }
 
+function formatOrdinal(day: number, locale?: string) {
+  const rules = new Intl.PluralRules(locale, { type: 'ordinal' })
+  const isEnglish = rules.resolvedOptions().locale.split('-')[0] === 'en'
+  return isEnglish ? `${day}${ORDINAL_SUFFIXES[rules.select(day)]}` : String(day)
+}
+
 function formatPart(locale, t, date) {
   const value = formatter(locale, TOKENS[t]).format(date)
   return value.split(/\s+/g).slice(1).join(' ')
@@ -228,6 +235,7 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     Q: Math.ceil((date.getMonth() + 1) / 3),
     D: date.getDate(),
     DD: padStart(date.getDate(), 2, '0'),
+    Do: formatOrdinal(date.getDate(), locale),
     d: date.getDay(),
     ddd: formatter(locale, TOKENS.ddd).format(date),
     dddd: formatter(locale, TOKENS.dddd).format(date),
