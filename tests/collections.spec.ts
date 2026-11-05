@@ -394,6 +394,22 @@ describe('collections', () => {
     assert.deepEqual(groupBy([6.1, 4.2, 6.3], Math.floor), { '4': [4.2], '6': [6.1, 6.3] })
   })
 
+  it('groupBy accepts keys named after inherited properties', () => {
+    const identity = (x) => x
+    assert.deepEqual(groupBy(['constructor', 'toString'], identity), {
+      constructor: ['constructor'],
+      toString: ['toString']
+    })
+
+    const groups = groupBy(['__proto__', '__proto__'], identity)
+    assert(Object.getPrototypeOf(groups) === Object.prototype)
+    assert.deepEqual(Object.entries(groups), [['__proto__', ['__proto__', '__proto__']]])
+
+    const coerced = groupBy([1], () => ['__proto__'])
+    assert(Object.getPrototypeOf(coerced) === Object.prototype)
+    assert.deepEqual(Object.entries(coerced), [['__proto__', [1]]])
+  })
+
   it('map', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
