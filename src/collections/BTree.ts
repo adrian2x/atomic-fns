@@ -1021,7 +1021,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
   get(key: K, defaultValue: V | undefined, tree: BTree<K, V>): V | undefined {
     const i = this.indexOf(key, 0, tree._compare)
     const children = this.children
-    return i < children.length ? children[i].get(key, defaultValue, tree) : undefined
+    return i < children.length ? children[i].get(key, defaultValue, tree) : defaultValue
   }
 
   getPairOrNextLower(

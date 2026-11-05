@@ -245,4 +245,14 @@ describe('BTree', () => {
     assert(tree.removeRange(Number.NaN, 5, true) === 2)
     assert(tree.size === 0)
   })
+
+  it('get returns the default past the last key', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, i)
+    }
+    assert(tree.height > 0)
+    assert(tree.get(-1, 'none') === 'none')
+    assert(tree.get(99, 'none') === 'none')
+  })
 })
