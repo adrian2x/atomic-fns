@@ -296,9 +296,14 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
         part += fmt[i++]
       }
 
-      part += fmt[i]
+      part += fmt[i] ?? ''
       // add any repeated characters that come after
       while (i < fmt.length - 1 && fmt[i + 1] === fmt[i]) part += fmt[++i]
+
+      if (!STRFTIME[part]) {
+        results.push(part)
+        continue
+      }
 
       if (HOUR_PARTS[part]) {
         const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
