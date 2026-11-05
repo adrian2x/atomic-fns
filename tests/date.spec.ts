@@ -319,7 +319,7 @@ describe('IntlDate', () => {
     assert(start.isBefore(end))
     assert(end.year === 1970)
     assert(end.month === 1)
-    assert(end.day === 2)
+    assert(end.day === 1)
   })
 
   it('subtract', () => {
@@ -330,7 +330,7 @@ describe('IntlDate', () => {
     assert(start.isAfter(end))
     assert(end.year === 1964)
     assert(end.month === 7)
-    assert(end.day === 2)
+    assert(end.day === 3)
   })
 
   it('format', () => {
@@ -622,6 +622,18 @@ describe('IntlDate', () => {
       assert.strictEqual(end(at(2021, 2, 13, 23, 30), 'day'), '2021-03-13 23:59:59.999')
       assert.strictEqual(end(at(2021, 10, 1, 0, 30), 'month'), '2021-11-30 23:59:59.999')
     })
+  })
+
+  it('add applies every unit as written, largest first', () => {
+    const day = (date: IntlDate) => date.format('YYYY-MM-DD')
+    const start = mockDate('2021-01-15')
+    assert.strictEqual(day(start.add({ months: 1, days: 30 })), '2021-03-17')
+    assert.strictEqual(day(start.add({ days: 30, months: 1 })), '2021-03-17')
+    assert.strictEqual(day(start.add({ years: 1, months: '2' })), '2022-03-15')
+    assert.strictEqual(day(start.add({ months: 1, days: 45 })), '2021-04-01')
+    assert.strictEqual(day(start.add({ years: 1, months: 13, days: 400 })), '2024-03-21')
+    assert.strictEqual(day(mockDate('2021-01-31').add({ days: 1, months: 1 })), '2021-03-01')
+    assert.strictEqual(day(mockDate('2020-02-29').add({ years: 1, months: 1 })), '2021-03-29')
   })
 
   it('strftime format', () => {
