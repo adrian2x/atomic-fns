@@ -505,7 +505,13 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
       obj.month = (q - 1) * 3 + 1
     }
 
-    return this.set(obj)
+    const start = this.set(obj)
+    if (obj.hour !== undefined) return start
+
+    // Date reads a repeated wall clock as its first pass, this date may be on the second
+    const offset = this._date.getTimezoneOffset()
+    const kept = new Date(start.getTime() + (offset - start._date.getTimezoneOffset()) * 6e4)
+    return kept.getTimezoneOffset() === offset ? this.clone(kept) : start
   }
 
   endOf(unit: DurationUnit) {
