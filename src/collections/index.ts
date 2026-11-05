@@ -655,7 +655,7 @@ export function findLastIndex<T>(
 ): number {
   if (arr == null) return -1
   const length = arr.length
-  if (start == null) start = length - 1
+  start = Math.min(start ?? length - 1, length - 1)
   if (!length || start < 0) return -1
   const it = isFunction(fn) ? fn : isObject(fn) ? matches(fn) : (obj) => get(fn, obj)
   for (; start >= 0; start--) {
@@ -686,7 +686,7 @@ export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
   const op = call(obj, 'lastIndexOf', ...(start === undefined ? [value] : [value, start]))
   if (op != null) return op
   const length = obj.length
-  if (start == null) start = length - 1
+  start = Math.min(start ?? length - 1, length - 1)
   if (!length || start < 0) return -1
   for (; start >= 0; start--) {
     if (eq(value, obj[start])) return start
