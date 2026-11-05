@@ -35,28 +35,6 @@ export function round(x: number, digits = 0): number {
 }
 
 /**
- * Rounds down and returns the largest integer less than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer less than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor Math.floor()}
- */
-export function floor(x: number) {
-  return Math.floor(x)
-}
-
-/**
- * Rounds up and returns the largest integer greater than or equal to a given number.
- * @param x A number.
- * @returns Nearest integer greater than or equal to number.
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/ceil Math.ceil()}
- */
-export function ceil(x: number) {
-  return Math.ceil(x)
-}
-
-/**
  * Returns a tuple like `[x / y, x % y]`.
  *
  * @param x
