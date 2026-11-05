@@ -7,9 +7,11 @@ const REGEX_FORMAT =
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
 
-const padStart = (string, length, pad) => String(string).padStart(length, pad)
+function padStart(string, length, pad) {
+  return String(string).padStart(length, pad)
+}
 
-const padZoneStr = (instance: Date) => {
+function padZoneStr(instance: Date) {
   const negMinutes = -instance.getTimezoneOffset()
   const minutes = Math.abs(negMinutes)
   const hourOffset = Math.floor(minutes / 60)
@@ -162,16 +164,20 @@ const HOUR_PARTS = { '%I': 1, '%-I': 1, '%K': 1, '%k': 1 }
 const ERA_PARTS = { '%n': 1, '%N': 1, '%nn': 1 }
 const TZ_PARTS = { '%ZZ': 1, '%-ZZ': 1, '%-z': 1, '%z': 1, '%-Z': 1, '%Z': 1 }
 
-const formatter = (locale: string, opts) => new Intl.DateTimeFormat(locale, opts)
+function formatter(locale: string, opts) {
+  return new Intl.DateTimeFormat(locale, opts)
+}
 
-const formatHour = (h, maxLength) => String(h % 12 || 12).padStart(maxLength, '0')
+function formatHour(h, maxLength) {
+  return String(h % 12 || 12).padStart(maxLength, '0')
+}
 
-const formatMeridiem = (hour, isLowercase?) => {
+function formatMeridiem(hour, isLowercase?) {
   const m = hour < 12 ? 'AM' : 'PM'
   return isLowercase ? m.toLowerCase() : m
 }
 
-const formatPart = (locale, t, date) => {
+function formatPart(locale, t, date) {
   const value = formatter(locale, TOKENS[t]).format(date)
   return value.split(/\s+/g).slice(1).join(' ')
 }
@@ -249,6 +255,11 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
  * @param {?string} locale The locale to use when formatting (default is system locale).
  * @returns {string} The string representation of date
  * @see {@link https://strftime.org/ strftime format}
+ * @example
+```js
+strftime('%A, %d/%m/%y', new Date())
+// 'Saturday, 01/02/2020'
+```
  */
 export function strftime(fmt: string, date: Date, locale?: string): string {
   const results: string[] = []

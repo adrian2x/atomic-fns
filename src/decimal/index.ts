@@ -9,7 +9,7 @@ const NUMBER_REGEX = /^(-?)([0-9]+)(\.([0-9]+))?$/
 /**
  * Casts the given value as a {@link Decimal}.
  */
-export function decimal(x) {
+export function decimal(x): Decimal {
   return new Decimal(x)
 }
 
@@ -28,7 +28,7 @@ export class Decimal {
    * @param {*} value
    * @returns {Decimal}
    */
-  constructor(value?) {
+  constructor(value?: any) {
     if (value == null) {
       return this
     }
@@ -96,7 +96,7 @@ a.negated()  // -5
 ```
    * @returns {Decimal}
    */
-  negated() {
+  negated(): Decimal {
     const negated = new Decimal()
     negated.i = -this.i
     negated.e = this.e
@@ -114,7 +114,7 @@ a.add(b)  // 50000000000.000000005
 ```
    * @returns {Decimal}
    */
-  add(x) {
+  add(x): Decimal {
     let a = new Decimal(this)
     let b = new Decimal(x)
     // a+b = a.i * 10^a.e + b.i * 10^b.e
@@ -149,7 +149,7 @@ a.sub(b)  // 0.9999999999999999999
 ```
    * @returns {Decimal}
    */
-  sub(x) {
+  sub(x): Decimal {
     return this.add(decimal(x).negated())
   }
 
@@ -164,7 +164,7 @@ a.mul(b)  // 1
 ```
    * @returns {Decimal}
    */
-  mul(x) {
+  mul(x): Decimal {
     const a = new Decimal(this)
     const b = new Decimal(x)
     // a * b = (a.i * b.i) * 10^(a.e + b.e)
@@ -188,7 +188,7 @@ a.div(b)  // 0.333333333333333333333333333333
 ```
    * @returns {Decimal}
    */
-  div(x) {
+  div(x: Decimal | string | number): Decimal {
     const a = new Decimal(this)
     const b = new Decimal(x)
     // We need to increase the number of digits of a and b so that a / b will have the desired precision.
@@ -215,7 +215,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * Returns the square root of this `Decimal`.
    * @returns {TDecimal}
    */
-  sqrt() {
+  sqrt(): Decimal {
     Decimal.PRECISION++
 
     // Let the guess value be 10^(e/2), where e is this.e
@@ -250,7 +250,7 @@ a.div(b)  // 0.333333333333333333333333333333
   }
 
   /** Returns a new copy of this Decimal value. */
-  clone() {
+  clone(): Decimal {
     const a = new Decimal()
     a.i = this.i
     a.e = this.e
@@ -260,7 +260,7 @@ a.div(b)  // 0.333333333333333333333333333333
   /**
    * Remove zeroes in the least-significant digit of this `Decimal`
    */
-  private _normalize() {
+  private _normalize(): this {
     while (this.i % 10n === 0n && this.i !== 0n) {
       this.i /= 10n
       this.e++
@@ -271,7 +271,7 @@ a.div(b)  // 0.333333333333333333333333333333
   /**
    * Truncate this `Decimal` to the configured precision
    */
-  private _truncate() {
+  private _truncate(): this {
     // TODO: Make this better
     // TODO: Rounding
     const trunc = -this.e - Decimal.PRECISION
@@ -297,9 +297,8 @@ a.div(b)  // 0.333333333333333333333333333333
 
   /**
    * Returns a string representation of this decimal.
-   * @returns {Decimal}
    */
-  toString() {
+  toString(): string {
     let s = this.i.toString()
     let m = ''
     if (s[0] === '-') {
@@ -319,7 +318,7 @@ a.div(b)  // 0.333333333333333333333333333333
     }
   }
 
-  [Symbol.for('nodejs.util.inspect.custom')]() {
+  [Symbol.for('nodejs.util.inspect.custom')](): string {
     return this.toString()
   }
 
@@ -327,11 +326,11 @@ a.div(b)  // 0.333333333333333333333333333333
    * Converts this decimal to the `Number` value
    * @returns {number}
    */
-  toNumber() {
+  toNumber(): number {
     return Number(Decimal.prototype.toString.call(this))
   }
 
-  static get precision() {
+  static get precision(): number {
     return Decimal.PRECISION
   }
 
@@ -344,7 +343,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * @param {*} x other
    * @returns {boolean}
    */
-  eq(x) {
+  eq(x: any): boolean {
     const other = decimal(x)
     return this.i === other.i && this.e === other.e
   }
@@ -354,7 +353,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * @param {*} x
    * @returns {boolean}
    */
-  lt(x) {
+  lt(x): boolean {
     const other = decimal(x)
     if (this.e === other.e) return this.i < other.i
     const e = this.e - other.e
@@ -372,7 +371,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * @param {*} x
    * @returns {number}
    */
-  compare(x) {
+  compare(x): 0 | 1 | -1 {
     if (this.eq(x)) return 0
     if (this.lt(x)) return -1
     return 1
@@ -383,7 +382,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * @param {*} x
    * @returns {boolean}
    */
-  gt(x) {
+  gt(x): boolean {
     return this.compare(x) > 0
   }
 
@@ -392,7 +391,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * @param {*} x
    * @returns {boolean}
    */
-  lte(x) {
+  lte(x): boolean {
     return this.compare(x) <= 0
   }
 
@@ -401,13 +400,13 @@ a.div(b)  // 0.333333333333333333333333333333
    * @param {*} x
    * @returns {boolean}
    */
-  gte(x) {
+  gte(x): boolean {
     return this.compare(x) >= 0
   }
 }
 
 /** Returns a BigInt that is equal to `i` times `10^e` */
-function exp(i: bigint, e: number) {
+function exp(i: bigint, e: number): bigint {
   // TODO: Make this better
   // The implementation is faster than 10n ** BigInt(e). But could we make it faster still?
   let ii = i

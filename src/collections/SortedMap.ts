@@ -30,7 +30,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {this} Returns the Map object.
    */
-  add(key: K) {
+  add(key: K): this {
     this.store.set(key, null as V)
     return this
   }
@@ -40,7 +40,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {?V} The key value or `undefined`.
    */
-  get(key: K) {
+  get(key: K): V | undefined {
     return this.store.get(key)
   }
 
@@ -50,15 +50,16 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @param {V} value
    * @returns {this} Returns the Map object.
    */
-  set(key: K, value: V) {
-    return this.store.set(key, value)
+  set(key: K, value: V): this {
+    this.store.set(key, value)
+    return this
   }
 
   /**
    * Returns the smallest key in the tree.
    * @returns {?K}
    */
-  min() {
+  min(): K | undefined {
     return this.store.min()
   }
 
@@ -66,7 +67,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * Returns the largest key in the tree.
    * @returns {?K}
    */
-  max() {
+  max(): K | undefined {
     return this.store.max()
   }
 
@@ -75,14 +76,14 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {boolean} `true` if key was removed, otherwise `false`.
    */
-  delete(item: K) {
+  delete(item: K): boolean {
     return this.store.remove(item) !== undefined
   }
 
   /**
    * Removes all key/value pairs in the tree.
    */
-  clear() {
+  clear(): void {
     return this.store.clear()
   }
 
@@ -90,7 +91,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * Returns the total key/value pairs in the tree.
    * @returns {number}
    */
-  get size() {
+  get size(): number {
     return this.store.size
   }
 
@@ -98,7 +99,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * Check if there are no key/value pairs in the tree.
    * @returns {boolean} `true` if is empty.
    */
-  empty() {
+  empty(): boolean {
     return this.store.empty()
   }
 
@@ -107,7 +108,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {boolean} `true` if key is found, otherwise `false`.
    */
-  contains(key: K) {
+  contains(key: K): boolean {
     return this.store.contains(key)
   }
 
@@ -116,7 +117,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {boolean} `true` if key is found, otherwise `false`.
    */
-  has(key: K) {
+  has(key: K): boolean {
     return this.store.contains(key)
   }
 
@@ -124,7 +125,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * Returns a new iterator of all **ordered** keys in the map.
    * @returns {Iterable<K>}
    */
-  keys() {
+  keys(): Iterable<K> {
     return this.store.keys()
   }
 
@@ -132,7 +133,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * Returns a new iterator of all values **ordered** by their keys.
    * @returns {Iterable<V>}
    */
-  values() {
+  values(): Iterable<V> {
     return this.store.values()
   }
 
@@ -140,7 +141,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * Returns a new iterator of all key value pairs **ordered** by their keys.
    * @returns {Iterable<[K, V]>}
    */
-  entries() {
+  entries(): Iterable<[K, V]> {
     return this.store.entries()
   }
 }

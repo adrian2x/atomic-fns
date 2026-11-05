@@ -241,9 +241,8 @@ describe('IntlDate', () => {
   it('diff', () => {
     let start = mockDate('2020-02-29')
     let end = start.add({ years: 1 })
-
-    assert(start.isBefore(end))
     assert(end.isAfter(start))
+    assert(start.isBefore(end))
     assert(end.diff(start, 'years') === 1)
     assert(end.diff(start, 'months') === 12)
     assert(end.diff(start, 'months', true) === 12.024887574693526)
@@ -268,27 +267,23 @@ describe('IntlDate', () => {
   })
 
   it('toNow', () => {
-    let date = new Date(1964, 0, 1, 2, 30, 0, 0)
-    let start = mockDate(date)
-    let end = new Date()
-    let years = end.getFullYear() - start.year
-    assert(start.toNow('years') === `in ${years} years`)
+    let now = mockDate()
+    let start = now.subtract({years: 33})
+    assert(start.toNow('years') === `in 33 years`)
   })
 
   it('fromNow', () => {
-    let date = new Date(1964, 0, 1, 2, 30, 0, 0)
-    let start = mockDate(date)
-    let end = new Date()
-    let years = end.getFullYear() - start.year
-    assert(start.fromNow('years') === `${years} years ago`)
+    let now = mockDate()
+    let start = now.subtract({years: 33})
+    assert(start.fromNow('years') === `33 years ago`)
   })
 
   it('add', () => {
     let date = new Date(1964, 6, 2, 2, 30, 0, 0)
     let start = mockDate(date)
     let end = start.add({ years: 5, months: 5, days: 30 })
-    assert(start.isBefore(end))
     assert(end.isAfter(start))
+    assert(start.isBefore(end))
     assert(end.year === 1970)
     assert(end.month === 1)
     assert(end.day === 2)
@@ -298,8 +293,8 @@ describe('IntlDate', () => {
     let date = new Date(1970, 0, 2, 1, 30, 0, 0)
     let start = mockDate(date)
     let end = start.subtract({ years: 5, months: 5, days: 30 })
-    assert(start.isAfter(end))
     assert(end.isBefore(start))
+    assert(start.isAfter(end))
     assert(end.year === 1964)
     assert(end.month === 7)
     assert(end.day === 2)

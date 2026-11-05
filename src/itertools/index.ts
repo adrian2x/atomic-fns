@@ -15,16 +15,16 @@ import { Function, Iteratee, Predicate } from '../types'
  * @param initial Optional initial value (defaults to the first element in iterable)
  * @returns A sequence of accumulated values
  */
-export function* accumulate<T>(iterable: Iterable<T>, func = add, initial?) {
+export function* accumulate<T>(iterable: Iterable<T>, func = add, initial?: any): Generator<T> {
   const it = iter(iterable)
   let total = initial
-  let head = it.next()
-  if (initial == null) total = head.value
-  while (!head.done) {
+  let current = it.next()
+  if (initial == null) total = current.value
+  while (!current.done) {
     yield total
-    head = it.next()
-    if (head.done) return
-    total = func(total, head.value)
+    current = it.next()
+    if (current.done) return
+    total = func(total, current.value)
   }
 }
 
@@ -41,7 +41,7 @@ all([0])
 all([1, 2, 3])
 // true
 
-all([2, 4, 6] => (n) => n > 1)
+all([2, 4, 6], n => n > 1)
 // true
 ```
 @see {@link any}
@@ -66,7 +66,7 @@ any([0])
 any([0, 1, null, undefined])
 // true
 
-any([1, 4, 5] => (n) => n % 2 === 0)
+any([1, 4, 5], n => n % 2 === 0)
 // true
 ```
 @see {@link all}
@@ -104,7 +104,7 @@ contains('abcd', 'bc')
  *
  * @see {@link collections.find}
  */
-export function contains(collection: Iterable<any>, value) {
+export function contains(collection: Iterable<any>, value: any): boolean {
   if (!collection) return false
   const includes = call(collection, 'includes', value)
   if (includes != null) return includes
@@ -263,7 +263,7 @@ export function* itake<T>(n: number, iterable: Iterable<T>) {
  * @param obj The given collection to iterate over.
  * @returns An Iterator type.
  */
-export function iter<T>(obj): Iterator<T, T> {
+export function iter<T>(obj: any): Iterator<T, T> {
   const iterable = call(obj, Symbol.iterator)
   if (notNull(iterable)) return iterable as Iterator<T>
   return Object.keys(obj)[Symbol.iterator]() as Iterator<T>
@@ -361,11 +361,11 @@ const compKey = (compare: Comparer, key) => (x, y) => compare(key(x), key(y))
 
 /**
  * Creates a new sorted list from the elements in the array. This can be called many ways:
- *   - sorted([...], true) => reverse order
- *   - sorted([...], fn = (x) => any) => using a key fn
- *   - sorted([...], fn = (x) => any, true) => reverse order using key
- *   - sorted([...], false, (x, y) => number) => using custom compare
- *   - sorted([...], fn = (x) => any, true, (x, y) => number) => custom key, reverse and compare
+ *   - sorted([...], true) - reverse order
+ *   - sorted([...], fn = x => any) - using a key fn
+ *   - sorted([...], fn = x => any, true) - reverse order using key
+ *   - sorted([...], false, (x, y) => number) - using custom compare
+ *   - sorted([...], fn = x => any, true, (x, y) => number) - custom key, reverse and compare
  *
  * If `args` is an Object, returns the sorted keys.
  *
@@ -408,9 +408,9 @@ export function sorted<T>(
 
 /**
  * Sort `args` in place. Can be called like this:
- *   - sort([...], true) => reverse order
- *   - sort([...], (x, y) => number) => using custom compare
- *   - sort([...], true, (x, y) => number) => reverse and using custom compare
+ *   - sort([...], true) - reverse order
+ *   - sort([...], (x, y) => number) - using custom compare
+ *   - sort([...], true, (x, y) => number) - reverse and using custom compare
  *
  * @param {any[]} args
  * @param {(boolean | Comparer)} [reverse]

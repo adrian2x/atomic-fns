@@ -217,7 +217,7 @@ export class Duration {
    * @example Duration.fromObject({years: 2, days: 3}).get('days') // 3
    * @return {number}
    */
-  get(unit) {
+  get(unit: string): number {
     return this[UNITS_PLURAL[unit.toLowerCase()]]
   }
 
@@ -239,7 +239,7 @@ export class Duration {
    * @param {Duration|Object|number} duration - The amount to subtract.
    * @return {Duration}
    */
-  subtract(duration) {
+  subtract(duration: Duration | TDuration | number) {
     const dur = new Duration(duration)
     return this.add(dur.negated())
   }
@@ -347,7 +347,7 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   }
 
   total(unit: DurationUnit) {
-    return this.shiftTo(unit).get(unit) as number
+    return this.shiftTo(unit).get(unit)
   }
 
   exact(unit?: DurationUnit) {

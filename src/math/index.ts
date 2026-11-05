@@ -14,7 +14,7 @@ import { Predicate } from '../types.js'
  * @param x The value.
  * @returns The absolute value.
  */
-export function abs(x): number {
+export function abs(x: any): number {
   const op = call(x, 'abs')
   if (op != null) return op
   return Math.abs(x)
@@ -67,14 +67,14 @@ export function divmod(x: number, y: number): [number, number] {
   return [Math.floor(x / y), x % y]
 }
 
-export function log2(x): number {
+export function log2(x: number): number {
   if (x > 0) {
     return Math.log(x) * 1.442695
   }
   return Number.NaN
 }
 
-export function logBase(x, y): number {
+export function logBase(x: number, y: number): number {
   if (x > 0 && y > 0) {
     return Math.log(y) / Math.log(x)
   }
@@ -115,7 +115,7 @@ export function max<T>(iterable: Iterable<T>, key = id): T {
 ```js
 let objects = [{ 'n': 4 }, { 'n': 2 }, { 'n': 8 }, { 'n': 6 }]
 
-mean(objects, (o) => o.n)
+mean(objects, o => o.n)
 // 5
 ```
  */
@@ -125,7 +125,7 @@ export function mean<T>(iterable: Iterable<T>, key = id): number {
   let total = 0
   let count = 0
   for (const value of iterable) {
-    total += key(value)
+    total += key(value) as unknown as number
     count++
   }
   if (count !== 0) return total / count

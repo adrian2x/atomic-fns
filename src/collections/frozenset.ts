@@ -13,22 +13,22 @@ export class FrozenSet<T = any> extends Set<T> {
   }
 
   /** @private */
-  add() {
+  add(): this {
     return this
   }
 
   /** @private */
-  delete() {
+  delete(): boolean {
     return false
   }
 
   /** @private */
-  clear() {
+  clear(): this {
     return this
   }
 
   /** @private */
-  freeze() {
+  freeze(): Readonly<this> {
     return Object.freeze(this)
   }
 }

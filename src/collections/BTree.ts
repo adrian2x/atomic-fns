@@ -366,7 +366,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   /** Gets the number of key-value pairs in the tree. */
-  get size() {
+  get size(): number {
     return this.count
   }
 
@@ -437,7 +437,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     return true
   }
 
-  add(key: K) {
+  add(key: K): boolean {
     return this.set(key, null as V)
   }
 
@@ -643,12 +643,12 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   /** Gets the lowest key in the tree. Complexity: O(log size) */
-  minKey() {
+  minKey(): K {
     return this.root.minKey()
   }
 
   /** Gets the highest key in the tree. Complexity: O(1) */
-  maxKey() {
+  maxKey(): K {
     return this.root.maxKey()
   }
 
@@ -667,7 +667,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   // Additional methods ///////////////////////////////////////////////////////
 
   /** Returns the maximum number of children/values before nodes will split. */
-  get maxNodeSize() {
+  get maxNodeSize(): number {
     return this._maxNodeSize
   }
 
@@ -706,7 +706,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   /** Gets a string representing the tree's data based on toArray(). */
-  toString() {
+  toString(): string {
     return this.toArray().toString()
   }
 
@@ -955,7 +955,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
         }
   }
 
-  [Symbol.iterator]() {
+  [Symbol.iterator](): IterableIterator<[K, V]> {
     return this.entries()
   }
 }
