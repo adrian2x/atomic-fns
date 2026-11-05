@@ -444,6 +444,14 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false) {
     const dt = new IntlDate(other)
+    const monthsInUnit = MONTHS_IN_UNIT[UNITS_PLURAL[unit.toLowerCase()]]
+    if (monthsInUnit && !exact) {
+      // whole months are the ones `add` can take from `other` without passing this date
+      let months = (this.year - dt.year) * 12 + this.month - dt.month
+      const sign = Math.sign(this.getTime() - dt.getTime())
+      if (sign * (dt.add({ months }).getTime() - this.getTime()) > 0) months -= sign
+      return Math.trunc(months / monthsInUnit)
+    }
     const dur = new Duration(this.getTime() - dt.getTime(), exact)
     let total = dur.total(unit)
     if (!exact) total = Math.trunc(total)
@@ -611,6 +619,8 @@ export function subDuration(
 ): Date {
   return addDuration(date, new Duration(duration, exact).negated(), exact)
 }
+
+const MONTHS_IN_UNIT = { years: 12, quarters: 3, months: 1 }
 
 const UNITS_SINGULAR = {
   year: 'year',
