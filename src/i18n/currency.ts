@@ -77,19 +77,24 @@ export class Currency extends Decimal {
     return super.clone.call(this)
   }
 
-  toString(): string {
+  /** `Intl` reads a decimal string exactly, while a `Number` past 2^53 has lost digits. */
+  private formattable(): number | Intl.StringNumericLiteral {
     const number = this.toNumber()
-    return this.numberFormat.format(number)
+    if (Math.abs(number) <= Number.MAX_SAFE_INTEGER) return number
+    return Decimal.prototype.toString.call(this) as Intl.StringNumericLiteral
+  }
+
+  toString(): string {
+    return this.numberFormat.format(this.formattable())
   }
 
   format(opts: Intl.NumberFormatOptions = {}, locale?: string): string {
-    const number = this.toNumber()
     const overrides = { ...this.overrides }
     if (Object.keys(opts).some((key) => DIGIT_OPTION.test(key) && opts[key] !== undefined)) {
       for (const key in overrides) if (DIGIT_OPTION.test(key)) delete overrides[key]
     }
     opts = defaults({}, opts, overrides, this.options)
-    return new Intl.NumberFormat(locale ?? this.locale, opts).format(number)
+    return new Intl.NumberFormat(locale ?? this.locale, opts).format(this.formattable())
   }
 
   displayName(): string {
