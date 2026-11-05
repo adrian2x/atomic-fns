@@ -461,6 +461,34 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%nn', date), 'ADn')
   })
 
+  it('strftime fills every %p and %P', () => {
+    const date = new Date(2020, 1, 1, 13, 5)
+    assert.strictEqual(strftime('%I %p %p', date), '01 pm pm')
+    assert.strictEqual(strftime('%I %P %p', date), '01 PM pm')
+    assert.strictEqual(strftime('%p %I', date), 'pm 01')
+    assert.strictEqual(strftime('%P %I', date), 'PM 01')
+  })
+
+  it('strftime %-H drops the leading zero', () => {
+    assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 1)), '1')
+    assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 0)), '0')
+    assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 13)), '13')
+    assert.strictEqual(strftime('%H', new Date(2020, 1, 1, 1)), '01')
+    assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 1), 'ar-EG'), '١')
+  })
+
+  it('strftime numeric directives leave out the unit text of the locale', () => {
+    const date = new Date(2021, 5, 15, 9, 5, 3)
+    assert.strictEqual(strftime('%H:%M', date, 'de-DE'), '09:05')
+    assert.strictEqual(strftime('%H:%M', date, 'fr-FR'), '09:05')
+    assert.strictEqual(strftime('%y/%m/%d', date, 'ja-JP'), '2021/06/15')
+    assert.strictEqual(strftime('%y', date, 'th-TH'), '2564')
+    assert.strictEqual(strftime('%I %P', date, 'ko-KR'), '09 오전')
+    assert.strictEqual(strftime('%I %P', date, 'ja-JP'), '09 午前')
+    assert.strictEqual(strftime('%-H', date, 'de-DE'), '9')
+    assert.strictEqual(strftime('%B', date, 'ja-JP'), '6月')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
@@ -523,4 +551,10 @@ describe('IntlDate', () => {
     // %p No effect on 24h
     assert(strftime('%k:%-M:%-S %p', date).match(/\d+:\d+:\d+$/), strftime('%k:%-M:%-S %p', date))
   })
+})
+it('strftime %-H accepts a timestamp and no date', () => {
+  assert(strftime('%-H', Date.UTC(2020, 0, 1, 9)) === '9')
+  assert(/^\d+$/.test(strftime('%-H', undefined as any)))
+
+  assert(strftime('%-H', null as any) === '0')
 })
