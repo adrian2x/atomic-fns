@@ -607,6 +607,12 @@ it('strftime %-H accepts a timestamp and no date', () => {
 })
 
 describe('Duration', () => {
+  it('exact with a unit leaves the receiver alone', () => {
+    const duration = new Duration({ months: 1 })
+    assert.strictEqual(duration.exact('days'), 30.436875)
+    assert.strictEqual(duration.total('days'), 30)
+  })
+
   it('normalize and rescale leave the receiver alone', () => {
     const duration = new Duration({ hours: 1, minutes: 90 })
     assert.deepStrictEqual(duration.normalize().toObject(), { hours: 2, minutes: 30 })
