@@ -721,6 +721,20 @@ function cloneValue(value, deep, ancestors) {
   ) {
     return cloneArray(value, deep)
   }
+  if (value?.constructor === Map) {
+    const map = new Map()
+    ancestors.set(value, map)
+    for (const [key, item] of value) map.set(key, deep ? cloneValue(item, deep, ancestors) : item)
+    ancestors.delete(value)
+    return map
+  }
+  if (value?.constructor === Set) {
+    const set = new Set()
+    ancestors.set(value, set)
+    for (const item of value) set.add(deep ? cloneValue(item, deep, ancestors) : item)
+    ancestors.delete(value)
+    return set
+  }
   if (isObject(value)) {
     if (isDate(value)) return new Date(value.getTime())
     if (isRegExp(value)) {
