@@ -819,8 +819,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   extend(entries: Iterable<[K, V]>): number {
     let added = 0
     for (const pair of entries) {
-      this.set(pair[0], pair[1] ?? (null as V))
-      added++
+      if (this.set(pair[0], pair[1] ?? (null as V))) added++
     }
     return added
   }

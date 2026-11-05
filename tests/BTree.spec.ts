@@ -304,4 +304,18 @@ describe('BTree', () => {
     assert(tree.keysRange(0, 9, true, 10).length === 10)
     assert(tree.keysRange(0, 9, true, 100).length === 10)
   })
+
+  it('extend counts only new keys', () => {
+    const tree = new BTree([[0, 'zero']])
+    assert(
+      tree.extend([
+        [0, 'a'],
+        [1, 'b'],
+        [1, 'c']
+      ]) === 1
+    )
+    assert(tree.get(0) === 'a')
+    assert(tree.get(1) === 'c')
+    assert(tree.size === 2)
+  })
 })
