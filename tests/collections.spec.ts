@@ -14,6 +14,7 @@ import {
   findLastIndex,
   flatten,
   forEach,
+  forEachRight,
   FrozenSet,
   groupBy,
   insort,
@@ -379,6 +380,19 @@ describe('collections', () => {
       { user: 'pebbles', active: true }
     ]
     assert(findLast(users, 'active') === users[2])
+  })
+
+  it('forEachRight and findLast walk iterables', () => {
+    const seen = [] as unknown[]
+    forEachRight(new Set(['a', 'b']), (value, index) => {
+      seen.push([index, value])
+    })
+    assert.deepEqual(seen, [
+      [1, 'b'],
+      [0, 'a']
+    ])
+    assert(findLast(new Set([1, 2, 3]), (x) => x < 3) === 2)
+    assert(findLast('abc', (x) => x < 'c') === 'b')
   })
 
   it('forEach', () => {
