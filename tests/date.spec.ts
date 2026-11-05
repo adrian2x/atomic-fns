@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { formatDate, IntlDate, strftime } from '../src/i18n/index.js'
+import { asDate, formatDate, IntlDate, strftime } from '../src/i18n/index.js'
 
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })
@@ -487,6 +487,14 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%I %P', date, 'ja-JP'), '09 午前')
     assert.strictEqual(strftime('%-H', date, 'de-DE'), '9')
     assert.strictEqual(strftime('%B', date, 'ja-JP'), '6月')
+  })
+
+  it('asDate reads a fraction of a second', () => {
+    assert.strictEqual(asDate('2020-01-01T00:00:00.5').getMilliseconds(), 500)
+    assert.strictEqual(asDate('2020-01-01T00:00:00.05').getMilliseconds(), 50)
+    assert.strictEqual(asDate('2020-01-01T00:00:00.123456').getMilliseconds(), 123)
+    assert.strictEqual(asDate('2020-01-01T00:00:00.5', true).getUTCMilliseconds(), 500)
+    assert.strictEqual(asDate('2020-01-01T00:00:00').getMilliseconds(), 0)
   })
 
   it('strftime format', () => {

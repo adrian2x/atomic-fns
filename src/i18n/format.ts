@@ -49,7 +49,7 @@ export function asDate(date: string | number | Date, utc = false): Date {
 
     if (d) {
       const m = d[2] - 1 || 0
-      const ms = (d[7] || '0').slice(0, 3)
+      const ms = (d[7] || '').padEnd(3, '0').slice(0, 3)
 
       if (utc) {
         return new Date(Date.UTC(d[1], m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms))
