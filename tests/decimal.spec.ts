@@ -138,4 +138,11 @@ describe('Decimal', () => {
     assert(b.gt(0))
     assert(b.gt(a))
   })
+
+  it('eq answers false for null, undefined and booleans', () => {
+    assert(!decimal('0').eq(null))
+    assert(!decimal('0').eq(undefined))
+    assert(!decimal(1).eq(true))
+    assert(!decimal(0).eq(false))
+  })
 })

@@ -351,6 +351,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {boolean}
    */
   eq(x: any): boolean {
+    if (x == null || typeof x === 'boolean') return false
     let other: Decimal
     try {
       other = decimal(x)
