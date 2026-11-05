@@ -476,6 +476,31 @@ describe('collections', () => {
     })
   })
 
+  it('flatten Object keeps leaf values', () => {
+    const date = new Date(0)
+    const regex = /x/
+    const map = new Map()
+    const fn = () => 1
+    assert.deepStrictEqual(
+      flatten({ date, nan: NaN, big: 1n, nested: { regex, map }, list: [fn], text: '', no: false }),
+      {
+        date,
+        nan: NaN,
+        big: 1n,
+        'nested.regex': regex,
+        'nested.map': map,
+        'list[0]': fn,
+        text: '',
+        no: false
+      }
+    )
+    assert(flatten(date) === date)
+  })
+
+  it('flatten Object drops null, undefined and empty containers', () => {
+    assert.deepStrictEqual(flatten({ a: null, b: undefined, c: {}, d: [], e: 1 }), { e: 1 })
+  })
+
   it('groupBy', () => {
     assert.deepEqual(groupBy([6.1, 4.2, 6.3], Math.floor), { '4': [4.2], '6': [6.1, 6.3] })
   })
