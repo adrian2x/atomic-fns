@@ -162,6 +162,14 @@ describe('operators', () => {
     assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 4, 2)], [1, 3])
   })
 
+  it('islice stops at stop', () => {
+    assert.deepEqual([...islice([1, 2, 3], 0, 0)], [])
+    assert.deepEqual(take(1, islice(range(Infinity), 0, 0)), [])
+    assert.deepEqual([...islice(range(10), 2, 5, 2)], [2, 4])
+    assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 5, 2)], [1, 3, 5])
+    assert.deepEqual([...islice(range(10), 0, 10, 3)], [0, 3, 6, 9])
+  })
+
   it('itake', () => {
     let it = itake(3, [false, 0, '', true, '', []])
     assert.deepEqual([...it], [false, 0, ''])
