@@ -77,7 +77,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @returns {boolean} `true` if key was removed, otherwise `false`.
    */
   delete(item: K): boolean {
-    return this.store.remove(item) !== undefined
+    return this.store.delete(item)
   }
 
   /**
