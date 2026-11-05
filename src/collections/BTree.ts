@@ -306,7 +306,7 @@ class BNode<K, V = any> {
               tree.count--
               i--
               iHigh--
-            } else if (result.value) {
+            } else if ('value' in Object(result)) {
               this.reifyValues()[i] = result.value
             }
           }
