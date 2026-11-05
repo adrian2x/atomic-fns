@@ -1,110 +1,120 @@
-import { Collection } from './abc.js'
-import { SplayTree } from './SplayTree.js'
+import { arrayFromIterable } from '../internal/iterable.js'
+import type { Comparer } from '../operators/index.js'
+import { ValueCollection } from './abc.js'
+import { BTree } from './BTree.js'
 
 /**
- * A `SortedSet` is a set that holds values in order. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as values.
- * @see {@link Comparable}
- * @see {@link Ordered}
- * @template K, V
+ * Set whose values stay ordered by the library total-order `compare` (or a supplied comparator).
+ * Backed by {@link BTree}. `add` of an existing value is a no-op. Like native `Set`, it stores
+ * `-0` as `+0`.
+ *
+ * @template T
  */
-export class SortedSet<T> extends Collection {
-  private readonly store: SplayTree<T>
+export class SortedSet<T> extends ValueCollection<T> {
+  readonly #tree: BTree<T, true>
+  readonly #compareFn: Comparer<T> | undefined
+
   /**
-   * Creates a new `SortedSet` object.
-   * @param {Iterable<T>} [iterable] Initialize the set with entries.
-   * @param {Comparer} [compareFn] The `compare` function to sort keys.
+   * @param values Initial values; `null` means none, as for native `Set`.
+   * @param compareFn Value comparator. Defaults to the library total-order `compare`.
    */
-  constructor(iterable?: Iterable<T>, compareFn?) {
+  constructor(values?: Iterable<T> | null, compareFn?: Comparer<T>) {
     super()
-    this.store = new SplayTree(compareFn)
-    if (iterable) {
-      for (const key of iterable) {
-        this.store.add(key)
-      }
-    }
+    this.#compareFn = compareFn
+    this.#tree = new BTree<T, true>(undefined, compareFn)
+    if (values == null) return
+    for (const value of arrayFromIterable<T>(values)) this.#insert(value)
+  }
+
+  get size(): number {
+    return this.#tree.size
+  }
+
+  get isFrozen(): boolean {
+    return this.#tree.isFrozen
+  }
+
+  protected override cloneFrom(values: Iterable<T>): this {
+    return Reflect.construct(this.constructor, [values, this.#compareFn]) as this
+  }
+
+  protected override cloneInsert(value: T): void {
+    this.add(value)
+  }
+
+  readonly [Symbol.toStringTag] = 'SortedSet'
+
+  /**
+   * Insert `value` if absent. Existing values are left unchanged.
+   * @returns `this`
+   */
+  add(value: T): this {
+    this.#assertMutable()
+    this.#insert(value)
+    return this
+  }
+
+  has(value: T): boolean {
+    return this.#tree.has(value)
+  }
+
+  delete(value: T): boolean {
+    this.#assertMutable()
+    return this.#tree.delete(value)
+  }
+
+  clear(): void {
+    this.#assertMutable()
+    this.#tree.clear()
   }
 
   /**
-   * Inserts a new value in order in the `Set`, if the value doesn't exist.
-   * @param {T} value
-   * @returns {this} Returns the Set object.
+   * Smallest value, or `undefined` when empty.
    */
-  add(value: T) {
-    this.store.add(value)
+  min(): T | undefined {
+    return this.#tree.firstKey()
+  }
+
+  /**
+   * Largest value, or `undefined` when empty.
+   */
+  max(): T | undefined {
+    return this.#tree.lastKey()
+  }
+
+  values(): IteratorObject<T> {
+    return this.#tree.keys()
+  }
+
+  /**
+   * Values in descending order as `[value, value]` pairs.
+   */
+  entriesDescending(): IteratorObject<[T, T]> {
+    return this.#tree.entriesDescending().map(([k]): [T, T] => [k, k])
+  }
+
+  /**
+   * Reject further mutators permanently (like `Object.freeze`).
+   */
+  freeze(): this {
+    this.#tree.freeze()
     return this
   }
 
   /**
-   * Returns the smallest value in the set.
-   * @returns {?T}
+   * Value at `index` (Array.prototype.at rules), or `undefined` out of range.
    */
-  min() {
-    return this.store.min()
+  at(index: number): T | undefined {
+    const entry = this.#tree.at(index)
+    return entry === undefined ? undefined : entry[0]
   }
 
-  /**
-   * Returns the largest value in the set.
-   * @returns {?T}
-   */
-  max() {
-    return this.store.max()
+  #insert(value: T): void {
+    const stored = value === 0 ? (0 as T) : value
+    if (!this.#tree.has(stored)) this.#tree.set(stored, true)
   }
 
-  /**
-   * Removes the value from the set and returns `true` if the value was found and removed.
-   * @param {T} value
-   * @returns {boolean} `true` if the value was found and removed.
-   */
-  delete(value: T) {
-    return this.store.remove(value) !== undefined
-  }
-
-  /**
-   * Removes all values in the set.
-   */
-  clear() {
-    return this.store.clear()
-  }
-
-  /**
-   * Returns the total number of elements in the set.
-   * @returns {number}
-   */
-  get size() {
-    return this.store.size
-  }
-
-  /**
-   * Check if there are no values in the set.
-   * @returns {boolean} `true` if is empty.
-   */
-  empty() {
-    return this.store.empty()
-  }
-
-  /**
-   * Returns `true` if the `value` exists.
-   * @param {T} value
-   * @returns {boolean} `true` if value is found, otherwise `false`.
-   */
-  contains(value: T) {
-    return this.store.contains(value)
-  }
-
-  /**
-   * Returns `true` if the `value` exists.
-   * @param {T} value
-   * @returns {boolean} `true` if value is found, otherwise `false`.
-   */
-  has(value: T) {
-    return this.store.contains(value)
-  }
-
-  /**
-   * Returns a new iterator of all values **in-order**.
-   * @returns {Iterable<T>}
-   */
-  values() {
-    return this.store.keys()
+  #assertMutable(): void {
+    if (this.isFrozen) throw new TypeError('SortedSet is frozen')
   }
 }

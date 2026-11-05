@@ -1,141 +1,149 @@
-import { Mapping } from './abc.js'
+import { MapCollection } from './abc.js'
+
+interface Entry<K, V> {
+  readonly key: K
+  value: V
+  older?: Entry<K, V>
+  newer?: Entry<K, V>
+}
 
 /**
- * Implements a Least Recently Used fixed-capacity cache which supports updating, removing, and accessing keys in O(1).
+ * Fixed-capacity Least Recently Used cache. `get` refreshes recency; `has` does not. Iterators and
+ * `forEach` walk a snapshot taken when they start, so `get` and `set` inside a loop are safe.
+ *
+ * Recency lives in a linked list. Keeping it in a Map's insertion order would need a delete and a
+ * set per hit, and V8 scans the slots those leave behind, so hot keys and evictions cost O(capacity).
+ *
  * @template K, V
  */
-export class LRUCache<K = any, V = any> extends Mapping<K, V> {
-  protected items = new Map<K, V>()
-  protected maxSize: number
+export class LRUCache<K = unknown, V = unknown> extends MapCollection<K, V> {
+  readonly #items = new Map<K, Entry<K, V>>()
+  readonly #capacity: number
+  #oldest?: Entry<K, V>
+  #newest?: Entry<K, V>
 
   /**
-   * Creates a new instance of fixed size.
-   * @param {number} capacity
+   * @param capacity Maximum number of entries; must be an integer >= 1.
+   * @throws {RangeError} when capacity is not an integer >= 1.
    */
   constructor(capacity = 1024) {
     super()
-    this.maxSize = capacity
+    if (!Number.isInteger(capacity) || capacity < 1) {
+      throw new RangeError('capacity must be an integer >= 1')
+    }
+    this.#capacity = capacity
   }
 
   /**
-   * Adds a new element with a specified `key` and `value` to the cache. If an element with the same key already exists, the element will be updated.
-   * @param {K} key
-   * @param {V} value
-   * @returns {this}
+   * Set `key` to `value`. Updating an existing key does not evict. Inserting a new key at
+   * capacity evicts the least recently used entry.
    */
-  set(key: K, value: V) {
-    if (this.items.size === this.maxSize) {
-      // Because ES6 maps remember insertion order, we can evict the first key
-      const lastKey = this.items.keys().next().value
-      this.items.delete(lastKey)
+  set(key: K, value: V): this {
+    const entry = this.#items.get(key)
+    if (entry !== undefined) {
+      entry.value = value
+      this.#refresh(entry)
+      return this
     }
-    // Delete the previous key to update the new insertion order
-    this.items.delete(key)
-    this.items.set(key, value)
+    const oldest = this.#oldest
+    if (oldest !== undefined && this.#items.size >= this.#capacity) {
+      this.#unlink(oldest)
+      this.#items.delete(oldest.key)
+    }
+    const added: Entry<K, V> = { key, value }
+    this.#items.set(key, added)
+    this.#append(added)
     return this
   }
 
-  /**
-   * This is just an alias of {@link LRUCache.set}.
-   * @param {K} key The key to add (note value will be `undefined`)
-   * @returns {this}
-   */
-  add(key: K) {
-    return this.set(key, undefined as V)
+  has(key: K): boolean {
+    return this.#items.has(key)
   }
 
   /**
-   * Returns `true` if the specified `key` is found on the cache.
-   * @param {K} key
-   * @returns {boolean}
+   * Return the value for `key`, refreshing its recency. Missing keys return `undefined`.
    */
-  contains(key: K) {
-    return this.items.has(key)
+  get(key: K): V | undefined {
+    const entry = this.#items.get(key)
+    if (entry === undefined) return undefined
+    this.#refresh(entry)
+    return entry.value
   }
 
-  /**
-   * Get the value associated with the specified `key`, or `undefined` it not found.
-   * @param {K} key
-   * @returns {?V} The associated value or `undefined`
-   */
-  get(key: K) {
-    if (this.items.has(key)) {
-      const value = this.items.get(key)
-      // Delete the previous key to update the new insertion order
-      this.items.delete(key)
-      this.items.set(key, value)
-      return value
-    }
+  clear(): void {
+    this.#items.clear()
+    this.#oldest = undefined
+    this.#newest = undefined
   }
 
-  /**
-   * Removes all keys and values from the cache.
-   * @returns {this}
-   */
-  clear() {
-    this.items.clear()
-    return this
+  delete(key: K): boolean {
+    const entry = this.#items.get(key)
+    if (entry === undefined) return false
+    this.#unlink(entry)
+    return this.#items.delete(key)
   }
 
-  /**
-   * Removes a key from the cache and returns `true` if the key existed or `false` otherwise.
-   * @param {K} key
-   * @returns {boolean} `true` if the key existed and was removed
-   */
-  delete(key: K) {
-    return this.items.delete(key)
+  get size(): number {
+    return this.#items.size
   }
 
-  /**
-   * Removes the value associated with the specified `key` from the cache and returns the removed value if the key existed.
-   * @param {K} key
-   * @returns {?V} The value if it was removed or `undefined`.
-   */
-  remove(key: K) {
-    const value = this.items.get(key)
-    this.items.delete(key)
-    return value
+  protected override cloneFrom(entries: Iterable<[K, V]>): this {
+    const copy = Reflect.construct(this.constructor, [this.#capacity]) as this
+    for (const [k, v] of entries) copy.set(k, v)
+    return copy
   }
 
-  /**
-   * Returns the total number of elements in the cache.
-   */
-  get size() {
-    return this.items.size
+  /** Maximum number of entries. */
+  get capacity(): number {
+    return this.#capacity
   }
 
-  /**
-   * Returns the total capacity of the cache.
-   */
-  get capacity() {
-    return this.maxSize
+  readonly [Symbol.toStringTag] = 'LRUCache'
+
+  keys(): IteratorObject<K> {
+    return this.#snapshot()
+      .map((entry) => entry.key)
+      .values()
   }
 
-  /**
-   * Returns an iterable of all the keys in the cache, in insertion order.
-   * @returns {IterableIterator<K>}
-   */
-  keys() {
-    return this.items.keys()
+  values(): IteratorObject<V> {
+    return this.#snapshot()
+      .map((entry) => entry.value)
+      .values()
   }
 
-  /**
-   * Returns an iterable of all the values in the cache, in insertion order.
-   * @returns {IterableIterator<V>}
-   */
-  values() {
-    return this.items.values()
+  entries(): IteratorObject<[K, V]> {
+    return this.#snapshot()
+      .map((entry): [K, V] => [entry.key, entry.value])
+      .values()
   }
 
-  /**
-   * Returns an iterable of all the [key, value] pairs in the cache, in insertion order.
-   * @returns {IterableIterator<[K, V]>}
-   */
-  entries() {
-    return this.items.entries()
+  #snapshot(): Entry<K, V>[] {
+    const entries: Entry<K, V>[] = []
+    for (let entry = this.#oldest; entry !== undefined; entry = entry.newer) entries.push(entry)
+    return entries
   }
 
-  [Symbol.iterator]() {
-    return this.entries()
+  #refresh(entry: Entry<K, V>): void {
+    if (entry === this.#newest) return
+    this.#unlink(entry)
+    this.#append(entry)
+  }
+
+  #unlink(entry: Entry<K, V>): void {
+    const { older, newer } = entry
+    if (older === undefined) this.#oldest = newer
+    else older.newer = newer
+    if (newer === undefined) this.#newest = older
+    else newer.older = older
+    entry.older = undefined
+    entry.newer = undefined
+  }
+
+  #append(entry: Entry<K, V>): void {
+    entry.older = this.#newest
+    if (this.#newest === undefined) this.#oldest = entry
+    else this.#newest.newer = entry
+    this.#newest = entry
   }
 }

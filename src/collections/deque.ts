@@ -1,337 +1,283 @@
-import { KeyError, ValueError } from '../globals/index.js'
-import { IterableIterator } from '../itertools/index.js'
-import { eq } from '../operators/index.js'
-import { Iteratee } from '../types.js'
-import { Sequence } from './abc.js'
+import { assertNotHugeSparse } from '../internal/arrayKeys.js'
+import { isTypedArray, requireIterable } from '../internal/iterable.js'
+import { truncateForError } from '../internal/truncate.js'
+import { sameValueZero } from '../operators/index.js'
+import { SetCollection } from './abc.js'
+
+const MIN_CAPACITY = 8
 
 /**
- * Fixed capacity double-ended queue implemented as ring deque.
+ * Double-ended queue backed by a ring buffer.
+ * Grows by doubling when unbounded; with `maxlen`, evicts from the opposite end (Python deque).
+ *
  * @template T
  */
-export class Deque<T = any> extends Sequence<T> {
-  items: T[]
-  start: number = 0
-  count: number = 0
-  capacity: number
-  ArrayConstructor: any
+export class Deque<T> extends SetCollection<T, number> {
+  #buf: { [i: number]: T; length: number }
+  #cap: number
+  #head = 0
+  #size = 0
+  readonly #maxlen: number | undefined
+  readonly #arrType: (new (n: number) => { [i: number]: T; length: number }) | undefined
+  readonly #empty: T
 
   /**
-   * Creates a new `Deque` instance of a fixed size.
-   * @param {Array} [arrType = []] The initial elements or array type to use (accepts any kind of typed array).
-   * @param {number} [capacity=1024] The fixed size of the deque. Defaults to `1024`.
+   * @param items Initial elements, read one at a time. When longer than `maxlen`, only the last
+   * `maxlen` remain.
+   * @param options.maxlen Maximum size; overflow evicts from the opposite end. `0` makes push/unshift
+   * no-ops. `null`, `undefined` and `Infinity` mean unbounded.
+   * @param options.arrType Typed-array (or similar) constructor used for storage.
+   * @throws {RangeError} when `maxlen` is negative, not an integer, or above
+   * `Number.MAX_SAFE_INTEGER`.
    */
-  constructor(arrType = [] as T[], capacity = 1024) {
+  constructor(
+    items?: Iterable<T> | null,
+    options?: {
+      maxlen?: number | null
+      arrType?: new (n: number) => { [i: number]: T; length: number }
+    }
+  ) {
     super()
-    if (typeof capacity !== 'number' || capacity <= 0)
-      throw new ValueError(`Deque capacity should be a positive integer.`)
+    const maxlen = options?.maxlen ?? undefined
+    if (
+      maxlen !== undefined &&
+      maxlen !== Infinity &&
+      (!Number.isInteger(maxlen) || maxlen < 0 || maxlen > Number.MAX_SAFE_INTEGER)
+    ) {
+      throw new RangeError(
+        'maxlen must be a non-negative integer <= Number.MAX_SAFE_INTEGER or Infinity'
+      )
+    }
+    this.#maxlen = maxlen
+    this.#arrType = options?.arrType
+    this.#empty = this.#alloc(1)[0]
 
-    this.ArrayConstructor = arrType.constructor
-    this.capacity = capacity
-    this.items = new this.ArrayConstructor(arrType.length || this.capacity)
-    this.clear()
+    const source = requireIterable<T>(items ?? [])
+    const isArray = isTypedArray(source)
+    if (isArray) assertNotHugeSparse(source)
+    const known = isArray ? source.length : 0
+    const bound = maxlen === undefined || maxlen === Infinity ? known : Math.min(known, maxlen)
+    this.#cap = Math.max(MIN_CAPACITY, capacityFor(bound, maxlen))
+    this.#buf = this.#alloc(this.#cap)
 
-    if (arrType.length) {
-      for (const item of arrType) {
-        this.append(item)
-      }
+    for (const x of source) {
+      this.#pushOne(x)
     }
   }
 
-  /** Returns the total number of elements in the deque. */
-  get size() {
-    return this.count
+  get size(): number {
+    return this.#size
+  }
+
+  protected override cloneFrom(values: Iterable<T>): this {
+    const options = { maxlen: this.#maxlen, arrType: this.#arrType }
+    return Reflect.construct(this.constructor, [values, options]) as this
+  }
+
+  protected override cloneInsert(value: T): void {
+    this.push(value)
   }
 
   /**
-   * Method used to clear the structure.
+   * Maximum size when constructed with `maxlen`, otherwise `undefined`.
    */
-  clear() {
-    // Properties
-    this.start = 0
-    this.count = 0
+  get maxlen(): number | undefined {
+    return this.#maxlen
+  }
+
+  readonly [Symbol.toStringTag] = 'Deque'
+
+  clear(): void {
+    this.#cap = MIN_CAPACITY
+    this.#buf = this.#alloc(this.#cap)
+    this.#head = 0
+    this.#size = 0
   }
 
   /**
-   * Alias of {@link Deque.append}
-   * @param {T} item Item to append.
-   * @returns {number} Returns the new size of the deque.
+   * Append one or more elements at the end.
+   * @returns The new size.
    */
-  add(item) {
-    return this.append(item)
+  push(...xs: T[]): number {
+    for (const x of xs) this.#pushOne(x)
+    return this.#size
   }
 
   /**
-   * Appends a new element to the end of the deque.
-   * @param {T} item Item to append.
-   * @returns {number} Returns the new size of the deque.
+   * Insert one or more elements at the front, preserving argument order.
+   * @returns The new size.
    */
-  append(item) {
-    if (this.count === this.capacity) this.popleft()
-
-    const index = (this.start + this.count) % this.capacity
-
-    this.items[index] = item
-
-    return ++this.count
+  unshift(...xs: T[]): number {
+    for (let i = xs.length - 1; i >= 0; i--) this.#unshiftOne(xs[i])
+    return this.#size
   }
 
   /**
-   * Appends a new element to the beginning of the deque.
-   * @param {T} item Item to prepend.
-   * @returns {number} Returns the new size of the deque.
+   * Remove and return the last element, or `undefined` when empty.
    */
-  appendleft(item) {
-    if (this.count === this.capacity) this.pop()
-
-    let index = this.start - 1
-
-    if (this.start === 0) index = this.capacity - 1
-
-    this.items[index] = item
-    this.start = index
-
-    return ++this.count
+  pop(): T | undefined {
+    if (this.#size === 0) return undefined
+    const j = this.#phys(this.#size - 1)
+    const x = this.#buf[j]
+    this.#buf[j] = this.#empty
+    this.#size--
+    return x
   }
 
   /**
-   * Removes and returns the element at the end of the deque.
-   * @returns {?T} Returns the popped item.
+   * Remove and return the first element, or `undefined` when empty.
    */
-  pop() {
-    if (this.count === 0) return
-
-    const index = (this.start + this.count - 1) % this.capacity
-
-    this.count--
-
-    return this.items[index]
+  shift(): T | undefined {
+    if (this.#size === 0) return undefined
+    const x = this.#buf[this.#head]
+    this.#buf[this.#head] = this.#empty
+    this.#head = (this.#head + 1) % this.#cap
+    this.#size--
+    return x
   }
 
   /**
-   * Alias of {@link Deque.pop}
-   * @returns {?T} Returns the popped item.
+   * Element at index `i` (negative from the end). Out of range or empty -> `undefined`.
+   * The index coerces as in `Array.prototype.at`, so `NaN` and non-numbers mean `0`.
    */
-  remove() {
-    return this.pop()
+  at(i: number): T | undefined {
+    const idx = this.#fromEnd(i)
+    if (idx < 0 || idx >= this.#size) return undefined
+    return this.#buf[this.#phys(idx)]
   }
 
   /**
-   * Removes and returns the element at the beginning of the deque.
-   * @returns {?T} Returns the removed deque element.
+   * Replace the element at index `i` (negative from the end). The index coerces as in {@link at}.
+   * @returns `this`
+   * @throws {RangeError} when the index is out of range.
    */
-  popleft() {
-    if (this.count === 0) return
-
-    const index = this.start
-
-    this.count--
-    this.start++
-
-    if (this.start === this.capacity) this.start = 0
-
-    return this.items[index]
-  }
-
-  /**
-   * Returns the element at the beginning of the deque.
-   * @returns {?T} The element if exists
-   */
-  first() {
-    if (this.count === 0) return
-
-    return this.items[this.start]
-  }
-
-  /**
-   * Returns the element at a specified index position in the deque.
-   * @param {number} index The given index
-   * @returns {?T} The element if exists
-   */
-  get(index) {
-    if (this.count === 0) return
-
-    index = this.start + index
-    if (index < 0) index += this.count
-
-    if (index > this.capacity) index -= this.capacity
-
-    return this.items[index]
-  }
-
-  /**
-   * Update the element at a given `index`.
-   * @param {number} index The given index
-   */
-  set(index: number, value: T) {
-    if (index < 0) index += this.count
-    if (index > this.count) throw new KeyError(`Invalid index: ${index} not in Deque.`)
-    this.items[index] = value
-  }
-
-  /**
-   * Check if a given element is in the deque.
-   * @param {T} x The value to find
-   * @returns {boolean} `true` if the value is found
-   */
-  contains(x) {
-    for (const value of this.values()) {
-      if (eq(x, value)) return true
+  set(i: number, v: T): this {
+    const idx = this.#fromEnd(i)
+    if (idx < 0 || idx >= this.#size) {
+      throw new RangeError(`index ${truncateForError(i)} out of range`)
     }
-    return false
+    this.#buf[this.#phys(idx)] = v
+    return this
+  }
+
+  has(value: T): boolean {
+    return this.includes(value)
   }
 
   /**
-   * Returns the first element that matches the `iteratee` function.
-   * @param {Iteratee<T>} iteratee A function that will be invoked per element
-   * @returns {?T} The element if exists
+   * `true` when `x` is present (SameValueZero).
    */
-  find(iteratee: Iteratee<T>) {
-    for (const [key, value] of this.entries()) {
-      if (iteratee(value, key, this)) return value
+  includes(x: T): boolean {
+    return this.values().some((v) => sameValueZero(v, x))
+  }
+
+  /**
+   * First element for which `fn` is truthy, or `undefined`.
+   */
+  find(fn: (v: T, i: number) => unknown): T | undefined {
+    return this.values().find((v, i) => fn(v, i))
+  }
+
+  override forEach(cb: (value: T, key: number, coll: this) => void, thisArg?: unknown): void {
+    for (let i = 0; i < this.#size; i++) {
+      cb.call(thisArg, this.#buf[this.#phys(i)], i, this)
     }
   }
 
   /**
-   * Calls `iteratee` function for every element in the deque.
-   * @param {Iteratee<T>} iteratee A function that will be invoked per element
+   * Copy of the elements in order.
    */
-  forEach(iteratee) {
-    const c = this.capacity
-    const l = this.count
-    let i = this.start
-    let j = 0
+  toArray(): T[] {
+    return this.values().toArray()
+  }
 
-    while (j < l) {
-      iteratee(this.items[i], j, this)
-      i++
-      j++
+  /**
+   * Copy of the elements in reverse order.
+   */
+  toReversed(): T[] {
+    return this.values().toArray().toReversed()
+  }
 
-      if (i === c) i = 0
+  override keys(): IteratorObject<number> {
+    return Iterator.from(this.#keys())
+  }
+
+  values(): IteratorObject<T> {
+    return Iterator.from(this.#values())
+  }
+
+  override entries(): IteratorObject<[number, T]> {
+    return Iterator.from(this.#entries())
+  }
+
+  *#keys(): Generator<number> {
+    for (let i = 0; i < this.#size; i++) yield i
+  }
+
+  *#values(): Generator<T> {
+    for (let i = 0; i < this.#size; i++) yield this.#buf[this.#phys(i)]
+  }
+
+  *#entries(): Generator<[number, T]> {
+    for (let i = 0; i < this.#size; i++) yield [i, this.#buf[this.#phys(i)]]
+  }
+
+  /** Index `i` as `Array.prototype.at` reads it: truncated, `NaN` as `0`, negative from the end. */
+  #fromEnd(i: number): number {
+    const idx = Math.trunc(i) || 0
+    return idx < 0 ? idx + this.#size : idx
+  }
+
+  #phys(i: number): number {
+    return (this.#head + i) % this.#cap
+  }
+
+  #alloc(n: number): { [i: number]: T; length: number } {
+    if (this.#arrType) return new this.#arrType(n)
+    return new Array<T>(n)
+  }
+
+  #grow(): void {
+    const needed = this.#size + 1
+    let newCap = Math.max(this.#cap * 2, needed)
+    if (this.#maxlen !== undefined && this.#maxlen !== Infinity) {
+      if (this.#cap >= this.#maxlen) return
+      newCap = Math.min(newCap, this.#maxlen)
     }
+    if (newCap <= this.#cap) return
+    const nb = this.#alloc(newCap)
+    for (let i = 0; i < this.#size; i++) nb[i] = this.#buf[this.#phys(i)]
+    this.#buf = nb
+    this.#cap = newCap
+    this.#head = 0
   }
 
-  /**
-   * Returns a new array with all the elements in reverse order.
-   * @returns {Array<T>} The elements reversed
-   */
-  reversed() {
-    return this.toArray().reverse()
-  }
-
-  /**
-   * Returns a new array with all the elements in the order they were added to the deque.
-   * @returns {Array<T>} The elements array
-   */
-  toArray() {
-    // Optimization
-    const offset = this.start + this.count
-
-    if (offset < this.capacity) return this.items.slice(this.start, offset)
-
-    const array = new this.ArrayConstructor(this.count)
-    const c = this.capacity
-    const l = this.count
-    let i = this.start
-    let j = 0
-
-    while (j < l) {
-      array[j] = this.items[i]
-      i++
-      j++
-
-      if (i === c) i = 0
+  #pushOne(x: T): void {
+    if (this.#maxlen !== undefined && this.#size === this.#maxlen) {
+      if (this.#maxlen === 0) return
+      this.shift()
     }
-
-    return array
+    if (this.#size === this.#cap) this.#grow()
+    this.#buf[this.#phys(this.#size)] = x
+    this.#size++
   }
 
-  /**
-   * Returns an iterator over the deque's values.
-   * @returns {Iterator}
-   */
-  values(): Iterable<T> {
-    const items = this.items
-    const c = this.capacity
-    const l = this.count
-    let i = this.start
-    let j = 0
-
-    return IterableIterator(() => {
-      if (j >= l)
-        return {
-          done: true,
-          value: undefined
-        }
-
-      const value = items[i]
-
-      i++
-      j++
-
-      if (i === c) i = 0
-
-      return { value }
-    })
+  #unshiftOne(x: T): void {
+    if (this.#maxlen !== undefined && this.#size === this.#maxlen) {
+      if (this.#maxlen === 0) return
+      this.pop()
+    }
+    if (this.#size === this.#cap) this.#grow()
+    this.#head = (this.#head - 1 + this.#cap) % this.#cap
+    this.#buf[this.#head] = x
+    this.#size++
   }
+}
 
-  /**
-   * Alias of {@link Deque.values}. Returns iterator of values.
-   */
-  keys() {
-    return this.values()
-  }
-
-  /**
-   * Creates an iterator of `[index, value]` pairs for all elements in the deque.
-   * @returns {Iterator}
-   */
-  entries() {
-    const items = this.items
-    const c = this.capacity
-    const l = this.count
-    let i = this.start
-    let j = 0
-
-    return IterableIterator<[number, T]>(() => {
-      if (j >= l)
-        return {
-          done: true,
-          value: undefined
-        }
-
-      const value = items[i]
-
-      i++
-
-      if (i === c) i = 0
-
-      return {
-        value: [j++, value]
-      }
-    })
-  }
-
-  [Symbol.iterator]() {
-    return this.values()
-  }
-
-  [Symbol.for('nodejs.util.inspect.custom')]() {
-    return this.inspect()
-  }
-
-  // This is just for debugging in nodejs
-  inspect() {
-    const array = this.toArray()
-
-    array.type = this.ArrayConstructor.name
-    array.capacity = this.capacity
-
-    // Trick so that node displays the name of the constructor
-    Object.defineProperty(array, 'constructor', {
-      value: Deque,
-      enumerable: false
-    })
-
-    return array
-  }
+/** Initial buffer capacity: enough for `bound` live slots, never above finite maxlen. */
+function capacityFor(bound: number, maxlen: number | undefined): number {
+  if (bound <= 1) return 1
+  if (maxlen !== undefined && maxlen !== Infinity && bound >= maxlen) return maxlen
+  if (bound > 2 ** 30) return bound
+  return 1 << (32 - Math.clz32(bound - 1))
 }

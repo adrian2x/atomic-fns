@@ -4,262 +4,523 @@
  * @module functools
  */
 
-import { Function } from '../globals/index.js'
+import type { AnyFunction } from '../types.js'
 
 /**
- * Creates a function that invokes `fn` with the this binding of `thisArg` and `partials` as partially applied arguments.
- * @param {Function} fn The function to bind.
- * @param {*} thisArg The `this` value of `fn`.
- * @param {...*} [partials] The arguments to prepend to `fn`.
- * @returns {Function} Returns the new bound function.
- * @see {@link partial}
+ * A loosely typed callable used for curry return values.
+ * Recursive so arity-splitting calls type-check; the final application is a value at runtime.
  */
-export function bind(fn: Function, thisArg, ...partials) {
-  return fn.bind(thisArg, ...partials)
+export type LooseFunction = (...args: unknown[]) => LooseFunction
+
+function assertFunction(fn: unknown): void {
+  if (typeof fn !== 'function') throw new TypeError('Expected a function')
 }
 
 /**
- * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least arity number of arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on. The arity of `func` may be specified if `func.length` is not sufficient.
- * @param {Function} func The function to curry.
- * @returns Returns the new curried function.
+ * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least `arity` arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on. `func` runs with the `this` of the latest call.
+ * @param func The function to curry.
+ * @param arity The number of arguments to wait for (default `func.length`).
+ * @returns The new curried function.
  */
-export function curry(func: Function) {
-  return function curried(...args) {
-    if (args.length >= func.length) {
-      return func.apply(this, args)
+export function curry<A extends unknown[], R>(
+  func: (...args: A) => R,
+  arity?: number
+): LooseFunction & ((...args: A) => R) {
+  assertFunction(func)
+  const required = arity ?? func.length
+  const curried = function (this: unknown, ...args: unknown[]): unknown {
+    if (args.length >= required) {
+      return Reflect.apply(func, this, args)
     }
 
-    return (...args2) => {
+    return function (this: unknown, ...args2: unknown[]): unknown {
       return curried.apply(this, args.concat(args2))
     }
   }
+  // TypeScript cannot express finite variadic curry arity on a recursive helper
+  return curried as LooseFunction & ((...args: A) => R)
 }
 
 /**
  * Creates a function that invokes `fn` with partials prepended to the arguments it receives.
- * **Note:** The given function will have `this` bound to `undefined`. If using `this` inside `fn`, consider {@link bind} instead.
- * @param {Function} fn The function to bind.
- * @param {...*} [args] The arguments to apply to `fn`.
- * @returns {Function} Returns the new partially applied function
+ * The given function will have `this` bound to `undefined`.
+ * @param fn The function to partially apply.
+ * @param args The arguments to apply to `fn`.
+ * @returns The new partially applied function.
  */
-export function partial(fn, ...args) {
-  return bind(fn, undefined, ...args)
+export function partial<A extends unknown[], R>(
+  fn: (...args: A) => R,
+  ...args: Partial<A>
+): (...rest: unknown[]) => R {
+  assertFunction(fn)
+  return (...rest: unknown[]) => fn(...([...args, ...rest] as A))
+}
+
+/** Flattens one level, as Lodash `flow` does, and refuses anything but functions. */
+function pipelineOf<F extends AnyFunction>(fns: readonly (F | readonly F[])[]): F[] {
+  const pipeline = fns.flat() as F[]
+  pipeline.forEach(assertFunction)
+  return pipeline
+}
+
+function pipeThrough(
+  thisArg: unknown,
+  fns: readonly ((...a: never[]) => unknown)[],
+  args: ArrayLike<unknown>
+): unknown {
+  if (fns.length === 0) return args[0]
+  let result: unknown
+  let first = true
+  for (const fn of fns) {
+    if (first) {
+      result = Reflect.apply(fn, thisArg, args)
+      first = false
+    } else {
+      result = Reflect.apply(fn, undefined, [result])
+    }
+  }
+  return result
 }
 
 /**
  * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from left to right.
- * @param {...*} [args] The set of functions to apply.
- * @returns {Function} A new function that applies each given function on the result of the previous one.
+ * The first function receives all call arguments (and `this`); each later function receives the previous result.
+ * With no functions it returns its first argument. Arrays of functions flatten one level, as in Lodash; anything else throws `TypeError('Expected a function')`.
+ * @returns A new function that applies each given function on the result of the previous one.
  */
-export function flow(...args) {
-  return (x) => {
-    for (const fn of args) {
-      x = fn(x)
-    }
-    return x
+export function flow(): <T>(value: T) => T
+export function flow<T>(fns: readonly ((value: T) => T)[]): (value: T) => T
+export function flow<A extends unknown[], R>(fn: (...a: A) => R): (...a: A) => R
+export function flow<A extends unknown[], B, C>(f1: (...a: A) => B, f2: (b: B) => C): (...a: A) => C
+export function flow<A extends unknown[], B, C, D>(
+  f1: (...a: A) => B,
+  f2: (b: B) => C,
+  f3: (c: C) => D
+): (...a: A) => D
+export function flow<A extends unknown[], B, C, D, E>(
+  f1: (...a: A) => B,
+  f2: (b: B) => C,
+  f3: (c: C) => D,
+  f4: (d: D) => E
+): (...a: A) => E
+export function flow<A extends unknown[], B, C, D, E, F>(
+  f1: (...a: A) => B,
+  f2: (b: B) => C,
+  f3: (c: C) => D,
+  f4: (d: D) => E,
+  f5: (e: E) => F
+): (...a: A) => F
+export function flow<A extends unknown[], B, C, D, E, F, G>(
+  f1: (...a: A) => B,
+  f2: (b: B) => C,
+  f3: (c: C) => D,
+  f4: (d: D) => E,
+  f5: (e: E) => F,
+  f6: (f: F) => G
+): (...a: A) => G
+/** @param fns The set of functions to apply. */
+export function flow(...fns: (AnyFunction | readonly AnyFunction[])[]): (...a: never[]) => unknown {
+  const pipeline = pipelineOf(fns)
+  return function (this: unknown, ...args: never[]): unknown {
+    return pipeThrough(this, pipeline, args)
   }
 }
 
 /**
- * This is just an alias for the {@link flow} function.
+ * Alias for {@link flow}.
  * @see {@link flow}
  */
 export const pipe = flow
 
 /**
- * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from right to left.
- * @param {...*} [args] The set of functions to apply.
- * @returns {Function} A new function that applies each given function on the result of the previous step.
+ * Creates a function composition from a given set of functions applied right to left.
+ * Does not mutate the argument list. Empty and array arguments behave as in {@link flow}.
+ * @param args The set of functions to apply.
+ * @returns A new function that applies each given function on the result of the previous step.
  */
-export function compose(...args) {
-  return flow(args.reverse())
+export function compose<A extends unknown[]>(
+  ...args: (((...args: A) => unknown) | readonly ((...args: A) => unknown)[])[]
+): (...args: A) => unknown {
+  const reversed: ((...a: never[]) => unknown)[] = pipelineOf(args).reverse()
+  return function (this: unknown, ...callArgs: A): unknown {
+    return pipeThrough(this, reversed, callArgs)
+  }
 }
 
 /**
- * Creates a function that memoizes the result of `func`. If `resolver` is provided, it determines the cache key for storing the result based on the arguments provided to the memoized function. By default, the first argument provided to the memoized function is used as the map cache key.
- *
- * @param {Function} func The function to have its output memoized.
- * @param {Function} [resolver] The function to resolve the cache key.
- * @return {Function} Returns the new memoized function.
+ * A memoized function with its cache `Map` and a `clear` helper.
  */
-export function memoize<T>(func: Function<T>, resolver?: Function): Function<T> {
-  const cache = new Map<any, T>()
-  return (...args) => {
-    const key = resolver ? resolver(...args) : args[0]
-    const prev = cache.get(key)
-    if (prev !== undefined) return prev
-    const value = func(...args)
-    cache.set(key, value)
+export type Memoized<F extends AnyFunction> = F & {
+  cache: Map<unknown, ReturnType<F>>
+  clear(): void
+}
+
+/** A Map at the engine's size limit throws; the value is still good, it just goes unremembered. */
+function remember<V>(store: Map<unknown, V>, key: unknown, value: V): void {
+  try {
+    store.set(key, value)
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error
+  }
+}
+
+/**
+ * Creates a function that memoizes the result of `fn`. If `resolver` is provided, it determines the cache key from the arguments. By default the first argument is the key. Uses `Map.has`, so `undefined` results are cached. Invokes `fn` and `resolver` with the caller's `this`. Exposes `memoized.cache`, which lookups read and may be replaced, and `memoized.clear()`.
+ *
+ * The cache grows with every distinct key and never evicts: call `clear()`, or size-limit keys from untrusted input. Past the engine's `Map` limit, new results are returned but not remembered.
+ * @param fn The function to have its output memoized.
+ * @param resolver The function to resolve the cache key.
+ * @returns The new memoized function.
+ */
+export function memoize<F extends AnyFunction>(
+  fn: F,
+  resolver?: (...args: Parameters<F>) => unknown
+): Memoized<F> {
+  assertFunction(fn)
+  if (resolver != null) assertFunction(resolver)
+  const memoized = function (this: unknown, ...args: Parameters<F>): ReturnType<F> {
+    const key = resolver ? resolver.apply(this, args) : args[0]
+    const store = memoized.cache
+    if (store.has(key)) {
+      return store.get(key) as ReturnType<F>
+    }
+    const value = fn.apply(this, args) as ReturnType<F>
+    remember(store, key, value)
+    return value
+  } as Memoized<F>
+  memoized.cache = new Map()
+  memoized.clear = (): void => {
+    memoized.cache.clear()
+  }
+  return memoized
+}
+
+/**
+ * TC39 method decorator that memoizes per instance (`WeakMap` of `Map`s), keyed by the first argument. A call on a non-object `this` runs uncached. Each store grows like {@link memoize}'s.
+ * @param value The method to wrap.
+ * @param context The decorator context (unused; required by the TC39 signature).
+ * @returns A per-instance memoized method.
+ */
+export function cache<This extends object, Args extends unknown[], R>(
+  value: (this: This, ...args: Args) => R,
+  context: ClassMethodDecoratorContext<This, (this: This, ...args: Args) => R>
+): (this: This, ...args: Args) => R
+export function cache<This extends object, Args extends unknown[], R>(
+  value: (this: This, ...args: Args) => R
+): (this: This, ...args: Args) => R {
+  assertFunction(value)
+  const byInstance = new WeakMap<This, Map<unknown, R>>()
+  return function (this: This, ...args: Args): R {
+    if (Object(this) !== this) return value.apply(this, args)
+    let store = byInstance.get(this)
+    if (!store) {
+      store = new Map()
+      byInstance.set(this, store)
+    }
+    const key = args[0]
+    if (store.has(key)) {
+      return store.get(key) as R
+    }
+    const result = value.apply(this, args)
+    remember(store, key, result)
+    return result
+  }
+}
+
+/**
+ * A debounced function with `cancel` and `flush`.
+ */
+export interface Debounced<F extends AnyFunction> {
+  (...args: Parameters<F>): ReturnType<F> | undefined
+  cancel(): void
+  flush(): ReturnType<F> | undefined
+}
+
+/** Inclusive max for `setTimeout` / `setInterval` delays (signed 32-bit). */
+const MAX_TIMER_WAIT_MS = 2_147_483_647
+
+/** Clamp negative finite waits to 0; throw on NaN or values above {@link MAX_TIMER_WAIT_MS}. */
+function assertTimerWait(wait: number, name: string): number {
+  if (Number.isFinite(wait) && wait < 0) return 0
+  if (!Number.isFinite(wait) || wait > MAX_TIMER_WAIT_MS) {
+    throw new RangeError(`${name} must be between 0 and 2147483647 ms`)
+  }
+  return wait
+}
+
+/** A call held back for later: its `this` and arguments. */
+interface HeldCall<F extends AnyFunction> {
+  thisArg: unknown
+  args: Parameters<F>
+}
+
+/**
+ * Creates a debounced function that delays invoking `fn` until after `wait` milliseconds have elapsed since the last call. Trailing invocations use the latest arguments. When `maxWait` elapses since the first pending call, `fn` is invoked with the latest arguments and later calls start a new window. Returns the last result. `wait` defaults to 0. Negative finite `wait` / `maxWait` clamp to 0; NaN and values above 2147483647 throw `RangeError`. `maxWait < wait` is raised to `wait`, and a null `maxWait` is absent.
+ * @param fn The function to debounce.
+ * @param wait The number of milliseconds to delay.
+ * @param options `leading` invokes on the first call of a burst (default false), `trailing` on the last (default true), and `maxWait` is the longest delay.
+ * @returns The new debounced function with `cancel` and `flush`.
+ */
+export function debounce<F extends AnyFunction>(
+  fn: F,
+  wait?: number | null,
+  options?: { leading?: boolean; trailing?: boolean; maxWait?: number | null }
+): Debounced<F> {
+  assertFunction(fn)
+  const delay = assertTimerWait(wait ?? 0, 'wait')
+  const leading = options?.leading ?? false
+  const trailing = options?.trailing ?? true
+  const maxDelay =
+    options?.maxWait == null
+      ? undefined
+      : Math.max(assertTimerWait(options.maxWait, 'maxWait'), delay)
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let maxTimer: ReturnType<typeof setTimeout> | undefined
+  let lastCall: HeldCall<F> | undefined
+  let lastResult: ReturnType<F> | undefined
+
+  function invokeLastCall(): ReturnType<F> | undefined {
+    if (lastCall === undefined) return lastResult
+    const call = lastCall
+    lastCall = undefined
+    lastResult = fn.apply(call.thisArg, call.args) as ReturnType<F>
+    return lastResult
+  }
+
+  function clearTimers(): void {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+    if (maxTimer !== undefined) {
+      clearTimeout(maxTimer)
+      maxTimer = undefined
+    }
+  }
+
+  function debounced(this: unknown, ...args: Parameters<F>): ReturnType<F> | undefined {
+    const startsBurst = timer === undefined
+    lastCall = { thisArg: this, args }
+
+    if (timer !== undefined) clearTimeout(timer)
+    timer = setTimeout(() => {
+      clearTimers()
+      if (trailing) invokeLastCall()
+      else lastCall = undefined
+    }, delay)
+
+    if (maxDelay !== undefined && maxTimer === undefined) {
+      maxTimer = setTimeout(() => {
+        maxTimer = undefined
+        invokeLastCall()
+      }, maxDelay)
+    }
+
+    return leading && startsBurst ? invokeLastCall() : lastResult
+  }
+
+  debounced.cancel = (): void => {
+    clearTimers()
+    lastCall = undefined
+  }
+
+  debounced.flush = (): ReturnType<F> | undefined => {
+    if (lastCall !== undefined) clearTimers()
+    return invokeLastCall()
+  }
+
+  return debounced
+}
+
+/**
+ * A throttled function with `cancel` and `flush` (same shape as {@link Debounced}).
+ */
+export type Throttled<F extends AnyFunction> = Debounced<F>
+
+/**
+ * Creates a throttled function that invokes `fn` at most once per `wait` milliseconds on the
+ * leading edge, and once more on the trailing edge with the latest arguments when calls arrived
+ * during the window (Lodash defaults: leading + trailing). `wait` defaults to 0 and still batches
+ * via `setTimeout(0)`: one leading invoke plus at most one trailing per macrotask. Negative finite
+ * `wait` clamps to 0; NaN and values above 2147483647 throw `RangeError`. `cancel` clears a
+ * pending trailing timer; `flush` invokes the pending trailing call once and starts a new window.
+ * A window opens before `fn` runs, so a reentrant call or a throw from `fn` stays throttled.
+ * @param fn The function to throttle.
+ * @param wait The number of milliseconds to throttle invocations to.
+ * @param options `leading` and `trailing` choose the edges that invoke (both default true).
+ * @returns The new throttled function with `cancel` and `flush`.
+ */
+export function throttle<F extends AnyFunction>(
+  fn: F,
+  wait?: number | null,
+  options?: { leading?: boolean; trailing?: boolean }
+): Throttled<F> {
+  assertFunction(fn)
+  const delay = assertTimerWait(wait ?? 0, 'wait')
+  const leading = options?.leading ?? true
+  const trailing = options?.trailing ?? true
+  let lastResult: ReturnType<F> | undefined
+  let pending: HeldCall<F> | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  function startWindow(): void {
+    timer = setTimeout(() => {
+      timer = undefined
+      const call = pending
+      pending = undefined
+      if (call) invoke(call)
+    }, delay)
+  }
+
+  function invoke(call: HeldCall<F>): ReturnType<F> {
+    startWindow()
+    lastResult = fn.apply(call.thisArg, call.args) as ReturnType<F>
+    return lastResult
+  }
+
+  function clearWindow(): void {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+  }
+
+  function throttled(this: unknown, ...args: Parameters<F>): ReturnType<F> | undefined {
+    const call = { thisArg: this, args }
+    if (timer === undefined) {
+      if (leading) return invoke(call)
+      startWindow()
+    }
+    if (trailing) pending = call
+    return lastResult
+  }
+
+  throttled.cancel = (): void => {
+    clearWindow()
+    pending = undefined
+  }
+
+  throttled.flush = (): ReturnType<F> | undefined => {
+    if (pending === undefined) return lastResult
+    const call = pending
+    pending = undefined
+    clearWindow()
+    return invoke(call)
+  }
+
+  return throttled
+}
+
+/**
+ * Creates a function that is restricted to invoking `fn` once. Repeat calls return the value of the first invocation, or `undefined` when it is still running or threw.
+ * @param fn The function to restrict.
+ * @returns The new restricted function.
+ * @example
+```js
+const func = x => x
+const single = once(func)
+single(1) // 1
+single(2) // 1
+single(3) // 1
+```
+ */
+export function once<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
+  assertFunction(fn)
+  let value!: R
+  let isCalled = false
+  return function (this: unknown, ...args: A): R {
+    if (!isCalled) {
+      isCalled = true
+      value = fn.apply(this, args)
+    }
     return value
   }
 }
 
 /**
- * Can be used as a decorator on any function or method to memoize its results.
- * **NOTE:** By default the given function is memoized using it's first argument, regardless of others.
- * @param target
- * @param name
- * @param descriptor
- * @returns A memoized version of the given function
+ * A value that may be undefined.
  */
-export function cache(target, name, descriptor) {
-  const original = descriptor.value
-  if (typeof original === 'function') {
-    descriptor.value = memoize(original)
-  }
-  return descriptor
-}
-
-/**
- * Creates a debounced function that delays invoking `func` until after `wait` milliseconds have elapsed since the last time the debounced function was invoked. Subsequent calls to the debounced function return the result of the last successful invocation. Provide options to set the `maxWait` milliseconds, regardless of when the function was last invoked.
- *
- * @param {Function} func The function to debounce.
- * @param {number} wait The number of milliseconds to delay.
- * @param {{ maxWait: number }} [opts] The maximum time `func` is allowed to be delayed before it's invoked.
- * @returns Returns the new debounced function.
- */
-export function debounce(
-  func: Function,
-  wait: number,
-  { maxWait }: { maxWait?: number } = {}
-): Function {
-  let timer, maxTimer, lastResult
-  return (...args) => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => {
-      clearTimeout(maxTimer)
-      maxTimer = null
-      lastResult = func(...args)
-    }, wait)
-
-    if (maxWait && !maxTimer) {
-      maxTimer = setTimeout(() => {
-        clearTimeout(timer)
-        maxTimer = null
-        lastResult = func(...args)
-      }, maxWait)
-    }
-
-    return lastResult
-  }
-}
-
-/**
- * Creates a throttled function that only invokes `func` at most once per every `wait` milliseconds. Subsequent calls to the throttled function return the result of the last successful invocation.
- *
- * @param {Function} func The function to throttle.
- * @param {number} wait The number of milliseconds to throttle invocations to.
- * @return {Function} Returns the new throttled function.
- */
-export function throttle(func: Function, wait: number): Function {
-  let pending = false
-  return (...args) => {
-    if (pending) return
-    func(...args)
-    pending = true
-    setTimeout(() => {
-      pending = false
-    }, wait)
-  }
-}
-
-/**
- * Creates a function that is restricted to invoking `func` once. Repeat calls to the function return the value of the first invocation. The `func` is invoked with the arguments of the created function.
- *
- * @param {Function} func The function to restrict
- * @returns {Function} Returns the new restricted function.
- * @example
-```js
-let func = x => x
-let single = once(func)
-single(1) // 1
-single(2) // 1
-single(3) // 1
-// ...
-// `func` is invoked only once.
-```
- */
-export function once<T>(func: Function<T>): Function<T> {
-  let result: T, isCalled
-  return (...args) => {
-    if (!isCalled) {
-      result = func(...args)
-      isCalled = true
-    }
-    return result
-  }
-}
-
 export type Maybe<T> = T | undefined
 
-export type Result<T, E = any> = [Maybe<T>, Maybe<E>]
+/**
+ * A `[value, error]` tuple from {@link result} / {@link resultAsync}.
+ */
+export type Result<T, E = unknown> = [Maybe<T>, Maybe<E>]
 
+/**
+ * Alias for {@link Maybe}.
+ */
 export type Optional<T> = Maybe<T>
 
+/** A thrown `undefined` would read as success in the tuple. */
+function caught(error: unknown): unknown {
+  return error === undefined ? new Error('undefined was thrown') : error
+}
+
 /**
- * Wraps a function to catch any exceptions inside and return a {@link Result} tuple with the value and error, if any.
- * @template T,E
- * @param {Function<T>} fn The function to wrap.
- * @returns {Function} A new function that wraps `fn` and returns the result tuple.
+ * Wraps a function to catch exceptions and return a {@link Result} tuple. A thrown `undefined` becomes an `Error`, so the error slot always tells failure from success.
+ * @param fn The function to wrap.
+ * @returns A new function that wraps `fn` and returns the result tuple.
  */
-export function result<T = any, E = unknown>(fn: Function<T>): Function<Result<T, E>> {
-  return (...args) => {
-    let value, err
+export function result<A extends unknown[], T, E = unknown>(
+  fn: (...args: A) => T
+): (...args: A) => Result<T, E> {
+  assertFunction(fn)
+  return function (this: unknown, ...args: A): Result<T, E> {
+    let value: Maybe<T>
+    let err: Maybe<E>
     try {
-      value = fn(...args)
+      value = fn.apply(this, args)
     } catch (error) {
-      err = error
+      err = caught(error) as E
     }
-    return [value as T, err as E]
+    return [value, err]
   }
 }
 
 /**
- * Wraps an async function to catch any exceptions inside and return a {@link Result} tuple with the value and error, if any.
- * @template T,E
- * @param {Function<Promise<T>>} fn The async function to await.
- * @returns {Function<Promise<Result<T, E>>>} A new function that awaits the given function and returns the result tuple.
+ * Wraps an async function to catch exceptions and return a {@link Result} tuple, as {@link result} does.
+ * @param fn The async function to await.
+ * @returns A new function that awaits the given function and returns the result tuple.
  */
-export function resultAsync<T = any, E = unknown>(
-  fn: Function<Promise<T>>
-): Function<Promise<Result<T, E>>> {
-  return async (...args) => {
-    let value, err
+export function resultAsync<A extends unknown[], T, E = unknown>(
+  fn: (...args: A) => Promise<T>
+): (...args: A) => Promise<Result<T, E>> {
+  assertFunction(fn)
+  return async function (this: unknown, ...args: A): Promise<Result<T, E>> {
+    let value: Maybe<T>
+    let err: Maybe<E>
     try {
-      value = await fn(...args)
+      value = await fn.apply(this, args)
     } catch (error) {
-      err = error
+      err = caught(error) as E
     }
-    return [value as T, err as E]
+    return [value, err]
   }
 }
 
 /**
- * Converts a function that expects a node-style callback argument like `(err, result)` to return a `Promise` instead.
- * @template T
- * @param {Function<T>} fun The given function to convert from callback style to `Promise`.
- * @param {*} thisArg
- * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a `Promise`.
+ * Converts a function that expects a node-style callback `(err, result)` to return a `Promise`. As in `util.promisify`, a falsy `err` is success.
+ * @param fun The function to convert from callback style to `Promise`.
+ * @param thisArg Optional `this` binding (default the caller's `this`).
+ * @returns A function that wraps `fun` and returns a `Promise`.
  */
-export function promisify<T>(fun: Function, thisArg?): Function<Promise<T>> {
-  const original = thisArg ? fun.bind(thisArg) : fun
-  return async (...args) => {
-    return await new Promise<T>((resolve, reject) =>
-      original(...args, (err, result: T) => {
-        if (err) return reject(err)
-        resolve(result)
-      })
-    )
+export function promisify<A extends unknown[], T>(
+  fun: (...args: [...A, (err: Error | null | undefined, result: T) => void]) => void,
+  thisArg?: unknown
+): (...args: A) => Promise<T> {
+  assertFunction(fun)
+  return function (this: unknown, ...args: A): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const cb = (err: Error | null | undefined, resultValue: T) => {
+        if (err) {
+          reject(err)
+          return
+        }
+        resolve(resultValue)
+      }
+      Reflect.apply(fun, thisArg ?? this, [...args, cb])
+    })
   }
-}
-
-/**
- * Invokes a given function that accepts callback arguments for success, error and returns a `Promise` of the results.
- * @param {Function} fn A function that accepts callback arguments for success, error.
- * @returns {Promise<T>} A `Promise` that will be resolved when `successCallback` is called or rejected when `errorCallback` is called.
- */
-export async function callAsync<T = any>(
-  fn: (successCallback: (data: T) => any, errorCallback: Function) => any
-) {
-  return await new Promise<T>(fn)
 }

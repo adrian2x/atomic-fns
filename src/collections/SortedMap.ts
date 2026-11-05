@@ -1,146 +1,138 @@
-import { Mapping } from './abc.js'
-import { SplayTree } from './SplayTree.js'
+import { withHookNesting } from '../internal/nesting.js'
+import { protocol, type Comparer } from '../operators/index.js'
+import { MapCollection, sameEntrySequence } from './abc.js'
+import { BTree } from './BTree.js'
+
+function positiveZero<K>(key: K): K {
+  return key === 0 ? (0 as K) : key
+}
+
+/** Items that are not entries pass through for {@link BTree} to reject. */
+function* withPositiveZeroKeys<K, V>(
+  entries: Iterable<readonly [K, V]>
+): Generator<readonly [K, V]> {
+  for (const entry of entries) {
+    yield (Object(entry) as typeof entry)[0] === 0 ? [positiveZero(entry[0]), entry[1]] : entry
+  }
+}
 
 /**
- * A `SortedMap` is a map that holds key value pairs ordered by keys. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as keys or values.
- * @see {@link operators.compare}
- * @see {@link operators.lt}
+ * Map whose keys stay ordered by the library total-order `compare` (or a supplied comparator).
+ * Backed by {@link BTree}. `set` on an existing key replaces the value and the stored key object.
+ * Like native `Map`, it stores a `-0` key as `+0`.
+ *
  * @template K, V
  */
-export class SortedMap<K, V> extends Mapping<K, V> {
-  private readonly store: SplayTree<K, V>
+export class SortedMap<K, V> extends MapCollection<K, V> {
+  readonly #tree: BTree<K, V>
+  readonly #compareFn: Comparer<K> | undefined
 
   /**
-   * Creates a new `SortedMap` object.
-   * @param {Iterable<[K, V]>} [iterable] Initialize the map with entries.
-   * @param {Comparer} [compareFn] The `compare` function to sort keys.
+   * @param entries Initial key-value pairs; `null` means none, as for native `Map`.
+   * @param compareFn Key comparator. Defaults to the library total-order `compare`.
    */
-  constructor(iterable?: Iterable<[K, V]>, compareFn?) {
+  constructor(entries?: Iterable<readonly [K, V]> | null, compareFn?: Comparer<K>) {
     super()
-    this.store = new SplayTree(compareFn)
-    if (iterable) {
-      for (const pair of iterable) {
-        this.store.set(pair[0], pair[1] ?? (null as V))
-      }
-    }
+    this.#compareFn = compareFn
+    this.#tree = new BTree(entries == null ? entries : withPositiveZeroKeys(entries), compareFn)
+  }
+
+  get size(): number {
+    return this.#tree.size
+  }
+
+  get isFrozen(): boolean {
+    return this.#tree.isFrozen
+  }
+
+  protected override cloneFrom(entries: Iterable<readonly [K, V]>): this {
+    return Reflect.construct(this.constructor, [entries, this.#compareFn]) as this
+  }
+
+  /** Sequence equality: key order is part of meaning. */
+  override [protocol.equals](other: unknown): boolean {
+    return withHookNesting(() => sameEntrySequence(this, other, (c) => c.entries()))
+  }
+
+  readonly [Symbol.toStringTag] = 'SortedMap'
+
+  get(key: K, defaultValue?: V): V | undefined {
+    return this.#tree.get(key, defaultValue)
   }
 
   /**
-   * Adds a new `key` with a `null` value, if the `key` doesn't exist.
-   * @param {K} key
-   * @returns {this} Returns the Map object.
+   * Insert or overwrite `key`. Replaces the stored key object as well as the value.
+   * @returns `this`
    */
-  add(key: K) {
-    this.store.set(key, null as V)
+  set(key: K, value: V): this {
+    this.#assertMutable()
+    this.#tree.set(positiveZero(key), value)
     return this
   }
 
-  /**
-   * Returns the value associated with the `key` or `undefined`.
-   * @param {K} key
-   * @returns {?V} The key value or `undefined`.
-   */
-  get(key: K) {
-    return this.store.get(key)
+  has(key: K): boolean {
+    return this.#tree.has(key)
+  }
+
+  delete(key: K): boolean {
+    this.#assertMutable()
+    return this.#tree.delete(key)
+  }
+
+  clear(): void {
+    this.#assertMutable()
+    this.#tree.clear()
   }
 
   /**
-   * Sets the value for the given `key`.
-   * @param {K} key
-   * @param {V} value
-   * @returns {this} Returns the Map object.
+   * Smallest key, or `undefined` when empty.
    */
-  set(key: K, value: V) {
-    return this.store.set(key, value)
+  min(): K | undefined {
+    return this.#tree.firstKey()
   }
 
   /**
-   * Returns the smallest key in the tree.
-   * @returns {?K}
+   * Largest key, or `undefined` when empty.
    */
-  min() {
-    return this.store.min()
+  max(): K | undefined {
+    return this.#tree.lastKey()
   }
 
   /**
-   * Returns the largest key in the tree.
-   * @returns {?K}
+   * Entries in descending key order.
    */
-  max() {
-    return this.store.max()
+  entriesDescending(): IteratorObject<[K, V]> {
+    return this.#tree.entriesDescending()
   }
 
   /**
-   * Returns `true` if the `key` existed in the map and was removed.
-   * @param {K} key
-   * @returns {boolean} `true` if key was removed, otherwise `false`.
+   * Reject further mutators permanently (like `Object.freeze`).
    */
-  delete(item: K) {
-    return this.store.remove(item) !== undefined
+  freeze(): this {
+    this.#tree.freeze()
+    return this
+  }
+
+  keys(): IteratorObject<K> {
+    return this.#tree.keys()
+  }
+
+  values(): IteratorObject<V> {
+    return this.#tree.values()
+  }
+
+  entries(): IteratorObject<[K, V]> {
+    return this.#tree.entries()
   }
 
   /**
-   * Removes all key/value pairs in the tree.
+   * Entry at `index` (Array.prototype.at rules), or `undefined` out of range.
    */
-  clear() {
-    return this.store.clear()
+  at(index: number): [K, V] | undefined {
+    return this.#tree.at(index)
   }
 
-  /**
-   * Returns the total key/value pairs in the tree.
-   * @returns {number}
-   */
-  get size() {
-    return this.store.size
-  }
-
-  /**
-   * Check if there are no key/value pairs in the tree.
-   * @returns {boolean} `true` if is empty.
-   */
-  empty() {
-    return this.store.empty()
-  }
-
-  /**
-   * Returns `true` if the `key` exists in the map.
-   * @param {K} key
-   * @returns {boolean} `true` if key is found, otherwise `false`.
-   */
-  contains(key: K) {
-    return this.store.contains(key)
-  }
-
-  /**
-   * Returns `true` if the `key` exists in the map.
-   * @param {K} key
-   * @returns {boolean} `true` if key is found, otherwise `false`.
-   */
-  has(key: K) {
-    return this.store.contains(key)
-  }
-
-  /**
-   * Returns a new iterator of all **ordered** keys in the map.
-   * @returns {Iterable<K>}
-   */
-  keys() {
-    return this.store.keys()
-  }
-
-  /**
-   * Returns a new iterator of all values **ordered** by their keys.
-   * @returns {Iterable<V>}
-   */
-  values() {
-    return this.store.values()
-  }
-
-  /**
-   * Returns a new iterator of all key value pairs **ordered** by their keys.
-   * @returns {Iterable<[K, V]>}
-   */
-  entries() {
-    return this.store.entries()
+  #assertMutable(): void {
+    if (this.isFrozen) throw new TypeError('SortedMap is frozen')
   }
 }

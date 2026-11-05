@@ -1,0 +1,32 @@
+{
+  "entryPoints": [
+    "src/collections/index.ts",
+    "src/decimal/index.ts",
+    "src/functools/index.ts",
+    "src/globals/index.ts",
+    "src/i18n/index.ts",
+    "src/itertools/index.ts",
+    "src/math/index.ts",
+    "src/operators/index.ts",
+    "src/random/index.ts",
+    "src/string/index.ts"
+  ],
+  "out": "docs",
+  "excludePrivate": true,
+  "treatWarningsAsErrors": true,
+  "intentionallyNotExported": [
+    "src/operators/protocol.ts:compare",
+    "src/operators/protocol.ts:equals",
+    "src/operators/protocol.ts:rank",
+    "src/operators/protocol.ts:clone",
+    "src/operators/protocol.ts:add",
+    "src/operators/protocol.ts:sub",
+    "src/operators/protocol.ts:mul",
+    "src/operators/protocol.ts:div",
+    "src/operators/protocol.ts:mod",
+    "src/operators/protocol.ts:pow",
+    "src/operators/protocol.ts:abs",
+    "src/operators/protocol.ts:boolKey",
+    "src/operators/protocol.ts:unit"
+  ]
+}

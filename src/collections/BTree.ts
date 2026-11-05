@@ -1,1341 +1,1158 @@
-import { KeyError } from '../globals/index.js'
-import { compare, Comparer } from '../operators/index.js'
-import { Mapping } from './abc.js'
-import { Iteratee } from '../types'
+import { arrayFromIterable, arrayFromIterableMap } from '../internal/iterable.js'
+import { withHookNesting } from '../internal/nesting.js'
+import { compare, protocol, type Comparer } from '../operators/index.js'
+import { MapCollection, sameEntrySequence } from './abc.js'
+import { checkInvariants } from './internal.js'
 
-const Delete = { delete: true }
-const DeleteRange = () => Delete
-const Break = { done: true }
-const EmptyArray: any[] = []
-const ReusedArray: any[] = [] // assumed thread-local
+/** Construction options for {@link BTree}. */
+export interface BTreeOptions {
+  /** Branching factor; integer in 8..1024. Default 64. */
+  nodeCapacity?: number
+}
 
-// Optimization: this array of `undefined`s is used instead of a normal
-// array of values in nodes where `undefined` is the only value.
-// Its length is extended to max node size on first use; since it can
-// be shared between trees with different maximums, its length can only
-// increase, never decrease. Its type should be undefined[] but strangely
-// TypeScript won't allow the comparison V[] === undefined[]. To prevent
-// users from making this array too large, BTree has a maximum node size.
-//
-// FAQ: undefVals[i] is already undefined, so why increase the array size?
-// Reading outside the bounds of an array is relatively slow because it
-// has the side effect of scanning the prototype chain.
-const undefVals: any[] = []
+/** Bounds for range methods. The start key is always inclusive. */
+export interface RangeOptions {
+  /** When true, the end key is included. Default false. */
+  inclusiveEnd?: boolean
+}
 
 /**
- * Leaf nodes and base class for internals.
- * Based on the `sorted-btree` implementation by David Piepgrass (MIT License).
- * @private
+ * Instruction returned from an {@link BTree.updateRange} callback.
+ * Exactly one of `replace`, `remove`, or a bare `stop` may describe the action;
+ * `stop` may also accompany `replace` or `remove` to end the walk after that entry.
  */
-class BNode<K, V = any> {
-  // If this is an internal node, _keys[i] is the highest key in children[i].
+export type RangeUpdate<V> =
+  { replace: V; stop?: true } | { remove: true; stop?: true } | { stop: true }
+
+interface LeafNode<K, V> {
+  readonly kind: 'leaf'
+  owner: object
   keys: K[]
   values: V[]
-  // True if this node might be within multiple `BTree`s (or have multiple parents).
-  // If so, it must be cloned before being mutated to avoid changing an unrelated tree.
-  // This is transitive: if it's true, children are also shared even if `isShared!=true`
-  // in those children. (Certain operations will propagate isShared=true to children.)
-  isShared?: boolean
-  get isLeaf() {
-    return (this as any).children === undefined
+}
+
+interface BranchNode<K, V> {
+  readonly kind: 'branch'
+  owner: object
+  children: TreeNode<K, V>[]
+  maxKeys: K[]
+  total: number
+}
+
+type TreeNode<K, V> = LeafNode<K, V> | BranchNode<K, V>
+
+interface PathFrame<K, V> {
+  node: BranchNode<K, V>
+  index: number
+}
+
+function countOf<K, V>(n: TreeNode<K, V>): number {
+  return n.kind === 'leaf' ? n.keys.length : n.total
+}
+
+function itemCount<K, V>(n: TreeNode<K, V>): number {
+  return n.kind === 'leaf' ? n.keys.length : n.children.length
+}
+
+function readLastKey<K, V>(n: TreeNode<K, V>): { ok: true; key: K } | { ok: false } {
+  if (n.kind === 'leaf') {
+    if (n.keys.length === 0) return { ok: false }
+    return { ok: true, key: n.keys[n.keys.length - 1] }
   }
+  if (n.maxKeys.length === 0) return { ok: false }
+  return { ok: true, key: n.maxKeys[n.maxKeys.length - 1] }
+}
 
-  constructor(keys: K[] = [], values?: V[]) {
-    this.keys = keys
-    this.values = values || undefVals
-    this.isShared = undefined
-  }
+function emptyLeaf<K, V>(owner: object): LeafNode<K, V> {
+  return { kind: 'leaf', owner, keys: [], values: [] }
+}
 
-  /// ////////////////////////////////////////////////////////////////////////
-  // Shared methods /////////////////////////////////////////////////////////
+function isNonPrimitive(value: unknown): value is object {
+  return Object(value) === value
+}
 
-  maxKey() {
-    return this.keys[this.keys.length - 1]
-  }
-
-  // If key not found, returns i^failXor where i is the insertion index.
-  // Callers that don't care whether there was a match will set failXor=0.
-  indexOf(key: K, failXor: number, cmp: (a: K, b: K) => number) {
-    const keys = this.keys
-    let lo = 0
-    let hi = keys.length
-    let mid = hi >> 1
-    while (lo < hi) {
-      const c = cmp(keys[mid], key)
-      if (c < 0) lo = mid + 1
-      else if (c > 0) hi = mid // key < keys[mid]
-      else if (c === 0) return mid
-      else {
-        // c is NaN or otherwise invalid
-        // eslint-disable-next-line
-        if (key === key)
-          // at least the search key is not NaN
-          return keys.length
-        // eslint-disable-next-line
-        else throw new KeyError(`Btree found an invalid key: ${key}`)
-      }
-      mid = (lo + hi) >> 1
-    }
-    return mid ^ failXor
-  }
-
-  /// //////////////////////////////////////////////////////////////////////////
-  // Leaf Node: misc //////////////////////////////////////////////////////////
-
-  minKey(): K | undefined {
-    return this.keys[0]
-  }
-
-  minPair(reusedArray: [K, V]): [K, V] | undefined {
-    if (this.keys.length === 0) return undefined
-    reusedArray[0] = this.keys[0]
-    reusedArray[1] = this.values[0]
-    return reusedArray
-  }
-
-  maxPair(reusedArray: [K, V]): [K, V] | undefined {
-    if (this.keys.length === 0) return undefined
-    const lastIndex = this.keys.length - 1
-    reusedArray[0] = this.keys[lastIndex]
-    reusedArray[1] = this.values[lastIndex]
-    return reusedArray
-  }
-
-  clone(): BNode<K, V> {
-    const v = this.values
-    return new BNode<K, V>(this.keys.slice(0), v === undefVals ? v : v.slice(0))
-  }
-
-  greedyClone(force?: boolean): BNode<K, V> {
-    return this.isShared && !force ? this : this.clone()
-  }
-
-  get(key: K, defaultValue: V | undefined, tree: BTree<K, V>): V | undefined {
-    const i = this.indexOf(key, -1, tree._compare)
-    return i < 0 ? defaultValue : this.values[i]
-  }
-
-  getPairOrNextLower(
-    key: K,
-    compare: (a: K, b: K) => number,
-    inclusive: boolean,
-    reusedArray: [K, V]
-  ): [K, V] | undefined {
-    const i = this.indexOf(key, -1, compare)
-    const indexOrLower = i < 0 ? ~i - 1 : inclusive ? i : i - 1
-    if (indexOrLower >= 0) {
-      reusedArray[0] = this.keys[indexOrLower]
-      reusedArray[1] = this.values[indexOrLower]
-      return reusedArray
-    }
-    return undefined
-  }
-
-  getPairOrNextHigher(
-    key: K,
-    compare: (a: K, b: K) => number,
-    inclusive: boolean,
-    reusedArray: [K, V]
-  ): [K, V] | undefined {
-    const i = this.indexOf(key, -1, compare)
-    const indexOrLower = i < 0 ? ~i : inclusive ? i : i + 1
-    const keys = this.keys
-    if (indexOrLower < keys.length) {
-      reusedArray[0] = keys[indexOrLower]
-      reusedArray[1] = this.values[indexOrLower]
-      return reusedArray
-    }
-    return undefined
-  }
-
-  checkValid(depth: number, tree: BTree<K, V>, baseIndex: number): number {
-    const kL = this.keys.length
-    const vL = this.values.length
-    assert(
-      this.values === undefVals ? kL <= vL : kL === vL,
-      'keys/values length mismatch: depth',
-      depth,
-      'with lengths',
-      kL,
-      vL,
-      'and baseIndex',
-      baseIndex
-    )
-    // Note: we don't check for "node too small" because sometimes a node
-    // can legitimately have size 1. This occurs if there is a batch
-    // deletion, leaving a node of size 1, and the siblings are full so
-    // it can't be merged with adjacent nodes. However, the parent will
-    // verify that the average node size is at least half of the maximum.
-    assert(depth === 0 || kL > 0, 'empty leaf at depth', depth, 'and baseIndex', baseIndex)
-    return kL
-  }
-
-  /// //////////////////////////////////////////////////////////////////////////
-  // Leaf Node: set & node splitting //////////////////////////////////////////
-
-  set(key: K, value: V, overwrite: boolean | undefined, tree: BTree<K, V>): boolean | BNode<K, V> {
-    let i = this.indexOf(key, -1, tree._compare)
-    if (i < 0) {
-      // key does not exist yet
-      i = ~i
-      tree.count++
-
-      if (this.keys.length < tree._maxNodeSize) {
-        return this.insertInLeaf(i, key, value, tree)
-      } else {
-        // This leaf node is full and must split
-        const newRightSibling = this.splitOffRightSide()
-
-        // eslint-disable-next-line
-        let target: BNode<K, V> = this
-        if (i > this.keys.length) {
-          i -= this.keys.length
-          target = newRightSibling
-        }
-        target.insertInLeaf(i, key, value, tree)
-        return newRightSibling
-      }
-    } else {
-      // Key already exists
-      if (overwrite) {
-        if (value !== undefined) this.reifyValues()
-        // usually this is a no-op, but some users may wish to edit the key
-        this.keys[i] = key
-        this.values[i] = value
-      }
-      return false
-    }
-  }
-
-  reifyValues() {
-    if (this.values === undefVals) return (this.values = this.values.slice(0, this.keys.length))
-    return this.values
-  }
-
-  insertInLeaf(i, key: K, value: V, tree: BTree<K, V>) {
-    this.keys.splice(i, 0, key)
-    if (this.values === undefVals) {
-      while (undefVals.length < tree._maxNodeSize) undefVals.push(undefined)
-      if (value === undefined) {
-        return true
-      } else {
-        this.values = undefVals.slice(0, this.keys.length - 1)
-      }
-    }
-    this.values.splice(i, 0, value)
-    return true
-  }
-
-  takeFromRight(rhs: BNode<K, V>) {
-    // Reminder: parent node must update its copy of key for this node
-    // assert: neither node is shared
-    // assert rhs.keys.length > (maxNodeSize/2 && this.keys.length<maxNodeSize)
-    let v = this.values
-    if (rhs.values === undefVals) {
-      if (v !== undefVals) v.push(undefined as any)
-    } else {
-      v = this.reifyValues()
-      // eslint-disable-next-line
-      v.push(rhs.values.shift()!)
-    }
-    // eslint-disable-next-line
-    this.keys.push(rhs.keys.shift()!)
-  }
-
-  takeFromLeft(lhs: BNode<K, V>) {
-    // Reminder: parent node must update its copy of key for this node
-    // assert: neither node is shared
-    // assert rhs.keys.length > (maxNodeSize/2 && this.keys.length<maxNodeSize)
-    let v = this.values
-    if (lhs.values === undefVals) {
-      if (v !== undefVals) v.unshift()
-    } else {
-      v = this.reifyValues()
-      // eslint-disable-next-line
-      v.unshift(lhs.values.pop()!)
-    }
-    // eslint-disable-next-line
-    this.keys.unshift(lhs.keys.pop()!)
-  }
-
-  splitOffRightSide(): BNode<K, V> {
-    // Reminder: parent node must update its copy of key for this node
-    const half = this.keys.length >> 1
-    const keys = this.keys.splice(half)
-    const values = this.values === undefVals ? undefVals : this.values.splice(half)
-    return new BNode<K, V>(keys, values)
-  }
-
-  /// //////////////////////////////////////////////////////////////////////////
-  // Leaf Node: scanning & deletions //////////////////////////////////////////
-
-  forRange<R>(
-    low: K,
-    high: K,
-    includeHigh: boolean | undefined,
-    editMode: boolean,
-    tree: BTree<K, V>,
-    count: number,
-    onFound?: Iteratee<K, V>
-  ): any | number {
-    const cmp = tree._compare
-    let iLow, iHigh
-    if (high === low) {
-      if (!includeHigh) return count
-      iHigh = (iLow = this.indexOf(low, -1, cmp)) + 1
-      if (iLow < 0) return count
-    } else {
-      iLow = this.indexOf(low, 0, cmp)
-      iHigh = this.indexOf(high, -1, cmp)
-      if (iHigh < 0) iHigh = ~iHigh
-      else if (includeHigh) iHigh++
-    }
-    const keys = this.keys
-    const values = this.values
-    if (onFound !== undefined) {
-      for (let i = iLow; i < iHigh; i++) {
-        const key = keys[i]
-        const result = onFound(key, values[i], count++)
-        if (result !== undefined) {
-          if (editMode) {
-            if (key !== keys[i] || this.isShared)
-              throw new Error('BTree illegally changed or cloned in editRange')
-            if (result.delete) {
-              this.keys.splice(i, 1)
-              if (this.values !== undefVals) this.values.splice(i, 1)
-              tree.count--
-              i--
-              iHigh--
-            } else if (result.value) {
-              values[i] = result.value
-            }
-          }
-          if (result.done !== undefined) return result
-        }
-      }
-    } else count += iHigh - iLow
-    return count
-  }
-
-  /** Adds entire contents of right-hand sibling (rhs is left unchanged) */
-  mergeSibling(rhs: BNode<K, V>, _: number) {
-    this.keys.push.apply(this.keys, rhs.keys)
-    if (this.values === undefVals) {
-      if (rhs.values === undefVals) return
-      this.values = this.values.slice(0, this.keys.length)
-    }
-    this.values.push.apply(this.values, rhs.reifyValues())
+function assertOptions(options: unknown): void {
+  if (options !== undefined && !isNonPrimitive(options)) {
+    throw new TypeError('options must be an object')
   }
 }
 
-const EmptyLeaf = new BNode<any, any>()
-EmptyLeaf.isShared = true
-
-function assert(exp: boolean, ...args: any[]) {
-  if (!exp) {
-    args.unshift('B+ tree') // at beginning of message
-    throw new Error(args.join(' '))
-  }
+/** Columns rather than `[key, value]` boxes: a bulk load holds every item at once. */
+function readEntries<K, V>(entries: Iterable<readonly [K, V]>): { keys: K[]; values: V[] } {
+  const values: V[] = []
+  const keys = arrayFromIterableMap(entries, (entry): K => {
+    if (!isNonPrimitive(entry)) throw new TypeError('entries must be [key, value] pairs')
+    const pair = entry as readonly [K, V]
+    values.push(pair[1])
+    return pair[0]
+  })
+  return { keys, values }
 }
 
-export class BTree<K = any, V = any> extends Mapping<K, V> {
-  private root: BNode<K, V> = EmptyLeaf as BNode<K, V>
-  count: number = 0
-  _maxNodeSize: number
+function resolveNodeCapacity(arg: number | undefined): number {
+  if (arg === undefined) return 64
+  if (!Number.isInteger(arg) || arg < 8 || arg > 1024) {
+    throw new RangeError('nodeCapacity must be an integer from 8 to 1024')
+  }
+  return arg
+}
+
+function resolveLimit(limit: number | undefined): number {
+  if (limit === undefined || limit === Infinity) return Infinity
+  if (!Number.isInteger(limit) || limit < 0) {
+    throw new RangeError('limit must be a non-negative integer or Infinity')
+  }
+  return limit
+}
+
+/**
+ * B+ tree map with order-statistic subtree counts and O(1) copy-on-write {@link BTree.clone}.
+ * Keys are totally ordered by a comparator; values may be `undefined`, and so may keys when the
+ * comparator orders `undefined` (the default {@link compare} does).
+ *
+ * A comparator must be pure, must return a finite number for every pair it is asked to order,
+ * and must return 0 for a key compared with itself; every new key is checked. A comparator that
+ * writes to its own tree corrupts it. Subtracting numbers fails for `Infinity` / `NaN` keys
+ * (`Infinity - x` is not finite) and for finite keys whose difference overflows; use
+ * {@link compare} or a comparator that handles those values.
+ *
+ * Under a strict total order, mutating while iterating never repeats a key: after a structural
+ * change the cursor re-seeks to the next key after the last yielded one. The walk ends unless the
+ * loop keeps inserting keys ahead of the cursor, as with native `Map`.
+ *
+ * The constructor and `setAll` on an empty tree load entries without calling `set`, so a subclass
+ * override of `set` runs only for `setAll` on a non-empty tree.
+ *
+ * @template K, V
+ */
+export class BTree<K = unknown, V = unknown> extends MapCollection<K, V> {
+  #root: TreeNode<K, V>
+  #size = 0
+  readonly #compareFn: Comparer<K>
+  readonly #nodeCapacity: number
+  readonly #minFill: number
+  #token: object = {}
+  #version = 0
+  #frozen = false
+  #atomicDepth = 0
 
   /**
-   * provides a total order over keys (and a strict partial order over the type K)
-   * @returns a negative value if a < b, 0 if a === b and a positive value if a > b
+   * @param entries Initial key-value pairs; `null` means none, as for native `Map`. Sorted unique
+   * input is bulk-loaded in linear time.
+   * @param compareFn Key comparator. Defaults to {@link compare}.
+   * @param options Construction options; see {@link BTreeOptions}.
    */
-  _compare: Comparer
-
-  /**
-   * Initializes an empty B+ tree.
-   * @param {?Iterable<[K, V]>} [entries] The initial key value pairs.
-   * @param compareFn Custom function to compare pairs of elements in the tree.
-   *   If not specified, defaultComparator will be used which is valid as long as K extends DefaultComparable.
-   * @param entries A set of key-value pairs to initialize the tree
-   * @param {number} [maxNodeSize=64] Branching factor (maximum items or children per node)
-   *   Must be in range 4..256. If undefined or <4 then default is used; if >256 then 256.
-   */
-  public constructor(entries?: Iterable<[K, V]>, compareFn?: Comparer, maxNodeSize: number = 64) {
+  constructor(
+    entries?: Iterable<readonly [K, V]> | null,
+    compareFn?: Comparer<K>,
+    options?: BTreeOptions
+  ) {
     super()
-    this._maxNodeSize = maxNodeSize >= 4 ? Math.min(maxNodeSize, 256) : 64
-    this._compare = compareFn || compare
-    if (entries) this.extend(entries)
+    assertOptions(options)
+    this.#compareFn = compareFn ?? compare
+    if (typeof this.#compareFn !== 'function') {
+      throw new TypeError('comparator must be a function')
+    }
+    this.#nodeCapacity = resolveNodeCapacity(options?.nodeCapacity)
+    this.#minFill = Math.floor(this.#nodeCapacity / 2)
+    this.#root = emptyLeaf(this.#token)
+    if (entries != null) {
+      const { keys, values } = readEntries(entries)
+      this.#bulkLoad(keys, values)
+    }
   }
 
-  /** Gets the number of key-value pairs in the tree. */
-  get size() {
-    return this.count
+  get size(): number {
+    return this.#size
   }
 
-  /** Releases the tree so that its size is 0. */
-  clear() {
-    this.root = EmptyLeaf as BNode<K, V>
-    this.count = 0
+  /** Branching factor chosen at construction. */
+  get nodeCapacity(): number {
+    return this.#nodeCapacity
   }
 
-  // /** Runs a function for each key-value pair, in order from smallest to
-  //  *  largest key. For compatibility with ES6 Map, the argument order to
-  //  *  the callback is backwards: value first, then key. Call forEachPair
-  //  *  instead to receive the key as the first argument.
-  //  * @returns the number of values that were sent to the callback,
-  //  *        or the R value if the callback returned {done:R}. */
-  // forEach<R = number>(iteratee: Iteratee<V, K>): R | number {
-  //   return this.forEachPair((k, v) => iteratee(v as V, k, this))
-  // }
+  /** Leaf depth of the tree; 0 when the root is a leaf. */
+  get height(): number {
+    let h = 0
+    let n = this.#root
+    while (n.kind === 'branch') {
+      h++
+      n = n.children[0]
+    }
+    return h
+  }
 
-  // /** Runs a function for each key-value pair, in order from smallest to
-  //  *  largest key. The callback can return {done:R} (where R is any value
-  //  *  except undefined) to stop immediately and return R from forEachPair.
-  //  * @param onFound A function that is called for each key-value pair. This
-  //  *        function can return {done:R} to stop early with result R.
-  //  *        The reason that you must return {done:R} instead of simply R
-  //  *        itself is for consistency with editRange(), which allows
-  //  *        multiple actions, not just breaking.
-  //  * @param initialCounter This is the value of the third argument of
-  //  *        `onFound` the first time it is called. The counter increases
-  //  *        by one each time `onFound` is called. Default value: 0
-  //  * @returns the number of pairs sent to the callback (plus initialCounter,
-  //  *        if you provided one). If the callback returned {done:R} then
-  //  *        the R value is returned instead. */
-  // private forEachPair<R = number>(callback: Iteratee<K, V>, initialCounter?: number): R | number {
-  //   const low = this.minKey()
-  //   const high = this.maxKey()
-  //   // eslint-disable-next-line
-  //   return this.rangeForEach(low!, high, true, callback, initialCounter)
-  // }
+  get isFrozen(): boolean {
+    return this.#frozen
+  }
+
+  readonly [Symbol.toStringTag] = 'BTree'
+
+  protected override cloneFrom(entries: Iterable<[K, V]>): this {
+    return Reflect.construct(this.constructor, [
+      entries,
+      this.#compareFn,
+      { nodeCapacity: this.#nodeCapacity }
+    ]) as this
+  }
+
+  /** Sequence equality: key order is part of meaning. */
+  override [protocol.equals](other: unknown): boolean {
+    return withHookNesting(() => sameEntrySequence(this, other, (c) => c.entries()))
+  }
 
   /**
-   * Finds a pair in the tree and returns the associated value.
-   * @param defaultValue a value to return if the key was not found.
-   * @returns the value, or defaultValue if the key was not found.
-   * @description Computational complexity: O(log size)
+   * Shallow: O(1) copy-on-write. Deep: new tree with keys by reference and deep-cloned values.
    */
+  override [protocol.clone](deep = false): this {
+    return deep ? super[protocol.clone](true) : this.clone()
+  }
+
+  clear(): void {
+    this.#assertMutable()
+    this.#root = emptyLeaf(this.#token)
+    this.#size = 0
+    this.#version++
+  }
+
   get(key: K, defaultValue?: V): V | undefined {
-    return this.root.get(key, defaultValue, this)
+    const found = this.#find(key)
+    if (!found?.found) return defaultValue
+    return found.leaf.values[found.pos]
   }
 
   /**
-   * Adds or overwrites a key-value pair in the B+ tree.
-   * @param key the key is used to determine the sort order of
-   *        data in the tree.
-   * @param value data to associate with the key (optional)
-   * @returns true if a new key-value pair was added.
-   * @description Computational complexity: O(log size)
-   * Note: when overwriting a previous entry, the key is updated
-   * as well as the value. This has no effect unless the new key
-   * has data that does not affect its sort order.
+   * Insert or overwrite `key`. Replaces the stored key object as well as the value.
+   * @returns `this`
    */
-  set(key: K, value: V): boolean {
-    if (this.root.isShared) this.root = this.root.clone()
-    const result = this.root.set(key, value, true, this)
-    if (result === true || result === false) return result
-    // Root node has split, so create a new root node.
-    this.root = new BNodeInternal<K, V>([this.root, result])
+  set(key: K, value: V): this {
+    this.#assertMutable()
+    const { path, leaf, pos, found: hit } = this.#findForSet(key)
+    if (!hit) this.#assertReflexive(key)
+    const ownedLeaf = this.#ownPath(path, leaf)
+    if (hit) {
+      ownedLeaf.keys[pos] = key
+      ownedLeaf.values[pos] = value
+      this.#refreshSeparators(path, ownedLeaf)
+      this.#version++
+      return this
+    }
+    ownedLeaf.keys.splice(pos, 0, key)
+    ownedLeaf.values.splice(pos, 0, value)
+    this.#size++
+    for (const frame of path) frame.node.total += 1
+    this.#bubbleInsert(path, ownedLeaf)
+    this.#version++
+    return this
+  }
+
+  has(key: K): boolean {
+    const found = this.#find(key)
+    return found?.found === true
+  }
+
+  delete(key: K): boolean {
+    this.#assertMutable()
+    const found = this.#find(key)
+    if (!found?.found) return false
+    const { path, leaf, pos } = found
+    const ownedLeaf = this.#ownPath(path, leaf)
+    ownedLeaf.keys.splice(pos, 1)
+    ownedLeaf.values.splice(pos, 1)
+    this.#size--
+    this.#bubbleDelete(path, ownedLeaf)
+    this.#version++
     return true
   }
 
-  add(key: K) {
-    return this.set(key, null as V)
+  /**
+   * Entry at `index` (Array.prototype.at rules), or `undefined` out of range. O(log n), no
+   * comparator calls.
+   */
+  at(index: number): [K, V] | undefined {
+    let i = Math.trunc(index) || 0
+    if (i < 0) i += this.#size
+    if (i < 0 || i >= this.#size) return undefined
+    let node = this.#root
+    while (node.kind === 'branch') {
+      let advanced = false
+      for (const child of node.children) {
+        const n = countOf(child)
+        if (i < n) {
+          node = child
+          advanced = true
+          break
+        }
+        i -= n
+      }
+      if (!advanced) return undefined
+    }
+    if (i >= node.keys.length) return undefined
+    return [node.keys[i], node.values[i]]
   }
 
   /**
-   * Returns true if the key exists in the B+ tree, false if not.
-   * @param key Key to detect
-   * @description Computational complexity: O(log size)
+   * Entries in ascending key order.
+   * @param lowestKey Optional lowest key to start at. `undefined` means omitted and starts at
+   * the minimum, also in a tree with an `undefined` key.
    */
-  contains(key: K): boolean {
-    return this.get(key) !== undefined
+  entries(lowestKey?: K): IteratorObject<[K, V]> {
+    const start = lowestKey === undefined ? undefined : { key: lowestKey }
+    return Iterator.from(this.#walk(true, start))
   }
 
   /**
-   * Removes a single key-value pair from the B+ tree.
-   * @param key Key to find
-   * @returns true if a pair was found and removed, false otherwise.
-   * @description Computational complexity: O(log size)
+   * Entries in descending key order.
+   * @param highestKey Optional highest key to start at. `undefined` means omitted and starts at
+   * the maximum.
    */
-  remove(key: K): boolean {
-    return this.rangeUpdate(key, key, true, DeleteRange) !== 0
+  entriesDescending(highestKey?: K): IteratorObject<[K, V]> {
+    const start = highestKey === undefined ? undefined : { key: highestKey }
+    return Iterator.from(this.#walk(false, start))
   }
 
-  /** Returns an iterator that provides items in order (ascending order if
-   *  the collection's comparator uses ascending order, as is the default.)
-   *  @param lowestKey First key to be iterated, or undefined to start at
-   *         minKey(). If the specified key doesn't exist then iteration
-   *         starts at the next higher key (according to the comparator).
-   *  @param reusedArray Optional array used repeatedly to store key-value
-   *         pairs, to avoid creating a new array on every iteration.
-   */
-  entries(lowestKey?: K, reusedArray?: Array<K | V>): IterableIterator<[K, V]> {
-    const info = this.findPath(lowestKey)
-    if (info === undefined) return iterator<[K, V]>()
-    let { nodequeue, nodeindex, leaf } = info
-    let state = reusedArray !== undefined ? 1 : 0
-    let i = lowestKey === undefined ? -1 : leaf.indexOf(lowestKey, 0, this._compare) - 1
+  keys(): IteratorObject<K> {
+    return this.entries().map(([k]) => k)
+  }
 
-    return iterator<[K, V]>(() => {
-      // eslint-disable-next-line
-      jump: while (true) {
-        switch (state) {
-          case 0:
-            if (++i < leaf.keys.length)
-              return { done: false, value: [leaf.keys[i], leaf.values[i]] }
-            state = 2
-            continue
-          case 1:
-            if (++i < leaf.keys.length) {
-              // eslint-disable-next-line
-              reusedArray![0] = leaf.keys[i]!
-              // eslint-disable-next-line
-              reusedArray![1] = leaf.values[i]!
-              return { done: false, value: reusedArray as [K, V] }
-            }
-            state = 2
-          // eslint-disable-next-line
-          case 2:
-            // Advance to the next leaf node
-            // eslint-disable-next-line
-            let level = -1
-            while (true) {
-              if (++level >= nodequeue.length) {
-                state = 3
-                // eslint-disable-next-line
-                continue jump
-              }
-              if (++nodeindex[level] < nodequeue[level].length) break
-            }
-            for (; level > 0; level--) {
-              nodequeue[level - 1] = (
-                nodequeue[level][nodeindex[level]] as BNodeInternal<K, V>
-              ).children
-              nodeindex[level - 1] = 0
-            }
-            leaf = nodequeue[0][nodeindex[0]]
-            i = -1
-            state = reusedArray !== undefined ? 1 : 0
-            continue
-          case 3:
-            return { done: true, value: undefined }
-        }
+  values(): IteratorObject<V> {
+    return this.entries().map(([, v]) => v)
+  }
+
+  /** Smallest key, or `undefined` when empty. */
+  firstKey(): K | undefined {
+    let n = this.#root
+    while (n.kind === 'branch') {
+      n = n.children[0]
+    }
+    return n.keys[0]
+  }
+
+  /** Largest key, or `undefined` when empty. */
+  lastKey(): K | undefined {
+    let n = this.#root
+    while (n.kind === 'branch') {
+      const last = n.children.at(-1)
+      if (last === undefined) return undefined
+      n = last
+    }
+    return n.keys.at(-1)
+  }
+
+  /** Least entry with key strictly greater than `key`, or undefined. */
+  higher(key: K): [K, V] | undefined {
+    return this.#bound(key, 'higher')
+  }
+
+  /** Greatest entry with key strictly less than `key`, or undefined. */
+  lower(key: K): [K, V] | undefined {
+    return this.#bound(key, 'lower')
+  }
+
+  /** Least entry with key greater than or equal to `key`, or undefined. */
+  ceiling(key: K): [K, V] | undefined {
+    return this.#bound(key, 'ceiling')
+  }
+
+  /** Greatest entry with key less than or equal to `key`, or undefined. */
+  floor(key: K): [K, V] | undefined {
+    return this.#bound(key, 'floor')
+  }
+
+  /**
+   * Entries whose keys lie in `[from, to)` (or `[from, to]` when `inclusiveEnd` is true).
+   * Under the default `compare`, an omitted `to` means up to the end: `undefined` ranks last, and
+   * an `undefined` key itself needs `inclusiveEnd`.
+   * @param options.limit Cap on how many pairs to collect; default Infinity. Must be a
+   * non-negative integer or Infinity.
+   */
+  entriesBetween(from: K, to: K, options?: RangeOptions & { limit?: number }): [K, V][] {
+    assertOptions(options)
+    const limit = resolveLimit(options?.limit)
+    const inclusiveEnd = options?.inclusiveEnd === true
+    if (limit === 0) return []
+    if (this.#cmp(from, to) > 0) return []
+    const out: [K, V][] = []
+    for (const [k, v] of this.#walk(true, { key: from })) {
+      const c = this.#cmp(k, to)
+      if (inclusiveEnd ? c > 0 : c >= 0) break
+      out.push([k, v])
+      if (out.length >= limit) break
+    }
+    return out
+  }
+
+  /**
+   * Insert or overwrite every pair from `entries`, read in full before the first write.
+   * On an empty tree this bulk-loads without calling `set`.
+   * @returns Count of keys that were not already present.
+   */
+  setAll(entries: Iterable<readonly [K, V]>): number {
+    return this.#atomic(() => {
+      const { keys, values } = readEntries(entries)
+      if (this.#size === 0) {
+        this.#bulkLoad(keys, values)
+        return this.#size
       }
+      let added = 0
+      for (let i = 0; i < keys.length; i++) {
+        if (!this.has(keys[i])) added++
+        this.set(keys[i], values[i])
+      }
+      return added
     })
   }
 
-  /** Returns an iterator that provides items in reversed order.
-   *  @param highestKey Key at which to start iterating, or undefined to
-   *         start at maxKey(). If the specified key doesn't exist then iteration
-   *         starts at the next lower key (according to the comparator).
-   *  @param reusedArray Optional array used repeatedly to store key-value
-   *         pairs, to avoid creating a new array on every iteration.
-   *  @param skipHighest Iff this flag is true and the highestKey exists in the
-   *         collection, the pair matching highestKey is skipped, not iterated.
+  /**
+   * Walk entries in `[from, to)` (or `[from, to]` when `inclusiveEnd` is true), invoking
+   * `visit` for each. Returning `false` from `visit` stops the walk.
+   * @returns Number of entries visited (including a final entry that returned false).
    */
-  reversed(
-    highestKey?: K,
-    reusedArray?: Array<K | V>,
-    skipHighest?: boolean
-  ): IterableIterator<[K, V]> {
-    if (highestKey === undefined) {
-      highestKey = this.maxKey()
-      skipHighest = undefined
-      if (highestKey === undefined) return iterator<[K, V]>() // collection is empty
+  visitRange(
+    from: K,
+    to: K,
+    visit: (key: K, value: V, index: number) => unknown,
+    options?: RangeOptions
+  ): number {
+    assertOptions(options)
+    const inclusiveEnd = options?.inclusiveEnd === true
+    let index = 0
+    for (const [k, v] of this.#walk(true, { key: from })) {
+      const c = this.#cmp(k, to)
+      if (inclusiveEnd ? c > 0 : c >= 0) break
+      const stop = visit(k, v, index)
+      index++
+      if (stop === false) break
     }
-    // eslint-disable-next-line
-    let { nodequeue, nodeindex, leaf } = this.findPath(highestKey)! || this.findPath(this.maxKey())!
-    assert(!nodequeue[0] || leaf === nodequeue[0][nodeindex[0]], 'wat!')
-    let i = leaf.indexOf(highestKey, 0, this._compare)
-    if (!skipHighest && i < leaf.keys.length && this._compare(leaf.keys[i], highestKey) <= 0) i++
-    let state = reusedArray !== undefined ? 1 : 0
+    return index
+  }
 
-    return iterator<[K, V]>(() => {
-      // eslint-disable-next-line
-      jump: while (true) {
-        switch (state) {
-          case 0:
-            if (--i >= 0) return { done: false, value: [leaf.keys[i], leaf.values[i]] }
-            state = 2
-            continue
-          case 1:
-            if (--i >= 0) {
-              // eslint-disable-next-line
-              reusedArray![0] = leaf.keys[i]!
-              // eslint-disable-next-line
-              reusedArray![1] = leaf.values[i]!
-              return { done: false, value: reusedArray as [K, V] }
-            }
-            state = 2
-          // eslint-disable-next-line
-          case 2:
-            // Advance to the next leaf node
-            // eslint-disable-next-line
-            let level = -1
-            while (true) {
-              if (++level >= nodequeue.length) {
-                state = 3
-                // eslint-disable-next-line
-                continue jump
-              }
-              if (--nodeindex[level] >= 0) break
-            }
-            for (; level > 0; level--) {
-              nodequeue[level - 1] = (
-                nodequeue[level][nodeindex[level]] as BNodeInternal<K, V>
-              ).children
-              nodeindex[level - 1] = nodequeue[level - 1].length - 1
-            }
-            leaf = nodequeue[0][nodeindex[0]]
-            i = leaf.keys.length
-            state = reusedArray !== undefined ? 1 : 0
-            continue
-          case 3:
-            return { done: true, value: undefined }
+  /**
+   * Atomically update entries in `[from, to)` (or `[from, to]` when `inclusiveEnd` is true).
+   * The callback returns a {@link RangeUpdate}, or `undefined` or `null` to leave the entry alone.
+   * @returns Number of entries visited.
+   */
+  updateRange(
+    from: K,
+    to: K,
+    update: (key: K, value: V, index: number) => RangeUpdate<V> | null | undefined,
+    options?: RangeOptions
+  ): number {
+    assertOptions(options)
+    return this.#atomic(() => {
+      const inclusiveEnd = options?.inclusiveEnd === true
+      let index = 0
+      for (const [k, v] of this.#walk(true, { key: from })) {
+        const c = this.#cmp(k, to)
+        if (inclusiveEnd ? c > 0 : c >= 0) break
+        const r = update(k, v, index)
+        index++
+        if (r == null) continue
+        if (!isNonPrimitive(r)) {
+          throw new TypeError('update must return a RangeUpdate, null or undefined')
         }
+        const remove = 'remove' in r && r.remove
+        if (remove && 'replace' in r) {
+          throw new TypeError('RangeUpdate cannot both replace and remove')
+        }
+        if (remove) this.delete(k)
+        else if ('replace' in r) this.set(k, r.replace)
+        if ('stop' in r && r.stop) break
       }
+      return index
     })
   }
 
-  /* Used by entries() and entriesReversed() to prepare to start iterating.
-   * It develops a "node queue" for each non-leaf level of the tree.
-   * Levels are numbered "bottom-up" so that level 0 is a list of leaf
-   * nodes from a low-level non-leaf node. The queue at a given level L
-   * consists of nodequeue[L] which is the children of a BNodeInternal,
-   * and nodeindex[L], the current index within that child list, such
-   * such that nodequeue[L-1] === nodequeue[L][nodeindex[L]].children.
-   * (However inside this function the order is reversed.)
-   * @private
+  /**
+   * Delete every entry whose key lies in `[from, to)` (or `[from, to]` when `inclusiveEnd`
+   * is true). Atomic: a failure leaves the tree unchanged. Under the default `compare`, an
+   * omitted `to` means up to the end: `undefined` ranks last, and an `undefined` key itself needs
+   * `inclusiveEnd`.
+   * @returns Number of entries removed.
    */
-  private findPath(
-    key?: K
-  ): { nodequeue: Array<Array<BNode<K, V>>>; nodeindex: number[]; leaf: BNode<K, V> } | undefined {
-    let nextnode = this.root
-    let nodequeue: Array<Array<BNode<K, V>>>, nodeindex: number[]
-
-    if (nextnode.isLeaf) {
-      // use preallocated empty
-      nodequeue = EmptyArray
-      nodeindex = EmptyArray
-    } else {
-      nodequeue = []
-      nodeindex = []
-      for (let d = 0; !nextnode.isLeaf; d++) {
-        nodequeue[d] = (nextnode as BNodeInternal<K, V>).children
-        nodeindex[d] = key === undefined ? 0 : nextnode.indexOf(key, 0, this._compare)
-        if (nodeindex[d] >= nodequeue[d].length) return // first key > maxKey()
-        nextnode = nodequeue[d][nodeindex[d]]
+  removeRange(from: K, to: K, options?: RangeOptions): number {
+    return this.#atomic(() => {
+      const keys = this.entriesBetween(from, to, options).map(([k]) => k)
+      let n = 0
+      for (const k of keys) {
+        if (this.delete(k)) n++
       }
-      nodequeue.reverse()
-      nodeindex.reverse()
-    }
-    return { nodequeue, nodeindex, leaf: nextnode }
-  }
-
-  /** Returns a new iterator for iterating the keys of each pair in ascending order.
-   *  @param firstKey: Minimum key to include in the output. */
-  keys(firstKey?: K): IterableIterator<K> {
-    const it = this.entries(firstKey, ReusedArray)
-    return iterator<K>(() => {
-      const n: IteratorResult<any> = it.next()
-      if (n.value) n.value = n.value[0]
       return n
     })
   }
 
-  /** Gets the lowest key in the tree. Complexity: O(log size) */
-  minKey() {
-    return this.root.minKey()
-  }
-
-  /** Gets the highest key in the tree. Complexity: O(1) */
-  maxKey() {
-    return this.root.maxKey()
-  }
-
-  /** Returns a new iterator for iterating the values of each pair in order by key.
-   *  @param firstKey: Minimum key whose associated value is included in the output. */
-  values(firstKey?: K): IterableIterator<V> {
-    const it = this.entries(firstKey, ReusedArray)
-    return iterator<V>(() => {
-      const n: IteratorResult<any> = it.next()
-      if (n.value) n.value = n.value[1]
+  /**
+   * Delete every listed key. Atomic: comparator failures leave the tree unchanged.
+   * @returns Number of keys that were present and removed.
+   */
+  removeAll(keys: Iterable<K>): number {
+    return this.#atomic(() => {
+      const list = arrayFromIterable<K>(keys)
+      for (const k of list) this.has(k)
+      let n = 0
+      for (const k of list) {
+        if (this.delete(k)) n++
+      }
       return n
     })
   }
 
-  /// //////////////////////////////////////////////////////////////////////////
-  // Additional methods ///////////////////////////////////////////////////////
-
-  /** Returns the maximum number of children/values before nodes will split. */
-  get maxNodeSize() {
-    return this._maxNodeSize
+  /** O(1) copy-on-write clone of the same class, sharing structure until either side writes. */
+  clone(): this {
+    const copy = this.cloneFrom([])
+    copy.#root = this.#root
+    copy.#size = this.#size
+    this.#token = {}
+    return copy
   }
 
-  // /** Quickly clones the tree by marking the root node as shared.
-  //  *  Both copies remain editable. When you modify either copy, any
-  //  *  nodes that are shared (or potentially shared) between the two
-  //  *  copies are cloned so that the changes do not affect other copies.
-  //  *  This is known as copy-on-write behavior, or "lazy copying". */
-  // clone(): BTree<K, V> {
-  //   this.root.isShared = true
-  //   let result = new BTree<K, V>(undefined, this._compare, this._maxNodeSize)
-  //   result.root = this.root
-  //   result.count = this.count
-  //   return result
-  // }
-
-  /** Performs a deep cloning of the tree, immediately duplicating any nodes that are
-   *  not currently marked as shared, in order to avoid marking any
-   *  additional nodes as shared.
-   *  @param force Clone all nodes, even shared ones.
-   */
-  clone(force = false): BTree<K, V> {
-    const result = new BTree<K, V>(undefined, this._compare, this._maxNodeSize)
-    result.root = this.root.greedyClone(force)
-    result.count = this.count
-    return result
-  }
-
-  /** Gets an array filled with the contents of the tree, sorted by key */
-  toArray(): Array<[K, V]> {
-    const min = this.minKey()
-    const max = this.maxKey()
-    const maxLength = 2147483647
-    if (min !== undefined) return this.keysRange(min, max, true, maxLength)
-    return []
-  }
-
-  /** Gets a string representing the tree's data based on toArray(). */
-  toString() {
-    return this.toArray().toString()
-  }
-
-  /** Returns the next pair whose key is larger than the specified key (or undefined if there is none).
-   * If key === undefined, this function returns the lowest pair.
-   * @param key The key to search for.
-   * @param reusedArray Optional array used repeatedly to store key-value pairs, to
-   * avoid creating a new array on every iteration.
-   */
-  lowerBound(key: K | undefined, reusedArray?: [K, V]): [K, V] | undefined {
-    reusedArray = reusedArray || ([] as unknown as [K, V])
-    if (key === undefined) {
-      return this.root.minPair(reusedArray)
-    }
-    return this.root.getPairOrNextHigher(key, this._compare, false, reusedArray)
-  }
-
-  /** Returns the next key larger than the specified key, or undefined if there is none.
-   *  Also, nextHigherKey(undefined) returns the lowest key.
-   */
-  // nextHigherKey(key: K | undefined): K | undefined {
-  //   let p = this.after(key, ReusedArray as [K, V])
-  //   return p && p[0]
-  // }
-
-  /** Returns the next pair whose key is smaller than the specified key (or undefined if there is none).
-   *  If key === undefined, this function returns the highest pair.
-   * @param key The key to search for.
-   * @param reusedArray Optional array used repeatedly to store key-value pairs, to
-   *        avoid creating a new array each time you call this method.
-   */
-  upperBound(key: K | undefined, reusedArray?: [K, V]): [K, V] | undefined {
-    reusedArray = reusedArray || ([] as unknown as [K, V])
-    if (key === undefined) {
-      return this.root.maxPair(reusedArray)
-    }
-    return this.root.getPairOrNextLower(key, this._compare, false, reusedArray)
-  }
-
-  /** Returns the next key smaller than the specified key, or undefined if there is none.
-   *  Also, nextLowerKey(undefined) returns the highest key.
-   */
-  // nextLowerKey(key: K | undefined): K | undefined {
-  //   let p = this.before(key, ReusedArray as [K, V])
-  //   return p && p[0]
-  // }
-
-  /** Returns the key-value pair associated with the supplied key if it exists
-   *  or the pair associated with the next lower pair otherwise. If there is no
-   *  next lower pair, undefined is returned.
-   * @param key The key to search for.
-   * @param reusedArray Optional array used repeatedly to store key-value pairs, to
-   *        avoid creating a new array each time you call this method.
-   * */
-  floor(key: K, reusedArray?: [K, V]): [K, V] | undefined {
-    return this.root.getPairOrNextLower(
-      key,
-      this._compare,
-      true,
-      reusedArray || ([] as unknown as [K, V])
-    )
-  }
-
-  /** Returns the key-value pair associated with the supplied key if it exists
-   *  or the pair associated with the next lower pair otherwise. If there is no
-   *  next lower pair, undefined is returned.
-   * @param key The key to search for.
-   * @param reusedArray Optional array used repeatedly to store key-value pairs, to
-   *        avoid creating a new array each time you call this method.
-   * */
-  ceiling(key: K, reusedArray?: [K, V]): [K, V] | undefined {
-    return this.root.getPairOrNextHigher(
-      key,
-      this._compare,
-      true,
-      reusedArray || ([] as unknown as [K, V])
-    )
+  toArray(): [K, V][] {
+    return [...this.entries()]
   }
 
   /**
-   * Builds an array of pairs from the specified range of keys, sorted by key.
-   * Each returned pair is also an array: pair[0] is the key, pair[1] is the value.
-   * @param low The first key in the array will be greater than or equal to `low`.
-   * @param high This method returns when a key larger than this is reached.
-   * @param includeHigh If the `high` key is present, its pair will be included
-   *        in the output if and only if this parameter is true. Note: if the
-   *        `low` key is present, it is always included in the output.
-   * @param maxLength Length limit. getRange will stop scanning the tree when
-   *                  the array reaches this size.
-   * @description Computational complexity: O(result.length + log size)
+   * Reject further mutators permanently (like `Object.freeze`).
+   * @returns `this`
+   * @throws {TypeError} during an atomic update, which could still roll back
    */
-  keysRange(low: K, high: K, includeHigh?: boolean, maxLength: number = 0x3ffffff): Array<[K, V]> {
-    const results: Array<[K, V]> = []
-    this.root.forRange(low, high, includeHigh, false, this, 0, (k, v) => {
-      results.push([k, v])
-      return results.length > maxLength ? Break : undefined
-    })
-    return results
-  }
-
-  /** Adds all pairs from a list of key-value pairs.
-   * @param entries Pairs to add to this tree. If there are duplicate keys,
-   *        later pairs currently overwrite earlier ones (e.g. [[0,1],[0,7]]
-   *        associates 0 with 7.)
-   * @returns The number of pairs added to the collection.
-   * @description Computational complexity: O(pairs.length * log(size + pairs.length))
-   */
-  extend(entries: Iterable<[K, V]>): number {
-    let added = 0
-    for (const pair of entries) {
-      this.set(pair[0], pair[1] ?? (null as V))
-      added++
+  freeze(): this {
+    if (this.#atomicDepth > 0) {
+      throw new TypeError('BTree cannot freeze during an atomic update')
     }
-    return added
+    this.#frozen = true
+    return this
   }
 
   /**
-   * Scans the specified range of keys, in ascending order by key.
-   * Note: the callback `onFound` must not insert or remove items in the
-   * collection. Doing so may cause incorrect data to be sent to the
-   * callback afterward.
-   * @param low The first key scanned will be greater than or equal to `low`.
-   * @param high Scanning stops when a key larger than this is reached.
-   * @param includeHigh If the `high` key is present, `onFound` is called for
-   *        that final pair if and only if this parameter is true.
-   * @param onFound A function that is called for each key-value pair. This
-   *        function can return {done:R} to stop early with result R.
-   * @param initialCounter Initial third argument of onFound. This value
-   *        increases by one each time `onFound` is called. Default: 0
-   * @returns The number of values found, or R if the callback returned
-   *        `{done:R}` to stop early.
-   * @description Computational complexity: O(number of items scanned + log size)
+   * Structural integrity check for tests.
+   * @internal
+   * @throws {Error} when an invariant fails
    */
-  rangeForEach<R = number>(
-    low: K,
-    high: K,
-    includeHigh: boolean,
-    onFound?: Iteratee<K, V>,
-    initialCounter?: number
-  ): R | number {
-    const r = this.root.forRange(low, high, includeHigh, false, this, initialCounter || 0, onFound)
-    return typeof r === 'number' ? r : r.done
-  }
-
-  /**
-   * Scans and potentially modifies values for a subsequence of keys.
-   * Note: the callback `onFound` should ideally be a pure function.
-   *   Specifically, it must not insert items, call clone(), or change
-   *   the collection except via return value; out-of-band editing may
-   *   cause an exception or may cause incorrect data to be sent to
-   *   the callback (duplicate or missed items). It must not cause a
-   *   clone() of the collection, otherwise the clone could be modified
-   *   by changes requested by the callback.
-   * @param low The first key scanned will be greater than or equal to `low`.
-   * @param high Scanning stops when a key larger than this is reached.
-   * @param includeHigh If the `high` key is present, `onFound` is called for
-   *        that final pair if and only if this parameter is true.
-   * @param onFound A function that is called for each key-value pair. This
-   *        function can return `{value:v}` to change the value associated
-   *        with the current key, `{delete:true}` to delete the current pair,
-   *        `{done:R}` to stop early with result R, or it can return nothing
-   *        (undefined or {}) to cause no effect and continue iterating.
-   *        `{done:R}` can be combined with one of the other two commands.
-   *        The third argument `counter` is the number of items iterated
-   *        previously; it equals 0 when `onFound` is called the first time.
-   * @returns The number of values scanned, or R if the callback returned
-   *        `{done:R}` to stop early.
-   * @description
-   *   Computational complexity: O(number of items scanned + log size)
-   *   Note: if the tree has been cloned with clone(), any shared
-   *   nodes are copied before `onFound` is called. This takes O(n) time
-   *   where n is proportional to the amount of shared data scanned.
-   */
-  rangeUpdate<R = V>(
-    low: K,
-    high: K,
-    includeHigh: boolean,
-    onFound: (k: K, v: V | undefined, counter: number) => any,
-    initialCounter?: number
-  ): R | number {
-    let root = this.root
-    if (root.isShared) this.root = root = root.clone()
-    try {
-      const r = root.forRange(low, high, includeHigh, true, this, initialCounter || 0, onFound)
-      return typeof r === 'number' ? r : r.done
-    } finally {
-      let isShared
-      while (root.keys.length <= 1 && !root.isLeaf) {
-        isShared ||= root.isShared
-        this.root = root =
-          root.keys.length === 0 ? EmptyLeaf : (root as any as BNodeInternal<K, V>).children[0]
+  [checkInvariants](): void {
+    const fail = (name: string): never => {
+      throw new Error(`BTree invariant violated: ${name}`)
+    }
+    const depths = new Set<number>()
+    const walk = (node: TreeNode<K, V>, depth: number, isRoot: boolean): number => {
+      if (node.kind === 'leaf') {
+        if (node.keys.length !== node.values.length) fail('leaf-arrays')
+        depths.add(depth)
+        if (
+          !isRoot &&
+          (node.keys.length < this.#minFill || node.keys.length > this.#nodeCapacity)
+        ) {
+          fail('fill')
+        }
+        if (isRoot && node.keys.length > this.#nodeCapacity) fail('fill')
+        for (let i = 1; i < node.keys.length; i++) {
+          if (!(this.#cmp(node.keys[i - 1], node.keys[i]) < 0)) fail('order')
+        }
+        return node.keys.length
       }
-      // If any ancestor of the new root was shared, the new root must also be shared
-      if (isShared) {
-        root.isShared = true
+      if (node.maxKeys.length !== node.children.length) fail('separators')
+      if (
+        !isRoot &&
+        (node.children.length < this.#minFill || node.children.length > this.#nodeCapacity)
+      ) {
+        fail('fill')
       }
+      if (isRoot) {
+        if (node.children.length > this.#nodeCapacity) fail('fill')
+        if (node.children.length < 2) fail('fill')
+      }
+      let sum = 0
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i]
+        const childCount = walk(child, depth + 1, false)
+        sum += childCount
+        const expected = readLastKey(child)
+        const sep = node.maxKeys[i]
+        if (!expected.ok || !Object.is(sep, expected.key)) fail('separators')
+      }
+      if (node.total !== sum) fail('totals')
+      return sum
+    }
+    const rootCount = walk(this.#root, 0, true)
+    if (rootCount !== this.#size) fail('totals')
+    if (depths.size > 1) fail('depth')
+    if (this.height !== (depths.values().next().value ?? 0)) fail('depth')
+    if ((this.#size === 0) !== (this.#root.kind === 'leaf' && this.#root.keys.length === 0)) {
+      fail('empty')
     }
   }
 
-  /**
-   * Removes a range of key-value pairs from the B+ tree.
-   * @param low The first key scanned will be greater than or equal to `low`.
-   * @param high Scanning stops when a key larger than this is reached.
-   * @param includeHigh Specifies whether the `high` key, if present, is deleted.
-   * @returns The number of key-value pairs that were deleted.
-   * @description Computational complexity: O(log size + number of items deleted)
-   */
-  removeRange(low: K, high: K, includeHigh: boolean): number {
-    return this.rangeUpdate(low, high, includeHigh, DeleteRange)
+  #assertMutable(): void {
+    if (this.#frozen) throw new TypeError('BTree is frozen')
   }
 
-  /** Removes a series of keys from the collection. */
-  removeKeys(keys: K[]): number {
-    let r = 0
-    for (let i = 0; i < keys.length; i++) if (this.remove(keys[i])) r++
+  #cmp(a: K, b: K): number {
+    const r = this.#compareFn(a, b)
+    if (typeof r !== 'number' || !Number.isFinite(r)) {
+      throw new TypeError('comparator must return a finite number')
+    }
     return r
   }
 
-  /** Gets the height of the tree: the number of internal nodes between the
-   *  BTree object and its leaf nodes (zero if there are no internal nodes). */
-  get height(): number {
-    let node = this.root as any
-    let height = -1
-    while (node) {
-      height++
-      node = node.isLeaf ? undefined : node?.children?.[0]
+  #assertReflexive(key: K): void {
+    if (this.#cmp(key, key) !== 0) {
+      throw new TypeError('comparator must return 0 for a key compared with itself')
     }
-    return height
   }
 
-  /** Makes the object read-only to ensure it is not accidentally modified.
-   *  Freezing does not have to be permanent; unfreeze() reverses the effect.
-   *  This is accomplished by replacing mutator functions with a function
-   *  that throws an Error. Compared to using a property (e.g. this.isFrozen)
-   *  this implementation gives better performance in non-frozen BTrees.
-   */
-  freeze() {
-    const t = this as any
-    // Note: all other mutators ultimately call set() or editRange()
-    //       so we don't need to override those others.
-    t.clear =
-      t.set =
-      t.editRange =
-        () => {
-          throw TypeError('Attempted to modify a frozen BTree')
+  #lowerBound(keys: readonly K[], key: K): number {
+    let lo = 0
+    let hi = keys.length
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      if (this.#cmp(keys[mid], key) < 0) lo = mid + 1
+      else hi = mid
+    }
+    return lo
+  }
+
+  #upperBound(keys: readonly K[], key: K): number {
+    let lo = 0
+    let hi = keys.length
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      if (this.#cmp(keys[mid], key) <= 0) lo = mid + 1
+      else hi = mid
+    }
+    return lo
+  }
+
+  #find(
+    key: K
+  ): { path: PathFrame<K, V>[]; leaf: LeafNode<K, V>; pos: number; found: boolean } | undefined {
+    const path: PathFrame<K, V>[] = []
+    let node = this.#root
+    while (node.kind === 'branch') {
+      const index = this.#lowerBound(node.maxKeys, key)
+      if (index >= node.children.length) {
+        return undefined
+      }
+      path.push({ node, index })
+      node = node.children[index]
+    }
+    const pos = this.#lowerBound(node.keys, key)
+    const found = pos < node.keys.length && this.#cmp(node.keys[pos], key) === 0
+    return { path, leaf: node, pos, found }
+  }
+
+  #findForSet(key: K): {
+    path: PathFrame<K, V>[]
+    leaf: LeafNode<K, V>
+    pos: number
+    found: boolean
+  } {
+    const path: PathFrame<K, V>[] = []
+    let node = this.#root
+    while (node.kind === 'branch') {
+      let index = this.#lowerBound(node.maxKeys, key)
+      if (index >= node.children.length) index = node.children.length - 1
+      path.push({ node, index })
+      node = node.children[index]
+    }
+    const pos = this.#lowerBound(node.keys, key)
+    const found = pos < node.keys.length && this.#cmp(node.keys[pos], key) === 0
+    return { path, leaf: node, pos, found }
+  }
+
+  #own(node: TreeNode<K, V>): TreeNode<K, V> {
+    if (node.owner === this.#token) return node
+    if (node.kind === 'leaf') {
+      return {
+        kind: 'leaf',
+        owner: this.#token,
+        keys: node.keys.slice(),
+        values: node.values.slice()
+      }
+    }
+    return {
+      kind: 'branch',
+      owner: this.#token,
+      children: node.children.slice(),
+      maxKeys: node.maxKeys.slice(),
+      total: node.total
+    }
+  }
+
+  #ownPath(path: PathFrame<K, V>[], _leaf: LeafNode<K, V>): LeafNode<K, V> {
+    let owned = this.#own(this.#root)
+    this.#root = owned
+    for (const frame of path) {
+      if (owned.kind !== 'branch') break
+      const ownedChild = this.#own(owned.children[frame.index])
+      owned.children[frame.index] = ownedChild
+      frame.node = owned
+      owned = ownedChild
+    }
+    if (owned.kind === 'leaf') return owned
+    return emptyLeaf(this.#token)
+  }
+
+  #refreshSeparators(path: PathFrame<K, V>[], leaf: LeafNode<K, V>): void {
+    let child: TreeNode<K, V> = leaf
+    for (let p = path.length - 1; p >= 0; p--) {
+      const frame = path[p]
+      const last = readLastKey(child)
+      if (last.ok) frame.node.maxKeys[frame.index] = last.key
+      child = frame.node
+    }
+  }
+
+  #bubbleInsert(path: PathFrame<K, V>[], leaf: LeafNode<K, V>): void {
+    let node: TreeNode<K, V> = leaf
+    let pathIndex = path.length - 1
+    while (itemCount(node) === this.#nodeCapacity + 1) {
+      const mid = Math.ceil((this.#nodeCapacity + 1) / 2)
+      let left: TreeNode<K, V>
+      let right: TreeNode<K, V>
+      if (node.kind === 'leaf') {
+        left = {
+          kind: 'leaf',
+          owner: this.#token,
+          keys: node.keys.slice(0, mid),
+          values: node.values.slice(0, mid)
         }
-  }
-
-  [Symbol.iterator]() {
-    return this.entries()
-  }
-}
-
-function iterator<T>(
-  next: () => IteratorResult<T> = () => ({ done: true, value: undefined })
-): IterableIterator<T> {
-  return {
-    next,
-    [Symbol.iterator]() {
-      return this
-    }
-  }
-}
-
-/** Internal node (non-leaf node) ********************************************/
-class BNodeInternal<K, V> extends BNode<K, V> {
-  // Note: conventionally B+ trees have one fewer key than the number of
-  // children, but I find it easier to keep the array lengths equal: each
-  // keys[i] caches the value of children[i].maxKey().
-  children: Array<BNode<K, V>>
-
-  /**
-   * This does not mark `children` as shared, so it is the responsibility of the caller
-   * to ensure children are either marked shared, or aren't included in another tree.
-   */
-  constructor(children: Array<BNode<K, V>>, keys?: K[]) {
-    if (!keys) {
-      keys = []
-      for (let i = 0; i < children.length; i++) keys[i] = children[i].maxKey()
-    }
-    super(keys)
-    this.children = children
-  }
-
-  clone(): BNode<K, V> {
-    const children = this.children.slice(0)
-    for (let i = 0; i < children.length; i++) children[i].isShared = true
-    return new BNodeInternal<K, V>(children, this.keys.slice(0))
-  }
-
-  greedyClone(force?: boolean): BNode<K, V> {
-    if (this.isShared && !force) return this
-    const nu = new BNodeInternal<K, V>(this.children.slice(0), this.keys.slice(0))
-    for (let i = 0; i < nu.children.length; i++) nu.children[i] = nu.children[i].greedyClone(force)
-    return nu
-  }
-
-  minKey() {
-    return this.children[0].minKey()
-  }
-
-  minPair(reusedArray: [K, V]): [K, V] | undefined {
-    return this.children[0].minPair(reusedArray)
-  }
-
-  maxPair(reusedArray: [K, V]): [K, V] | undefined {
-    return this.children[this.children.length - 1].maxPair(reusedArray)
-  }
-
-  get(key: K, defaultValue: V | undefined, tree: BTree<K, V>): V | undefined {
-    const i = this.indexOf(key, 0, tree._compare)
-    const children = this.children
-    return i < children.length ? children[i].get(key, defaultValue, tree) : undefined
-  }
-
-  getPairOrNextLower(
-    key: K,
-    compare: (a: K, b: K) => number,
-    inclusive: boolean,
-    reusedArray: [K, V]
-  ): [K, V] | undefined {
-    const i = this.indexOf(key, 0, compare)
-    const children = this.children
-    if (i >= children.length) return this.maxPair(reusedArray)
-    const result = children[i].getPairOrNextLower(key, compare, inclusive, reusedArray)
-    if (result === undefined && i > 0) {
-      return children[i - 1].maxPair(reusedArray)
-    }
-    return result
-  }
-
-  getPairOrNextHigher(
-    key: K,
-    compare: (a: K, b: K) => number,
-    inclusive: boolean,
-    reusedArray: [K, V]
-  ): [K, V] | undefined {
-    const i = this.indexOf(key, 0, compare)
-    const children = this.children
-    const length = children.length
-    if (i >= length) return undefined
-    const result = children[i].getPairOrNextHigher(key, compare, inclusive, reusedArray)
-    if (result === undefined && i < length - 1) {
-      return children[i + 1].minPair(reusedArray)
-    }
-    return result
-  }
-
-  checkValid(depth: number, tree: BTree<K, V>, baseIndex: number): number {
-    const kL = this.keys.length
-    const cL = this.children.length
-    assert(
-      kL === cL,
-      'keys/children length mismatch: depth',
-      depth,
-      'lengths',
-      kL,
-      cL,
-      'baseIndex',
-      baseIndex
-    )
-    assert(
-      kL > 1 || depth > 0,
-      'internal node has length',
-      kL,
-      'at depth',
-      depth,
-      'baseIndex',
-      baseIndex
-    )
-    let size = 0
-    const c = this.children
-    const k = this.keys
-    let childSize = 0
-    for (let i = 0; i < cL; i++) {
-      size += c[i].checkValid(depth + 1, tree, baseIndex + size)
-      childSize += c[i].keys.length
-      assert(size >= childSize, 'wtf', baseIndex) // no way this will ever fail
-      assert(
-        i === 0 || c[i - 1].constructor === c[i].constructor,
-        'type mismatch, baseIndex:',
-        baseIndex
-      )
-      if (c[i].maxKey() !== k[i])
-        assert(
-          false,
-          'keys[',
-          i,
-          '] =',
-          k[i],
-          'is wrong, should be ',
-          c[i].maxKey(),
-          'at depth',
-          depth,
-          'baseIndex',
-          baseIndex
-        )
-      if (!(i === 0 || tree._compare(k[i - 1], k[i]) < 0))
-        assert(false, 'sort violation at depth', depth, 'index', i, 'keys', k[i - 1], k[i])
-    }
-    // 2020/08: BTree doesn't always avoid grossly undersized nodes,
-    // but AFAIK such nodes are pretty harmless, so accept them.
-    const toofew = childSize === 0 // childSize < (tree.maxNodeSize >> 1)*cL;
-    if (toofew || childSize > tree.maxNodeSize * cL)
-      assert(
-        false,
-        toofew ? 'too few' : 'too many',
-        'children (',
-        childSize,
-        size,
-        ') at depth',
-        depth,
-        'maxNodeSize:',
-        tree.maxNodeSize,
-        'children.length:',
-        cL,
-        'baseIndex:',
-        baseIndex
-      )
-    return size
-  }
-
-  /// //////////////////////////////////////////////////////////////////////////
-  // Internal Node: set & node splitting //////////////////////////////////////
-
-  set(
-    key: K,
-    value: V,
-    overwrite: boolean | undefined,
-    tree: BTree<K, V>
-  ): boolean | BNodeInternal<K, V> {
-    const c = this.children
-    const max = tree._maxNodeSize
-    const cmp = tree._compare
-    let i = Math.min(this.indexOf(key, 0, cmp), c.length - 1)
-    let child = c[i]
-
-    if (child.isShared) c[i] = child = child.clone()
-    if (child.keys.length >= max) {
-      // child is full; inserting anything else will cause a split.
-      // Shifting an item to the left or right sibling may avoid a split.
-      // We can do a shift if the adjacent node is not full and if the
-      // current key can still be placed in the same node after the shift.
-      let other: BNode<K, V>
-      if (i > 0 && (other = c[i - 1]).keys.length < max && cmp(child.keys[0], key) < 0) {
-        if (other.isShared) c[i - 1] = other = other.clone()
-        other.takeFromRight(child)
-        this.keys[i - 1] = other.maxKey()
-      } else if (
-        (other = c[i + 1]) !== undefined &&
-        other.keys.length < max &&
-        cmp(child.maxKey(), key) < 0
-      ) {
-        if (other.isShared) c[i + 1] = other = other.clone()
-        other.takeFromLeft(child)
-        this.keys[i] = c[i].maxKey()
-      }
-    }
-
-    const result = child.set(key, value, overwrite, tree)
-    if (result === false) return false
-    this.keys[i] = child.maxKey()
-    if (result === true) return true
-
-    // The child has split and `result` is a new right child... does it fit?
-    if (this.keys.length < max) {
-      // yes
-      this.insert(i + 1, result)
-      return true
-    } else {
-      // no, we must split also
-      const newRightSibling = this.splitOffRightSide()
-      let target = this as any
-      if (cmp(result.maxKey(), this.maxKey()) > 0) {
-        target = newRightSibling
-        i -= this.keys.length
-      }
-      target.insert(i + 1, result)
-      return newRightSibling
-    }
-  }
-
-  /**
-   * Inserts `child` at index `i`.
-   * This does not mark `child` as shared, so it is the responsibility of the caller
-   * to ensure that either child is marked shared, or it is not included in another tree.
-   */
-  insert(i, child: BNode<K, V>) {
-    this.children.splice(i, 0, child)
-    this.keys.splice(i, 0, child.maxKey())
-  }
-
-  /**
-   * Split this node.
-   * Modifies this to remove the second half of the items, returning a separate node containing them.
-   */
-  splitOffRightSide() {
-    // assert !this.isShared;
-    const half = this.children.length >> 1
-    return new BNodeInternal<K, V>(this.children.splice(half), this.keys.splice(half))
-  }
-
-  takeFromRight(rhs: BNode<K, V>) {
-    // Reminder: parent node must update its copy of key for this node
-    // assert: neither node is shared
-    // assert rhs.keys.length > (maxNodeSize/2 && this.keys.length<maxNodeSize)
-    // eslint-disable-next-line
-    this.keys.push(rhs.keys.shift()!)
-    // eslint-disable-next-line
-    this.children.push((rhs as BNodeInternal<K, V>).children.shift()!)
-  }
-
-  takeFromLeft(lhs: BNode<K, V>) {
-    // Reminder: parent node must update its copy of key for this node
-    // assert: neither node is shared
-    // assert rhs.keys.length > (maxNodeSize/2 && this.keys.length<maxNodeSize)
-    // eslint-disable-next-line
-    this.keys.unshift(lhs.keys.pop()!)
-    // eslint-disable-next-line
-    this.children.unshift((lhs as BNodeInternal<K, V>).children.pop()!)
-  }
-
-  /// //////////////////////////////////////////////////////////////////////////
-  // Internal Node: scanning & deletions //////////////////////////////////////
-
-  // Note: `count` is the next value of the third argument to `onFound`.
-  //       A leaf node's `forRange` function returns a new value for this counter,
-  //       unless the operation is to stop early.
-  forRange<R>(
-    low: K,
-    high: K,
-    includeHigh: boolean | undefined,
-    editMode: boolean,
-    tree: BTree<K, V>,
-    count: number,
-    onFound?: (k: K, v: V | undefined, counter: number) => any
-  ): any {
-    const cmp = tree._compare
-    const keys = this.keys
-    const children = this.children
-    let iLow = this.indexOf(low, 0, cmp)
-    let i = iLow
-    const iHigh = Math.min(high === low ? iLow : this.indexOf(high, 0, cmp), keys.length - 1)
-    if (!editMode) {
-      // Simple case
-      for (; i <= iHigh; i++) {
-        const result = children[i].forRange(low, high, includeHigh, editMode, tree, count, onFound)
-        if (typeof result !== 'number') return result
-        count = result
-      }
-    } else if (i <= iHigh) {
-      try {
-        for (; i <= iHigh; i++) {
-          if (children[i].isShared) children[i] = children[i].clone()
-          const result = children[i].forRange(
-            low,
-            high,
-            includeHigh,
-            editMode,
-            tree,
-            count,
-            onFound
-          )
-          // Note: if children[i] is empty then keys[i]=undefined.
-          //       This is an invalid state, but it is fixed below.
-          keys[i] = children[i].maxKey()
-          if (typeof result !== 'number') return result
-          count = result
+        right = {
+          kind: 'leaf',
+          owner: this.#token,
+          keys: node.keys.slice(mid),
+          values: node.values.slice(mid)
         }
-      } finally {
-        // Deletions may have occurred, so look for opportunities to merge nodes.
-        const half = tree._maxNodeSize >> 1
-        if (iLow > 0) iLow--
-        for (i = iHigh; i >= iLow; i--) {
-          if (children[i].keys.length <= half) {
-            if (children[i].keys.length !== 0) {
-              this.tryMerge(i, tree._maxNodeSize)
-            } else {
-              // child is empty! delete it!
-              keys.splice(i, 1)
-              children.splice(i, 1)
-            }
+      } else {
+        const leftChildren = node.children.slice(0, mid)
+        const rightChildren = node.children.slice(mid)
+        let leftTotal = 0
+        for (const c of leftChildren) leftTotal += countOf(c)
+        let rightTotal = 0
+        for (const c of rightChildren) rightTotal += countOf(c)
+        left = {
+          kind: 'branch',
+          owner: this.#token,
+          children: leftChildren,
+          maxKeys: node.maxKeys.slice(0, mid),
+          total: leftTotal
+        }
+        right = {
+          kind: 'branch',
+          owner: this.#token,
+          children: rightChildren,
+          maxKeys: node.maxKeys.slice(mid),
+          total: rightTotal
+        }
+      }
+      if (pathIndex < 0) {
+        const leftLast = readLastKey(left)
+        const rightLast = readLastKey(right)
+        if (!leftLast.ok || !rightLast.ok) return
+        this.#root = {
+          kind: 'branch',
+          owner: this.#token,
+          children: [left, right],
+          maxKeys: [leftLast.key, rightLast.key],
+          total: countOf(left) + countOf(right)
+        }
+        return
+      }
+      const frame = path[pathIndex]
+      const parent = frame.node
+      const i = frame.index
+      parent.children[i] = left
+      parent.children.splice(i + 1, 0, right)
+      const leftLast = readLastKey(left)
+      const rightLast = readLastKey(right)
+      if (!leftLast.ok || !rightLast.ok) return
+      parent.maxKeys[i] = leftLast.key
+      parent.maxKeys.splice(i + 1, 0, rightLast.key)
+      let sum = 0
+      for (const c of parent.children) sum += countOf(c)
+      parent.total = sum
+      node = parent
+      pathIndex--
+    }
+    this.#fixTotals(path)
+  }
+
+  #fixTotals(path: PathFrame<K, V>[]): void {
+    for (let p = path.length - 1; p >= 0; p--) {
+      const frame = path[p]
+      let sum = 0
+      for (const c of frame.node.children) sum += countOf(c)
+      frame.node.total = sum
+      const last = readLastKey(frame.node.children[frame.index])
+      if (last.ok) frame.node.maxKeys[frame.index] = last.key
+    }
+  }
+
+  #bubbleDelete(path: PathFrame<K, V>[], leaf: LeafNode<K, V>): void {
+    for (const frame of path) {
+      frame.node.total -= 1
+    }
+    const frames = path.slice()
+    let node: TreeNode<K, V> = leaf
+    while (frames.length > 0 && itemCount(node) < this.#minFill) {
+      const frame = frames[frames.length - 1]
+      const parent = frame.node
+      const i = frame.index
+      const j = i > 0 ? i - 1 : i + 1
+      const sib = this.#own(parent.children[j])
+      parent.children[j] = sib
+      if (itemCount(sib) > this.#minFill) {
+        if (j < i) {
+          if (node.kind === 'leaf' && sib.kind === 'leaf') {
+            const ki = sib.keys.length - 1
+            if (ki < 0) break
+            const k = sib.keys[ki]
+            const v = sib.values[ki]
+            sib.keys.length = ki
+            sib.values.length = ki
+            node.keys.unshift(k)
+            node.values.unshift(v)
+          } else if (node.kind === 'branch' && sib.kind === 'branch') {
+            const ci = sib.children.length - 1
+            if (ci < 0) break
+            const moved = sib.children[ci]
+            const movedKey = sib.maxKeys[ci]
+            sib.children.length = ci
+            sib.maxKeys.length = ci
+            const movedCount = countOf(moved)
+            sib.total -= movedCount
+            node.children.unshift(moved)
+            node.maxKeys.unshift(movedKey)
+            node.total += movedCount
+          }
+        } else if (node.kind === 'leaf' && sib.kind === 'leaf') {
+          if (sib.keys.length === 0) break
+          const k = sib.keys[0]
+          const v = sib.values[0]
+          sib.keys.splice(0, 1)
+          sib.values.splice(0, 1)
+          node.keys.push(k)
+          node.values.push(v)
+        } else if (node.kind === 'branch' && sib.kind === 'branch') {
+          if (sib.children.length === 0) break
+          const moved = sib.children[0]
+          const movedKey = sib.maxKeys[0]
+          sib.children.splice(0, 1)
+          sib.maxKeys.splice(0, 1)
+          const movedCount = countOf(moved)
+          sib.total -= movedCount
+          node.children.push(moved)
+          node.maxKeys.push(movedKey)
+          node.total += movedCount
+        }
+        const leftIdx = Math.min(i, j)
+        const rightIdx = Math.max(i, j)
+        const leftLast = readLastKey(parent.children[leftIdx])
+        if (leftLast.ok) parent.maxKeys[leftIdx] = leftLast.key
+        const rightLast = readLastKey(parent.children[rightIdx])
+        if (rightLast.ok) parent.maxKeys[rightIdx] = rightLast.key
+        break
+      }
+      const leftIdx = Math.min(i, j)
+      const rightIdx = Math.max(i, j)
+      const leftRaw = parent.children[leftIdx]
+      const rightRaw = parent.children[rightIdx]
+      const left = this.#own(leftRaw)
+      parent.children[leftIdx] = left
+      if (left.kind === 'leaf' && rightRaw.kind === 'leaf') {
+        left.keys.push(...rightRaw.keys)
+        left.values.push(...rightRaw.values)
+      } else if (left.kind === 'branch' && rightRaw.kind === 'branch') {
+        left.children.push(...rightRaw.children)
+        left.maxKeys.push(...rightRaw.maxKeys)
+        left.total += rightRaw.total
+      }
+      parent.children.splice(rightIdx, 1)
+      parent.maxKeys.splice(rightIdx, 1)
+      const last = readLastKey(left)
+      if (last.ok) parent.maxKeys[leftIdx] = last.key
+      node = parent
+      frames.pop()
+    }
+    while (this.#root.kind === 'branch' && this.#root.children.length === 1) {
+      this.#root = this.#root.children[0]
+      if (frames.length > 0) frames.shift()
+    }
+    let child: TreeNode<K, V> = node
+    for (let p = frames.length - 1; p >= 0; p--) {
+      const frame = frames[p]
+      const last = readLastKey(child)
+      if (last.ok) frame.node.maxKeys[frame.index] = last.key
+      let sum = 0
+      for (const c of frame.node.children) sum += countOf(c)
+      frame.node.total = sum
+      child = frame.node
+    }
+  }
+
+  #bound(key: K, kind: 'higher' | 'lower' | 'ceiling' | 'floor'): [K, V] | undefined {
+    if (kind === 'ceiling' || kind === 'higher') {
+      let node = this.#root
+      while (node.kind === 'branch') {
+        const index =
+          kind === 'ceiling'
+            ? this.#lowerBound(node.maxKeys, key)
+            : this.#upperBound(node.maxKeys, key)
+        if (index >= node.children.length) return undefined
+        node = node.children[index]
+      }
+      const pos =
+        kind === 'ceiling' ? this.#lowerBound(node.keys, key) : this.#upperBound(node.keys, key)
+      const k = node.keys[pos]
+      const v = node.values[pos]
+      if (pos >= node.keys.length) return undefined
+      return [k, v]
+    }
+    // floor / lower
+    let node = this.#root
+    let fallback: TreeNode<K, V> | undefined
+    while (node.kind === 'branch') {
+      const index =
+        kind === 'floor' ? this.#upperBound(node.maxKeys, key) : this.#lowerBound(node.maxKeys, key)
+      if (index > 0) fallback = node.children[index - 1]
+      if (index >= node.children.length) {
+        node = node.children[node.children.length - 1]
+        break
+      }
+      node = node.children[index]
+    }
+    while (node.kind === 'branch') {
+      node = node.children[node.children.length - 1]
+    }
+    const pos =
+      kind === 'floor' ? this.#upperBound(node.keys, key) - 1 : this.#lowerBound(node.keys, key) - 1
+    if (pos >= 0 && pos < node.keys.length) {
+      return [node.keys[pos], node.values[pos]]
+    }
+    if (fallback === undefined) return undefined
+    let n = fallback
+    while (n.kind === 'branch') {
+      n = n.children[n.children.length - 1]
+    }
+    if (n.keys.length === 0) return undefined
+    return [n.keys[n.keys.length - 1], n.values[n.values.length - 1]]
+  }
+
+  *#walk(forward: boolean, start: { key: K } | undefined): Generator<[K, V], void, undefined> {
+    interface Cursor {
+      branches: PathFrame<K, V>[]
+      leaf: LeafNode<K, V>
+      index: number
+    }
+    // `from` undefined means "no bound" (an explicit `undefined` key is wrapped as `{ key }`).
+    const seek = (from: { key: K } | undefined, exclusive: boolean): Cursor | undefined => {
+      if (this.#size === 0) return undefined
+      const branches: PathFrame<K, V>[] = []
+      let node: TreeNode<K, V> = this.#root
+      if (from === undefined) {
+        if (forward) {
+          while (node.kind === 'branch') {
+            branches.push({ node, index: 0 })
+            node = node.children[0]
+          }
+          if (node.keys.length === 0) return undefined
+          return { branches, leaf: node, index: 0 }
+        }
+        while (node.kind === 'branch') {
+          const idx = node.children.length - 1
+          branches.push({ node, index: idx })
+          node = node.children[idx]
+        }
+        if (node.keys.length === 0) return undefined
+        return { branches, leaf: node, index: node.keys.length - 1 }
+      }
+      const key = from.key
+      if (forward) {
+        while (node.kind === 'branch') {
+          const index = exclusive
+            ? this.#upperBound(node.maxKeys, key)
+            : this.#lowerBound(node.maxKeys, key)
+          if (index >= node.children.length) return undefined
+          branches.push({ node, index })
+          node = node.children[index]
+        }
+        const index = exclusive
+          ? this.#upperBound(node.keys, key)
+          : this.#lowerBound(node.keys, key)
+        if (index >= node.keys.length) return undefined
+        return { branches, leaf: node, index }
+      }
+      // reverse: last key <= key (or < if exclusive)
+      let fallback: { branches: PathFrame<K, V>[]; node: TreeNode<K, V> } | undefined
+      while (node.kind === 'branch') {
+        const index = exclusive
+          ? this.#lowerBound(node.maxKeys, key)
+          : this.#upperBound(node.maxKeys, key)
+        if (index > 0) {
+          fallback = {
+            branches: [...branches, { node, index: index - 1 }],
+            node: node.children[index - 1]
           }
         }
-        if (children.length !== 0 && children[0].keys.length === 0) assert(false, 'emptiness bug')
+        if (index >= node.children.length) {
+          const idx = node.children.length - 1
+          branches.push({ node, index: idx })
+          node = node.children[idx]
+          break
+        }
+        branches.push({ node, index })
+        node = node.children[index]
       }
+      while (node.kind === 'branch') {
+        const idx = node.children.length - 1
+        branches.push({ node, index: idx })
+        node = node.children[idx]
+      }
+      const index = exclusive
+        ? this.#lowerBound(node.keys, key) - 1
+        : this.#upperBound(node.keys, key) - 1
+      if (index >= 0) return { branches, leaf: node, index }
+      if (fallback === undefined) return undefined
+      let n = fallback.node
+      const fb = fallback.branches
+      while (n.kind === 'branch') {
+        const idx = n.children.length - 1
+        fb.push({ node: n, index: idx })
+        n = n.children[idx]
+      }
+      if (n.keys.length === 0) return undefined
+      return { branches: fb, leaf: n, index: n.keys.length - 1 }
     }
-    return count
+
+    let cursor = seek(start, false)
+
+    const advance = (c: Cursor): Cursor | undefined => {
+      if (forward) {
+        if (c.index + 1 < c.leaf.keys.length) return { ...c, index: c.index + 1 }
+        const branches = c.branches.slice()
+        while (branches.length > 0) {
+          const top = branches[branches.length - 1]
+          if (top.index + 1 < top.node.children.length) {
+            top.index++
+            let node: TreeNode<K, V> = top.node.children[top.index]
+            while (node.kind === 'branch') {
+              branches.push({ node, index: 0 })
+              node = node.children[0]
+            }
+            return { branches, leaf: node, index: 0 }
+          }
+          branches.pop()
+        }
+        return undefined
+      }
+      if (c.index > 0) return { ...c, index: c.index - 1 }
+      const branches = c.branches.slice()
+      while (branches.length > 0) {
+        const top = branches[branches.length - 1]
+        if (top.index > 0) {
+          top.index--
+          let node: TreeNode<K, V> = top.node.children[top.index]
+          while (node.kind === 'branch') {
+            const childIndex = node.children.length - 1
+            branches.push({ node, index: childIndex })
+            node = node.children[childIndex]
+          }
+          return { branches, leaf: node, index: node.keys.length - 1 }
+        }
+        branches.pop()
+      }
+      return undefined
+    }
+
+    while (cursor !== undefined) {
+      if (cursor.index < 0 || cursor.index >= cursor.leaf.keys.length) return
+      const k = cursor.leaf.keys[cursor.index]
+      const v = cursor.leaf.values[cursor.index]
+      const seenVersion = this.#version
+      yield [k, v]
+      cursor = this.#version === seenVersion ? advance(cursor) : seek({ key: k }, true)
+    }
   }
 
-  /** Merges child i with child i+1 if their combined size is not too large */
-  tryMerge(i, maxSize: number): boolean {
-    const children = this.children
-    if (i >= 0 && i + 1 < children.length) {
-      if (children[i].keys.length + children[i + 1].keys.length <= maxSize) {
-        if (children[i].isShared)
-          // cloned already UNLESS i is outside scan range
-          children[i] = children[i].clone()
-        children[i].mergeSibling(children[i + 1], maxSize)
-        children.splice(i + 1, 1)
-        this.keys.splice(i + 1, 1)
-        this.keys[i] = children[i].maxKey()
-        return true
-      }
+  #atomic<T>(fn: () => T): T {
+    this.#assertMutable()
+    const snapshotRoot = this.#root
+    const snapshotSize = this.#size
+    this.#token = {}
+    this.#atomicDepth++
+    try {
+      return fn()
+    } catch (err) {
+      this.#root = snapshotRoot
+      this.#size = snapshotSize
+      this.#version++
+      throw err
+    } finally {
+      this.#atomicDepth--
     }
-    return false
   }
 
-  /**
-   * Move children from `rhs` into this.
-   * `rhs` must be part of this tree, and be removed from it after this call
-   * (otherwise isShared for its children could be incorrect).
-   */
-  mergeSibling(rhs: BNode<K, V>, maxNodeSize: number) {
-    // assert !this.isShared;
-    const oldLength = this.keys.length
-    this.keys.push.apply(this.keys, rhs.keys)
-    const rhsChildren = (rhs as any as BNodeInternal<K, V>).children
-    this.children.push.apply(this.children, rhsChildren)
-
-    if (rhs.isShared && !this.isShared) {
-      // All children of a shared node are implicitly shared, and since their new
-      // parent is not shared, they must now be explicitly marked as shared.
-      for (let i = 0; i < rhsChildren.length; i++) rhsChildren[i].isShared = true
+  #bulkLoad(keys: K[], values: V[]): void {
+    for (const key of keys) this.#assertReflexive(key)
+    const ascending = keys.every((key, i) => i === 0 || this.#cmp(keys[i - 1], key) < 0)
+    const sorted = ascending ? { keys, values } : this.#sortedLastWins(keys, values)
+    const M = this.#nodeCapacity
+    const n = sorted.keys.length
+    const leafCount = Math.max(1, Math.ceil(n / M))
+    const leaves: LeafNode<K, V>[] = []
+    const base = Math.floor(n / leafCount)
+    const extra = n % leafCount
+    let offset = 0
+    for (let i = 0; i < leafCount; i++) {
+      const end = offset + base + (i < extra ? 1 : 0)
+      leaves.push({
+        kind: 'leaf',
+        owner: this.#token,
+        keys: sorted.keys.slice(offset, end),
+        values: sorted.values.slice(offset, end)
+      })
+      offset = end
     }
+    let level: TreeNode<K, V>[] = leaves
+    while (level.length > 1) {
+      const count = Math.ceil(level.length / M)
+      const next: BranchNode<K, V>[] = []
+      const bbase = Math.floor(level.length / count)
+      const bextra = level.length % count
+      let off = 0
+      for (let i = 0; i < count; i++) {
+        const size = bbase + (i < bextra ? 1 : 0)
+        const children = level.slice(off, off + size)
+        off += size
+        const maxKeys: K[] = []
+        let total = 0
+        for (const c of children) {
+          const last = readLastKey(c)
+          if (last.ok) maxKeys.push(last.key)
+          total += countOf(c)
+        }
+        next.push({
+          kind: 'branch',
+          owner: this.#token,
+          children,
+          maxKeys,
+          total
+        })
+      }
+      level = next
+    }
+    this.#root = level[0]
+    this.#size = n
+    this.#version++
+  }
 
-    // If our children are themselves almost empty due to a mass-delete,
-    // they may need to be merged too (but only the oldLength-1 and its
-    // right sibling should need this).
-    this.tryMerge(oldLength - 1, maxNodeSize)
+  #sortedLastWins(keys: K[], values: V[]): { keys: K[]; values: V[] } {
+    const order = keys.map((_, i) => i).sort((a, b) => this.#cmp(keys[a], keys[b]))
+    const sorted: { keys: K[]; values: V[] } = { keys: [], values: [] }
+    for (const i of order) {
+      const last = sorted.keys.length - 1
+      const slot = last >= 0 && this.#cmp(sorted.keys[last], keys[i]) === 0 ? last : last + 1
+      sorted.keys[slot] = keys[i]
+      sorted.values[slot] = values[i]
+    }
+    return sorted
   }
 }

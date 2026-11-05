@@ -1,9 +1,36 @@
 import { isObject, ValueError } from '../../globals/index.js'
-import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
-import { asDate, formatDate, strftime } from '../format.js'
+import { truncateForError } from '../../internal/truncate.js'
+import { protocol, type Comparable, type Equatable, type Rank } from '../../operators/protocol.js'
 import {
-  asNumber,
-  DateObject,
+  Duration,
+  durationField,
+  type DurationField,
+  type DurationObject,
+  type DurationUnit
+} from '../duration.js'
+import { asDate, formatDate, strftime, type FormatOptions } from '../format.js'
+import { addDuration, lastDayOfMonth, subDuration } from './arith.js'
+import {
+  advanceWall,
+  civilFromDayNumber,
+  dayNumber,
+  daysInMonthOf,
+  isDateBrand,
+  ISO_WEEK_RULE,
+  localeWeekRule,
+  MAX_TIME_MS,
+  MS_PER_DAY,
+  offsetMsAt,
+  readWall,
+  utcWallToTime,
+  wallToTime,
+  wallToTimePreferOffset,
+  weekdayOf,
+  weekDateOf,
+  weekCount,
+  type WallFields
+} from './calendar.js'
+import {
   dayOfYear,
   daysInMonth,
   daysInYear,
@@ -11,12 +38,13 @@ import {
   maxDate,
   minDate,
   weekOfYear,
-  weeksInYear
+  weeksInYear,
+  type DateObject
 } from './utils.js'
 
-// Export date functions
 export {
   asDate,
+  dayOfYear,
   daysInMonth,
   daysInYear,
   formatDate,
@@ -24,275 +52,393 @@ export {
   maxDate,
   minDate,
   strftime,
+  weekOfYear,
   weeksInYear
 }
+export type { FormatOptions }
 
-export { DateObject }
-export type DateInput = number | string | Date
-export type DateLike = DateInput | IntlDate | DateObject
+export { addDuration, lastDayOfMonth, subDuration }
+export type { DurationObject, DateObject }
+export type DateLike = number | string | Date | IntlDate | DateObject | null
 
-const INVALID_DATE_STRING = 'Invalid Date'
+/** Options for {@link IntlDate} construction. */
+export interface DateCtorOpts {
+  locale?: string
+  utc?: boolean
+}
+
+function isDateObject(v: unknown): v is DateObject {
+  return isObject(v) && !(v instanceof Date) && !(v instanceof IntlDate)
+}
+
+/** Wall fields moved to `weekday` (1 = Monday) of the ISO week they roll into. */
+function onWeekday(fields: WallFields, weekday: number | undefined): WallFields {
+  if (weekday === undefined) return fields
+  const current = weekdayOf(Math.floor(utcWallToTime(fields) / MS_PER_DAY)) || 7
+  return { ...fields, day: fields.day + weekday - current }
+}
+
+function fieldsToDate(values: DateObject, utc: boolean): Date {
+  const fields = readDateFields(values)
+  const wall: WallFields = {
+    year: fields.year ?? 0,
+    month: fields.month ?? 1,
+    day: fields.day ?? 1,
+    hour: fields.hour ?? 0,
+    minute: fields.minute ?? 0,
+    second: fields.second ?? 0,
+    millisecond: fields.millisecond ?? 0
+  }
+  return new Date(wallToTime(onWeekday(wall, fields.weekday), utc))
+}
+
+function toDurationObject(duration: number | Duration | DurationObject): DurationObject {
+  if (typeof duration === 'number') return { milliseconds: duration }
+  if (duration instanceof Duration) return duration.toObject()
+  return duration
+}
+
+/** How far one unit advances: calendar months or days, or exact `ms` for a time unit. */
+interface UnitStep {
+  readonly months: number
+  readonly days: number
+  readonly ms: number
+}
+
+const UNIT_STEPS: Readonly<Record<DurationField | 'isoWeek', UnitStep>> = {
+  years: { months: 12, days: 0, ms: 0 },
+  quarters: { months: 3, days: 0, ms: 0 },
+  months: { months: 1, days: 0, ms: 0 },
+  weeks: { months: 0, days: 7, ms: 0 },
+  isoWeek: { months: 0, days: 7, ms: 0 },
+  days: { months: 0, days: 1, ms: 0 },
+  hours: { months: 0, days: 0, ms: 3_600_000 },
+  minutes: { months: 0, days: 0, ms: 60_000 },
+  seconds: { months: 0, days: 0, ms: 1000 },
+  milliseconds: { months: 0, days: 0, ms: 1 }
+}
 
 /**
- * Creates a date tied to a given locale (default system locale) which can be formatted in that locale's language using the native {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis} directly or using a formatting string.
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl Intl Apis}
+ * Calendar units from `s` to `e` as Temporal `until` rounds them and `total` measures them.
+ * Anchors are `s`'s wall time some units on, resolved "compatible"; the count is the last anchor
+ * that does not pass `e`, and the fraction is `e`'s place in the window to the next anchor. An
+ * anchor on a skipped day resolves onto its neighbour and adds nothing to the count.
  */
-export class IntlDate {
-  private _date: Date
-  readonly locale?: string
-  intlRelativeFormat: Intl.RelativeTimeFormat
+function calendarDiff(s: number, e: number, utc: boolean, step: UnitStep, exact: boolean): number {
+  const sign = e > s ? 1 : -1
+  const start = readWall(s, utc)
+  const end = readWall(e, utc)
+  const endOffset = offsetMsAt(e, utc)
 
-  /** Parses the provided value as UTC date or returns the current UTC date. */
-  static UTC(value?: DateLike, locale?: string) {
+  const anchor = (count: number): number => {
+    if (count === 0) return s
+    const wall = advanceWall(start, count * step.months, count * step.days)
+    const time = wallToTime(wall, utc)
+    return Number.isNaN(time) ? utcWallToTime(wall) - endOffset : time
+  }
+  const passesEnd = (count: number): boolean => sign * (anchor(count) - e) > 0
+
+  const span =
+    step.months === 0
+      ? (dayNumber(end.year, end.month, end.day) - dayNumber(start.year, start.month, start.day)) /
+        step.days
+      : ((end.year - start.year) * 12 + end.month - start.month) / step.months
+  let count = Math.trunc(span)
+  while (!passesEnd(count + sign) && anchor(count + sign) !== anchor(count)) count += sign
+  while (passesEnd(count)) count -= sign
+  if (!exact) return count
+
+  const from = anchor(count)
+  let next = count + sign
+  while (anchor(next) === from) next += sign
+  return count + (e - from) / Math.abs(anchor(next) - from)
+}
+
+function zeroNegZero(n: number): number {
+  return Object.is(n, -0) ? 0 : n
+}
+
+function resolveStartUnit(unit: string): DurationField | 'isoWeek' {
+  const lower = unit.toLowerCase()
+  if (lower === 'isoweek' || lower === 'isoweeks') return 'isoWeek'
+  const field = (() => {
+    try {
+      return durationField(unit)
+    } catch {
+      return undefined
+    }
+  })()
+  if (field === undefined) throw new ValueError(`unknown date field ${truncateForError(unit)}`)
+  return field
+}
+
+/**
+ * A date tied to a locale (default system locale) with calendar-correct arithmetic
+ * and an optional UTC view of the same instant.
+ */
+export class IntlDate implements Comparable, Equatable {
+  readonly #date: Date
+  readonly locale?: string
+  readonly utc: boolean
+  #relativeFormat?: Intl.RelativeTimeFormat
+  #relativeAutoFormat?: Intl.RelativeTimeFormat
+
+  readonly [protocol.rank]: Rank = 5;
+
+  [protocol.compare](o: unknown): number | undefined {
+    return this.protocolCompare(o)
+  }
+
+  [protocol.equals](o: unknown): boolean {
+    return this.protocolEquals(o)
+  }
+
+  /** Parses the provided value as a UTC-view date or returns the current instant in UTC view. */
+  static UTC(value?: DateLike, locale?: string): IntlDate {
     return new IntlDate(value, { utc: true, locale })
   }
 
-  /** Returns the current local date and time.*/
-  static now() {
+  /** Returns the current local date and time. */
+  static now(): IntlDate {
     return new IntlDate()
   }
 
-  /** Creates a new date from a Unix timestamp (seconds since the unix epoch) */
-  static unix(seconds: number) {
+  /** Creates a new date from a Unix timestamp (seconds since the unix epoch). */
+  static unix(seconds: number): IntlDate {
     return new IntlDate(seconds * 1000)
   }
 
   /**
-   * Creates a new `IntlDate` in local time and specified locale (default is system locale).
-   * **Note:** The allowed values for `month` start at 1, which is different from legacy `Date`
-   * @param {DateLike} obj The date value (default is current local time)
-   * @param {Object} opts The options for this date
-   * @param {boolean?} opts.utc Converts input or current time to UTC
-   * @param {string?} opts.locale A locale string to use for this date
-   * @returns
+   * Creates a new `IntlDate` storing a true instant plus an optional `utc` flag.
+   * With `utc` set, getters and `format` read UTC fields; `getTime`/`toISOString` never shift.
+   * Object input follows the field rules of {@link IntlDate.set} and defaults missing
+   * `month`/`day` to 1 and other fields to 0; years 0-99 are literal. Out-of-range fields roll
+   * like `Date`, and a result outside the Date range is invalid. A value that is not date-like
+   * is invalid; only `undefined` means the current time.
+   * @param obj The date value (default is current time)
+   * @param opts.utc When true, getters/format use UTC fields
+   * @param opts.locale A locale string to use for this date
    */
-  constructor(obj?: DateLike, { locale, utc }: any = {}) {
-    this.locale = locale
-
+  constructor(obj?: DateLike, opts: DateCtorOpts = {}) {
     if (obj instanceof IntlDate) {
-      obj = obj._date
-    }
-
-    if (typeof obj === 'string' || typeof obj === 'number' || obj instanceof Date) {
-      this._date = asDate(obj, utc)
-    } else if (isObject(obj)) {
-      let { year, month, day, hour, minute, second, millisecond } = obj
-
-      // NOTE month is from 1-12, not from 0-11
-      if (typeof month === 'number') {
-        month -= 1
-      }
-
-      if (utc) {
-        // from UTC to current
-        this._date = new Date(
-          Date.UTC(year!, month!, day || 1, hour || 0, minute || 0, second || 0, millisecond || 0)
-        )
-      } else {
-        this._date = new Date(
-          year!,
-          month!,
-          day || 1,
-          hour || 0,
-          minute || 0,
-          second || 0,
-          millisecond || 0
-        )
-      }
+      this.#date = new Date(obj.#date.getTime())
+      this.locale = opts.locale ?? obj.locale
+      this.utc = opts.utc ?? obj.utc
     } else {
-      this._date = asDate(obj, utc)
+      this.locale = opts.locale
+      this.utc = Boolean(opts.utc)
+      this.#date = isDateObject(obj) ? fieldsToDate(obj, this.utc) : asDate(obj, this.utc)
     }
+  }
 
-    return this
+  /** `value` as a date in this date's locale and view. */
+  #inView(value: DateLike): IntlDate {
+    return new IntlDate(value instanceof IntlDate ? value.#date : value, {
+      locale: this.locale,
+      utc: this.utc
+    })
+  }
+
+  /** A date at `time` in this locale and view. Throws `RangeError` outside the Date range. */
+  #at(time: number): IntlDate {
+    if (!(Math.abs(time) <= MAX_TIME_MS)) throw new RangeError('date out of range')
+    return this.#inView(new Date(time))
   }
 
   /** Get the date's year. */
-  get year() {
-    return this._date.getFullYear()
+  get year(): number {
+    return this.utc ? this.#date.getUTCFullYear() : this.#date.getFullYear()
   }
 
-  /** Get the this date's month as a number from 1 to 12, inclusive. */
-  get month() {
-    return this._date.getMonth() + 1
+  /** Get this date's month as a number from 1 to 12, inclusive. */
+  get month(): number {
+    return (this.utc ? this.#date.getUTCMonth() : this.#date.getMonth()) + 1
   }
 
-  /** Returns the weekday as a number between 1 and 7, inclusive, where Monday is 1 and Sunday is 7. */
-  get dayOfWeek() {
-    if (this._date.getDay() === 0) return 7
-    return this._date.getDay()
+  /** Weekday 1-7 where Monday is 1 and Sunday is 7. */
+  get dayOfWeek(): number {
+    const dow = this.utc ? this.#date.getUTCDay() : this.#date.getDay()
+    return dow === 0 ? 7 : dow
   }
 
-  /** Get the this date's current day of the month. */
-  get day() {
-    return this._date.getDate()
+  /** Day of the month. */
+  get day(): number {
+    return this.utc ? this.#date.getUTCDate() : this.#date.getDate()
   }
 
-  /** Get the this date's current hour. */
-  get hour() {
-    return this._date.getHours()
+  /** Hour of day. */
+  get hour(): number {
+    return this.utc ? this.#date.getUTCHours() : this.#date.getHours()
   }
 
-  /** Get the this date's current minute. */
-  get minute() {
-    return this._date.getMinutes()
+  /** Minute of hour. */
+  get minute(): number {
+    return this.utc ? this.#date.getUTCMinutes() : this.#date.getMinutes()
   }
 
-  /** Get the this date's current second. */
-  get second() {
-    return this._date.getSeconds()
+  /** Second of minute. */
+  get second(): number {
+    return this.utc ? this.#date.getUTCSeconds() : this.#date.getSeconds()
   }
 
-  /** Get the this date's current millisecond. */
-  get millisecond() {
-    return this._date.getMilliseconds()
+  /** Millisecond of second. */
+  get millisecond(): number {
+    return this.utc ? this.#date.getUTCMilliseconds() : this.#date.getMilliseconds()
   }
 
-  isValid() {
-    return this._date.toString() !== INVALID_DATE_STRING
+  /** Whether this date represents a valid instant. */
+  isValid(): boolean {
+    return !Number.isNaN(this.#date.getTime())
   }
 
-  /** Get the number of days in this date's month. */
-  daysInMonth() {
-    return daysInMonth(this._date)
+  /** Days in this date's month. */
+  daysInMonth(): number {
+    return lastDayOfMonth(this.year, this.month - 1)
   }
 
-  /** Get the number of days in this date's year. */
-  daysInYear() {
-    return daysInYear(this.year)
+  /** Days in this date's year, `NaN` when invalid. */
+  daysInYear(): number {
+    return this.isValid() ? daysInYear(this.year) : Number.NaN
   }
 
-  dayOfYear() {
-    return dayOfYear(this._date)
+  /** Day of year (1-366). */
+  dayOfYear(): number {
+    return dayOfYear(this.#date, this.utc)
   }
 
-  /** Returns `true` if this date's year is a leap year. */
-  isLeapYear() {
+  /** Whether this date's year is a leap year. */
+  isLeapYear(): boolean {
     return isLeapYear(this.year)
   }
 
-  /** Gets the number of weeks according to locale in the current year. */
-  weeksInYear() {
-    return weeksInYear(this.year)
+  /** Locale week-numbering year for this date. */
+  weekYear(): number {
+    if (!this.isValid()) return Number.NaN
+    const w = readWall(this.#date.getTime(), this.utc)
+    return weekDateOf(dayNumber(w.year, w.month, w.day), localeWeekRule(this.locale)).year
   }
 
-  /** Gets the number of weeks in the current year, according to ISO weeks. */
-  isoWeeksInYear() {
-    return weeksInYear(this.year, 1, 4)
+  /** Weeks in this date's locale week-numbering year. */
+  weeksInYear(): number {
+    if (!this.isValid()) return Number.NaN
+    return weekCount(this.weekYear(), localeWeekRule(this.locale))
   }
 
-  /** Returns the current week of the year. */
-  week() {
-    return weekOfYear(this._date).week
+  /** ISO week-numbering year for this date. */
+  isoWeekYear(): number {
+    if (!this.isValid()) return Number.NaN
+    const w = readWall(this.#date.getTime(), this.utc)
+    return weekDateOf(dayNumber(w.year, w.month, w.day), ISO_WEEK_RULE).year
   }
 
-  /** Returns the ISO week of the year. */
-  isoWeek() {
-    return weekOfYear(this._date, 1, 4).week
+  /** Weeks in this date's ISO week-numbering year. */
+  isoWeeksInYear(): number {
+    if (!this.isValid()) return Number.NaN
+    return weekCount(this.isoWeekYear(), ISO_WEEK_RULE)
+  }
+
+  /** Locale week of the year (rule from this instance's locale). */
+  week(): number {
+    if (!this.isValid()) return Number.NaN
+    const w = readWall(this.#date.getTime(), this.utc)
+    return weekDateOf(dayNumber(w.year, w.month, w.day), localeWeekRule(this.locale)).week
+  }
+
+  /** ISO 8601 week of the year. */
+  isoWeek(): number {
+    if (!this.isValid()) return Number.NaN
+    const w = readWall(this.#date.getTime(), this.utc)
+    return weekDateOf(dayNumber(w.year, w.month, w.day), ISO_WEEK_RULE).week
   }
 
   /**
-   * Returns a localized string representation of this date.
-   * @param {Intl.DateTimeFormatOptions} opts The options to use for the format
-   * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat Intl.DateTimeFormat()}
+   * Localized string via `Intl.DateTimeFormat`. UTC-view dates default to the UTC time zone.
+   * @param opts DateTimeFormat options
    */
-  toString(opts?: Intl.DateTimeFormatOptions) {
-    return this._date.toLocaleString(this.locale, opts)
+  toString(opts?: Intl.DateTimeFormatOptions): string {
+    const resolved = this.utc ? { timeZone: 'UTC', ...opts } : opts
+    return this.#date.toLocaleString(this.locale, resolved)
   }
 
   /**
-   * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as {@link https://momentjs.com/docs/#/displaying/format/ moment}.
-   * @param {string} str The format string to use
-   * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
+   * Format with moment-style tokens. UTC-view dates use UTC fields.
+   * @param str Format string
    * @example
 ```js
-new IntlDate().format('MM/DD/YYYY') // '10/31/2022'
+new IntlDate(new Date(2022, 9, 31)).format('MM/DD/YYYY') // '10/31/2022'
 ```
    */
-  format(str: string) {
-    return formatDate(str, this._date, this.locale)
+  format(str: string): string {
+    return formatDate(str, this.#date, { locale: this.locale, utc: this.utc })
+  }
+
+  /** A new copy of the native `Date` for this instant. */
+  toDate(): Date {
+    return new Date(this.isValid() ? this.#date.getTime() : NaN)
   }
 
   /**
-   * Returns a new copy of the native `Date` object used by this instance.
-   * @returns {Date} A new `Date` object
-   */
-  toDate() {
-    return new Date(this.isValid() ? this._date : NaN)
-  }
-
-  /**
-   * Returns the number of seconds since the Unix Epoch (January 1, 1970 UTC).
-   * @see {@link IntlDate.timestamp}
-   * @see {@link IntlDate.unix}
+   * Seconds since the Unix Epoch, floored.
    * @example
 ```js
-new IntlDate().toSeconds() // 1318874398
+new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toSeconds() // 1667256270
 ```
    */
-  toSeconds() {
-    return Math.trunc(this.getTime() / 1000)
+  toSeconds(): number {
+    return Math.floor(this.getTime() / 1000)
   }
 
-  /**
-   * Returns the number of seconds since the Unix Epoch (January 1, 1970 UTC).
-   * @see {@link IntlDate.toSeconds}
-   * @see {@link IntlDate.unix}
-   * @example
-```js
-new IntlDate().timestamp() // 1318874398
-```
-   */
-  timestamp() {
+  /** Alias of {@link IntlDate.toSeconds}. */
+  timestamp(): number {
+    return this.toSeconds()
+  }
+
+  /** Alias of {@link IntlDate.toSeconds}. */
+  unix(): number {
     return this.toSeconds()
   }
 
   /**
-   * Returns the number of seconds since the Unix Epoch (January 1, 1970 UTC).
-   * @see {@link IntlDate.toSeconds}
-   * @see {@link IntlDate.timestamp}
+   * ISO-8601 string of this instant.
    * @example
 ```js
-new IntlDate().unix() // 1318874398
+new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOString() // '2022-10-31T22:44:30.652Z'
 ```
    */
-  unix() {
-    return this.toSeconds()
+  toISOString(): string {
+    return this.#date.toISOString()
   }
 
-  /** Formats a string to the ISO8601 standard.
-   * @example
-```js
-new IntlDate().toISOString() // '2022-10-31T22:44:30.652Z'
-```
-   */
-  toISOString() {
-    return this._date.toISOString()
-  }
-
-  /** Returns the date part formatted as ISO8601.
-   * @example
-```js
-new IntlDate().toISODate() // '2022-10-31'
-```
-   */
-  toISODate() {
-    return this._date.toISOString().slice(0, 10)
-  }
-
-  /** Returns the time part formatted as ISO8601.
-   * @example
-```js
-new IntlDate().toISOTime() // 'T22:44:30.652Z'
-```
-   */
-  toISOTime() {
-    return this._date.toISOString().slice(11)
+  /** The ISO-8601 string `JSON.stringify` writes, `null` when invalid. */
+  toJSON(): string | null {
+    return this.isValid() ? this.toISOString() : null
   }
 
   /**
-   * Returns an object containing year, month, day-of-month, hours, minutes, seconds, milliseconds.
-   * @returns {Object} An object like `{year, month, date, hours, minutes, seconds, ms}`
+   * UTC date part of the ISO string.
+   * @example
+```js
+new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISODate() // '2022-10-31'
+```
    */
+  toISODate(): string {
+    const iso = this.toISOString()
+    return iso.slice(0, iso.indexOf('T'))
+  }
+
+  /**
+   * UTC time part of the ISO string.
+   * @example
+```js
+new IntlDate(new Date('2022-10-31T22:44:30.652Z')).toISOTime() // '22:44:30.652Z'
+```
+   */
+  toISOTime(): string {
+    const iso = this.toISOString()
+    return iso.slice(iso.indexOf('T') + 1)
+  }
+
+  /** Object of calendar fields in this date's view (local or UTC). */
   toObject(): DateObject {
     return {
       year: this.year,
@@ -305,352 +451,402 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     }
   }
 
-  /** Returns the number of milliseconds since the Unix Epoch (January 1, 1970 UTC)  */
-  getTime() {
-    return this.isValid() ? this._date.getTime() : NaN
+  /** Milliseconds since the Unix Epoch. */
+  getTime(): number {
+    return this.isValid() ? this.#date.getTime() : NaN
   }
 
-  /** Alias of {@link IntlDate.getTime}  */
-  valueOf() {
+  /** Alias of {@link IntlDate.getTime}. */
+  valueOf(): number {
     return this.getTime()
   }
 
-  /** Returns the timezone string name  */
-  zoneName() {
+  /** Time zone name via format token `zzz`. */
+  zoneName(): string {
     return this.format('zzz')
   }
 
-  /** Returns the timezone GMT offset as a string  */
-  zone() {
+  /** GMT offset string via format token `ZZ`. */
+  zone(): string {
     return this.format('ZZ')
   }
 
-  /** Returns the difference in `minutes` between this date and UTC  */
-  utcOffset() {
-    return this._date.getTimezoneOffset()
+  /**
+   * Minutes of local-minus-UTC offset (`-getTimezoneOffset`).
+   * UTC-view dates return `0`.
+   */
+  utcOffset(): number {
+    if (this.utc) return 0
+    return zeroNegZero(-this.#date.getTimezoneOffset())
   }
 
   /**
-   * Check if this date is before another date. The other value will be parsed as an `IntlDate` if not already so.
-   * @param {DateLike} other Another date or date like object
-   * @returns {boolean} Returns `true` if this date is before the given value
+   * True when this instant is before `other`, which is read in this date's view.
+   * @param other Another date-like value
    */
-  isBefore(other: DateLike) {
-    if (other instanceof IntlDate) {
-      return this.getTime() < other.getTime()
-    }
-    return this.getTime() < new IntlDate(other).getTime()
+  isBefore(other: DateLike): boolean {
+    return this.getTime() < this.#inView(other).getTime()
   }
 
   /**
-   * Check if this date is strictly after the given `start` and before `stop` dates. The values will be parsed as an `IntlDate` if not already so.
-   * @param {DateLike} start The smaller date
-   * @param {DateLike} stop The larger date
-   * @returns {boolean} Returns `true` if this date is greater than `start` and less than `stop`.
+   * True when this instant is strictly after `start` and before `stop`.
+   * @param start Lower bound
+   * @param stop Upper bound
    */
-  isBetween(start: DateLike, stop: DateLike) {
+  isBetween(start: DateLike, stop: DateLike): boolean {
     return this.isAfter(start) && this.isBefore(stop)
   }
 
   /**
-   * Check if this date is after another date. The other value will be parsed as an `IntlDate` if not already so.
-   * @param {DateLike} other Another date or date like object
-   * @returns {boolean} Returns `true` if this date is after the given value
+   * True when this instant is after `other`, which is read in this date's view.
+   * @param other Another date-like value
    */
-  isAfter(other: DateLike) {
-    if (other instanceof IntlDate) {
-      return this.getTime() > other.getTime()
-    }
-    return this.getTime() > new IntlDate(other).getTime()
+  isAfter(other: DateLike): boolean {
+    return this.getTime() > this.#inView(other).getTime()
   }
 
   /**
-   * Check if this date is the same as `other`.
-   * @param other Another date object
-   * @returns {boolean} Returns `true` if this date is the same as other
+   * True when both are valid and represent the same instant.
+   * @param other Another date
    */
-  isSame(other: Date | IntlDate) {
-    if (other instanceof IntlDate) {
-      return (
-        this.isValid() &&
-        other.isValid() &&
-        this.getTime() === other.getTime() &&
-        this.locale === other.locale
-      )
-    }
-    return this.getTime() === other.getTime()
+  isSame(other: Date | IntlDate): boolean {
+    return this[protocol.equals](other)
   }
 
-  lt(other: Date | IntlDate) {
+  /** True when this instant is before `other`. */
+  lt(other: Date | IntlDate): boolean {
     return this.isBefore(other)
   }
 
-  eq(other: Date | IntlDate) {
+  /** Instant equality (same as {@link IntlDate.isSame}). */
+  eq(other: Date | IntlDate): boolean {
     return this.isSame(other)
   }
 
-  compare(other: Date | IntlDate) {
-    if (!this.isValid()) return 1
-
-    let dt = new IntlDate(other)
-    if (!dt.isValid()) return -1
-
-    return this.getTime() - dt.getTime()
+  /**
+   * Signed ordering vs another date. Invalid dates compare greater than valid ones.
+   * @param other Another date
+   */
+  compare(other: Date | IntlDate): number {
+    const r = this.protocolCompare(other)
+    return r ?? 0
   }
 
-  set(values: DateObject) {
-    if (!this.isValid()) return this
+  /** Protocol compare: invalid > valid; both invalid declines. */
+  protocolCompare(o: unknown): number | undefined {
+    if (!(o instanceof IntlDate || isDateBrand(o))) return undefined
+    const otherTime = o.getTime()
+    const selfValid = this.isValid()
+    const otherValid = !Number.isNaN(otherTime)
+    if (!selfValid && !otherValid) return undefined
+    if (!selfValid) return 1
+    if (!otherValid) return -1
+    const diff = this.getTime() - otherTime
+    return diff < 0 ? -1 : diff > 0 ? 1 : 0
+  }
 
-    const normalized = normalizeObject(values, normalizeUnit)
+  /** Protocol equals: both valid with equal instants. */
+  protocolEquals(o: unknown): boolean {
+    return (o instanceof IntlDate || isDateBrand(o)) && this.getTime() === o.getTime()
+  }
 
-    let mixed = { ...this.toObject(), ...normalized }
+  /**
+   * Returns a new date with the given fields overlaid. Absent `day` clamps to the target month.
+   * `weekday` (1 = Monday) then moves within the ISO week. Fields must be integers; out-of-range
+   * ones roll like `Date`.
+   * Setting a field inside a repeated local hour keeps this instant's offset when that offset remains valid.
+   * @param values Fields to set
+   * @throws RangeError when the result is outside the Date range
+   */
+  set(values: DateObject): IntlDate {
+    const patch = readDateFields(values)
+    if (!this.isValid()) return this.clone()
 
-    // if we didn't set the day but we ended up on an overflow date,
-    // use the last day of the right month
-    if (normalized.day === undefined) {
-      mixed.day = Math.min(daysInMonth(this._date), mixed.day)
+    const t = this.getTime()
+    const wall = readWall(t, this.utc)
+    const year = patch.year ?? wall.year
+    const month = patch.month ?? wall.month
+    const fields: WallFields = {
+      year,
+      month,
+      day: patch.day ?? Math.min(wall.day, daysInMonthOf(year, month)),
+      hour: patch.hour ?? wall.hour,
+      minute: patch.minute ?? wall.minute,
+      second: patch.second ?? wall.second,
+      millisecond: patch.millisecond ?? wall.millisecond
     }
-
-    return this.clone(mixed)
+    const target = onWeekday(fields, patch.weekday)
+    return this.#at(wallToTimePreferOffset(target, this.utc, offsetMsAt(t, this.utc)))
   }
 
-  get relativeFormat() {
-    if (this.intlRelativeFormat) return this.intlRelativeFormat
-    this.intlRelativeFormat = new Intl.RelativeTimeFormat(this.locale)
-    return new Intl.RelativeTimeFormat(this.locale)
+  /** Cached `Intl.RelativeTimeFormat` for this instance (`numeric: "always"`). */
+  get relativeFormat(): Intl.RelativeTimeFormat {
+    this.#relativeFormat ??= new Intl.RelativeTimeFormat(this.locale, { numeric: 'always' })
+    return this.#relativeFormat
   }
 
-  relativeTime(n: number, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
+  /**
+   * Formats a relative time via the cached formatter.
+   * @param n Signed count
+   * @param unit Relative unit
+   */
+  relativeTime(n: number, unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
     return this.relativeFormat.format(n, unit)
   }
 
-  fromNow(unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    let diff = this.diff(new Date(), unit) as number
-    return this.relativeTime(diff, unit)
+  #formatRelative(count: number, unit: Intl.RelativeTimeFormatUnit): string {
+    if (Number.isNaN(count)) return 'Invalid Date'
+    if (count === 0) {
+      this.#relativeAutoFormat ??= new Intl.RelativeTimeFormat(this.locale, { numeric: 'auto' })
+      return this.#relativeAutoFormat.format(0, unit)
+    }
+    return this.relativeTime(count, unit)
   }
 
-  from(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    let diff = this.diff(other, unit) as number
-    return this.relativeTime(diff, unit)
+  #relativeUnit(
+    other: IntlDate,
+    unit: Intl.RelativeTimeFormatUnit | undefined
+  ): Intl.RelativeTimeFormatUnit {
+    if (unit !== undefined) return unit
+    const auto: readonly Intl.RelativeTimeFormatUnit[] = [
+      'years',
+      'months',
+      'days',
+      'hours',
+      'minutes',
+      'seconds'
+    ]
+    for (const candidate of auto) {
+      if (Math.abs(this.diff(other, candidate)) >= 1) return candidate
+    }
+    return 'seconds'
   }
 
-  toNow(unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    let diff = this.diff(new Date(), unit)
-    return this.relativeTime(-diff, unit)
+  #relativeBetween(
+    base: IntlDate,
+    target: IntlDate,
+    unit: Intl.RelativeTimeFormatUnit | undefined
+  ): string {
+    const resolved = target.#relativeUnit(base, unit)
+    return this.#formatRelative(target.diff(base, resolved), resolved)
   }
 
-  to(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    let diff = this.diff(other, unit)
-    return this.relativeTime(-diff, unit)
+  /**
+   * Relative time from now to this date. Omitting `unit` picks the largest of
+   * years, months, days, hours, minutes, seconds with absolute count at least 1.
+   * An invalid date gives `"Invalid Date"`.
+   * @param unit Relative unit
+   */
+  fromNow(unit?: Intl.RelativeTimeFormatUnit): string {
+    return this.from(new Date(), unit)
   }
 
-  diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false) {
-    let dt = new IntlDate(other)
-    let dur = new Duration(this.getTime() - dt.getTime(), exact)
-    let total = dur.total(unit)
-    if (!exact) total = Math.trunc(total)
-    return total
+  /**
+   * Relative time from `other` to this date. Omitting `unit` picks an automatic unit.
+   * A zero count uses `numeric: "auto"` phrasing ("today", "now", ...).
+   * An invalid date on either side gives `"Invalid Date"`.
+   * @param other Base date
+   * @param unit Relative unit
+   */
+  from(other: DateLike, unit?: Intl.RelativeTimeFormatUnit): string {
+    return this.#relativeBetween(this.#inView(other), this, unit)
   }
 
-  add(duration: TDuration, exact = false) {
-    return this.clone(addDuration(this._date, duration, exact))
+  /**
+   * Relative time from this date to now. Omitting `unit` picks an automatic unit.
+   * @param unit Relative unit
+   */
+  toNow(unit?: Intl.RelativeTimeFormatUnit): string {
+    return this.to(new Date(), unit)
   }
 
-  subtract(duration: TDuration, exact = false) {
-    return this.clone(subDuration(this._date, duration, exact))
+  /**
+   * Relative time from this date to `other`, the same text as `other.from(this)`.
+   * Omitting `unit` picks an automatic unit.
+   * @param other Target date
+   * @param unit Relative unit
+   */
+  to(other: DateLike, unit?: Intl.RelativeTimeFormatUnit): string {
+    return this.#relativeBetween(this, this.#inView(other), unit)
   }
 
-  startOf(unit: DurationUnit) {
-    if (!this.isValid()) return this
-    const obj = {} as DateObject,
-      normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
-    switch (normalizedUnit) {
-      case 'years':
-        obj.month = 1
-      // falls through
-      case 'quarters':
-      case 'months':
-        obj.day = 1
-      // falls through
-      case 'weeks':
-      case 'days':
-        obj.hour = 0
-      // falls through
-      case 'hours':
-        obj.minute = 0
-      // falls through
-      case 'minutes':
-        obj.second = 0
-      // falls through
+  /**
+   * Difference from `other` to this date in `unit`: Temporal `other.until(this)` rounded with
+   * `smallestUnit: unit`, `roundingMode: 'trunc'`, or the `total` of the elapsed time when `exact`.
+   * @param other Base date, read in this date's view
+   * @param unit Duration unit
+   * @param exact When true, leave fractional totals
+   */
+  diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false): number {
+    const step = UNIT_STEPS[durationField(unit)]
+    const o = this.#inView(other)
+    if (!this.isValid() || !o.isValid()) return Number.NaN
+    const s = o.getTime()
+    const e = this.getTime()
+    const v = step.ms === 0 ? calendarDiff(s, e, this.utc, step, exact) : (e - s) / step.ms
+    return zeroNegZero(exact ? v : Math.trunc(v))
+  }
+
+  /**
+   * Adds a duration with calendar-correct month/year clamp and DST-safe calendar units.
+   * Calendar fields advance the wall date once, then time fields add exact milliseconds.
+   * @param duration Duration fields, ms number, or Duration
+   */
+  add(duration: number | Duration | DurationObject): IntlDate {
+    return this.clone(addDuration(this.#date, toDurationObject(duration), 1, this.utc))
+  }
+
+  /**
+   * Subtracts a duration with calendar-correct month/year clamp.
+   * @param duration Duration fields, ms number, or Duration
+   */
+  subtract(duration: number | Duration | DurationObject): IntlDate {
+    return this.clone(subDuration(this.#date, toDurationObject(duration), this.utc))
+  }
+
+  /** Wall fields of the first moment of `field` around this valid date. */
+  #startWall(field: Exclude<DurationField, 'milliseconds'> | 'isoWeek'): WallFields {
+    const w = readWall(this.getTime(), this.utc)
+    const midnight = { ...w, hour: 0, minute: 0, second: 0, millisecond: 0 }
+    switch (field) {
       case 'seconds':
-        obj.millisecond = 0
-        break
-      case 'milliseconds':
-        break
-      // no default, invalid units throw in normalizeUnit()
+        return { ...w, millisecond: 0 }
+      case 'minutes':
+        return { ...w, second: 0, millisecond: 0 }
+      case 'hours':
+        return { ...w, minute: 0, second: 0, millisecond: 0 }
+      case 'days':
+        return midnight
+      case 'months':
+        return { ...midnight, day: 1 }
+      case 'quarters':
+        return { ...midnight, month: 3 * Math.floor((w.month - 1) / 3) + 1, day: 1 }
+      case 'years':
+        return { ...midnight, month: 1, day: 1 }
+      case 'weeks':
+      case 'isoWeek': {
+        const rule = field === 'isoWeek' ? ISO_WEEK_RULE : localeWeekRule(this.locale)
+        const dn = dayNumber(w.year, w.month, w.day)
+        return {
+          ...midnight,
+          ...civilFromDayNumber(dn - ((weekdayOf(dn) - rule.firstDay + 7) % 7))
+        }
+      }
+    }
+  }
+
+  /**
+   * Start of the given unit. `week` uses the locale first day of week; `isoWeek` is Monday 00:00.
+   * Day-or-larger units use compatible wall resolution; hour/minute/second keep this offset when valid.
+   * @param unit Duration unit, or `isoWeek` / `isoWeeks`
+   * @throws RangeError when the start is outside the Date range
+   */
+  startOf(unit: DurationUnit | 'isoWeek' | 'isoWeeks'): IntlDate {
+    const field = resolveStartUnit(unit)
+    if (field === 'milliseconds' || !this.isValid()) return this.clone()
+
+    const target = this.#startWall(field)
+    return this.#at(
+      UNIT_STEPS[field].ms === 0
+        ? wallToTime(target, this.utc)
+        : wallToTimePreferOffset(target, this.utc, offsetMsAt(this.getTime(), this.utc))
+    )
+  }
+
+  /**
+   * End of the given unit. Time units keep this offset when valid and never land before the receiver;
+   * day-or-larger units end 1 ms before the next unit starts.
+   * @param unit Duration unit, or `isoWeek` / `isoWeeks`
+   * @throws RangeError when the end is outside the Date range
+   */
+  endOf(unit: DurationUnit | 'isoWeek' | 'isoWeeks'): IntlDate {
+    const field = resolveStartUnit(unit)
+    if (field === 'milliseconds' || !this.isValid()) return this.clone()
+
+    const step = UNIT_STEPS[field]
+    if (step.ms === 0) {
+      const next = advanceWall(this.#startWall(field), step.months, step.days)
+      return this.#at(wallToTime(next, this.utc) - 1)
     }
 
-    if (normalizedUnit === 'weeks') {
-      obj.weekday = 1
+    const t = this.getTime()
+    const w = readWall(t, this.utc)
+    const last: WallFields = {
+      ...w,
+      minute: field === 'hours' ? 59 : w.minute,
+      second: field === 'seconds' ? w.second : 59,
+      millisecond: 999
     }
+    return this.#at(wallToTimePreferOffset(last, this.utc, offsetMsAt(t, this.utc)))
+  }
 
-    if (normalizedUnit === 'quarters') {
-      const q = Math.ceil(this.month / 3)
-      obj.month = (q - 1) * 3 + 1
+  /**
+   * Clones this date, optionally replacing the instant.
+   * @param date Replacement value; `null` gives an invalid date
+   */
+  clone(date?: DateLike): IntlDate {
+    return this.#inView(date === undefined ? this : date)
+  }
+
+  /**
+   * Earliest of the given dates, or `undefined` when none is valid. Values are parsed like the
+   * constructor parses them (strings as local time); the original value is returned.
+   * @throws TypeError when `dates` is not an array
+   */
+  static min(dates: readonly DateLike[]): DateLike | undefined {
+    return minDate(dates, IntlDate.#toTime)
+  }
+
+  /**
+   * Latest of the given dates, or `undefined` when none is valid. Values are parsed like the
+   * constructor parses them (strings as local time); the original value is returned.
+   * @throws TypeError when `dates` is not an array
+   */
+  static max(dates: readonly DateLike[]): DateLike | undefined {
+    return maxDate(dates, IntlDate.#toTime)
+  }
+
+  static #toTime(value: DateLike | undefined): number {
+    return new IntlDate(value ?? null).getTime()
+  }
+
+  /** Debug representation. */
+  inspect(): string {
+    return this.isValid() ? `new IntlDate("${this.toISOString()}")` : 'new IntlDate(NaN)'
+  }
+}
+
+const DATE_OBJECT_KEYS: ReadonlySet<string> = new Set([
+  'year',
+  'month',
+  'day',
+  'weekday',
+  'hour',
+  'minute',
+  'second',
+  'millisecond'
+])
+
+function dateFieldKey(unit: string): string {
+  const lower = unit.toLowerCase()
+  if (DATE_OBJECT_KEYS.has(lower)) return lower
+  if (lower.endsWith('s')) {
+    const singular = lower.slice(0, -1)
+    if (DATE_OBJECT_KEYS.has(singular)) return singular
+  }
+  throw new ValueError(`unknown date field ${truncateForError(unit)}`)
+}
+
+/** Validated fields of a {@link DateObject}; `null` and `undefined` count as absent. */
+function readDateFields(values: DateObject): Partial<Record<keyof DateObject, number>> {
+  const fields: Partial<Record<keyof DateObject, number>> = {}
+  for (const [key, raw] of Object.entries(values)) {
+    const field = dateFieldKey(key) as keyof DateObject
+    if (raw === undefined || raw === null) continue
+    if (typeof raw !== 'number' || !Number.isInteger(raw)) {
+      throw new ValueError(`date field ${truncateForError(key)} must be an integer`)
     }
-
-    return this.set(obj)
+    fields[field] = raw
   }
-
-  endOf(unit: DurationUnit) {
-    return this.isValid()
-      ? this.add({ [unit]: 1 })
-          .startOf(unit)
-          .subtract({ milliseconds: 1 })
-      : this
-  }
-
-  clone(date?: DateLike) {
-    return new IntlDate(date ?? this, { locale: this.locale })
-  }
-
-  static max(...args) {
-    return maxDate.apply(undefined, args)
-  }
-
-  static min(...args) {
-    return minDate.apply(undefined, args)
-  }
-
-  inspect() {
-    return `new IntlDate("${this.toISOString()}")`
-  }
-}
-
-// Check if the new offset is different because we crossed to DST
-function fixOffset(startDate: Date, endDate: Date) {
-  let startOffset = startDate.getTimezoneOffset()
-  let endOffset = endDate.getTimezoneOffset()
-  if (startOffset === endOffset) return new Date(endDate)
-  let postoffset = (startOffset - endOffset) * 60 * 1000
-  return new Date(+endDate + postoffset)
-}
-
-export function addDuration(
-  date: DateInput,
-  duration: number | Duration | TDuration,
-  exact = false
-): Date {
-  // Get the current offset of this date timezone
-  let newDate = new Date(date)
-  // Get the number of ticks forward
-  let { values } = new Duration(duration, exact).normalize()
-  // Apply any time changes that may have happened
-  for (const unit in values) {
-    setDateUnit(newDate, unit, Math.floor(values[unit]))
-  }
-  return fixOffset(new Date(date), newDate)
-}
-
-function setDateUnit(date: Date, unit: string, value: number) {
-  switch (unit) {
-    case 'years':
-      date.setFullYear(date.getFullYear() + value)
-      break
-
-    case 'quarters':
-      date.setMonth(date.getMonth() + value * 3)
-      break
-
-    case 'months':
-      date.setMonth(date.getMonth() + value)
-      break
-
-    case 'weeks':
-      date.setDate(date.getDate() + value * 7)
-      break
-
-    case 'days':
-      date.setDate(date.getDate() + value)
-      break
-
-    case 'hours':
-      date.setHours(date.getHours() + value)
-      break
-
-    case 'minutes':
-      date.setMinutes(date.getMinutes() + value)
-      break
-
-    case 'seconds':
-      date.setSeconds(date.getSeconds() + value)
-      break
-
-    case 'milliseconds':
-      date.setMilliseconds(date.getMilliseconds() + value)
-      break
-
-    default:
-      break
-  }
-
-  return date
-}
-
-/**
- * Subtract the specified years, months, weeks, days, hours, minutes and seconds from the given date.
- * @param date
- * @param duration
- * @param exact
- * @returns
- */
-export function subDuration(
-  date: DateInput,
-  duration: number | Duration | TDuration,
-  exact = false
-): Date {
-  return addDuration(date, new Duration(duration, exact).negated(), exact)
-}
-
-const UNITS_SINGULAR = {
-  year: 'year',
-  years: 'year',
-  month: 'month',
-  months: 'month',
-  day: 'day',
-  days: 'day',
-  hour: 'hour',
-  hours: 'hour',
-  minute: 'minute',
-  minutes: 'minute',
-  quarter: 'quarter',
-  quarters: 'quarter',
-  second: 'second',
-  seconds: 'second',
-  millisecond: 'millisecond',
-  milliseconds: 'millisecond',
-  weekday: 'weekday',
-  weekdays: 'weekday',
-  weeknumber: 'weekNumber',
-  weeksnumber: 'weekNumber',
-  weeknumbers: 'weekNumber',
-  weekyear: 'weekYear',
-  weekyears: 'weekYear',
-  ordinal: 'ordinal'
-}
-
-function normalizeUnit(unit) {
-  const normalized = UNITS_SINGULAR[unit.toLowerCase()]
-  if (!normalized) throw new ValueError(`Invalid unit ${unit}`)
-  return normalized
-}
-
-function normalizeObject(obj, normalizer) {
-  const normalized = {} as Record<DurationUnit, number>
-  for (const key of Object.keys(obj)) {
-    const value = obj[key]
-    if (value == null) continue
-    normalized[normalizer(key)] = asNumber(value)
-  }
-  return normalized
+  return fields
 }

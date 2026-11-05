@@ -1,21 +1,16 @@
 /**
  * A generic function type with arbitrary arguments and return.
  */
-export type Function<TReturn = any> = (...args: any) => TReturn
+export type AnyFunction<TReturn = unknown> = (...args: never[]) => TReturn
 
 /**
- * An iteratee function used for collection methods.
- * @see {@link collections.filter}
- * @see {@link collections.find}
- * @see {@link collections.forEach}
- * @see {@link collections.index}
- * @see {@link collections.map}
- * @see {@link collections.pick}
- * @see {@link collections.omit}
- * @see {@link collections.uniq}
- * @see {@link collections.sortedUniq}
- * @see {@link collections.groupBy}
+ * An iteratee function used for collection methods such as filter, find, forEach, map, pick,
+ * omit, uniq, sortedUniq, and groupBy.
  */
-export type Iteratee<T = any, K = any, TResult = any> = (value: T, key?: K, arr?) => TResult
+export type Iteratee<T = unknown, K = PropertyKey, TResult = unknown> = (
+  value: T,
+  key?: K,
+  arr?: unknown
+) => TResult
 
-export type Predicate<T = any, TReturn = any> = (value: T) => TReturn
+export type Predicate<T = unknown, TReturn = unknown> = (value: T) => TReturn

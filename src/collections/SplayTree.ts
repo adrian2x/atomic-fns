@@ -1,11 +1,9 @@
-import { compare, Comparer, eq } from '../operators/index.js'
-import { Mapping } from './abc.js'
+import { withHookNesting } from '../internal/nesting.js'
+import type { Comparer } from '../operators/index.js'
+import { compare, protocol } from '../operators/index.js'
+import { MapCollection, sameEntrySequence } from './abc.js'
 
-/**
- * Base SplayTree node class.
- * @private
- */
-class Node<K = any, V = any> {
+class Node<K, V> {
   key: K
   value: V
   left?: Node<K, V>
@@ -15,340 +13,308 @@ class Node<K = any, V = any> {
     this.key = key
     this.value = value
   }
-
-  get height() {
-    if (this.left && this.right) return 1 + Math.max(this.right.height, this.left.height)
-    if (this.right) return 1 + this.right.height
-    if (this.left) return 1 + this.left.height
-    return 0
-  }
-}
-
-// In-order traversal of a tree
-function* traverse(node?: Node) {
-  while (node) {
-    yield* traverse(node.left)
-    yield node
-    node = node.right
-  }
 }
 
 /**
- * A splay tree is a *self-balancing binary* search tree with the additional property that recently accessed elements are quick to access again.
- * Insertion, look-up and removal in O(log n) *amortized* time.
- * For many patterns of non-random operations splay trees can take better than logarithmic time, without requiring advance knowledge of the pattern.
+ * A splay tree is a self-balancing binary search tree with the additional property that recently
+ * accessed elements are quick to access again. Insertion, look-up and removal in O(log n)
+ * amortized time.
+ *
+ * Iterators capture a structural version; splaying bumps it. A stale iterator re-seeks by splaying
+ * its last yielded key's successor (O(log n) amortized), so an abandoned iterator can never disable
+ * splaying.
+ *
  * @see {@link https://en.wikipedia.org/wiki/Splay_tree Splay tree}
  * @see {@link https://web.archive.org/web/20220930173835/http://www14.in.tum.de/personen/albers/papers/ipl02.pdf Randomized Splay Trees}
  * @template K, V
  */
-export class SplayTree<K, V = any> extends Mapping<K, V> {
-  protected root?: Node<K, V>
-  protected cmp: Comparer
-  protected randSplay: number
-  protected count: number
+export class SplayTree<K, V = unknown> extends MapCollection<K, V> {
+  #root?: Node<K, V>
+  readonly #cmp: Comparer<K>
+  readonly #p: number
+  #size = 0
+  #version = 0
 
   /**
-   * Create a new randomized Splay Tree
-   * @param compareFn
-   * @param p When an element is accessed, with probability `p` splay the tree. With probability `1 - p`, leave the tree as it is.
+   * @param compareFn Key comparator. Defaults to {@link compare}.
+   * @param p Probability of splaying on a read. Must be in `[0, 1]`. With `0`, reads never reshape
+   * the tree, so they lose the amortized bound: on a tree built from sorted keys each read is O(n).
+   * @throws {RangeError} when `p` is outside `[0, 1]`.
    */
-  constructor(compareFn?, p = 0.5) {
+  constructor(compareFn?: Comparer<K>, p = 0.5) {
     super()
-    this.cmp = compareFn ?? compare
-    this.count = 0
-    this.randSplay = p
+    if (!(p >= 0 && p <= 1)) {
+      throw new RangeError('p must be in [0, 1]')
+    }
+    this.#cmp = compareFn ?? compare
+    this.#p = p
   }
 
-  top() {
-    return this.root?.key
+  get size(): number {
+    return this.#size
   }
 
-  get size() {
-    return this.count
+  protected override cloneFrom(entries: Iterable<[K, V]>): this {
+    const copy = Reflect.construct(this.constructor, [this.#cmp, this.#p]) as this
+    for (const [k, v] of entries) copy.set(k, v)
+    return copy
   }
 
-  empty() {
-    return !this.root
+  /** Sequence equality: key order is part of meaning (like SortedMap). */
+  override [protocol.equals](other: unknown): boolean {
+    return withHookNesting(() => sameEntrySequence(this, other, (c) => c.entries()))
   }
 
-  get height() {
-    if (!this.root) return 0
-    return this.root.height
-  }
+  readonly [Symbol.toStringTag] = 'SplayTree'
 
   /**
-   *  Returns the value for `key` or `undefined` if the key is not found.
-   * @param key The key to find.
-   * @returns {?V} The value for the key or `undefined`.
+   * Tree height via iterative BFS. Empty and single-node trees are `0`.
    */
-  get(key: K) {
-    if (!this.root) return
+  get height(): number {
+    if (!this.#root) return 0
+    let h = 0
+    let level: Node<K, V>[] = [this.#root]
+    for (;;) {
+      const next: Node<K, V>[] = []
+      for (const n of level) {
+        if (n.left) next.push(n.left)
+        if (n.right) next.push(n.right)
+      }
+      if (next.length === 0) return h
+      h++
+      level = next
+    }
+  }
 
-    // Note: deterministic splaying (always moves key to front):
-    // this.splay(key)
-    // if (this.cmp(key, this.root.key) === 0) return this.root.value
-
-    // Randomized Splay Trees https://doi.org/10.1016%2Fs0020-0190%2801%2900230-7
-    // The randomized idea is only moving accessed keys with a certain probability `p`.
-    // Values of `p` closer to 1 tend to perform well.
-    if (Math.random() <= this.randSplay) {
+  get(key: K): V | undefined {
+    if (!this.#root) return undefined
+    if (Math.random() < this.#p) {
       this.splay(key)
-      if (this.cmp(key, this.root.key) === 0) return this.root.value
-      else return undefined
+      return this.#cmp(key, this.#root.key) === 0 ? this.#root.value : undefined
     }
-
-    // Lookup the node down the tree
-    let current = this.root as any
-    while (current) {
-      const rank = this.cmp(key, current.key)
-      if (rank === 0) return current.value
-      if (rank < 0) current = current.left
-      else current = current.right
-    }
+    return this.#find(key)?.value
   }
 
-  /**
-   * Inserts the `key` and `value` in the tree if the `key` does not exist.
-   * @param {K} key A key which can be any comparable value
-   * @param {V} value A value associated with the key
-   * @returns
-   */
-  set(key: K, value: V) {
-    if (!this.root) {
-      this.root = new Node(key, value)
-      this.count += 1
-      return
+  has(key: K): boolean {
+    if (!this.#root) return false
+    if (Math.random() < this.#p) {
+      this.splay(key)
+      return this.#cmp(key, this.#root.key) === 0
     }
-    // Splay on the key to move the last node on the search path for
-    // the key to the root of the tree.
+    return this.#find(key) !== undefined
+  }
+
+  set(key: K, value: V): this {
+    if (!this.#root) {
+      this.#root = new Node(key, value)
+      this.#size = 1
+      this.#version++
+      return this
+    }
     this.splay(key)
-    const rank = this.cmp(key, this.root.key)
+    const rank = this.#cmp(key, this.#root.key)
     if (rank === 0) {
-      // Update the value
-      this.root.value = value
-      return
+      this.#root.value = value
+      return this
     }
     const node = new Node(key, value)
     if (rank > 0) {
-      node.left = this.root
-      node.right = this.root.right
-      this.root.right = undefined
+      node.left = this.#root
+      node.right = this.#root.right
+      this.#root.right = undefined
     } else {
-      node.right = this.root
-      node.left = this.root.left
-      this.root.left = undefined
+      node.right = this.#root
+      node.left = this.#root.left
+      this.#root.left = undefined
     }
-    this.root = node
-    this.count += 1
+    this.#root = node
+    this.#size++
+    return this
   }
 
-  /**
-   * Removes a specified key if it exists in the tree. The removed value is returned or `undefined` if not found.
-   * @param {K} key The key to remove.
-   * @returns {V} The removed value associated with `key`.
-   */
-  remove(key: K) {
-    if (!this.root) {
-      return
-    }
-    this.splay(key)
-    if (!eq(key, this.root.key)) {
-      return
-    }
-    const removed = this.root
-    if (!this.root.left) {
-      this.root = this.root.right
-    } else {
-      const right = this.root.right
-      this.root = this.root.left
-      //
-      // Splay to make sure that the new root has an empty right child.
-      //
-      this.splay(key)
-      //
-      // Insert the original right child as the right child of the new
-      // root.
-      //
-      this.root.right = right
-    }
-    this.count -= 1
-    return removed.value
-  }
-
-  //
-  //  function find(key)
-  //  @param {number} key Key to find in the tree.
-  //  @return {SplayTree.Node} Node having the specified key.
-  //
-  //
-
-  /**
-   * Returns the minimum key in the tree or subtree.
-   * @returns The minimum key.
-   */
-  min(root = this.root) {
-    if (!root) return
-    while (root.left) {
-      root = root.left
-    }
-    return root.key
-  }
-
-  /**
-   * Returns the maximum key in the tree or subtree.
-   * @returns The maximum key.
-   */
-  max(root = this.root) {
-    if (!root) return
-    while (root.right) {
-      root = root.right
-    }
-    return root.key
-  }
-
-  /**
-   * Returns the largest key that is less than a given key.
-   * @param key The given key
-   * @returns The largest key found or `undefined`.
-   */
-  lowerBound(key) {
-    if (!this.root) return
-
-    // Splay on the key to move the node with the given key or the last
-    // node on the search path to the top of the tree.
-    this.splay(key)
-
-    // Now the result is either the root node or the greatest node in
-    // the left subtree.
-    if (this.cmp(this.root.key, key) < 0) {
-      return this.root
-    } else if (this.root.left) {
-      return this.max(this.root.left)
-    }
-  }
-
-  /**
-   * This is the simplified top-down splaying method proposed by Sleator and Tarjan in {@link https://doi.org/10.1145%2F3828.3835 Self-Adjusting Binary Search Trees}.
-   * @param key
-   * @see {@link https://doi.org/10.1145%2F3828.3835 Self-Adjusting Binary Search Trees}
-   */
-  splay(key) {
-    if (!this.root) return
-
-    let stub, left, right
-    // eslint-disable-next-line
-    stub = left = right = new Node(null, null)
-
-    let root = this.root
-
-    while (true) {
-      const rank = this.cmp(key, root.key)
-      if (rank < 0) {
-        if (!root.left) {
-          break
-        }
-
-        if (this.cmp(key, root.left.key) < 0) {
-          // Rotate right.
-          const tmp = root.left
-          root.left = tmp.right
-          tmp.right = root
-          root = tmp
-          if (!root.left) {
-            break
-          }
-        }
-
-        // Link right.
-        right.left = root
-        right = root
-        root = root.left
-      } else if (rank > 0) {
-        if (!root.right) {
-          break
-        }
-        if (this.cmp(key, root.right.key) > 0) {
-          // Rotate left.
-          const tmp = root.right
-          root.right = tmp.left
-          tmp.left = root
-          root = tmp
-          if (!root.right) {
-            break
-          }
-        }
-        // Link left.
-        left.right = root
-        left = root
-        root = root.right
-      } else {
-        break
-      }
-    }
-
-    // Assemble.
-    left.right = root.left
-    right.left = root.right
-    root.left = stub.right
-    root.right = stub.left
-    this.root = root
-  }
-
-  add(key: K) {
-    return this.set(key, null as V)
-  }
-
-  /**
-   * Returns `true` if the given key is in the tree.
-   * @param {K} key The key to find.
-   * @returns `true` if found.
-   */
-  contains(key: K): boolean {
-    return this.get(key) !== undefined
-  }
-
-  /** Alias of remove but just returns `true` instead of the deleted value. */
   delete(key: K): boolean {
-    // since remove throws, this will throw too
-    this.remove(key)
+    if (!this.#root) return false
+    this.splay(key)
+    if (this.#cmp(key, this.#root.key) !== 0) return false
+    if (!this.#root.left) {
+      this.#root = this.#root.right
+    } else {
+      const right = this.#root.right
+      this.#root = this.#root.left
+      this.splay(key)
+      this.#root.right = right
+    }
+    this.#size--
     return true
   }
 
-  clear() {
-    if (!this.root) return
-    this.root.left = undefined
-    this.root.right = undefined
-    this.root = undefined
-    this.count = 0
+  clear(): void {
+    this.#root = undefined
+    this.#size = 0
+    this.#version++
   }
 
   /**
-   * Returns an ordered iterable of all the keys in the tree.
-   * @returns {Iterable<K>} An iterable of keys in-order.
+   * Minimum key. Splays the found node.
    */
-  *keys(): Iterable<K> {
-    for (const node of traverse(this.root)) {
-      yield node.key as K
-    }
+  min(): K | undefined {
+    if (!this.#root) return undefined
+    let n = this.#root
+    while (n.left) n = n.left
+    const key = n.key
+    this.splay(key)
+    return key
   }
 
   /**
-   * Returns an ordered iterable of all the keys and values in the tree.
-   * @returns {Iterable<[K,V]>} A iterable of `[key, value]` pairs sorted by key.
+   * Maximum key. Splays the found node.
    */
-  *entries(): Iterable<[K, V]> {
-    for (const node of traverse(this.root)) {
-      yield [node.key as K, node.value as V]
-    }
+  max(): K | undefined {
+    if (!this.#root) return undefined
+    let n = this.#root
+    while (n.right) n = n.right
+    const key = n.key
+    this.splay(key)
+    return key
   }
 
   /**
-   * Returns an ordered iterable of all the keys and values in the tree.
-   * @returns {Iterable<V>} A iterable of `[key, value]` pairs sorted by key.
+   * Greatest key strictly less than `key`, or `undefined`. Splays the found node.
    */
-  *values(): Iterable<V> {
-    for (const node of traverse(this.root)) {
-      yield node.value as V
+  lower(key: K): K | undefined {
+    if (!this.#root) return undefined
+    this.splay(key)
+    if (this.#cmp(this.#root.key, key) < 0) return this.#root.key
+    let n = this.#root.left
+    if (!n) return undefined
+    while (n.right) n = n.right
+    this.splay(n.key)
+    return n.key
+  }
+
+  /**
+   * Least key strictly greater than `key`, or `undefined`. Splays the found node.
+   */
+  higher(key: K): K | undefined {
+    if (!this.#root) return undefined
+    this.splay(key)
+    if (this.#cmp(this.#root.key, key) > 0) return this.#root.key
+    let n = this.#root.right
+    if (!n) return undefined
+    while (n.left) n = n.left
+    this.splay(n.key)
+    return n.key
+  }
+
+  /**
+   * Top-down splay of `key` (Sleator and Tarjan). Bumps the structural version so open
+   * iterators re-seek from their last key. A comparator that throws leaves every entry in place.
+   * @see {@link https://doi.org/10.1145%2F3828.3835 Self-Adjusting Binary Search Trees}
+   */
+  splay(key: K): void {
+    if (!this.#root) return
+
+    let left: Node<K, V>
+    let right: Node<K, V>
+    const stub = (left = right = new Node(null as K, null as V))
+
+    let root = this.#root
+
+    try {
+      for (;;) {
+        const rank = this.#cmp(key, root.key)
+        if (rank < 0) {
+          if (!root.left) break
+          if (this.#cmp(key, root.left.key) < 0) {
+            const tmp = root.left
+            root.left = tmp.right
+            tmp.right = root
+            root = tmp
+            if (!root.left) break
+          }
+          right.left = root
+          right = root
+          root = root.left
+        } else if (rank > 0) {
+          if (!root.right) break
+          if (this.#cmp(key, root.right.key) > 0) {
+            const tmp = root.right
+            root.right = tmp.left
+            tmp.left = root
+            root = tmp
+            if (!root.right) break
+          }
+          left.right = root
+          left = root
+          root = root.right
+        } else {
+          break
+        }
+      }
+    } finally {
+      left.right = root.left
+      right.left = root.right
+      root.left = stub.right
+      root.right = stub.left
+      this.#root = root
+      this.#version++
     }
+  }
+
+  keys(): IteratorObject<K> {
+    return this.#inorder().map((n) => n.key)
+  }
+
+  values(): IteratorObject<V> {
+    return this.#inorder().map((n) => n.value)
+  }
+
+  entries(): IteratorObject<[K, V]> {
+    return this.#inorder().map((n) => [n.key, n.value])
+  }
+
+  *#inorder(): Generator<Node<K, V>, void, undefined> {
+    let version = this.#version
+    let lastKey: K | undefined
+    let haveLast = false
+    const stack: Node<K, V>[] = []
+    let n: Node<K, V> | undefined = this.#root
+
+    // Splaying or mutating restructures the tree, so the stack is stale. Splay the successor of
+    // the last yielded key to the root: a plain descent would pay O(height) at every step.
+    const reseek = (): void => {
+      stack.length = 0
+      n = haveLast ? undefined : this.#root
+      if (haveLast) {
+        this.higher(lastKey as K)
+        const root = this.#root
+        if (root && this.#cmp(root.key, lastKey as K) > 0) stack.push(root)
+      }
+      version = this.#version
+    }
+
+    for (;;) {
+      if (version !== this.#version) reseek()
+      while (n) {
+        stack.push(n)
+        n = n.left
+      }
+      const current = stack.pop()
+      if (current === undefined) return
+      lastKey = current.key
+      haveLast = true
+      n = current.right
+      yield current
+    }
+  }
+
+  #find(key: K): Node<K, V> | undefined {
+    let n = this.#root
+    while (n) {
+      const c = this.#cmp(key, n.key)
+      if (c === 0) return n
+      n = c < 0 ? n.left : n.right
+    }
+    return undefined
   }
 }
