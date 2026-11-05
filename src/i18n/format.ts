@@ -187,9 +187,12 @@ function formatOrdinal(day: number, locale?: string) {
   return isEnglish ? `${day}${ORDINAL_SUFFIXES[rules.select(day)]}` : String(day)
 }
 
-function formatPart(locale, t, date) {
-  const value = formatter(locale, TOKENS[t]).format(date)
-  return value.split(/\s+/g).slice(1).join(' ')
+function formatPart(locale, opts, date, type) {
+  return (
+    formatter(locale, opts)
+      .formatToParts(date)
+      .find((part) => part.type === type)?.value ?? ''
+  )
 }
 
 /**
@@ -225,10 +228,10 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
 
   const matches = {
     ...time,
-    N: formatPart(locale, 'N', date),
-    NN: formatPart(locale, 'NN', date),
-    NNN: formatPart(locale, 'NNN', date),
-    NNNN: formatPart(locale, 'NNNN', date),
+    N: formatPart(locale, TOKENS.N, date, 'era'),
+    NN: formatPart(locale, TOKENS.NN, date, 'era'),
+    NNN: formatPart(locale, TOKENS.NNN, date, 'era'),
+    NNNN: formatPart(locale, TOKENS.NNNN, date, 'era'),
     YY: padStart(Math.abs(date.getFullYear()) % 100, 2, '0'),
     YYYY: padYear(date.getFullYear()),
     M: date.getMonth() + 1,
@@ -244,8 +247,8 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     dddd: formatter(locale, TOKENS.dddd).format(date),
     Z: zoneStr,
     ZZ: zoneStr.replace(':', ''),
-    z: formatPart(locale, 'z', date),
-    zzz: formatPart(locale, 'zzz', date),
+    z: formatPart(locale, TOKENS.z, date, 'timeZoneName'),
+    zzz: formatPart(locale, TOKENS.zzz, date, 'timeZoneName'),
     LT: `${time.h}:${time.mm} ${time.A}`,
     LTS: `${time.h}:${time.mm}:${time.ss} ${time.A}`,
     L: formatter(locale, DATE_SHORT_DD).format(date),
@@ -316,9 +319,8 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
       }
 
       if (ERA_PARTS[part] || TZ_PARTS[part]) {
-        // the formatting includes the date/year so we take what comes after
-        const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
-        results.push(res.slice(1).join(' '))
+        const type = ERA_PARTS[part] ? 'era' : 'timeZoneName'
+        results.push(formatPart(locale, STRFTIME[part], date, type))
         continue
       }
 

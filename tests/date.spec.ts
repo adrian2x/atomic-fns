@@ -424,6 +424,17 @@ describe('IntlDate', () => {
     assert.strictEqual(invalid.inspect(), 'new IntlDate(NaN)')
   })
 
+  it('era and zone names read their own part in every locale', () => {
+    const date = new Date(2021, 5, 15)
+    assert.strictEqual(formatDate('N', date, 'ja-JP'), '西暦')
+    assert.strictEqual(formatDate('NNNN', date, 'zh-CN'), '公元')
+    assert.strictEqual(formatDate('NNNN', date, 'ko-KR'), '서기')
+    assert.strictEqual(formatDate('N', date, 'th-TH'), 'พ.ศ.')
+    assert.strictEqual(formatDate('z zzz', date, 'th-TH'), 'UTC เวลาสากลเชิงพิกัด')
+    assert.strictEqual(strftime('%n %N', date, 'ja-JP'), '西暦 西暦')
+    assert.strictEqual(strftime('%-Z %Z', date, 'th-TH'), 'UTC เวลาสากลเชิงพิกัด')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
