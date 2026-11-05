@@ -1,6 +1,6 @@
 import { KeyError, ValueError } from '../globals/index.js'
 import { eq } from '../operators/index.js'
-import { Iteratee } from '../types.js'
+import type { Iteratee } from '../types.js'
 import { Sequence } from './abc.js'
 
 function IterableIterator<T>(next: Iterator<T>['next']): IterableIterator<T> {

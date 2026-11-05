@@ -14,12 +14,11 @@ import {
   isIterable,
   isNull,
   isObject,
-  isRegExp,
-  set
+  isRegExp
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
 import { compare, eq, identity } from '../operators/index.js'
-import { Iteratee } from '../types.js'
+import type { Iteratee } from '../types.js'
 
 export * from './abc.js'
 export * from './BTree.js'
