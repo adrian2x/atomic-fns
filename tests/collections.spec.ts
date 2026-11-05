@@ -339,6 +339,20 @@ describe('collections', () => {
     assert(find(users, (o) => o.active) === users[0])
   })
 
+  it('find walks iterables', () => {
+    assert(find(new Set([1, 2]), (x) => x > 1) === 2)
+    assert(find('ab', (x) => x === 'b') === 'b')
+    const first = { a: 1 }
+    assert(find(new Set([first]), 'a') === first)
+    assert(find(new Set([first]), { a: 1 }) === first)
+
+    function* numbers() {
+      let n = 0
+      while (true) yield n++
+    }
+    assert(find(numbers(), (x) => x === 3) === 3)
+  })
+
   it('find matches', () => {
     let users = [
       { user: 'barney', age: 36, active: true },
