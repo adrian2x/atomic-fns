@@ -159,4 +159,23 @@ describe('SplayTree', () => {
     assert.deepEqual(seen, [1, 2, 3, 4, 5])
     assert(tree.empty())
   })
+
+  it('height of a chain of 1e5 keys', () => {
+    let tree = new SplayTree()
+    for (let i = 0; i < 1e5; i++) {
+      tree.set(i, i)
+    }
+    assert(tree.height === 1e5 - 1)
+  })
+
+  it('height counts edges', () => {
+    let tree = new SplayTree()
+    assert(tree.height === 0)
+    tree.set(2, 2)
+    assert(tree.height === 0)
+    tree.set(1, 1)
+    assert(tree.height === 1)
+    tree.set(3, 3)
+    assert(tree.height === 2)
+  })
 })
