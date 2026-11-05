@@ -79,6 +79,13 @@ describe('random', () => {
     }
   })
 
+  it('shuffle returns the values of an object', () => {
+    const values = shuffle({ a: 1, b: 2, c: 3 })
+    assert(Array.isArray(values))
+    assert.deepEqual(values.sort(), [1, 2, 3])
+    assert.deepEqual(shuffle({}), [])
+  })
+
   it('sample', () => {
     let arr = randomArr()
     for (let i = 0; i < 100; i++) {
