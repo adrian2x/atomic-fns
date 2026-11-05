@@ -477,6 +477,18 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%-H', new Date(2020, 1, 1, 1), 'ar-EG'), '١')
   })
 
+  it('strftime numeric directives leave out the unit text of the locale', () => {
+    const date = new Date(2021, 5, 15, 9, 5, 3)
+    assert.strictEqual(strftime('%H:%M', date, 'de-DE'), '09:05')
+    assert.strictEqual(strftime('%H:%M', date, 'fr-FR'), '09:05')
+    assert.strictEqual(strftime('%y/%m/%d', date, 'ja-JP'), '2021/06/15')
+    assert.strictEqual(strftime('%y', date, 'th-TH'), '2564')
+    assert.strictEqual(strftime('%I %P', date, 'ko-KR'), '09 오전')
+    assert.strictEqual(strftime('%I %P', date, 'ja-JP'), '09 午前')
+    assert.strictEqual(strftime('%-H', date, 'de-DE'), '9')
+    assert.strictEqual(strftime('%B', date, 'ja-JP'), '6月')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
