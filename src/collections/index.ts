@@ -683,7 +683,7 @@ lastIndexOf([1, 2, 1, 2], 2, 2)
  */
 export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
   if (obj == null) return -1
-  const op = call(obj, 'lastIndexOf', value, start)
+  const op = call(obj, 'lastIndexOf', ...(start === undefined ? [value] : [value, start]))
   if (op != null) return op
   const length = obj.length
   if (start == null) start = length - 1
