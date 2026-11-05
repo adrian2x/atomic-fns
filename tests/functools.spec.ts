@@ -138,4 +138,11 @@ describe('functools', () => {
     vi.advanceTimersByTime(60)
     assert.deepEqual(seen, ['second'])
   })
+  it('throttle returns the last result', () => {
+    const throttled = throttle((x) => x * 2, 100)
+    assert(throttled(1) === 2)
+    assert(throttled(2) === 2)
+    vi.advanceTimersByTime(100)
+    assert(throttled(3) === 6)
+  })
 })
