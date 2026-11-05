@@ -4,7 +4,7 @@
  * @module itertools
  */
 
-import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js'
+import { call, isEmpty, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
 import { add, bool, compare, Comparer, eq, identity } from '../operators/index.js'
 import { Function, Iteratee, Predicate } from '../types.js'
 
@@ -111,7 +111,8 @@ export function contains(collection: Iterable<any>, value: any): boolean {
   if (!collection) return false
   const includes = call(collection, 'includes', value)
   if (includes != null) return includes
-  return any(collection, (x) => eq(value, x))
+  const items = isIterable(collection) ? collection : Object.values(collection)
+  return any(items, (x) => eq(value, x))
 }
 
 /**
@@ -226,7 +227,11 @@ export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>) {
 }
 
 export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = identity) {
-  return iflatten<T>(imap(iterable, mapFn))
+  const toIterable = (x: T) => {
+    const mapped = mapFn(x)
+    return isIterable(mapped) ? mapped : [mapped]
+  }
+  return iflatten<T>(imap(iterable, toIterable))
 }
 
 export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, step = 1) {
@@ -336,8 +341,8 @@ export function reduce<T>(
 ) {
   const it = iter<T>(iterable)
   let output = initial ?? it.next().value
-  for (const [index, value] of enumerate(it as any)) {
-    output = reducer(output, value as T, index)
+  for (const [index, value] of enumerate<T>({ [Symbol.iterator]: () => it })) {
+    output = reducer(output, value, index)
   }
   return output
 }

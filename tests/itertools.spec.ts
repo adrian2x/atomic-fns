@@ -70,6 +70,22 @@ describe('operators', () => {
     assert(!contains([4, 7, 1, 9], NaN))
   })
 
+  it('contains searches the values of a plain object', () => {
+    assert(contains({ a: 1, b: 2 }, 1))
+    assert(!contains({ a: 1, b: 2 }, 3))
+    assert(!contains({ a: 1, b: 2 }, 'a'))
+    assert(!contains({}, 1))
+  })
+
+  it('contains still iterates a class instance', () => {
+    class Bag {
+      hidden = 1;
+      [Symbol.iterator] = () => [2][Symbol.iterator]()
+    }
+    assert(contains(new Bag(), 2))
+    assert(!contains(new Bag(), 1))
+  })
+
   it('dropWhile', () => {
     let it = dropWhile([false, 0, '', true, '', []], Falsy)
     assert.deepEqual([...it], [true, '', []])
@@ -125,6 +141,11 @@ describe('operators', () => {
       ],
       [2, 4, 6, 8]
     )
+  })
+
+  it('flatMap yields a non-iterable result as is', () => {
+    assert.deepEqual([...flatMap([1, 2], (x) => x * 2)], [2, 4])
+    assert.deepEqual([...flatMap([1, 2], (x) => (x === 1 ? [x, x] : x))], [1, 1, 2])
   })
 
   it('icompact', () => {
@@ -197,6 +218,35 @@ describe('operators', () => {
 
   it('reduce', () => {
     assert(reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0) === 15)
+  })
+
+  it('reduce reads an iterable with a plain iterator', () => {
+    const countdown = {
+      [Symbol.iterator]() {
+        let n = 3
+        return { next: () => (n > 0 ? { value: n--, done: false } : { value: 0, done: true }) }
+      }
+    }
+    assert(reduce(countdown, (x, y) => x + y) === 6)
+    assert(reduce(countdown, (x, y) => x + y, 10) === 16)
+    assert(max(countdown) === 3)
+  })
+
+  it('reduce closes the iterator when the reducer throws', () => {
+    let closed = false
+    const numbers = (function* () {
+      try {
+        yield* [1, 2, 3]
+      } finally {
+        closed = true
+      }
+    })()
+    assert.throws(() =>
+      reduce(numbers, () => {
+        throw new Error('stop')
+      })
+    )
+    assert(closed)
   })
 
   it('reversed', () => {
