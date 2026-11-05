@@ -1,7 +1,15 @@
 import assert from 'assert'
-import { memoize, once } from '../src/functools/index.js'
+import { debounce, memoize, once } from '../src/functools/index.js'
 
 describe('functools', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('memoize caches an undefined result', () => {
     let calls = 0
     const memoized = memoize(() => {
@@ -37,5 +45,37 @@ describe('functools', () => {
     }
     assert(counter.first() === 2)
     assert(counter.first() === 2)
+  })
+
+  it('debounce keeps this', () => {
+    const seen = []
+    const counter = {
+      step: 2,
+      save: debounce(function () {
+        seen.push(this.step)
+      }, 100)
+    }
+    counter.save()
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, [2])
+  })
+
+  it('debounce with maxWait keeps this', () => {
+    const seen = []
+    const counter = {
+      step: 2,
+      save: debounce(
+        function () {
+          seen.push(this.step)
+        },
+        100,
+        { maxWait: 150 }
+      )
+    }
+    counter.save()
+    vi.advanceTimersByTime(90)
+    counter.save()
+    vi.advanceTimersByTime(60)
+    assert.deepEqual(seen, [2])
   })
 })

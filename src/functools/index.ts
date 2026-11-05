@@ -95,19 +95,19 @@ export function debounce(
   { maxWait }: { maxWait?: number } = {}
 ): Function {
   let timer, maxTimer, lastResult
-  return (...args) => {
+  return function (...args) {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       clearTimeout(maxTimer)
       maxTimer = null
-      lastResult = func(...args)
+      lastResult = func.apply(this, args)
     }, wait)
 
     if (maxWait && !maxTimer) {
       maxTimer = setTimeout(() => {
         clearTimeout(timer)
         maxTimer = null
-        lastResult = func(...args)
+        lastResult = func.apply(this, args)
       }, maxWait)
     }
 
