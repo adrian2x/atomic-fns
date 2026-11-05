@@ -461,6 +461,14 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%nn', date), 'ADn')
   })
 
+  it('strftime fills every %p and %P', () => {
+    const date = new Date(2020, 1, 1, 13, 5)
+    assert.strictEqual(strftime('%I %p %p', date), '01 pm pm')
+    assert.strictEqual(strftime('%I %P %p', date), '01 PM pm')
+    assert.strictEqual(strftime('%p %I', date), 'pm 01')
+    assert.strictEqual(strftime('%P %I', date), 'PM 01')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
