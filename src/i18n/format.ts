@@ -80,7 +80,6 @@ const STRFTIME = {
   // weekday
   '%A': { weekday: l },
   '%a': { weekday: s },
-  '%aa': { weekday: n },
   // day
   '%d': { day: dd },
   '%-d': { day: n },
@@ -113,7 +112,6 @@ const STRFTIME = {
   // era
   '%N': { era: l, year: dd },
   '%n': { era: s, year: dd },
-  '%nn': { era: n, year: 'narrow' },
   // timeZoneName
   // '%Z': { timeZoneName: 'longGeneric', year: dd },
   // '%-Z': { timeZoneName: 'shortGeneric', year: dd },
@@ -165,8 +163,8 @@ const TOKENS = {
 }
 
 const HOUR_PARTS = { '%I': 1, '%-I': 1, '%K': 1, '%k': 1 }
-const ERA_PARTS = { '%n': 1, '%N': 1, '%nn': 1 }
-const TZ_PARTS = { '%ZZ': 1, '%-ZZ': 1, '%-z': 1, '%z': 1, '%-Z': 1, '%Z': 1 }
+const ERA_PARTS = { '%n': 1, '%N': 1 }
+const TZ_PARTS = { '%-z': 1, '%z': 1, '%-Z': 1, '%Z': 1 }
 
 function formatter(locale: string, opts) {
   return new Intl.DateTimeFormat(locale, opts)
@@ -296,9 +294,14 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
         part += fmt[i++]
       }
 
-      part += fmt[i]
-      // add any repeated characters that come after
-      while (i < fmt.length - 1 && fmt[i + 1] === fmt[i]) part += fmt[++i]
+      part += fmt[i] ?? ''
+      // a doubled letter is a directive of its own only when the table lists it
+      if (fmt[i + 1] === fmt[i] && STRFTIME[part + fmt[i]]) part += fmt[++i]
+
+      if (!STRFTIME[part]) {
+        results.push(part)
+        continue
+      }
 
       if (HOUR_PARTS[part]) {
         const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
