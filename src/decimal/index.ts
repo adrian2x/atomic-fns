@@ -231,6 +231,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {TDecimal}
    */
   sqrt(): Decimal {
+    if (this.i < 0n) throw new ValueError('square root of a negative number')
     Decimal.PRECISION++
 
     // Let the guess value be 10^(e/2), where e is this.e
