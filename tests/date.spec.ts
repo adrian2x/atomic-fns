@@ -766,6 +766,11 @@ describe('IntlDate', () => {
     })
   })
 
+  it('toISODate and toISOTime split an expanded year', () => {
+    assert.strictEqual(mockDate(new Date(8.64e15)).toISODate(), '+275760-09-13')
+    assert.strictEqual(mockDate(new Date(8.64e15)).toISOTime(), '00:00:00.000Z')
+    assert.strictEqual(mockDate(new Date(-8.64e15)).toISODate(), '-271821-04-20')
+  })
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
