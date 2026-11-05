@@ -1,13 +1,13 @@
 import assert from 'assert'
-import { bool, id, isinstance, not, compare, shallowEqual } from '../src/operators/index.js'
+import { bool, identity, isinstance, not, compare, shallowEqual } from '../src/operators/index.js'
 
 describe('operators', () => {
-  it('id', () => {
-    assert(id(true) === true)
-    assert(id(false) === false)
-    assert(id(3.0) === 3.0)
-    assert(id('') === '')
-    assert(id(Object) === Object)
+  it('identity', () => {
+    assert(identity(true) === true)
+    assert(identity(false) === false)
+    assert(identity(3.0) === 3.0)
+    assert(identity('') === '')
+    assert(identity(Object) === Object)
   })
 
   it('bool', () => {
