@@ -650,4 +650,9 @@ describe('collections', () => {
     merge({}, { root: shared }, { root: shared })
     assert(reads === 2)
   })
+
+  it('sortedUniq sorts by the iteratee', () => {
+    assert.deepEqual(sortedUniq([{ id: 2 }, { id: 1 }, { id: 2 }], 'id'), [{ id: 1 }, { id: 2 }])
+    assert.deepEqual(sortedUniq([3.2, 1.1, 3.9], Math.floor), [1.1, 3.2])
+  })
 })
