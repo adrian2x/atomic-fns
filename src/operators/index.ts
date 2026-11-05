@@ -71,7 +71,7 @@ export function compare(x, y): number {
  * @returns {boolean} `true` if `x` and `y` are equal or `false` otherwise.
  */
 export function eq(x, y): boolean {
-  return Object.is(x, y) || !!call(x, 'eq', y)
+  return x === y || Object.is(x, y) || !!call(x, 'eq', y)
 }
 
 /**
