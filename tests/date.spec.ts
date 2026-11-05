@@ -435,6 +435,17 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%-Z %Z', date, 'th-TH'), 'UTC เวลาสากลเชิงพิกัด')
   })
 
+  it('strftime keeps unknown directives and a lone % as written', () => {
+    const date = new Date(2020, 1, 1)
+    assert.strictEqual(strftime('100%', date), '100%')
+    assert.strictEqual(strftime('%', date), '%')
+    assert.strictEqual(strftime('%-', date), '%-')
+    assert.strictEqual(strftime('%Q', date), '%Q')
+    assert.strictEqual(strftime('%-Q', date), '%-Q')
+    assert.strictEqual(strftime('%Q %d', date), '%Q 01')
+    assert.strictEqual(strftime('%%d', date), '%d')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
