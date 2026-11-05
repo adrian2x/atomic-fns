@@ -11,6 +11,10 @@ function padStart(string, length, pad) {
   return String(string).padStart(length, pad)
 }
 
+function padYear(year: number) {
+  return `${year < 0 ? '-' : ''}${padStart(Math.abs(year), 4, '0')}`
+}
+
 function padZoneStr(instance: Date) {
   const negMinutes = -instance.getTimezoneOffset()
   const minutes = Math.abs(negMinutes)
@@ -215,8 +219,8 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     NN: formatPart(locale, 'NN', date),
     NNN: formatPart(locale, 'NNN', date),
     NNNN: formatPart(locale, 'NNNN', date),
-    YY: String(date.getFullYear()).slice(-2),
-    YYYY: date.getFullYear(),
+    YY: padStart(Math.abs(date.getFullYear()) % 100, 2, '0'),
+    YYYY: padYear(date.getFullYear()),
     M: date.getMonth() + 1,
     MM: padStart(date.getMonth() + 1, 2, '0'),
     MMM: formatter(locale, TOKENS.MMM).format(date),

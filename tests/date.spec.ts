@@ -376,6 +376,20 @@ describe('IntlDate', () => {
     assert.strictEqual(mockDate().format('Y YYY dd zz zzzz'), 'Y YYY dd zz zzzz')
   })
 
+  it('format pads the year', () => {
+    const inYear = (year: number) => {
+      const date = new Date(2021, 5, 15)
+      date.setFullYear(year)
+      return mockDate(date).format('YYYY YY')
+    }
+    assert.strictEqual(inYear(5), '0005 05')
+    assert.strictEqual(inYear(50), '0050 50')
+    assert.strictEqual(inYear(999), '0999 99')
+    assert.strictEqual(inYear(2021), '2021 21')
+    assert.strictEqual(inYear(12345), '12345 45')
+    assert.strictEqual(inYear(-1), '-0001 01')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
