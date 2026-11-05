@@ -710,7 +710,10 @@ export function clone(value, deep = false) {
   if (isObject(value) && isFunction(value.clone)) {
     return value.clone()
   }
-  if (Array.isArray(value) || isArrayLike(value)) {
+  if (
+    Array.isArray(value) ||
+    (isArrayLike(value) && (isIterable(value) || value.length - 1 in value))
+  ) {
     return cloneArray(value, deep)
   }
   if (isObject(value)) {
