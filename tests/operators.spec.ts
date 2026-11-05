@@ -197,4 +197,22 @@ describe('operators', () => {
     assert(!lte(new Money(2), new Money(1)))
     assert(!gte(new Money(1), new Money(2)))
   })
+
+  it('lte and gte stay false for values that cannot be ordered', () => {
+    class Reading {
+      constructor(public n: number) {}
+      lt(other: Reading) {
+        return this.n < other.n
+      }
+      gt(other: Reading) {
+        return this.n > other.n
+      }
+      valueOf() {
+        return this.n
+      }
+    }
+    assert(!lte(new Reading(NaN), new Reading(0)))
+    assert(!gte(new Reading(NaN), new Reading(0)))
+    assert(lte(new Reading(1), new Reading(1)))
+  })
 })
