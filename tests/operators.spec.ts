@@ -182,4 +182,19 @@ describe('operators', () => {
     assert(compare(one, two) === -1)
     assert(compare(two, one) === 1)
   })
+  it('lte and gte hold for equal values with only a lt or gt hook', () => {
+    class Money {
+      constructor(public n: number) {}
+      lt(other: Money) {
+        return this.n < other.n
+      }
+      gt(other: Money) {
+        return this.n > other.n
+      }
+    }
+    assert(lte(new Money(1), new Money(1)))
+    assert(gte(new Money(1), new Money(1)))
+    assert(!lte(new Money(2), new Money(1)))
+    assert(!gte(new Money(1), new Money(2)))
+  })
 })
