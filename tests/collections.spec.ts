@@ -49,6 +49,13 @@ describe('collections', () => {
     assert.deepEqual(compact([[], {}, '', 0, null, new Map(), new Set()]), [])
   })
 
+  it('compact keeps a plain object with a zero length or size key', () => {
+    const file = { name: 'empty.txt', size: 0 }
+    const box = { length: 0, width: 5 }
+    assert.deepEqual(compact([file, box, {}]), [file, box])
+    assert.deepEqual(compact({ file, none: {} }), { file })
+  })
+
   it('count', () => {
     let counters = count([0, 1, false, 2, '', 3], (x) => !!x)
     assert(counters['true'] === 3)

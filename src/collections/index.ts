@@ -44,6 +44,7 @@ function setOwn(obj, key, value) {
 
 /** `isEmpty` counts declared parameters and keys, which says nothing about these values. */
 function isBlank(x): boolean {
+  if (isPlainObject(x)) return Object.keys(x).length === 0
   return isEmpty(x) && typeof x !== 'function' && !isDate(x) && !isRegExp(x)
 }
 
