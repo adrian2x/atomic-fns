@@ -70,4 +70,14 @@ describe('operators', () => {
     assert(gte(2, 2))
     assert(!gte(1, 2))
   })
+
+  it('shallowEqual tells kinds apart', () => {
+    assert(!shallowEqual({}, []))
+    assert(!shallowEqual({}, 5))
+    assert(!shallowEqual([1], { 0: 1, length: 1 }))
+    assert(!shallowEqual({}, new Date(0)))
+    class Point {}
+    assert(!shallowEqual(new Point(), {}))
+    assert(shallowEqual(Object.create(null), {}))
+  })
 })
