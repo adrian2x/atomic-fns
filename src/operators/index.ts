@@ -211,6 +211,15 @@ function sameKind(x, y): boolean {
   return (x.constructor?.name ?? 'Object') === (y.constructor?.name ?? 'Object')
 }
 
+function isDateOrRegExp(x): boolean {
+  return x instanceof Date || x instanceof RegExp
+}
+
+function sameDateOrRegExp(x, y): boolean {
+  if (x instanceof Date) return Object.is(x.getTime(), y.getTime())
+  return String(x) === String(y)
+}
+
 /**
  * Performs a shallow comparison of two objects or arrays to check if they have the same keys, length and values.
  * @param obj
@@ -222,6 +231,7 @@ export function shallowEqual(obj, other): boolean {
   if (obj === other) return true
 
   if (!sameKind(obj, other)) return false
+  if (isDateOrRegExp(obj)) return sameDateOrRegExp(obj, other)
 
   if (Array.isArray(obj)) {
     // compare the arrays
@@ -261,6 +271,7 @@ export function deepEqual(obj, other, checker?: Function, seen?): boolean
 export function deepEqual(obj, other, checker = eq, seen = new WeakSet()): boolean {
   if (checker(obj, other)) return true
   if (!sameKind(obj, other)) return false
+  if (isDateOrRegExp(obj)) return sameDateOrRegExp(obj, other)
   if (seen.has(obj) && seen.has(other)) return false
 
   if (Array.isArray(obj)) {
