@@ -18,11 +18,14 @@ import { Function, Iteratee, Predicate } from '../types.js'
 export function* accumulate<T>(iterable: Iterable<T>, func = add, initial?: any): Generator<T> {
   const it = iter(iterable)
   let total = initial
-  let current = it.next()
-  if (initial == null) total = current.value
-  while (!current.done) {
+  if (initial == null) {
+    const head = it.next()
+    if (head.done) return
+    total = head.value
+  }
+  while (true) {
     yield total
-    current = it.next()
+    const current = it.next()
     if (current.done) return
     total = func(total, current.value)
   }

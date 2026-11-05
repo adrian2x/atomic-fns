@@ -39,6 +39,15 @@ describe('operators', () => {
     )
   })
 
+  it('accumulate with initial', () => {
+    const add = (x, y) => x + y
+    assert.deepEqual([...accumulate([1, 2, 3], add, 10)], [10, 11, 13, 16])
+    assert.deepEqual([...accumulate([1, 2, 3], add, 0)], [0, 1, 3, 6])
+    assert.deepEqual([...accumulate([], add, 10)], [10])
+    assert.deepEqual([...accumulate([1, 2, 3], add, null)], [1, 3, 6])
+    assert.deepEqual([...accumulate([], add)], [])
+  })
+
   it('all', () => {
     assert(all([1, true, [], 'test', {}]))
     assert(!all([[], {}, '']))
