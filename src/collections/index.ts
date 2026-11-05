@@ -264,6 +264,7 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
 export function forEach<T>(collection: Iterable<T>, fn: Iteratee<T>): void
 export function forEach<T>(collection: Object, fn: Iteratee<T>): void
 export function forEach<T>(collection: Iterable<T> | Object, fn: Iteratee<T>): void {
+  if (collection == null) return
   if (Array.isArray(collection)) {
     for (let i = 0; i < collection.length; i++) {
       const res = fn(collection[i], i, collection)
