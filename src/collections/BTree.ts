@@ -71,7 +71,7 @@ class BNode<K, V = any> {
         // eslint-disable-next-line
         if (key === key)
           // at least the search key is not NaN
-          return keys.length
+          return keys.length ^ failXor
         // eslint-disable-next-line
         else throw new KeyError(`Btree found an invalid key: ${key}`)
       }
