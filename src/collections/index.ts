@@ -42,6 +42,12 @@ function setOwn(obj, key, value) {
   }
 }
 
+/** `isEmpty` counts declared parameters and keys, which says nothing about these values. */
+function isBlank(x): boolean {
+  if (isPlainObject(x)) return Object.keys(x).length === 0
+  return isEmpty(x) && typeof x !== 'function' && !isDate(x) && !isRegExp(x)
+}
+
 /**
  * Creates a new array with all falsy and empty values removed.
  * @param arr The array to compact
@@ -56,10 +62,10 @@ export function compact<T>(arr: T[]): T[]
 export function compact<T>(arr: T): Partial<T>
 export function compact<T>(arr: T | T[]): T[] | Partial<T> {
   if (!arr) return
-  if (Array.isArray(arr)) return arr.filter((x) => !isEmpty(x))
+  if (Array.isArray(arr)) return arr.filter((x) => !isBlank(x))
   const result = {}
   for (const key of Object.keys(arr)) {
-    if (!isEmpty(arr[key])) {
+    if (!isBlank(arr[key])) {
       setOwn(result, key, arr[key])
     }
   }
