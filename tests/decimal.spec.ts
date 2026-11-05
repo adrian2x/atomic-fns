@@ -145,4 +145,11 @@ describe('Decimal', () => {
     assert(!decimal(1).eq(true))
     assert(!decimal(0).eq(false))
   })
+
+  it('compare still reads null and booleans as numbers', () => {
+    assert(decimal(0).compare(null) === 0)
+    assert(!decimal(0).gt(null))
+    assert(decimal(0).lte(null))
+    assert(decimal(1).lte(true))
+  })
 })
