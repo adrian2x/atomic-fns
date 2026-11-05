@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { divmod, max, min, round, sum } from '../src/math/index.js'
 
 describe('math', () => {

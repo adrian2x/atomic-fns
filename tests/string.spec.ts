@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import * as string from '../src/string/index.js'
 
 describe('string', () => {
