@@ -607,6 +607,14 @@ it('strftime %-H accepts a timestamp and no date', () => {
 })
 
 describe('Duration', () => {
+  it('normalize and rescale leave the receiver alone', () => {
+    const duration = new Duration({ hours: 1, minutes: 90 })
+    assert.deepStrictEqual(duration.normalize().toObject(), { hours: 2, minutes: 30 })
+    assert.deepStrictEqual(duration.toObject(), { hours: 1, minutes: 90 })
+    assert.deepStrictEqual(duration.rescale().toObject(), { hours: 2, minutes: 30 })
+    assert.deepStrictEqual(duration.toObject(), { hours: 1, minutes: 90 })
+  })
+
   it('reads quarters like any other unit', () => {
     assert.strictEqual(new Duration({ quarters: 2 }).get('quarters'), 2)
     assert.strictEqual(new Duration({ quarter: 2 }).get('quarter'), 2)

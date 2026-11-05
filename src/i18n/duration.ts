@@ -361,8 +361,9 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   }
 
   normalize() {
-    normalizeValues(this.matrix, this.values)
-    return new Duration(this.values)
+    const values = this.toObject()
+    normalizeValues(this.matrix, values)
+    return new Duration(values)
   }
 
   rescale() {
