@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { debounce, memoize, once } from '../src/functools/index.js'
+import { debounce, memoize, once, throttle } from '../src/functools/index.js'
 
 describe('functools', () => {
   beforeEach(() => {
@@ -76,6 +76,17 @@ describe('functools', () => {
     vi.advanceTimersByTime(90)
     counter.save()
     vi.advanceTimersByTime(60)
+    assert.deepEqual(seen, [2])
+  })
+  it('throttle keeps this', () => {
+    const seen = []
+    const counter = {
+      step: 2,
+      save: throttle(function () {
+        seen.push(this.step)
+      }, 100)
+    }
+    counter.save()
     assert.deepEqual(seen, [2])
   })
 })
