@@ -947,11 +947,11 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    */
   freeze() {
     const t = this as any
-    // Note: all other mutators ultimately call set() or editRange()
+    // Note: all other mutators ultimately call set() or rangeUpdate()
     //       so we don't need to override those others.
     t.clear =
       t.set =
-      t.editRange =
+      t.rangeUpdate =
         () => {
           throw TypeError('Attempted to modify a frozen BTree')
         }
