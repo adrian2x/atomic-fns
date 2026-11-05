@@ -17,6 +17,7 @@ import {
   forEachRight,
   FrozenSet,
   groupBy,
+  groupByMap,
   insort,
   insortLeft,
   intersection,
@@ -420,6 +421,15 @@ describe('collections', () => {
       result,
       users.map((x, i) => [i, x])
     )
+  })
+
+  it('forEach ignores null and undefined', () => {
+    forEach(null, () => assert.fail('called'))
+    forEach(undefined, () => assert.fail('called'))
+    const identity = (x) => x
+    assert.deepEqual(count(null, identity), {})
+    assert.deepEqual(groupBy(undefined, identity), {})
+    assert(groupByMap(null, identity).size === 0)
   })
 
   it('forEach object key', () => {
