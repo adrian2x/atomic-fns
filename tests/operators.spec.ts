@@ -9,7 +9,8 @@ import {
   eq,
   gt,
   lt,
-  gte
+  gte,
+  deepEqual
 } from '../src/operators/index.js'
 
 describe('operators', () => {
@@ -79,5 +80,16 @@ describe('operators', () => {
     class Point {}
     assert(!shallowEqual(new Point(), {}))
     assert(shallowEqual(Object.create(null), {}))
+  })
+
+  it('deepEqual tells kinds apart', () => {
+    assert(!deepEqual({}, []))
+    assert(!deepEqual({}, new Date(0)))
+    class Point {
+      x = 1
+    }
+    assert(!deepEqual(new Point(), { x: 1 }))
+    assert(deepEqual(new Point(), new Point()))
+    assert(deepEqual(Object.create(null), {}))
   })
 })
