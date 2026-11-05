@@ -687,6 +687,22 @@ describe('IntlDate', () => {
     })
   })
 
+  it('startOf and endOf stay on the same pass of a repeated hour', () => {
+    const full = (date: IntlDate) => date.format('YYYY-MM-DD HH:mm:ss.SSS Z')
+    inZone('America/New_York', () => {
+      const firstPass = mockDate(new Date('2021-11-07T05:30:20.500Z'))
+      const secondPass = mockDate(new Date('2021-11-07T06:30:20.500Z'))
+      assert.strictEqual(full(firstPass.startOf('hour')), '2021-11-07 01:00:00.000 -04:00')
+      assert.strictEqual(full(secondPass.startOf('hour')), '2021-11-07 01:00:00.000 -05:00')
+      assert.strictEqual(full(secondPass.startOf('minute')), '2021-11-07 01:30:00.000 -05:00')
+      assert.strictEqual(full(secondPass.startOf('second')), '2021-11-07 01:30:20.000 -05:00')
+      assert.strictEqual(full(firstPass.endOf('hour')), '2021-11-07 01:59:59.999 -04:00')
+      assert.strictEqual(full(secondPass.endOf('hour')), '2021-11-07 01:59:59.999 -05:00')
+      assert.strictEqual(full(secondPass.endOf('minute')), '2021-11-07 01:30:59.999 -05:00')
+      assert.strictEqual(full(secondPass.startOf('day')), '2021-11-07 00:00:00.000 -04:00')
+    })
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
