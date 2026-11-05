@@ -427,7 +427,7 @@ Duration.fromISO('P5Y3M').toObject()
 function normalizeUnits(obj) {
   const vals = {}
   for (const unit of Object.keys(obj)) {
-    vals[UNITS_PLURAL[unit]] = obj[unit]
+    if (obj[unit] != null) vals[UNITS_PLURAL[unit]] = obj[unit]
   }
   return vals
 }
