@@ -879,7 +879,7 @@ merge(object, other)
  */
 export function merge(object: Object, ...sources: Object[]): Object {
   for (const source of sources) {
-    baseMerge(object, source)
+    if (source != null) baseMerge(object, source)
   }
   return object
 }
