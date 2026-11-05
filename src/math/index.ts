@@ -35,14 +35,21 @@ export function round(x: number, digits = 0): number {
 }
 
 /**
- * Returns a tuple like `[x / y, x % y]`.
+ * Returns a tuple like `[q, r]` with the floored quotient of `x / y` and a remainder that takes the sign of `y`, so `q * y + r` gives `x`, as in Python.
  *
  * @param x
  * @param y
  * @returns
  */
 export function divmod(x: number, y: number): [number, number] {
-  return [Math.floor(x / y), x % y]
+  let remainder = x % y
+  let quotient = (x - remainder) / y
+  if (remainder !== 0 && remainder < 0 !== y < 0) {
+    remainder += y
+    quotient -= 1
+  }
+  // A zero or NaN quotient keeps the sign of zero and the infinities of `x / y`.
+  return [Math.round(quotient) || Math.floor(x / y), remainder]
 }
 
 export function logBase(x: number, y: number): number {
