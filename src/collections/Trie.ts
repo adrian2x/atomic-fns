@@ -44,13 +44,13 @@ export class Trie extends Collection {
       if (!current[c]) current[c] = {}
       current = current[c]
     }
+    if (!current.isWord) this.count++
     // Set as end of the word
     Object.defineProperty(current, 'isWord', {
       value: true,
       enumerable: false,
       writable: true
     })
-    this.count++
     return this
   }
 
