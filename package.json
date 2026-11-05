@@ -20,10 +20,11 @@
     "tsc:w": "tsc -p . --declaration --watch",
     "lint": "eslint src/**/*.ts --fix",
     "build": "npm run lint && npm test && npm run tsc && npm run docs",
-    "docs": "typedoc",
-    "check": "npm test"
+    "docs": "npx --yes --package=typedoc@0.28.20 --package=typescript@6.0.3 -- typedoc",
+    "check": "npm run tsc && npm test"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
     "eslint": "^8.25.0",
     "eslint-config-prettier": "^8.5.0",
@@ -31,8 +32,7 @@
     "eslint-plugin-n": "^15.3.0",
     "eslint-plugin-prettier": "^4.2.1",
     "prettier": "^2.7.1",
-    "typedoc": "^0.23.16",
-    "typescript": "^4.8.4",
+    "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },
   "repository": {
