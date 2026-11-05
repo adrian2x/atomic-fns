@@ -6,13 +6,6 @@
 
 import { call, isObject } from '../globals/index.js'
 
-/** @deprecated Use the `identity` function instead.
- * @see {@link identity}
- */
-export function id(x) {
-  return x
-}
-
 /** This is the identity function. It always returns the same value that was passed in. */
 export const identity = <T>(x: T) => x
 
