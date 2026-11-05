@@ -172,11 +172,6 @@ export function isNumber(x): x is number {
   return type(x) === 'number'
 }
 
-/** Check if value is an integer number type. */
-export function isInteger(x): x is number {
-  return type(x) === 'number' && Math.trunc(x) === x
-}
-
 /** Check if value is a bigint type. */
 export function isBigint(x): x is BigInt {
   return type(x) === 'bigint'
