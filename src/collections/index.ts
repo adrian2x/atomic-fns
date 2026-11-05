@@ -795,17 +795,25 @@ export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = 
   return values
 }
 
-function baseMergeDeep(obj, source, key, stack) {
+/** True for an object made by `{}`, `JSON.parse` or `Object.create(null)`, in any realm. */
+function isPlainObject(x): boolean {
+  if (Object.prototype.toString.call(x) !== '[object Object]') return false
+  const proto = Object.getPrototypeOf(x)
+  return proto === null || Object.getPrototypeOf(proto) === null
+}
+
+function baseMergeDeep(obj, source, key, stack, copies, merged) {
   const objValue = obj[key]
   const srcValue = source[key]
   const stacked = stack.get(srcValue)
-  if (stacked && (objValue !== stacked || !(key in obj))) {
+  if (stacked) {
     obj[key] = stacked
     return
   }
 
   let newValue: any
   let isCommon = newValue === undefined
+  let isCopy = false
   const isArray = Array.isArray(srcValue)
   const isTyped = ArrayBuffer.isView(srcValue)
 
@@ -819,32 +827,38 @@ function baseMergeDeep(obj, source, key, stack) {
       newValue = cloneTypedArray(srcValue, true)
     } else {
       newValue = []
+      isCopy = true
     }
-  } else if (isObject(srcValue)) {
-    newValue = objValue
-    if (!isObject(objValue)) {
-      newValue = srcValue
-    }
+  } else if (isPlainObject(srcValue)) {
+    isCopy = !isObject(objValue)
+    newValue = isCopy ? {} : objValue
   } else {
     isCommon = false
     newValue = srcValue
   }
-  if (isCommon) {
+  if (isCopy && copies.has(srcValue)) {
+    obj[key] = copies.get(srcValue)
+    return
+  }
+  const targets = merged.get(srcValue) ?? new WeakSet()
+  if (isCommon && !targets.has(newValue)) {
+    merged.set(srcValue, targets.add(newValue))
     stack.set(srcValue, newValue)
-    baseMerge(newValue, srcValue, stack)
+    baseMerge(newValue, srcValue, stack, copies, merged)
     stack.delete(srcValue)
   }
+  if (isCopy) copies.set(srcValue, newValue)
   obj[key] = newValue
 }
 
-function baseMerge(obj, source, stack?) {
+function baseMerge(obj, source, stack, copies, merged) {
   if (obj === source) return obj
   for (const key of Object.keys(source)) {
     if (key === '__proto__') continue
     const srcValue = source[key]
     const objValue = obj[key]
     if (typeof srcValue === 'object' && srcValue !== null) {
-      baseMergeDeep(obj, source, key, stack || new WeakMap())
+      baseMergeDeep(obj, source, key, stack, copies, merged)
     } else {
       if (srcValue !== undefined && objValue !== srcValue) {
         obj[key] = srcValue
@@ -879,7 +893,7 @@ merge(object, other)
  */
 export function merge(object: Object, ...sources: Object[]): Object {
   for (const source of sources) {
-    if (source != null) baseMerge(object, source)
+    if (source != null) baseMerge(object, source, new WeakMap(), new WeakMap(), new WeakMap())
   }
   return object
 }
