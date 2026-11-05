@@ -270,6 +270,12 @@ describe('collections', () => {
     assert.deepEqual(Object.keys(merged), ['constructor'])
   })
 
+  it('merge assigns Map, Set and other objects it cannot merge', () => {
+    const source = { map: new Map([['a', 1]]), set: new Set([1]), error: new Error('x') }
+    assert.deepStrictEqual(merge({}, source), source)
+    assert.deepStrictEqual(merge({ map: 1, set: 2, error: 3 }, source), source)
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })
