@@ -143,6 +143,11 @@ describe('operators', () => {
     )
   })
 
+  it('flatMap yields a non-iterable result as is', () => {
+    assert.deepEqual([...flatMap([1, 2], (x) => x * 2)], [2, 4])
+    assert.deepEqual([...flatMap([1, 2], (x) => (x === 1 ? [x, x] : x))], [1, 1, 2])
+  })
+
   it('icompact', () => {
     let it = icompact([false, 0, '', true, '', []])
     assert.deepEqual([...it], [true])

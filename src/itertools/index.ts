@@ -227,7 +227,11 @@ export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>) {
 }
 
 export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = identity) {
-  return iflatten<T>(imap(iterable, mapFn))
+  const toIterable = (x: T) => {
+    const mapped = mapFn(x)
+    return isIterable(mapped) ? mapped : [mapped]
+  }
+  return iflatten<T>(imap(iterable, toIterable))
 }
 
 export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, step = 1) {
