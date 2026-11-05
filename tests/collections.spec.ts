@@ -18,6 +18,7 @@ import {
   insort,
   insortLeft,
   intersection,
+  lastIndexOf,
   map,
   merge,
   omit,
@@ -545,6 +546,13 @@ describe('collections', () => {
       remove([1, 2, 3, 4], (x) => x % 2 === 0),
       [1, 3]
     )
+  })
+
+  it('lastIndexOf searches from the end by default', () => {
+    assert(lastIndexOf([1, 2, 1, 2], 2) === 3)
+    assert(lastIndexOf([1, 2, 1, 2], 2, 2) === 1)
+    assert(lastIndexOf(new Uint8Array([1, 2, 1]), 1) === 2)
+    assert(lastIndexOf('abca', 'a') === 3)
   })
 
   it('sortedUniq', () => {
