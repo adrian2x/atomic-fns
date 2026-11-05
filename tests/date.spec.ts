@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { formatDate, IntlDate, strftime } from '../src/i18n/index.js'
+import { asDate, formatDate, IntlDate, strftime } from '../src/i18n/index.js'
 
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })
@@ -487,6 +487,45 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%I %P', date, 'ja-JP'), '09 午前')
     assert.strictEqual(strftime('%-H', date, 'de-DE'), '9')
     assert.strictEqual(strftime('%B', date, 'ja-JP'), '6月')
+  })
+
+  it('asDate reads a fraction of a second', () => {
+    assert.strictEqual(asDate('2020-01-01T00:00:00.5').getMilliseconds(), 500)
+    assert.strictEqual(asDate('2020-01-01T00:00:00.05').getMilliseconds(), 50)
+    assert.strictEqual(asDate('2020-01-01T00:00:00.123456').getMilliseconds(), 123)
+    assert.strictEqual(asDate('2020-01-01T00:00:00.5', true).getUTCMilliseconds(), 500)
+    assert.strictEqual(asDate('2020-01-01T00:00:00').getMilliseconds(), 0)
+  })
+
+  it('asDate keeps years under 100', () => {
+    const fields = (date: Date) => [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    assert.deepStrictEqual(fields(asDate('0050-06-15')), [50, 6, 15])
+    assert.deepStrictEqual(fields(asDate('0000-02-29')), [0, 2, 29])
+    assert.strictEqual(
+      asDate('0099-12-31T10:00:00', true).toISOString(),
+      '0099-12-31T10:00:00.000Z'
+    )
+    assert.deepStrictEqual(fields(asDate('1999-12-31')), [1999, 12, 31])
+  })
+
+  it('asDate with utc reads every field from the same instant', () => {
+    const fields = (text: string) => {
+      const date = asDate(new Date(text), true)
+      return [date.getFullYear(), date.getMonth() + 1, date.getDate(), date.getHours()]
+    }
+
+    inZone('America/New_York', () => {
+      assert.deepStrictEqual(fields('2021-02-01T04:00:00Z'), [2021, 2, 1, 4])
+      assert.deepStrictEqual(fields('2021-04-01T02:00:00Z'), [2021, 4, 1, 2])
+      assert.strictEqual(IntlDate.UTC(new Date('2021-02-01T04:00:00Z')).month, 2)
+    })
+
+    inZone('Asia/Kolkata', () => {
+      assert.deepStrictEqual(fields('2021-12-31T23:00:00Z'), [2021, 12, 31, 23])
+      assert.deepStrictEqual(fields('2020-02-29T23:00:00Z'), [2020, 2, 29, 23])
+    })
+
+    assert.deepStrictEqual(fields('0050-06-15T12:00:00Z'), [50, 6, 15, 12])
   })
 
   it('strftime format', () => {
