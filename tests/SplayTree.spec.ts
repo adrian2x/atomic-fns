@@ -178,4 +178,22 @@ describe('SplayTree', () => {
     tree.set(3, 3)
     assert(tree.height === 2)
   })
+
+  it('add splays the key, as set does', () => {
+    let tree = new SplayTree(undefined, 0)
+    tree.set(1, 1)
+    tree.set(2, 2)
+    tree.add(1)
+    assert(tree.top() === 1)
+  })
+
+  it('add keeps the value of an existing key', () => {
+    let tree = new SplayTree()
+    tree.set(1, 'a')
+    tree.add(1)
+    assert(tree.get(1) === 'a')
+    assert(tree.size === 1)
+    tree.add(2)
+    assert(tree.get(2) === null)
+  })
 })
