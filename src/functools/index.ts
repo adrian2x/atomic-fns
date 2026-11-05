@@ -95,19 +95,19 @@ export function debounce(
   { maxWait }: { maxWait?: number } = {}
 ): Function {
   let timer, maxTimer, lastResult
-  return (...args) => {
+  return function (...args) {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       clearTimeout(maxTimer)
       maxTimer = null
-      lastResult = func(...args)
+      lastResult = func.apply(this, args)
     }, wait)
 
     if (maxWait && !maxTimer) {
       maxTimer = setTimeout(() => {
         clearTimeout(timer)
         maxTimer = null
-        lastResult = func(...args)
+        lastResult = func.apply(this, args)
       }, maxWait)
     }
 
@@ -124,9 +124,9 @@ export function debounce(
  */
 export function throttle(func: Function, wait: number): Function {
   let pending = false
-  return (...args) => {
+  return function (...args) {
     if (pending) return
-    func(...args)
+    func.apply(this, args)
     pending = true
     setTimeout(() => {
       pending = false
@@ -152,9 +152,9 @@ single(3) // 1
  */
 export function once<T>(func: Function<T>): Function<T> {
   let result: T, isCalled
-  return (...args) => {
+  return function (...args) {
     if (!isCalled) {
-      result = func(...args)
+      result = func.apply(this, args)
       isCalled = true
     }
     return result
@@ -174,10 +174,10 @@ export type Optional<T> = Maybe<T>
  * @returns {Function} A new function that wraps `fn` and returns the result tuple.
  */
 export function result<T = any, E = unknown>(fn: Function<T>): Function<Result<T, E>> {
-  return (...args) => {
+  return function (...args) {
     let value, err
     try {
-      value = fn(...args)
+      value = fn.apply(this, args)
     } catch (error) {
       err = error
     }
@@ -194,10 +194,10 @@ export function result<T = any, E = unknown>(fn: Function<T>): Function<Result<T
 export function resultAsync<T = any, E = unknown>(
   fn: Function<Promise<T>>
 ): Function<Promise<Result<T, E>>> {
-  return async (...args) => {
+  return async function (...args) {
     let value, err
     try {
-      value = await fn(...args)
+      value = await fn.apply(this, args)
     } catch (error) {
       err = error
     }
