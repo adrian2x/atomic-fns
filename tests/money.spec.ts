@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { Currency } from '../src/i18n/index.js'
 
 describe('Money', () => {

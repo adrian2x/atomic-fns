@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { debounce, memoize, once, result, resultAsync, throttle } from '../src/functools/index.js'
 
 describe('functools', () => {
