@@ -700,11 +700,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
 
   /** Gets an array filled with the contents of the tree, sorted by key */
   toArray(): Array<[K, V]> {
-    const min = this.minKey()
-    const max = this.maxKey()
-    const maxLength = 2147483647
-    if (min !== undefined) return this.keysRange(min, max, true, maxLength)
-    return []
+    return [...this.entries()]
   }
 
   /** Gets a string representing the tree's data based on toArray(). */

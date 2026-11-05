@@ -327,4 +327,15 @@ describe('BTree', () => {
     assert(tree.rangeForEach(5, 2, true) === 0)
     assert(tree.rangeForEach(5, 2, true, undefined, 3) === 3)
   })
+
+  it('toArray includes an undefined key', () => {
+    const tree = new BTree(undefined, (x, y) => (x ?? -1) - (y ?? -1))
+    tree.set(1, 'one')
+    tree.set(undefined, 'none')
+    assert.deepStrictEqual(tree.toArray(), [
+      [undefined, 'none'],
+      [1, 'one']
+    ])
+    assert.deepStrictEqual(new BTree([[undefined, 'only']]).toArray(), [[undefined, 'only']])
+  })
 })
