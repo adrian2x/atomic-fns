@@ -121,7 +121,7 @@ export function gt(x, y): boolean {
  * @see {@link gt}
  */
 export function gte(x, y): boolean {
-  if (x <= y || call(x, 'gte', y)) return true
+  if (x >= y || call(x, 'gte', y)) return true
   if (x === y || eq(x, y)) return true
   if (x > y || gt(x, y)) return true
   return false

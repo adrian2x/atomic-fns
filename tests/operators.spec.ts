@@ -8,7 +8,8 @@ import {
   shallowEqual,
   eq,
   gt,
-  lt
+  lt,
+  gte
 } from '../src/operators/index.js'
 
 describe('operators', () => {
@@ -62,5 +63,11 @@ describe('operators', () => {
     assert(gt(two, 1) === true)
     assert(gt(two, 3) === false)
     assert(gt(1, 2) === false)
+  })
+
+  it('gte compares with >=', () => {
+    assert(gte(2, 1))
+    assert(gte(2, 2))
+    assert(!gte(1, 2))
   })
 })
