@@ -986,7 +986,7 @@ export function defaults(object: Object, ...sources: Object[]): Object {
  */
 export function* difference<T>(...args: Array<Iterable<T>>): Generator<T> {
   const sets = args.map((arr) => new Set(arr))
-  const setA = sets[0]
+  const setA = sets[0] ?? new Set<T>()
 
   for (let i = 1; i < sets.length; i++) {
     for (const x of sets[i].values()) {

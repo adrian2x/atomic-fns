@@ -229,6 +229,10 @@ describe('collections', () => {
     assert.deepEqual([...difference([1, 2, 3], [2], [2, 3])], [1])
   })
 
+  it('difference with no arguments is empty', () => {
+    assert.deepEqual([...difference()], [])
+  })
+
   it('intersection', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]
