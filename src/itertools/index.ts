@@ -336,8 +336,8 @@ export function reduce<T>(
 ) {
   const it = iter<T>(iterable)
   let output = initial ?? it.next().value
-  for (const [index, value] of enumerate(it as any)) {
-    output = reducer(output, value as T, index)
+  for (const [index, value] of enumerate<T>({ [Symbol.iterator]: () => it })) {
+    output = reducer(output, value, index)
   }
   return output
 }

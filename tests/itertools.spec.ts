@@ -199,6 +199,35 @@ describe('operators', () => {
     assert(reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0) === 15)
   })
 
+  it('reduce reads an iterable with a plain iterator', () => {
+    const countdown = {
+      [Symbol.iterator]() {
+        let n = 3
+        return { next: () => (n > 0 ? { value: n--, done: false } : { value: 0, done: true }) }
+      }
+    }
+    assert(reduce(countdown, (x, y) => x + y) === 6)
+    assert(reduce(countdown, (x, y) => x + y, 10) === 16)
+    assert(max(countdown) === 3)
+  })
+
+  it('reduce closes the iterator when the reducer throws', () => {
+    let closed = false
+    const numbers = (function* () {
+      try {
+        yield* [1, 2, 3]
+      } finally {
+        closed = true
+      }
+    })()
+    assert.throws(() =>
+      reduce(numbers, () => {
+        throw new Error('stop')
+      })
+    )
+    assert(closed)
+  })
+
   it('reversed', () => {
     let arr = [3, 2, 1]
     let reverse = reversed(arr)
