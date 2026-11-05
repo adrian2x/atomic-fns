@@ -333,7 +333,7 @@ export function ord(x: string): number {
  * @returns `true` if the object has the property name.
  */
 export function has(obj, attr: PropertyKey): boolean {
-  return obj && attr in obj
+  return obj != null && attr in Object(obj)
 }
 
 /**
