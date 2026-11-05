@@ -227,6 +227,19 @@ describe('Decimal', () => {
     assert(!decimal('0.00').eq('0.01'))
   })
 
+  it('sqrt rounds the last digit once', () => {
+    assert(decimal(154448).sqrt().toString() === '392.99872773330958965454')
+    assert(decimal('9008856.40103').sqrt().toString() === '3001.47570388800582075067')
+    assert(decimal('72746.86').sqrt().toString() === '269.71625831603107125289')
+    assert(decimal('0.000000000000271').sqrt().toString() === '0.00000052057660339281')
+    assert(decimal(99).sqrt().toString() === '9.94987437106619954734')
+    assert(decimal(1000).sqrt().toString() === '31.62277660168379331999')
+    assert(decimal(4).sqrt().toString() === '2')
+    assert(decimal('0.25').sqrt().toString() === '0.5')
+    assert(decimal(0).sqrt().eq(0))
+    assert(decimal('1e-50').sqrt().eq(0))
+  })
+
   it('sqrt rejects a negative value', () => {
     for (const value of [-1, -4, '-0.5']) {
       assert.throws(() => decimal(value).sqrt(), ValueError, String(value))
