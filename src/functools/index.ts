@@ -94,8 +94,9 @@ export function debounce(
   wait: number,
   { maxWait }: { maxWait?: number } = {}
 ): Function {
-  let timer, maxTimer, lastResult
+  let timer, maxTimer, lastResult, latestCall
   return function (...args) {
+    latestCall = () => func.apply(this, args)
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       clearTimeout(maxTimer)
@@ -107,7 +108,7 @@ export function debounce(
       maxTimer = setTimeout(() => {
         clearTimeout(timer)
         maxTimer = null
-        lastResult = func.apply(this, args)
+        lastResult = latestCall()
       }, maxWait)
     }
 
