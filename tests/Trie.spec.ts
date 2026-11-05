@@ -101,4 +101,12 @@ describe('Trie', () => {
     tree.add('a')
     assert(tree.size === 1)
   })
+
+  it('contains returns a boolean', () => {
+    let tree = new Trie(['cat'])
+    assert(tree.contains('cat') === true)
+    assert(tree.contains('ca') === false)
+    assert(tree.contains('dog') === false)
+    assert(new Trie().contains('') === false)
+  })
 })
