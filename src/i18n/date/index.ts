@@ -161,7 +161,7 @@ export class IntlDate {
     return isLeapYear(this.year)
   }
 
-  /** Gets the number of weeks according to locale in the current year. */
+  /** Gets the number of Monday-first weeks in the current year, where week 1 is the first full week. */
   weeksInYear(): number {
     return weeksInYear(this.year)
   }
@@ -273,7 +273,7 @@ new IntlDate().toISODate() // '2022-10-31'
   /** Returns the time part formatted as ISO8601.
    * @example
 ```js
-new IntlDate().toISOTime() // 'T22:44:30.652Z'
+new IntlDate().toISOTime() // '22:44:30.652Z'
 ```
    */
   toISOTime(): string {
@@ -282,7 +282,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   /**
    * Returns an object containing year, month, day-of-month, hours, minutes, seconds, milliseconds.
-   * @returns {Object} An object like `{year, month, date, hours, minutes, seconds, ms}`
+   * @returns {Object} An object like `{year, month, day, hour, minute, second, millisecond}`
    */
   toObject(): DateObject {
     return {
@@ -499,7 +499,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
         break
       case 'milliseconds':
         break
-      // no default, invalid units throw in normalizeUnit()
+      // no default, an unknown unit changes nothing
     }
 
     if (normalizedUnit === 'weeks') {
