@@ -59,6 +59,16 @@ describe('IntlDate', () => {
     assert(Number.isNaN(mockDate(null).getTime()))
   })
 
+  it('invalid dates give NaN from diff and Invalid Date from relative text', () => {
+    const invalid = mockDate('garbage')
+    assert(Number.isNaN(invalid.diff(new Date())))
+    assert(Number.isNaN(mockDate().diff('garbage', 'days')))
+    assert.strictEqual(invalid.from(new Date()), 'Invalid Date')
+    assert.strictEqual(mockDate().to('garbage'), 'Invalid Date')
+    assert.strictEqual(invalid.fromNow(), 'Invalid Date')
+    assert.strictEqual(invalid.toNow(), 'Invalid Date')
+  })
+
   it('seconds', () => {
     let date = IntlDate.unix(946702800)
     assert(date.year === 2000)
@@ -607,6 +617,14 @@ it('strftime %-H accepts a timestamp and no date', () => {
 })
 
 describe('Duration', () => {
+  it('reads its getters whatever it was built from', () => {
+    assert.strictEqual(new Duration(NaN).years, 0)
+    assert.strictEqual(new Duration(NaN).toISOString(), 'PT0S')
+    assert.strictEqual(new Duration(null).hours, 0)
+    assert(Number.isNaN(new Duration(NaN).total('days')))
+    assert(Number.isNaN(new Duration(NaN).total('milliseconds')))
+  })
+
   it('exact durations stay exact', () => {
     const exact = new Duration({ months: 1 }, true)
     assert.strictEqual(new Duration(exact).total('days'), 30.436875)
