@@ -152,9 +152,9 @@ single(3) // 1
  */
 export function once<T>(func: Function<T>): Function<T> {
   let result: T, isCalled
-  return (...args) => {
+  return function (...args) {
     if (!isCalled) {
-      result = func(...args)
+      result = func.apply(this, args)
       isCalled = true
     }
     return result
