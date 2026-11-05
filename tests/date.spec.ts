@@ -273,9 +273,9 @@ describe('IntlDate', () => {
     assert(start.isBefore(end))
     assert(end.diff(start, 'years') === 1)
     assert(end.diff(start, 'months') === 12)
-    assert(end.diff(start, 'months', true) === 12.024887574693526)
-    assert(end.diff(start, 'days') === 366)
-    assert(end.diff(start, 'days', true) === 366)
+    assert(end.diff(start, 'months', true) === 11.992032690609664)
+    assert(end.diff(start, 'days') === 365)
+    assert(end.diff(start, 'days', true) === 365)
   })
 
   it('to', () => {
@@ -544,6 +544,31 @@ describe('IntlDate', () => {
     })
 
     assert.deepStrictEqual(fields('0050-06-15T12:00:00Z'), [50, 6, 15, 12])
+  })
+
+  it('add clamps to the last day of a shorter month', () => {
+    const day = (date: IntlDate) => date.format('YYYY-MM-DD')
+    assert.strictEqual(day(mockDate('2021-01-31').add({ months: 1 })), '2021-02-28')
+    assert.strictEqual(day(mockDate('2020-01-31').add({ months: 1 })), '2020-02-29')
+    assert.strictEqual(day(mockDate('2021-03-31').subtract({ months: 1 })), '2021-02-28')
+    assert.strictEqual(day(mockDate('2021-10-31').add({ months: 1 })), '2021-11-30')
+    assert.strictEqual(day(mockDate('2020-02-29').add({ years: 1 })), '2021-02-28')
+    assert.strictEqual(day(mockDate('2020-02-29').subtract({ years: 1 })), '2019-02-28')
+    assert.strictEqual(day(mockDate('2020-02-29').add({ years: 4 })), '2024-02-29')
+    assert.strictEqual(day(mockDate('2021-11-30').add({ quarters: 1 })), '2022-02-28')
+    assert.strictEqual(day(mockDate('2021-01-15').add({ months: 13 })), '2022-02-15')
+    assert.strictEqual(day(mockDate('2021-01-15').add({ months: -13 })), '2019-12-15')
+  })
+
+  it('endOf stays in the current month and quarter', () => {
+    const end = (date: string, unit) => mockDate(date).endOf(unit).format('YYYY-MM-DD')
+    for (const date of ['2021-01-29', '2021-01-30', '2021-01-31']) {
+      assert.strictEqual(end(date, 'month'), '2021-01-31')
+    }
+    assert.strictEqual(end('2021-03-31', 'month'), '2021-03-31')
+    assert.strictEqual(end('2021-08-31', 'month'), '2021-08-31')
+    assert.strictEqual(end('2021-03-31', 'quarter'), '2021-03-31')
+    assert.strictEqual(end('2021-12-31', 'quarter'), '2021-12-31')
   })
 
   it('strftime format', () => {
