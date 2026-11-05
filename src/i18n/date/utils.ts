@@ -171,15 +171,14 @@ function createUTCDate(...args) {
     y = args[0]
   // the Date.UTC function remaps years 0-99 to 1900-1999
   if (y < 100 && y >= 0) {
-    args = Array.from(arguments)
     // preserve leap years using a full 400 year cycle, then reset
     args[0] = y + 400
     date = new Date(Date.UTC.apply(null, args))
-    if (isFinite(date.getUTCFullYear())) {
+    if (Number.isFinite(date.getUTCFullYear())) {
       date.setUTCFullYear(y)
     }
   } else {
-    date = new Date(Date.UTC.apply(null, arguments))
+    date = new Date(Date.UTC.apply(null, args))
   }
 
   return date
