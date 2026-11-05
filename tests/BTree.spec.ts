@@ -338,4 +338,18 @@ describe('BTree', () => {
     ])
     assert.deepStrictEqual(new BTree([[undefined, 'only']]).toArray(), [[undefined, 'only']])
   })
+
+  it('reversed starts at the last key when that key is undefined', () => {
+    const tree = new BTree(undefined, (x, y) => (x ?? 1000) - (y ?? 1000), 4)
+    const keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, undefined]
+    for (const key of keys) {
+      tree.set(key, key)
+    }
+    assert.deepStrictEqual(
+      [...tree.reversed()].map(([key]) => key),
+      keys.toReversed()
+    )
+    assert.deepStrictEqual([...new BTree([[undefined, 'only']]).reversed()], [[undefined, 'only']])
+    assert.deepStrictEqual([...new BTree().reversed()], [])
+  })
 })
