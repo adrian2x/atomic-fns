@@ -325,11 +325,11 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     return this.findNode(key) !== undefined
   }
 
-  /** Alias of remove but just returns `true` instead of the deleted value. */
+  /** Alias of remove but returns `true` if the key was found instead of the deleted value. */
   delete(key: K): boolean {
-    // since remove throws, this will throw too
+    const size = this.count
     this.remove(key)
-    return true
+    return this.count < size
   }
 
   clear(): void {
