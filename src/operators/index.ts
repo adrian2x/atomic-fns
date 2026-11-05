@@ -99,7 +99,7 @@ export function lte(x, y): boolean {
   const op = call(x, 'lte', y)
   if (op != null) return !!op
   const less = call(x, 'lt', y)
-  if (less != null) return !!less || eq(x, y) || call(y, 'lt', x) === false
+  if (less != null) return !!less || eq(x, y) || (call(y, 'lt', x) === false && x <= y)
   return x <= y || eq(x, y)
 }
 
@@ -128,7 +128,7 @@ export function gte(x, y): boolean {
   const op = call(x, 'gte', y)
   if (op != null) return !!op
   const greater = call(x, 'gt', y)
-  if (greater != null) return !!greater || eq(x, y) || call(y, 'gt', x) === false
+  if (greater != null) return !!greater || eq(x, y) || (call(y, 'gt', x) === false && x >= y)
   return x >= y || eq(x, y)
 }
 
