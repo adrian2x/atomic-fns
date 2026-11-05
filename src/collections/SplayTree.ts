@@ -17,10 +17,13 @@ class Node<K = any, V = any> {
   }
 
   get height(): number {
-    if (this.left && this.right) return 1 + Math.max(this.right.height, this.left.height)
-    if (this.right) return 1 + this.right.height
-    if (this.left) return 1 + this.left.height
-    return 0
+    let height = -1
+    let level: Array<Node<K, V>> = [this]
+    while (level.length) {
+      height += 1
+      level = level.flatMap((node) => [node.left, node.right].filter(Boolean))
+    }
+    return height
   }
 }
 
