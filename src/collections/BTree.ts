@@ -313,7 +313,7 @@ class BNode<K, V = any> {
           if (result.done !== undefined) return result
         }
       }
-    } else count += iHigh - iLow
+    } else count += Math.max(iHigh - iLow, 0)
     return count
   }
 
@@ -803,8 +803,8 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   keysRange(low: K, high: K, includeHigh?: boolean, maxLength: number = 0x3ffffff): Array<[K, V]> {
     const results: Array<[K, V]> = []
     this.root.forRange(low, high, includeHigh, false, this, 0, (k, v) => {
+      if (results.length >= maxLength) return Break
       results.push([k, v])
-      return results.length > maxLength ? Break : undefined
     })
     return results
   }
@@ -819,8 +819,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   extend(entries: Iterable<[K, V]>): number {
     let added = 0
     for (const pair of entries) {
-      this.set(pair[0], pair[1] ?? (null as V))
-      added++
+      if (this.set(pair[0], pair[1] ?? (null as V))) added++
     }
     return added
   }
