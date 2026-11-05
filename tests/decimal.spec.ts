@@ -240,6 +240,32 @@ describe('Decimal', () => {
     assert(decimal('1e-50').sqrt().eq(0))
   })
 
+  it('sqrt converges whatever the digit count', () => {
+    assert(
+      decimal(`1${'0'.repeat(70)}1`)
+        .sqrt()
+        .toString() === '316227766016837933199889354443271853.37195551393252168269'
+    )
+    assert(
+      decimal(`2${'0'.repeat(80)}`)
+        .sqrt()
+        .toString() === '14142135623730950488016887242096980785696.7187537694807317668'
+    )
+    assert(
+      decimal(`0.${'1234567890'.repeat(7)}123`)
+        .sqrt()
+        .toString() === '0.35136418288201442531'
+    )
+    assert(
+      decimal('1234567890'.repeat(8)).sqrt().toString() ===
+        '3513641828820144253111222381699882939174.84087723940033681655'
+    )
+    const value = decimal(`7${'1'.repeat(10000)}`)
+    const root = value.sqrt()
+    const gap = root.mul(root).sub(value)
+    assert(gap.lt('1e4990') && gap.gt('-1e4990'))
+  })
+
   it('sqrt rejects a negative value', () => {
     for (const value of [-1, -4, '-0.5']) {
       assert.throws(() => decimal(value).sqrt(), ValueError, String(value))

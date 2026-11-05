@@ -234,10 +234,10 @@ a.div(b)  // 0.333333333333333333333333333333
     if (this.i < 0n) throw new ValueError('square root of a negative number')
     Decimal.PRECISION++
 
-    // Let the guess value be 10^(e/2), where e is this.e
+    // Let the guess value be 10^(m/2), where m is the magnitude of this value
     let x = new Decimal()
     x.i = 1n
-    x.e = Math.floor(this.e / 2)
+    x.e = Math.floor((this.e + this.i.toString().length) / 2)
     const onehalf = new Decimal('0.5')
 
     let xt = x.clone()
