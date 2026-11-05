@@ -827,11 +827,8 @@ function baseMergeDeep(obj, source, key, stack) {
     } else {
       newValue = []
     }
-  } else if (isObject(srcValue)) {
-    newValue = objValue
-    if (!isObject(objValue)) {
-      newValue = isPlainObject(srcValue) ? {} : srcValue
-    }
+  } else if (isPlainObject(srcValue)) {
+    newValue = isObject(objValue) ? objValue : {}
   } else {
     isCommon = false
     newValue = srcValue
