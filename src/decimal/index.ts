@@ -262,6 +262,13 @@ a.div(b)  // 0.333333333333333333333333333333
     xt._truncate()
     xt._normalize()
 
+    // Rounding twice can leave the last digit one too high, so check it against the exact square
+    const half = new Decimal()
+    half.i = 5n
+    half.e = -Decimal.PRECISION - 1
+    const low = xt.sub(half)
+    if (low.gt(0) && low.mul(low).gt(this)) return low.sub(half)
+
     return xt
   }
 
