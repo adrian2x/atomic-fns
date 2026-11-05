@@ -444,7 +444,8 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false) {
     const dt = new IntlDate(other)
-    const monthsInUnit = MONTHS_IN_UNIT[UNITS_PLURAL[unit.toLowerCase()]]
+    const normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
+    const monthsInUnit = MONTHS_IN_UNIT[normalizedUnit]
     if (monthsInUnit && !exact) {
       // whole months are the ones `add` can take from `other` without passing this date
       let months = (this.year - dt.year) * 12 + this.month - dt.month
@@ -452,7 +453,12 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
       if (sign * (dt.add({ months }).getTime() - this.getTime()) > 0) months -= sign
       return Math.trunc(months / monthsInUnit)
     }
-    const dur = new Duration(this.getTime() - dt.getTime(), exact)
+    let elapsed = this.getTime() - dt.getTime()
+    if (normalizedUnit === 'days' || normalizedUnit === 'weeks') {
+      // a calendar day can last 23 or 25 hours, so measure it on the wall clock
+      elapsed += (dt._date.getTimezoneOffset() - this._date.getTimezoneOffset()) * 6e4
+    }
+    const dur = new Duration(elapsed, exact)
     let total = dur.total(unit)
     if (!exact) total = Math.trunc(total)
     return total
