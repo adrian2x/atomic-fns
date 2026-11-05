@@ -422,7 +422,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
   }
 
   relativeTime(n: number, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
-    return this.relativeFormat.format(n, unit)
+    return Number.isNaN(n) ? INVALID_DATE_STRING : this.relativeFormat.format(n, unit)
   }
 
   fromNow(unit: Intl.RelativeTimeFormatUnit = 'seconds') {
