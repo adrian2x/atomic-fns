@@ -842,9 +842,8 @@ uniq([2, 1, 2])
 export function sortedUniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
 export function sortedUniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
 export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
-  const values = uniq(arr, fn as Iteratee<T>)
-  values.sort(compare)
-  return values
+  const it = isFunction(fn) ? fn : (x) => get(fn, x)
+  return uniq(arr, it).sort((x, y) => compare(it(x), it(y)))
 }
 
 /** True for an object made by `{}`, `JSON.parse` or `Object.create(null)`, in any realm. */
