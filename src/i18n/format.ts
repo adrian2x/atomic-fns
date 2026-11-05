@@ -280,7 +280,7 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
 
   const results: string[] = []
   let dayPeriod: string = ''
-  let dayPeriodIndex = -1
+  const dayPeriodIndexes: number[] = []
   for (let i = 0; i < fmt.length; i++) {
     let part = fmt[i]
     if (part === '%') {
@@ -313,10 +313,7 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
 
       if (part === '%P' || part === '%p') {
         // leave this flag in place for later
-        dayPeriodIndex = results.length
-        if (part === '%p' && dayPeriod) {
-          dayPeriod = dayPeriod.toLowerCase()
-        }
+        dayPeriodIndexes.push(results.length)
         results.push(part)
         continue
       }
@@ -338,8 +335,10 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
     }
   }
 
-  // insert the AM/PM at the correct spot
-  if (dayPeriodIndex >= 0) results[dayPeriodIndex] = dayPeriod || ''
+  // insert the AM/PM at the correct spots
+  for (const index of dayPeriodIndexes) {
+    results[index] = results[index] === '%p' ? (dayPeriod || '').toLowerCase() : dayPeriod || ''
+  }
 
   return results.join('').trim()
 }
