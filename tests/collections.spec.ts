@@ -245,6 +245,12 @@ describe('collections', () => {
     assert.deepEqual(sortedUniq(union(a, b)), [1, 2, 3, 4, 5])
   })
 
+  it('uniq and union treat null and undefined as empty', () => {
+    assert.deepEqual(uniq(null), [])
+    assert.deepEqual(sortedUniq(undefined), [])
+    assert.deepEqual([...union(null, [1], undefined)], [1])
+  })
+
   it('filter', () => {
     let users = [
       { user: 'barney', age: 36, active: true },

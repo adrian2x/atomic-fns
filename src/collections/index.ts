@@ -818,7 +818,7 @@ export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identi
   const keys = new Set()
   const results: T[] = []
   const it = isFunction(fn) ? fn : (x) => get(fn, x)
-  for (const x of arr) {
+  for (const x of arr ?? []) {
     const key = it(x)
     if (keys.has(key)) continue
     keys.add(key)
@@ -1042,7 +1042,7 @@ export function* intersection<T>(...args: Array<Iterable<T>>): Generator<T> {
 export function* union<T>(...args: Array<Iterable<T>>): Generator<T> {
   const results = new Set<T>()
   for (const arr of args) {
-    for (const item of arr) {
+    for (const item of arr ?? []) {
       results.add(item)
     }
   }
