@@ -508,6 +508,26 @@ describe('IntlDate', () => {
     assert.deepStrictEqual(fields(asDate('1999-12-31')), [1999, 12, 31])
   })
 
+  it('asDate with utc reads every field from the same instant', () => {
+    const fields = (text: string) => {
+      const date = asDate(new Date(text), true)
+      return [date.getFullYear(), date.getMonth() + 1, date.getDate(), date.getHours()]
+    }
+
+    inZone('America/New_York', () => {
+      assert.deepStrictEqual(fields('2021-02-01T04:00:00Z'), [2021, 2, 1, 4])
+      assert.deepStrictEqual(fields('2021-04-01T02:00:00Z'), [2021, 4, 1, 2])
+      assert.strictEqual(IntlDate.UTC(new Date('2021-02-01T04:00:00Z')).month, 2)
+    })
+
+    inZone('Asia/Kolkata', () => {
+      assert.deepStrictEqual(fields('2021-12-31T23:00:00Z'), [2021, 12, 31, 23])
+      assert.deepStrictEqual(fields('2020-02-29T23:00:00Z'), [2020, 2, 29, 23])
+    })
+
+    assert.deepStrictEqual(fields('0050-06-15T12:00:00Z'), [50, 6, 15, 12])
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
