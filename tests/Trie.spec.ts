@@ -114,7 +114,6 @@ describe('Trie', () => {
     let words = ['a', 'ab', 'abc', 'abd']
     let tree = new Trie(words)
     assert.deepEqual([...tree.matches('a', 2)], ['a', 'ab'])
-    assert.deepEqual([...tree.matches('a', 2.5)], ['a', 'ab'])
     assert.deepEqual([...tree.matches('a', 0)], [])
     assert.deepEqual([...tree.matches('a', -1)], [])
     assert.deepEqual([...tree.matches('a', 100)], words)

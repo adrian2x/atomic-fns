@@ -1,3 +1,4 @@
+import { itake } from '../itertools/index.js'
 import { Collection } from './abc.js'
 
 type TrieNode = {
@@ -83,14 +84,7 @@ export class Trie extends Collection {
    */
   matches = function* (word: string, limit?: number): Generator<string> {
     const node = this.findNode(word)
-    if (node) {
-      const most = limit ?? Infinity
-      let count = 0
-      for (const match of traverse(node, word)) {
-        if (++count > most) return
-        yield match
-      }
-    }
+    if (node) yield* itake(limit ?? Infinity, traverse(node, word))
   }
 
   /**
