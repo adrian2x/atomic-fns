@@ -4,6 +4,16 @@ import { IntlDate, strftime } from '../src/i18n/index.js'
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })
 
+const inZone = (zone: string, test: () => void) => {
+  const previous = process.env.TZ
+  process.env.TZ = zone
+  try {
+    test()
+  } finally {
+    process.env.TZ = previous
+  }
+}
+
 describe('IntlDate', () => {
   it('now', () => {
     let date = new Date()
@@ -333,6 +343,27 @@ describe('IntlDate', () => {
     assert(d.format('lll').match(/\d+\:\d+\sPM|AM/), d.format('lll'))
     assert(d.format('llll').includes('Sat, Feb 1, 2020'), d.format('llll'))
     assert(d.format('llll').match(/\d+\:\d+\sPM|AM/), d.format('llll'))
+  })
+
+  it('format Z and ZZ print the numeric offset', () => {
+    let date = mockDate('2020-02-01T11:01:01')
+    assert.strictEqual(date.format('Z'), '+00:00')
+    assert.strictEqual(date.format('ZZ'), '+0000')
+    assert.strictEqual(date.format(''), '2020-02-01T11:01:01+00:00')
+    assert.strictEqual(mockDate(date.format('')).getTime(), date.getTime())
+    assert.strictEqual(date.zone(), 'GMT+00:00')
+
+    inZone('America/New_York', () => {
+      date = mockDate('2020-02-01T11:01:01')
+      assert.strictEqual(date.format('Z ZZ'), '-05:00 -0500')
+      assert.strictEqual(date.format(''), '2020-02-01T11:01:01-05:00')
+      assert.strictEqual(mockDate(date.format('')).getTime(), date.getTime())
+      assert.strictEqual(date.zone(), 'GMT-05:00')
+    })
+
+    inZone('Asia/Kolkata', () => {
+      assert.strictEqual(mockDate('2020-02-01T11:01:01').format('Z ZZ'), '+05:30 +0530')
+    })
   })
 
   it('strftime format', () => {
