@@ -48,7 +48,7 @@ export function choice<T>(arr: T[]): T {
  */
 export function sample<T>(arr: T[], size: number): T[] {
   if (!arr?.length || arr.length < size) return []
-  return shuffle(arr.slice()).slice(-size)
+  return shuffle(arr.slice()).slice(0, size)
 }
 
 /**
@@ -60,9 +60,9 @@ export function sample<T>(arr: T[], size: number): T[] {
  * @template T
  */
 export function shuffle<T>(arr: T[], size?: number): T[] {
-  if (!arr?.length) return arr
   if (isObject(arr)) arr = Object.values(arr)
-  if (size == null) size = arr.length - 1
+  if (!arr?.length) return arr
+  if (size == null || size >= arr.length) size = arr.length - 1
   for (let i = 0; i <= size; i++) {
     const j = randomInt(i, size)
     const temp = arr[j]
