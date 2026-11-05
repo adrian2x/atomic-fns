@@ -18,6 +18,15 @@ describe('math', () => {
     assert(round(1.545, 3) === 1.545)
   })
 
+  it('round leaves a number alone once scaling overflows', () => {
+    assert(round(1e300, 10) === 1e300)
+    assert(round(-1e300, 10) === -1e300)
+    assert(round(1.5, 400) === 1.5)
+    assert(round(0, 400) === 0)
+    assert(round(Infinity, 400) === Infinity)
+    assert(Number.isNaN(round(NaN, 2)))
+  })
+
   it('divmod', () => {
     assert.deepEqual(divmod(7, 2), [3, 1])
     assert.deepEqual(divmod(-7, -2), [3, -1])
