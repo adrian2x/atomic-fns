@@ -552,3 +552,7 @@ describe('IntlDate', () => {
     assert(strftime('%k:%-M:%-S %p', date).match(/\d+:\d+:\d+$/), strftime('%k:%-M:%-S %p', date))
   })
 })
+it('strftime %-H accepts a timestamp and no date', () => {
+  assert(strftime('%-H', Date.UTC(2020, 0, 1, 9)) === '9')
+  assert(/^\d+$/.test(strftime('%-H', undefined as any)))
+})
