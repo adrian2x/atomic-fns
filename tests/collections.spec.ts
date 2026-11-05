@@ -3,6 +3,7 @@ import {
   binarySearch,
   bisect,
   bisectLeft,
+  BTree,
   clone,
   compact,
   count,
@@ -112,6 +113,12 @@ describe('collections', () => {
     const merged = merge({}, { view }) as { view: DataView }
     assert(merged.view !== view)
     assert(merged.view.getUint8(1) === 3)
+  })
+
+  it('clone calls a clone method on array-like objects', () => {
+    const tree = new BTree([[1, 2]])
+    assert(clone(tree) instanceof BTree)
+    assert(clone(tree, true) instanceof BTree)
   })
 
   it('difference', () => {
