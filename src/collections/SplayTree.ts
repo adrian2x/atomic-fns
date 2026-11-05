@@ -122,7 +122,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
   }
 
   /**
-   * Inserts the `key` and `value` in the tree if the `key` does not exist.
+   * Inserts the `key` and `value` in the tree, or updates the value if the `key` exists.
    * @param {K} key A key which can be any comparable value
    * @param {V} value A value associated with the key
    * @returns
@@ -361,8 +361,8 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
   }
 
   /**
-   * Returns an ordered iterable of all the keys and values in the tree.
-   * @returns {Iterable<V>} A iterable of `[key, value]` pairs sorted by key.
+   * Returns an ordered iterable of all the values in the tree.
+   * @returns {Iterable<V>} An iterable of values sorted by key.
    */
   *values(): Iterable<V> {
     for (const node of traverse(this.root)) {
