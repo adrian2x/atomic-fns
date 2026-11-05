@@ -393,6 +393,7 @@ export function set(
 ): any {
   return Object.defineProperty(obj, attr, {
     value,
+    configurable: true,
     enumerable,
     writable
   })
