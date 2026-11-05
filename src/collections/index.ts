@@ -331,6 +331,12 @@ export function forEachRight<T>(collection: T[] | Object, fn: Iteratee<T>): void
       const res = fn(value, i, collection)
       if (res === false) return
     }
+  } else if (isIterable(collection)) {
+    const items = Array.from(collection)
+    for (let i = items.length - 1; i >= 0; i--) {
+      const res = fn(items[i] as T, i, collection)
+      if (res === false) return
+    }
   } else if (isObject(collection)) {
     const keys = Object.keys(collection)
     for (let i = keys.length - 1; i >= 0; i--) {
