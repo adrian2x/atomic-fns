@@ -561,6 +561,22 @@ describe('collections', () => {
     assert(binarySearch(arr, 9) === 6)
   })
 
+  it('binarySearch encodes the insertion point', () => {
+    assert(binarySearch([1, 3, 5], 6) === -4)
+    assert(binarySearch([1, 3, 5], 2) === -2)
+    assert(binarySearch([1], 2) === -2)
+    assert(binarySearch([], 1) === -1)
+    assert(binarySearch([], undefined) === -1)
+    for (let size = 0; size < 8; size++) {
+      const arr = Array.from({ length: size }, (_, i) => i * 2)
+      for (let x = -1; x <= size * 2; x++) {
+        const result = binarySearch(arr, x)
+        if (arr.includes(x)) assert(arr[result] === x)
+        else assert(-result - 1 === arr.filter((y) => y < x).length)
+      }
+    }
+  })
+
   it('bisect', () => {
     assert(bisect([1], 2) === 1)
     let arr = [1, 1, 4, 4, 7, 7, 9]
