@@ -290,4 +290,18 @@ describe('BTree', () => {
     assert(tree.get(1) === 'one')
     assert(tree.size === 2)
   })
+
+  it('keysRange stops at maxLength', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, i)
+    }
+    assert.deepEqual(
+      tree.keysRange(0, 9, true, 3).map(([key]) => key),
+      [0, 1, 2]
+    )
+    assert.deepEqual(tree.keysRange(0, 9, true, 0), [])
+    assert(tree.keysRange(0, 9, true, 10).length === 10)
+    assert(tree.keysRange(0, 9, true, 100).length === 10)
+  })
 })
