@@ -243,7 +243,7 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     llll: formatter(locale, DATE_MED_WITH_WEEKDAY).format(date)
   }
 
-  return str.replace(REGEX_FORMAT, (match, $1) => $1 || matches[match] || zoneStr.replace(':', '')) // 'ZZ'
+  return str.replace(REGEX_FORMAT, (match, $1) => $1 ?? matches[match] ?? match)
 }
 
 /**

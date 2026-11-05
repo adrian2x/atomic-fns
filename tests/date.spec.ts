@@ -366,6 +366,16 @@ describe('IntlDate', () => {
     })
   })
 
+  it('format prints zero values', () => {
+    const midnight = mockDate(new Date(2021, 0, 3, 0, 0, 0, 0))
+    assert.strictEqual(midnight.format('H:m:s d'), '0:0:0 0')
+    assert.strictEqual(mockDate(0).format('X x'), '0 0')
+  })
+
+  it('format leaves unknown tokens alone', () => {
+    assert.strictEqual(mockDate().format('Y YYY dd zz zzzz'), 'Y YYY dd zz zzzz')
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
