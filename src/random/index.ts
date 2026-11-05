@@ -13,7 +13,8 @@ import { isObject } from '../globals/index.js'
  * @returns {number}
  */
 export function random(min = 0, max = 1) {
-  return Math.random() * (max - min) + min
+  const value = Math.random() * (max - min) + min
+  return value === max ? min : value
 }
 
 /**

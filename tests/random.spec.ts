@@ -37,6 +37,12 @@ describe('random', () => {
     }
   })
 
+  it('random stays below max when the draw rounds up to it', () => {
+    assert(drawAt(LAST_DRAW, () => random(1e15, 1e15 + 1)) < 1e15 + 1)
+    assert(drawAt(0.5, () => random(5, 5)) === 5)
+    assert(drawAt(LAST_DRAW, () => random(5, 1)) > 1)
+  })
+
   it('randomInt', () => {
     for (let i = 1; i <= 100; i++) {
       let r = randomInt(0, i)
