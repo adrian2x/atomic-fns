@@ -323,7 +323,7 @@ class BNode<K, V = any> {
     this.keys.push.apply(this.keys, rhs.keys)
     if (this.values === undefVals) {
       if (rhs.values === undefVals) return
-      this.values = this.values.slice(0, this.keys.length)
+      this.values = this.values.slice(0, this.keys.length - rhs.keys.length)
     }
     this.values.push.apply(this.values, rhs.reifyValues())
   }

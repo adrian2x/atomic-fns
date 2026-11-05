@@ -140,4 +140,15 @@ describe('BTree', () => {
     }
     assert.deepEqual([...tree.entries()], [...times(10, (i) => [i, i * 2])])
   })
+
+  it('keeps values aligned when a leaf of undefined values merges with its sibling', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 4; i++) {
+      tree.set(i, undefined)
+    }
+    tree.set(4, 'four')
+    tree.remove(0)
+    assert(tree.get(4) === 'four')
+    assert.deepStrictEqual([...tree.values()], [undefined, undefined, undefined, 'four'])
+  })
 })
