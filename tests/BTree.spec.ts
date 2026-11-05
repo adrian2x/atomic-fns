@@ -151,4 +151,15 @@ describe('BTree', () => {
     assert(tree.get(4) === 'four')
     assert.deepStrictEqual([...tree.values()], [undefined, undefined, undefined, 'four'])
   })
+
+  it('rangeUpdate gives a value to one key without changing other trees', () => {
+    const tree = new BTree()
+    tree.set(1, undefined)
+    tree.rangeUpdate(1, 1, true, () => ({ value: 'changed' }))
+    assert(tree.get(1) === 'changed')
+
+    const other = new BTree()
+    other.set(7, undefined)
+    assert(other.get(7) === undefined)
+  })
 })
