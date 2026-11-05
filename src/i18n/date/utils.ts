@@ -373,6 +373,7 @@ export function dayOfYear(input: string | number | Date): number {
   input.setMinutes(0)
   input.setSeconds(0)
   input.setMilliseconds(0)
-  let start = new Date(input.getFullYear(), 0, 1, 0, 0, 0, 0)
+  const start = new Date(input)
+  start.setMonth(0, 1)
   return Math.round((+input - start.getTime()) / 864e5) + 1
 }
