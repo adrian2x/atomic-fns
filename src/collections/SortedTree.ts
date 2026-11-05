@@ -22,12 +22,12 @@ export class SortedTree<K, V> extends Mapping<K, V> {
   }
 
   /**
-   * Adds a new `key` with a `null` value.
+   * Adds a new `key` with a `null` value, if the `key` doesn't exist.
    * @param {K} key
    * @returns {this} Returns the Tree object.
    */
   add(key: K): this {
-    this.store.set(key, null as V)
+    if (!this.store.contains(key)) this.store.set(key, null as V)
     return this
   }
 
