@@ -108,4 +108,41 @@ describe('functools', () => {
     }
     assert.deepEqual(await counter.read(), [2, undefined])
   })
+
+  it('debounce with maxWait passes the latest arguments', () => {
+    const seen = []
+    const save = debounce((text) => seen.push(text), 100, { maxWait: 250 })
+    for (const text of ['h', 'he', 'hel']) {
+      save(text)
+      vi.advanceTimersByTime(90)
+    }
+    assert.deepEqual(seen, ['hel'])
+    vi.advanceTimersByTime(100)
+    assert.deepEqual(seen, ['hel'])
+  })
+
+  it('debounce with maxWait passes the latest this', () => {
+    const seen = []
+    const save = debounce(
+      function () {
+        seen.push(this.name)
+      },
+      100,
+      { maxWait: 150 }
+    )
+    const first = { name: 'first', save }
+    const second = { name: 'second', save }
+    first.save()
+    vi.advanceTimersByTime(90)
+    second.save()
+    vi.advanceTimersByTime(60)
+    assert.deepEqual(seen, ['second'])
+  })
+  it('throttle returns the last result', () => {
+    const throttled = throttle((x) => x * 2, 100)
+    assert(throttled(1) === 2)
+    assert(throttled(2) === 2)
+    vi.advanceTimersByTime(100)
+    assert(throttled(3) === 6)
+  })
 })
