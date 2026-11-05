@@ -189,12 +189,12 @@ export function isFunction(x): x is Function {
 
 /** Check if value is an async function type. */
 export function isAsyncFunction(x): boolean {
-  return x?.constructor.name === 'AsyncFunction'
+  return x?.constructor?.name === 'AsyncFunction'
 }
 
 /** Check if value is a generator function type. */
 export function isGenerator(x): x is Generator {
-  return x?.constructor.constructor?.name === 'GeneratorFunction'
+  return x?.constructor?.constructor?.name === 'GeneratorFunction'
 }
 
 /** Check if value is `null` or `undefined`. */
