@@ -43,6 +43,23 @@ describe('collections', () => {
     )
   })
 
+  it('copies keep a __proto__ key as data', () => {
+    const source = JSON.parse('{"__proto__": {"admin": true}, "a": 1}')
+    const copies = [
+      clone(source),
+      clone(source, true),
+      compact(source),
+      pick(source, () => true),
+      omit(source, ['b']),
+      omit(source, () => false)
+    ]
+    for (const copy of copies) {
+      assert(Object.getPrototypeOf(copy) === Object.prototype)
+      assert.deepEqual(Object.keys(copy), ['__proto__', 'a'])
+    }
+    assert(Object.getPrototypeOf(pick(source, ['__proto__'])) === Object.prototype)
+  })
+
   it('clone array', () => {
     let arr = [4, 7, 1, 9]
     assert.deepEqual(clone(arr), arr)
