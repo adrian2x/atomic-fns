@@ -81,6 +81,14 @@ describe('Decimal', () => {
     assert.throws(() => decimal(-Infinity), RangeError)
   })
 
+  it('reads a long run of trailing zeros in linear time', () => {
+    const start = performance.now()
+    const value = decimal(`-1${'0'.repeat(100000)}`)
+    assert(performance.now() - start < 1000)
+    assert(value.toString() === `-1${'0'.repeat(100000)}`)
+    assert(decimal(`0.5${'0'.repeat(100000)}`).toString() === '0.5')
+  })
+
   it('negated', () => {
     assert(decimal(0).toString() === '0')
     assert(decimal(0).negated().toString() === '0')
