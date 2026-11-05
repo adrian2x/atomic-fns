@@ -158,11 +158,6 @@ export function isString(x): x is string {
   return type(x) === 'string'
 }
 
-/** Check if value is an Array type. */
-export function isArray(x): x is any[] {
-  return Array.isArray(x)
-}
-
 /**
  * Check if value is Array-like type.
  * A value is considered array-like if it's not a function and has a `.length` number property.
