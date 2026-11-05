@@ -213,4 +213,19 @@ describe('BTree', () => {
     assert(tree.remove(0) === false)
     assert(tree.size === 2)
   })
+
+  it('freeze blocks every mutator', () => {
+    const tree = new BTree()
+    for (let i = 10; i > 0; i--) {
+      tree.set(i, i)
+    }
+    tree.freeze()
+    assert.throws(() => tree.remove(1), TypeError)
+    assert.throws(() => tree.removeRange(1, 5, true), TypeError)
+    assert.throws(() => tree.removeKeys([1, 2]), TypeError)
+    assert.throws(() => tree.rangeUpdate(1, 5, true, () => ({ value: 0 })), TypeError)
+    assert.throws(() => tree.extend([[11, 11]]), TypeError)
+    assert(tree.size === 10)
+    assert(tree.get(1) === 1)
+  })
 })
