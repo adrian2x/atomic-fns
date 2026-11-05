@@ -280,6 +280,12 @@ describe('collections', () => {
     assert.deepEqual(merge({ a: 1 }, null, undefined, { b: 2 }), { a: 1, b: 2 })
   })
 
+  it('merge keeps a value when the source has undefined', () => {
+    assert.deepEqual(merge({ a: 1 }, { a: undefined }), { a: 1 })
+    assert.deepEqual(merge({ a: { b: 1 } }, { a: { b: undefined } }), { a: { b: 1 } })
+    assert.deepEqual(merge({ a: [1, 2] }, { a: [undefined, 3] }), { a: [1, 3] })
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })

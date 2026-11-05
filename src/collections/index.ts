@@ -846,7 +846,7 @@ function baseMerge(obj, source, stack?) {
     if (typeof srcValue === 'object' && srcValue !== null) {
       baseMergeDeep(obj, source, key, stack || new WeakMap())
     } else {
-      if (objValue !== srcValue) {
+      if (srcValue !== undefined && objValue !== srcValue) {
         obj[key] = srcValue
       }
     }
