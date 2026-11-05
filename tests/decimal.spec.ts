@@ -182,6 +182,14 @@ describe('Decimal', () => {
     }
   })
 
+  it('a zero result prints as zero', () => {
+    assert(decimal('100').sub('100').toString() === '0')
+    assert(decimal('100').add('-100').toString() === '0')
+    assert(decimal('1000').mul(0).toString() === '0')
+    assert(decimal(0).mul('100').toString() === '0')
+    assert(decimal('1.5').sub('1.5').toString() === '0.0')
+  })
+
   it('zero equals zero at any scale', () => {
     assert(decimal('0.00').eq(0))
     assert(decimal(0).eq('0.00'))
