@@ -211,6 +211,10 @@ function sameKind(x, y): boolean {
   return (x.constructor?.name ?? 'Object') === (y.constructor?.name ?? 'Object')
 }
 
+function isList(x): boolean {
+  return Array.isArray(x) || (ArrayBuffer.isView(x) && !(x instanceof DataView))
+}
+
 function isDateOrRegExp(x): boolean {
   return x instanceof Date || x instanceof RegExp
 }
@@ -278,7 +282,7 @@ export function deepEqual(obj, other, checker = eq, seen = new WeakMap()): boole
   if (partners.has(other)) return true
   seen.set(obj, partners.add(other))
 
-  if (Array.isArray(obj)) {
+  if (isList(obj)) {
     // compare the arrays
     if (obj.length !== other.length) return false
 
