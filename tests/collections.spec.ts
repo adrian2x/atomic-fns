@@ -570,6 +570,20 @@ describe('collections', () => {
     assert(bisect(arr, 9) === 7)
   })
 
+  it('bisect finds the insertion point between elements', () => {
+    assert(bisect([1, 3, 5], 2) === 1)
+    assert(bisectLeft([1, 3, 5], 2) === 1)
+    assert.deepEqual(insort([1, 3, 5], 2), [1, 2, 3, 5])
+    assert.deepEqual(insortLeft([1, 3, 5], 2), [1, 2, 3, 5])
+    for (let size = 0; size < 8; size++) {
+      const arr = Array.from({ length: size }, (_, i) => Math.floor(i / 2) * 2)
+      for (let x = -1; x <= size + 1; x++) {
+        assert(bisect(arr, x) === arr.filter((y) => y <= x).length)
+        assert(bisectLeft(arr, x) === arr.filter((y) => y < x).length)
+      }
+    }
+  })
+
   it('insort', () => {
     assert.deepEqual(insort([1], 2), [1, 2])
     assert.deepEqual(insort([1, 1, 4, 4, 7, 7, 9], 5), [1, 1, 4, 4, 5, 7, 7, 9])
