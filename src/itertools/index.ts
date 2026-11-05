@@ -4,7 +4,16 @@
  * @module itertools
  */
 
-import { call, isEmpty, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
+import {
+  call,
+  isDate,
+  isEmpty,
+  isIterable,
+  isObject,
+  isRegExp,
+  notNull,
+  ValueError
+} from '../globals/index.js'
 import { add, bool, compare, Comparer, eq, identity } from '../operators/index.js'
 import { Function, Iteratee, Predicate } from '../types.js'
 
@@ -190,7 +199,10 @@ compact([0, 1, false, 2, '', 3])
  */
 export function* icompact<T>(iterable: Iterable<T>) {
   for (const value of iterable) {
-    if (!isEmpty(value)) yield value
+    // `isEmpty` reads arity and keys, which say nothing about these values
+    if (!isEmpty(value) || typeof value === 'function' || isDate(value) || isRegExp(value)) {
+      yield value
+    }
   }
 }
 
