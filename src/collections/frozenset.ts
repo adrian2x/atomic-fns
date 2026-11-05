@@ -15,17 +15,17 @@ export class FrozenSet<T = any> extends Set<T> {
   }
 
   /** @private */
-  add(): this {
+  override add(): this {
     return this
   }
 
   /** @private */
-  delete(): boolean {
+  override delete(): boolean {
     return false
   }
 
   /** @private */
-  clear(): this {
+  override clear(): this {
     return this
   }
 

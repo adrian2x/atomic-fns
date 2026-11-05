@@ -77,7 +77,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     return this.count
   }
 
-  empty(): boolean {
+  override empty(): boolean {
     return !this.root
   }
 
