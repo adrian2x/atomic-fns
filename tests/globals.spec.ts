@@ -10,7 +10,6 @@ import {
   hashCode,
   HASH_KEY,
   hex,
-  isArray,
   isArrayLike,
   isAsyncFunction,
   isBigint,
@@ -106,10 +105,8 @@ describe('globals', () => {
     assert(!isString([]))
   })
 
-  it('isArray', () => {
-    assert(isArray([]))
+  it('isArrayLike', () => {
     assert(isArrayLike([]))
-    assert(!isArray(''))
     assert(!isArrayLike(''))
   })
 
