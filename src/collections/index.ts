@@ -519,7 +519,8 @@ export function pick<T>(obj: T, paths: Iteratee | PropertyKey[]): Partial<T> {
   }
 
   for (const key of paths) {
-    if (key !== '__proto__') result[key] = get(key, obj)
+    const value = get(key, obj)
+    if (key !== '__proto__' && (value !== undefined || key in Object(obj))) result[key] = value
   }
   return result
 }
