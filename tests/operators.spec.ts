@@ -142,4 +142,7 @@ describe('operators', () => {
     }
     assert(deepEqual(wideLeft, wideRight))
   })
+  it('deepEqual accepts a WeakSet as seen', () => {
+    assert(deepEqual({ a: 1 }, { a: 1 }, eq, new WeakSet()))
+  })
 })

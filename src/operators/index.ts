@@ -269,6 +269,7 @@ export function shallowEqual(obj, other): boolean {
  */
 export function deepEqual(obj, other, checker?: Function, seen?): boolean
 export function deepEqual(obj, other, checker = eq, seen = new WeakMap()): boolean {
+  if (!(seen instanceof WeakMap)) seen = new WeakMap()
   if (checker(obj, other)) return true
   if (!sameKind(obj, other)) return false
   if (isDateOrRegExp(obj)) return sameDateOrRegExp(obj, other)
