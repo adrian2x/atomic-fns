@@ -78,9 +78,7 @@ export class IntlDate {
       let { year, month, day, hour, minute, second, millisecond } = obj
 
       // NOTE month is from 1-12, not from 0-11
-      if (typeof month === 'number') {
-        month -= 1
-      }
+      month = (month ?? 1) - 1
 
       // Date reads the years 0 to 99 as 1900 to 1999, 400 years later the leap years still match
       const shift = year >= 0 && year < 100 ? 400 : 0
