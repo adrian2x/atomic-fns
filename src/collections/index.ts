@@ -16,7 +16,6 @@ import {
   isNumber,
   isObject,
   isString,
-  keys,
   set
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
@@ -249,7 +248,7 @@ export function forEach<T>(collection: Iterable<T> | Object, fn: Iteratee<T>): v
       if (res === false) return
     }
   } else {
-    for (const key of keys(collection)) {
+    for (const key of Object.keys(collection)) {
       const res = fn(collection[key], key, collection)
       if (res === false) return
     }

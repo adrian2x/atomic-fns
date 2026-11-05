@@ -22,7 +22,6 @@ import {
   isPromise,
   isString,
   isSymbol,
-  keys,
   list,
   next,
   oct,
@@ -31,7 +30,6 @@ import {
   True,
   type,
   uniqueId,
-  values,
   noop
 } from '../src/globals/index.js'
 import { enumerate } from '../src/itertools/index.js'
@@ -187,16 +185,6 @@ describe('globals', () => {
   it('ord', () => {
     assert(ord('a') === 97)
     assert(ord('€') === 8364)
-  })
-
-  it('keys', () => {
-    let obj = { a: 1, b: 2 }
-    assert.deepEqual(keys(obj), Object.keys(obj))
-  })
-
-  it('values', () => {
-    let obj = { a: 1, b: 2 }
-    assert.deepEqual(values(obj), Object.values(obj))
   })
 
   it('next', () => {
