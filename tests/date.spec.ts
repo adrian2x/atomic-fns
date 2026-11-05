@@ -720,6 +720,15 @@ describe('IntlDate', () => {
     assert.strictEqual(day(mockDate({ year: 1950, month: 6, day: 15 })), '1950-06-15')
   })
 
+  it('create from an Object without a month', () => {
+    assert.strictEqual(mockDate({ year: 2020 }).format('YYYY-MM-DD'), '2020-01-01')
+    assert.strictEqual(mockDate({ year: 2020, day: 5 }).format('YYYY-MM-DD'), '2020-01-05')
+    assert.strictEqual(
+      mockDate({ year: 2020 }, { utc: true }).toISOString(),
+      '2020-01-01T00:00:00.000Z'
+    )
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
