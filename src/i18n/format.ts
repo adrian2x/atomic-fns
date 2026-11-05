@@ -207,11 +207,13 @@ function formatPart(locale, opts, date, type) {
 
 /**
  * Returns a localized string representation of this date, according to the given format string. Format codes use the same specification as {@link https://momentjs.com/docs/#/displaying/format/ moment}.
- * @param {string} str The format string to use
+ * @param {string} formatStr The format string to use
+ * @param {Date} date The date value
+ * @param {?string} locale The locale to use when formatting (default is system locale).
  * @see {@link https://momentjs.com/docs/#/displaying/format/ List of formats}
  * @example
 ```js
-formatDate(new Date(), 'MM/DD/YYYY') // '10/31/2022'
+formatDate('MM/DD/YYYY', new Date()) // '10/31/2022'
 ```
   */
 export function formatDate(formatStr: string, date: Date, locale?: string): string {
@@ -423,7 +425,7 @@ const DATE_MED_WITH_WEEKDAY = {
   hourCycle: 'h12'
 }
 
-/** LLLL: Tuesday, October 14, 1983, 8:30 PM */
+/** LLLL: Friday, October 14, 1983, 8:30 PM */
 const DATE_HUGE = {
   year: n,
   month: l,
