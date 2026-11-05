@@ -742,8 +742,8 @@ export function clone(value, deep = false) {
   return cloneValue(value, deep, new Map())
 }
 
-function cloneValue(value, deep, ancestors) {
-  if (ancestors.has(value)) return ancestors.get(value)
+function cloneValue(value, deep, copies) {
+  if (copies.has(value)) return copies.get(value)
   if (value instanceof ArrayBuffer) return value.slice(0)
   if (ArrayBuffer.isView(value)) {
     return cloneTypedArray(value, deep)
@@ -752,20 +752,18 @@ function cloneValue(value, deep, ancestors) {
     return value.clone()
   }
   if (Array.isArray(value) || hasElements(value)) {
-    return cloneArray(value, deep, ancestors)
+    return cloneArray(value, deep, copies)
   }
   if (value?.constructor === Map) {
     const map = new Map()
-    ancestors.set(value, map)
-    for (const [key, item] of value) map.set(key, deep ? cloneValue(item, deep, ancestors) : item)
-    ancestors.delete(value)
+    copies.set(value, map)
+    for (const [key, item] of value) map.set(key, deep ? cloneValue(item, deep, copies) : item)
     return map
   }
   if (value?.constructor === Set) {
     const set = new Set()
-    ancestors.set(value, set)
-    for (const item of value) set.add(deep ? cloneValue(item, deep, ancestors) : item)
-    ancestors.delete(value)
+    copies.set(value, set)
+    for (const item of value) set.add(deep ? cloneValue(item, deep, copies) : item)
     return set
   }
   if (isObject(value)) {
@@ -776,15 +774,14 @@ function cloneValue(value, deep, ancestors) {
       return regex
     }
     const copy = {}
-    ancestors.set(value, copy)
+    copies.set(value, copy)
     for (const key in value) {
       if (deep) {
-        setOwn(copy, key, cloneValue(value[key], deep, ancestors))
+        setOwn(copy, key, cloneValue(value[key], deep, copies))
       } else {
         setOwn(copy, key, value[key])
       }
     }
-    ancestors.delete(value)
     return copy
   }
   return value
@@ -799,21 +796,20 @@ function hasElements(x): boolean {
  * Clones an array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used, and each item is cloned in turn when it rejects the array.
  * @param arr The array to clone
  * @param [deep=false] Creates a deep clone using `structuredClone` if true.
- * @param ancestors The copies of the objects on the current path.
+ * @param copies The copy of each object seen so far.
  * @returns The new array
  * @see {@link clone}
  */
-function cloneArray<T>(arr: T[], deep: boolean, ancestors: Map<unknown, unknown>): T[] {
+function cloneArray<T>(arr: T[], deep: boolean, copies: Map<unknown, unknown>): T[] {
   if (!deep) return Array.from(arr)
   try {
     return structuredClone(arr)
   } catch {
     const copy = Array.from(arr)
-    ancestors.set(arr, copy)
+    copies.set(arr, copy)
     copy.forEach((item, index) => {
-      copy[index] = cloneValue(item, deep, ancestors)
+      copy[index] = cloneValue(item, deep, copies)
     })
-    ancestors.delete(arr)
     return copy
   }
 }
