@@ -124,6 +124,10 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @returns
    */
   set(key: K, value: V) {
+    this.insert(key, value, true)
+  }
+
+  private insert(key: K, value: V, overwrite: boolean) {
     if (!this.root) {
       this.root = new Node(key, value)
       this.count += 1
@@ -135,7 +139,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     const rank = this.cmp(key, this.root.key)
     if (rank === 0) {
       // Update the value
-      this.root.value = value
+      if (overwrite) this.root.value = value
       return
     }
     const node = new Node(key, value)
@@ -305,7 +309,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
   }
 
   add(key: K): void {
-    return this.set(key, null as V)
+    this.insert(key, null as V, false)
   }
 
   /**
