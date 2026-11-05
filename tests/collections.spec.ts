@@ -276,6 +276,10 @@ describe('collections', () => {
     assert.deepStrictEqual(merge({ map: 1, set: 2, error: 3 }, source), source)
   })
 
+  it('merge skips null and undefined sources', () => {
+    assert.deepEqual(merge({ a: 1 }, null, undefined, { b: 2 }), { a: 1, b: 2 })
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })
