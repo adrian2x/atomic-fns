@@ -351,9 +351,9 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   }
 
   exact(unit?: DurationUnit) {
+    if (unit) return new Duration(this, true).total(unit)
     this.matrix = exactMatrix
-    if (!unit) return this
-    return this.total(unit)
+    return this
   }
 
   toObject() {
