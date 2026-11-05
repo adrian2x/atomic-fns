@@ -59,7 +59,7 @@ export function compare(x, y): number {
   const op = call(x, 'compare', y)
   if (typeof op === 'number') return op
   if (x instanceof Date && y instanceof Date) return Math.sign(x.getTime() - y.getTime()) || 0
-  if (x < y || lt(x, y)) return -1
+  if (lt(x, y)) return -1
   return 1
 }
 
@@ -82,7 +82,8 @@ export function eq(x, y): boolean {
  * @returns {boolean} `true` if `x` is strictly less than `y` or `false` otherwise.
  */
 export function lt(x, y): boolean {
-  return x < y || !!call(x, 'lt', y)
+  const op = call(x, 'lt', y)
+  return op != null ? !!op : x < y
 }
 
 /**
@@ -95,10 +96,11 @@ export function lt(x, y): boolean {
  * @see {@link lt}
  */
 export function lte(x, y): boolean {
-  if (x <= y || call(x, 'lte', y)) return true
-  if (x === y || eq(x, y)) return true
-  if (x < y || lt(x, y)) return true
-  return false
+  const op = call(x, 'lte', y)
+  if (op != null) return !!op
+  const less = call(x, 'lt', y)
+  if (less != null) return !!less || eq(x, y) || (call(y, 'lt', x) === false && x <= y)
+  return x <= y || eq(x, y)
 }
 
 /**
@@ -109,7 +111,8 @@ export function lte(x, y): boolean {
  * @returns {boolean} `true` if `x` is strictly greater than `y` or `false` otherwise.
  */
 export function gt(x, y): boolean {
-  return x > y || !!call(x, 'gt', y)
+  const op = call(x, 'gt', y)
+  return op != null ? !!op : x > y
 }
 
 /**
@@ -122,10 +125,11 @@ export function gt(x, y): boolean {
  * @see {@link gt}
  */
 export function gte(x, y): boolean {
-  if (x >= y || call(x, 'gte', y)) return true
-  if (x === y || eq(x, y)) return true
-  if (x > y || gt(x, y)) return true
-  return false
+  const op = call(x, 'gte', y)
+  if (op != null) return !!op
+  const greater = call(x, 'gt', y)
+  if (greater != null) return !!greater || eq(x, y) || (call(y, 'gt', x) === false && x >= y)
+  return x >= y || eq(x, y)
 }
 
 /**
