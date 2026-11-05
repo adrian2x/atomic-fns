@@ -302,6 +302,34 @@ describe('collections', () => {
     assert(other.a.self === other.a)
   })
 
+  it('merge copies plain objects from sources', () => {
+    const source = { a: { b: 1 }, list: [{ c: 1 }] }
+    const merged = merge({}, source) as typeof source
+    merged.a.b = 2
+    merged.list[0].c = 2
+    assert.deepEqual(source, { a: { b: 1 }, list: [{ c: 1 }] })
+
+    const first = { options: { a: 1 } }
+    merge({}, first, { options: { b: 2 } })
+    assert.deepEqual(first, { options: { a: 1 } })
+
+    const cyclic = { a: { self: null } }
+    cyclic.a.self = cyclic.a
+    const copy = merge({}, cyclic) as typeof cyclic
+    assert(copy.a !== cyclic.a)
+    assert(copy.a.self === copy.a)
+  })
+
+  it('merge assigns a Date or class instance by reference', () => {
+    class Point {
+      x = 1
+    }
+    const source = { date: new Date(0), point: new Point() }
+    const merged = merge({}, source) as typeof source
+    assert(merged.date === source.date)
+    assert(merged.point === source.point)
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })
