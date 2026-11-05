@@ -438,7 +438,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   add(key: K): boolean {
-    return this.set(key, null as V)
+    return this.set(key, this.get(key, null as V))
   }
 
   /**
