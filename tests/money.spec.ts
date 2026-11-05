@@ -82,4 +82,8 @@ describe('Money', () => {
     assert(Money(100).eq(new Currency(100, 'USD')))
     assert(!Money(100).eq(new Currency(100, 'EUR')))
   })
+
+  it('compare keeps two currencies apart', () => {
+    assert(new Currency(5, 'USD').compare(new Currency(5, 'EUR')) !== 0)
+  })
 })
