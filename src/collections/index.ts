@@ -703,7 +703,8 @@ export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
 export function clone<T>(value: T, deep?: boolean): T
 export function clone<T>(value: T[], deep?: boolean): T[]
 export function clone(value, deep = false) {
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+  if (value instanceof ArrayBuffer) return value.slice(0)
+  if (ArrayBuffer.isView(value)) {
     return cloneTypedArray(value, deep)
   }
   if (Array.isArray(value) || isArrayLike(value)) {

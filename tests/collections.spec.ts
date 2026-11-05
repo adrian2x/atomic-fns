@@ -89,6 +89,14 @@ describe('collections', () => {
     assert(regexCopy.lastIndex === 3)
   })
 
+  it('clone copies an ArrayBuffer', () => {
+    const buffer = new Uint8Array([1, 2, 3]).buffer
+    const copy = clone(buffer)
+    assert(copy !== buffer)
+    assert.deepEqual([...new Uint8Array(copy)], [1, 2, 3])
+    assert(clone(buffer, true).byteLength === 3)
+  })
+
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]
