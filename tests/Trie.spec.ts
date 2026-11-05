@@ -79,4 +79,15 @@ describe('Trie', () => {
     assert(tree.remove('') === false)
     assert(tree.size === 1)
   })
+
+  it('matches a word of 1e5 letters', () => {
+    let word = 'a'.repeat(1e5)
+    let tree = new Trie([word])
+    assert.deepEqual([...tree.matches('')], [word])
+  })
+
+  it('matches keeps prefix order', () => {
+    let tree = new Trie(['b', 'ba', 'a', 'bc', 'bab', 'bb'])
+    assert.deepEqual([...tree.matches('')], ['b', 'ba', 'bab', 'bc', 'bb', 'a'])
+  })
 })
