@@ -35,7 +35,9 @@ export class Deque<T = any> extends Sequence<T> {
 
     this.ArrayConstructor = arrType.constructor
     this.capacity = capacity
-    this.items = new this.ArrayConstructor(arrType.length || this.capacity)
+    // A typed array cannot grow, so it takes the whole capacity up front
+    const length = ArrayBuffer.isView(arrType) ? capacity : arrType.length || capacity
+    this.items = new this.ArrayConstructor(length)
     this.clear()
 
     if (arrType.length) {

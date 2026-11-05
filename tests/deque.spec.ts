@@ -130,4 +130,22 @@ describe('deque', () => {
     assert.throws(() => new Deque().set(0, 9), KeyError)
     assert.deepEqual(deque.toArray(), [1, 2, 3])
   })
+
+  it('typed arrays keep appended values', () => {
+    let deque = new Deque(new Int32Array([1, 2, 3]))
+    deque.append(4)
+    deque.appendleft(0)
+    assert(deque.size === 5)
+    assert.deepEqual(Array.from(deque.toArray()), [0, 1, 2, 3, 4])
+    assert(deque.first() === 0)
+    assert(deque.pop() === 4)
+  })
+
+  it('typed arrays keep their capacity', () => {
+    let deque = new Deque(new Int32Array([1, 2, 3]), 4)
+    deque.append(4)
+    deque.append(5)
+    assert.deepEqual(Array.from(deque.toArray()), [2, 3, 4, 5])
+    assert.deepEqual(Array.from(new Deque(new Int32Array([1, 2, 3]), 2).toArray()), [2, 3])
+  })
 })
