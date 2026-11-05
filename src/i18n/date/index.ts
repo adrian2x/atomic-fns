@@ -545,6 +545,13 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
   }
 }
 
+/**
+ * Add the specified years, months, weeks, days, hours, minutes and seconds to the given date
+ * @param date
+ * @param duration
+ * @param exact Kept for callers that pass it, it no longer changes the result.
+ * @returns
+ */
 export function addDuration(
   date: number | string | Date,
   duration: number | Duration | TDuration,
@@ -615,7 +622,7 @@ function setDateUnit(date: Date, unit: string, value: number) {
  * Subtract the specified years, months, weeks, days, hours, minutes and seconds from the given date.
  * @param date
  * @param duration
- * @param exact
+ * @param exact Kept for callers that pass it, it no longer changes the result.
  * @returns
  */
 export function subDuration(
