@@ -4,7 +4,7 @@
  * @module itertools
  */
 
-import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js'
+import { call, isEmpty, isIterable, isObject, notNull, ValueError } from '../globals/index.js'
 import { add, bool, compare, Comparer, eq, identity } from '../operators/index.js'
 import { Function, Iteratee, Predicate } from '../types.js'
 
@@ -111,7 +111,8 @@ export function contains(collection: Iterable<any>, value: any): boolean {
   if (!collection) return false
   const includes = call(collection, 'includes', value)
   if (includes != null) return includes
-  return any(collection, (x) => eq(value, x))
+  const items = isIterable(collection) ? collection : Object.values(collection)
+  return any(items, (x) => eq(value, x))
 }
 
 /**
