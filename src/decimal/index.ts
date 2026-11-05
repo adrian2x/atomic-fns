@@ -276,6 +276,7 @@ a.div(b)  // 0.333333333333333333333333333333
    * Remove zeroes in the least-significant digit of this `Decimal`
    */
   private _normalize(): this {
+    if (this.i === 0n) this.e = Math.min(this.e, 0)
     if (this.i === 0n || this.i % 10n !== 0n) return this
     const digits = this.i.toString()
     let end = digits.length
@@ -368,7 +369,7 @@ a.div(b)  // 0.333333333333333333333333333333
     } catch {
       return false
     }
-    return this.i === other.i && this.e === other.e
+    return this.i === other.i && (this.e === other.e || this.i === 0n)
   }
 
   /**
