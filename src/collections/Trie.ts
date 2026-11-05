@@ -22,7 +22,7 @@ function* traverse(root: TrieNode, prefix: string): Generator<string> {
  * @see {@link https://en.wikipedia.org/wiki/Trie Trie}
  */
 export class Trie extends Collection {
-  private root: TrieNode = {}
+  private root: TrieNode = Object.create(null)
   private count = 0
 
   constructor(words?: string[]) {
@@ -42,7 +42,7 @@ export class Trie extends Collection {
     let current = this.root
     for (let i = 0; i < word.length; i++) {
       const c = word[i]
-      if (!current[c]) current[c] = {}
+      if (!current[c]) current[c] = Object.create(null)
       current = current[c]
     }
     if (!current.isWord) this.count++
@@ -100,7 +100,7 @@ export class Trie extends Collection {
    * Removes all strings from the tree.
    */
   clear() {
-    this.root = {}
+    this.root = Object.create(null)
     this.count = 0
   }
 

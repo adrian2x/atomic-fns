@@ -125,4 +125,11 @@ describe('Trie', () => {
     assert.deepEqual([...tree.matches('w')], words)
     assert.deepEqual([...tree.matches('w', null)], words)
   })
+
+  it('cannot reach Object.prototype', () => {
+    const trie = new Trie(JSON.parse('[["__proto__", "polluted"]]'))
+    assert(({} as any).polluted === undefined)
+    assert(trie.size === 1)
+    delete (Object.prototype as any).polluted
+  })
 })
