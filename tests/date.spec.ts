@@ -497,6 +497,17 @@ describe('IntlDate', () => {
     assert.strictEqual(asDate('2020-01-01T00:00:00').getMilliseconds(), 0)
   })
 
+  it('asDate keeps years under 100', () => {
+    const fields = (date: Date) => [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    assert.deepStrictEqual(fields(asDate('0050-06-15')), [50, 6, 15])
+    assert.deepStrictEqual(fields(asDate('0000-02-29')), [0, 2, 29])
+    assert.strictEqual(
+      asDate('0099-12-31T10:00:00', true).toISOString(),
+      '0099-12-31T10:00:00.000Z'
+    )
+    assert.deepStrictEqual(fields(asDate('1999-12-31')), [1999, 12, 31])
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })

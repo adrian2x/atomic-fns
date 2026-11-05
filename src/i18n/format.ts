@@ -29,6 +29,19 @@ function padZoneStr(instance: Date) {
   )}`
 }
 
+function fromFields(utc: boolean, year: number, month, day, hour, minute, second, ms): Date {
+  // Date reads the years 0 to 99 as 1900 to 1999, 400 years later the leap years still match
+  const shift = year >= 0 && year < 100 ? 400 : 0
+  if (utc) {
+    const date = new Date(Date.UTC(year + shift, month, day, hour, minute, second, ms))
+    date.setUTCFullYear(date.getUTCFullYear() - shift)
+    return date
+  }
+  const date = new Date(year + shift, month, day, hour, minute, second, ms)
+  date.setFullYear(date.getFullYear() - shift)
+  return date
+}
+
 /**
  * Returns a new Date from the given arguments.
  * @param {string | number | Date} date The date value
@@ -51,11 +64,7 @@ export function asDate(date: string | number | Date, utc = false): Date {
       const m = d[2] - 1 || 0
       const ms = (d[7] || '').padEnd(3, '0').slice(0, 3)
 
-      if (utc) {
-        return new Date(Date.UTC(d[1], m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms))
-      }
-
-      return new Date(d[1], m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms)
+      return fromFields(utc, Number(d[1]), m, d[3] || 1, d[4] || 0, d[5] || 0, d[6] || 0, ms)
     }
   }
 
