@@ -327,26 +327,6 @@ export function ord(x: string): number {
 }
 
 /**
- * Returns an array of the own enumerable property names of `object`.
- * @param object The given object.
- * @returns The array of object keys.
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
- */
-export function keys<T>(object: T): Array<keyof T> {
-  return Object.keys(object) as Array<keyof T>
-}
-
-/**
- * Returns an array of the own enumerable property values of `object`.
- * @param object The given object.
- * @returns The array of object keys.
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values Object.values()}
- */
-export function values<T = any>(object): T[] {
-  return Object.values(object)
-}
-
-/**
  * Check if a given property is present in a given object.
  * @param obj The object to check.
  * @param attr A property key name.
