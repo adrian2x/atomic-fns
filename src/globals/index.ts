@@ -94,7 +94,7 @@ export function type(value: any): string {
       if (value instanceof Error) return 'error'
       if (value[Symbol.toStringTag]) return value[Symbol.toStringTag]
 
-      const className = str(value)
+      const className = Object.prototype.toString.call(value)
       if (className === '[object Window]') return 'object'
       if (className.endsWith('Array]') || Array.isArray(value)) {
         return 'array'
