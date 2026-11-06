@@ -70,7 +70,7 @@ export function compare(x, y): number {
  * @returns {boolean} `true` if `x` and `y` are equal or `false` otherwise.
  */
 export function eq(x, y): boolean {
-  return Object.is(x, y) || call(x, 'eq', y) != null
+  return Object.is(x, y) || !!call(x, 'eq', y)
 }
 
 /**
@@ -81,7 +81,7 @@ export function eq(x, y): boolean {
  * @returns {boolean} `true` if `x` is strictly less than `y` or `false` otherwise.
  */
 export function lt(x, y): boolean {
-  return x < y || call(x, 'lt', y) != null
+  return x < y || !!call(x, 'lt', y)
 }
 
 /**
@@ -108,7 +108,7 @@ export function lte(x, y): boolean {
  * @returns {boolean} `true` if `x` is strictly greater than `y` or `false` otherwise.
  */
 export function gt(x, y): boolean {
-  return x > y || call(x, 'gt', y)
+  return x > y || !!call(x, 'gt', y)
 }
 
 /**
@@ -121,7 +121,7 @@ export function gt(x, y): boolean {
  * @see {@link gt}
  */
 export function gte(x, y): boolean {
-  if (x <= y || call(x, 'gte', y)) return true
+  if (x >= y || call(x, 'gte', y)) return true
   if (x === y || eq(x, y)) return true
   if (x > y || gt(x, y)) return true
   return false
