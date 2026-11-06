@@ -1,4 +1,4 @@
-import { compare, Comparer, eq } from '../operators/index.js'
+import { compare, Comparer } from '../operators/index.js'
 import { Mapping } from './abc.js'
 
 /**
@@ -92,6 +92,10 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @returns {?V} The value for the key or `undefined`.
    */
   get(key: K): V | undefined {
+    return this.findNode(key)?.value
+  }
+
+  private findNode(key: K): Node<K, V> | undefined {
     if (!this.root) return
 
     // Note: deterministic splaying (always moves key to front):
@@ -103,7 +107,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     // Values of `p` closer to 1 tend to perform well.
     if (Math.random() <= this.randSplay) {
       this.splay(key)
-      if (this.cmp(key, this.root.key) === 0) return this.root.value
+      if (this.cmp(key, this.root.key) === 0) return this.root
       else return undefined
     }
 
@@ -111,14 +115,14 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     let current = this.root as any
     while (current) {
       const rank = this.cmp(key, current.key)
-      if (rank === 0) return current.value
+      if (rank === 0) return current
       if (rank < 0) current = current.left
       else current = current.right
     }
   }
 
   /**
-   * Inserts the `key` and `value` in the tree if the `key` does not exist.
+   * Inserts the `key` and `value` in the tree, or updates the value if the `key` exists.
    * @param {K} key A key which can be any comparable value
    * @param {V} value A value associated with the key
    * @returns
@@ -166,7 +170,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
       return
     }
     this.splay(key)
-    if (!eq(key, this.root.key)) {
+    if (this.cmp(key, this.root.key) !== 0) {
       return
     }
     const removed = this.root
@@ -318,14 +322,14 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @returns `true` if found.
    */
   contains(key: K): boolean {
-    return this.get(key) !== undefined
+    return this.findNode(key) !== undefined
   }
 
-  /** Alias of remove but just returns `true` instead of the deleted value. */
+  /** Alias of remove but returns `true` if the key was found instead of the deleted value. */
   delete(key: K): boolean {
-    // since remove throws, this will throw too
+    const size = this.count
     this.remove(key)
-    return true
+    return this.count < size
   }
 
   clear(): void {
@@ -357,8 +361,8 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
   }
 
   /**
-   * Returns an ordered iterable of all the keys and values in the tree.
-   * @returns {Iterable<V>} A iterable of `[key, value]` pairs sorted by key.
+   * Returns an ordered iterable of all the values in the tree.
+   * @returns {Iterable<V>} An iterable of values sorted by key.
    */
   *values(): Iterable<V> {
     for (const node of traverse(this.root)) {

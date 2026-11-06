@@ -148,4 +148,20 @@ describe('SortedMap', () => {
     assert(tree.get('a') === 1)
     assert(tree.size === 1)
   })
+
+  it('has a key whose value is undefined', () => {
+    let tree = new SortedMap()
+    tree.set('a', undefined)
+    assert(tree.has('a'))
+    assert(tree.contains('a'))
+    assert(tree.size === 1)
+  })
+
+  it('delete a key whose value is undefined', () => {
+    let tree = new SortedMap()
+    tree.set('a', undefined)
+    assert(tree.delete('a') === true)
+    assert(tree.delete('a') === false)
+    assert(tree.empty())
+  })
 })

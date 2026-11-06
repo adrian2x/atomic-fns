@@ -196,4 +196,53 @@ describe('SplayTree', () => {
     tree.add(2)
     assert(tree.get(2) === null)
   })
+
+  it('remove uses the comparator', () => {
+    let tree = new SplayTree((x, y) => x.id - y.id)
+    tree.set({ id: 1 }, 'a')
+    tree.set({ id: 2 }, 'b')
+    assert(tree.remove({ id: 1 }) === 'a')
+    assert(tree.size === 1)
+    assert(!tree.contains({ id: 1 }))
+    assert(tree.contains({ id: 2 }))
+  })
+
+  it('remove treats 0 and -0 as one key', () => {
+    let tree = new SplayTree()
+    tree.set(0, 'a')
+    assert(tree.get(-0) === 'a')
+    assert(tree.remove(-0) === 'a')
+    assert(tree.empty())
+  })
+
+  it('contains a key whose value is undefined', () => {
+    for (const p of [0, 1]) {
+      let tree = new SplayTree(undefined, p)
+      tree.set(1, undefined)
+      tree.set(2, undefined)
+      assert(tree.contains(1))
+      assert(tree.contains(2))
+      assert(!tree.contains(3))
+    }
+  })
+
+  it('contains leaves the tree alone when p is 0', () => {
+    let tree = new SplayTree(undefined, 0)
+    tree.set(1, 1)
+    tree.set(2, 2)
+    assert(tree.contains(1))
+    assert(tree.top() === 2)
+  })
+
+  it('delete reports whether the key was there', () => {
+    let tree = new SplayTree()
+    assert(tree.delete(1) === false)
+    tree.set(1, 'a')
+    tree.set(2, undefined)
+    assert(tree.delete(3) === false)
+    assert(tree.delete(1) === true)
+    assert(tree.delete(1) === false)
+    assert(tree.delete(2) === true)
+    assert(tree.empty())
+  })
 })
