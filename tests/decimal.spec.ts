@@ -227,6 +227,53 @@ describe('Decimal', () => {
     assert(!decimal('0.00').eq('0.01'))
   })
 
+  it('sqrt rounds the last digit once', () => {
+    assert(decimal(154448).sqrt().toString() === '392.99872773330958965454')
+    assert(decimal('9008856.40103').sqrt().toString() === '3001.47570388800582075067')
+    assert(decimal('72746.86').sqrt().toString() === '269.71625831603107125289')
+    assert(decimal('0.000000000000271').sqrt().toString() === '0.00000052057660339281')
+    assert(decimal(99).sqrt().toString() === '9.94987437106619954734')
+    assert(decimal(1000).sqrt().toString() === '31.62277660168379331999')
+    assert(decimal(4).sqrt().toString() === '2')
+    assert(decimal('0.25').sqrt().toString() === '0.5')
+    assert(decimal(0).sqrt().eq(0))
+    assert(decimal('1e-50').sqrt().eq(0))
+  })
+
+  it('sqrt converges whatever the digit count', () => {
+    assert(
+      decimal(`1${'0'.repeat(70)}1`)
+        .sqrt()
+        .toString() === '316227766016837933199889354443271853.37195551393252168269'
+    )
+    assert(
+      decimal(`2${'0'.repeat(80)}`)
+        .sqrt()
+        .toString() === '14142135623730950488016887242096980785696.7187537694807317668'
+    )
+    assert(
+      decimal(`0.${'1234567890'.repeat(7)}123`)
+        .sqrt()
+        .toString() === '0.35136418288201442531'
+    )
+    assert(
+      decimal('1234567890'.repeat(8)).sqrt().toString() ===
+        '3513641828820144253111222381699882939174.84087723940033681655'
+    )
+    const value = decimal(`7${'1'.repeat(10000)}`)
+    const root = value.sqrt()
+    const gap = root.mul(root).sub(value)
+    assert(gap.lt('1e4990') && gap.gt('-1e4990'))
+  })
+
+  it('sqrt rejects a negative value', () => {
+    for (const value of [-1, -4, '-0.5']) {
+      assert.throws(() => decimal(value).sqrt(), ValueError, String(value))
+      assert(Decimal.PRECISION === 20)
+    }
+    assert(decimal(1).div(3).toString() === '0.33333333333333333333')
+  })
+
   it('lt', () => {
     let a = decimal('0.0000000000000000000025')
     let b = decimal('0.00000000000000000000255')
