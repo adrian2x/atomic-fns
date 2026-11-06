@@ -729,6 +729,43 @@ describe('IntlDate', () => {
     )
   })
 
+  it('diff counts whole calendar months, quarters and years', () => {
+    const diff = (end: string, start: string, unit) => mockDate(end).diff(mockDate(start), unit)
+    assert.strictEqual(diff('2021-03-01', '2021-02-01', 'months'), 1)
+    assert.strictEqual(diff('2021-02-01', '2021-03-01', 'months'), -1)
+    assert.strictEqual(diff('2021-12-31', '2021-01-01', 'months'), 11)
+    assert.strictEqual(diff('2010-01-01', '2000-01-01', 'months'), 120)
+    assert.strictEqual(diff('2021-02-28', '2021-01-31', 'months'), 1)
+    assert.strictEqual(diff('2021-02-27', '2021-01-31', 'months'), 0)
+    assert.strictEqual(diff('2021-01-31', '2021-02-28', 'months'), 0)
+    assert.strictEqual(diff('2039-12-31', '2000-01-01', 'years'), 39)
+    assert.strictEqual(diff('2040-01-01', '2000-01-01', 'years'), 40)
+    assert.strictEqual(diff('2021-02-28', '2020-02-29', 'years'), 1)
+    assert.strictEqual(diff('2021-07-01', '2021-01-01', 'quarters'), 2)
+    assert.strictEqual(diff('2021-01-01', '2021-07-01', 'quarters'), -2)
+    assert.strictEqual(diff('2021-03-31', '2021-01-01', 'quarters'), 0)
+    assert.strictEqual(mockDate('2021-03-01').from('2021-02-01', 'months'), 'in 1 month')
+
+    const start = mockDate('2021-01-31')
+    assert.strictEqual(start.add({ months: 1 }).diff(start, 'months'), 1)
+    assert(Number.isNaN(mockDate('garbage').diff(start, 'months')))
+  })
+
+  it('diff counts calendar days and weeks across DST', () => {
+    inZone('America/New_York', () => {
+      assert.strictEqual(at(2021, 2, 15).diff(at(2021, 2, 14), 'days'), 1)
+      assert.strictEqual(at(2021, 2, 15).diff(at(2021, 2, 13), 'days'), 2)
+      assert.strictEqual(at(2021, 2, 14).diff(at(2021, 2, 15), 'days'), -1)
+      assert.strictEqual(at(2021, 10, 8).diff(at(2021, 10, 7), 'days'), 1)
+      assert.strictEqual(at(2021, 2, 21).diff(at(2021, 2, 14), 'weeks'), 1)
+      assert.strictEqual(at(2021, 2, 15).diff(at(2021, 2, 14), 'days', true), 1)
+      assert.strictEqual(at(2021, 2, 15).diff(at(2021, 2, 14), 'hours'), 23)
+
+      const start = at(2021, 2, 14)
+      assert.strictEqual(start.add({ days: 1 }).diff(start, 'days'), 1)
+    })
+  })
+
   it('strftime format', () => {
     let date = new Date(2020, 1, 1, 11, 1, 1, 1)
     let d = mockDate(date, { utc: true })
