@@ -152,13 +152,13 @@ const orderedUnits = [
 const reverseUnits = orderedUnits.slice(0).reverse()
 
 export class Duration {
-  values: TDuration
+  values: TDuration = {}
   private matrix = casualMatrix
 
   constructor(dur: number | TDuration | Duration = {}, exact = false) {
     if (dur instanceof Duration) {
       this.values = { ...dur.values }
-    } else if (isNumber(dur)) {
+    } else if (typeof dur === 'number') {
       this.values = { milliseconds: dur }
     } else if (isObject(dur)) {
       this.values = normalizeUnits(dur)
@@ -388,8 +388,9 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
    */
   toISOString() {
     let s = 'P'
+    const months = this.get('quarters') * 3 + this.months
     if (this.years !== 0) s += this.years + 'Y'
-    if (this.months !== 0) s += this.months + 'M'
+    if (months !== 0) s += months + 'M'
     if (this.weeks !== 0) s += this.weeks + 'W'
     if (this.days !== 0) s += this.days + 'D'
     if (this.hours !== 0 || this.minutes !== 0 || this.seconds !== 0 || this.milliseconds !== 0)
