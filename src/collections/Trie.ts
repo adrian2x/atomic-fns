@@ -1,3 +1,4 @@
+import { itake } from '../itertools/index.js'
 import { Collection } from './abc.js'
 
 type TrieNode = {
@@ -44,13 +45,13 @@ export class Trie extends Collection {
       if (!current[c]) current[c] = {}
       current = current[c]
     }
+    if (!current.isWord) this.count++
     // Set as end of the word
     Object.defineProperty(current, 'isWord', {
       value: true,
       enumerable: false,
       writable: true
     })
-    this.count++
     return this
   }
 
@@ -79,13 +80,11 @@ export class Trie extends Collection {
   /**
    * Generates all results that start with the given string.
    * @param word A prefix string
-   * @param {number} [limit=20] The number of results to return.
+   * @param {number} [limit] The number of results to return. Defaults to every result.
    */
-  matches = function* (word: string, limit = 20): Generator<string> {
+  matches = function* (word: string, limit?: number): Generator<string> {
     const node = this.findNode(word)
-    if (node) {
-      yield* traverse(node, word)
-    }
+    if (node) yield* itake(limit ?? Infinity, traverse(node, word))
   }
 
   /**
@@ -94,7 +93,7 @@ export class Trie extends Collection {
    */
   contains(word: string): boolean {
     const node = this.findNode(word)
-    return node?.isWord
+    return !!node?.isWord
   }
 
   /**
