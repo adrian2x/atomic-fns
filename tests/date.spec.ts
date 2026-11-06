@@ -4,6 +4,16 @@ import { IntlDate, strftime } from '../src/i18n/index.js'
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })
 
+const inZone = (zone: string, test: () => void) => {
+  const previous = process.env.TZ
+  process.env.TZ = zone
+  try {
+    test()
+  } finally {
+    process.env.TZ = previous
+  }
+}
+
 describe('IntlDate', () => {
   it('now', () => {
     let date = new Date()
@@ -333,6 +343,75 @@ describe('IntlDate', () => {
     assert(d.format('lll').match(/\d+\:\d+\sPM|AM/), d.format('lll'))
     assert(d.format('llll').includes('Sat, Feb 1, 2020'), d.format('llll'))
     assert(d.format('llll').match(/\d+\:\d+\sPM|AM/), d.format('llll'))
+  })
+
+  it('format Z and ZZ print the numeric offset', () => {
+    let date = mockDate('2020-02-01T11:01:01')
+    assert.strictEqual(date.format('Z'), '+00:00')
+    assert.strictEqual(date.format('ZZ'), '+0000')
+    assert.strictEqual(date.format(''), '2020-02-01T11:01:01+00:00')
+    assert.strictEqual(mockDate(date.format('')).getTime(), date.getTime())
+    assert.strictEqual(date.zone(), 'GMT+00:00')
+
+    inZone('America/New_York', () => {
+      date = mockDate('2020-02-01T11:01:01')
+      assert.strictEqual(date.format('Z ZZ'), '-05:00 -0500')
+      assert.strictEqual(date.format(''), '2020-02-01T11:01:01-05:00')
+      assert.strictEqual(mockDate(date.format('')).getTime(), date.getTime())
+      assert.strictEqual(date.zone(), 'GMT-05:00')
+    })
+
+    inZone('Asia/Kolkata', () => {
+      assert.strictEqual(mockDate('2020-02-01T11:01:01').format('Z ZZ'), '+05:30 +0530')
+    })
+  })
+
+  it('format prints zero values', () => {
+    const midnight = mockDate(new Date(2021, 0, 3, 0, 0, 0, 0))
+    assert.strictEqual(midnight.format('H:m:s d'), '0:0:0 0')
+    assert.strictEqual(mockDate(0).format('X x'), '0 0')
+  })
+
+  it('format leaves unknown tokens alone', () => {
+    assert.strictEqual(mockDate().format('Y YYY dd zz zzzz'), 'Y YYY dd zz zzzz')
+  })
+
+  it('format pads the year', () => {
+    const inYear = (year: number) => {
+      const date = new Date(2021, 5, 15)
+      date.setFullYear(year)
+      return mockDate(date).format('YYYY YY')
+    }
+    assert.strictEqual(inYear(5), '0005 05')
+    assert.strictEqual(inYear(50), '0050 50')
+    assert.strictEqual(inYear(999), '0999 99')
+    assert.strictEqual(inYear(2021), '2021 21')
+    assert.strictEqual(inYear(12345), '12345 45')
+    assert.strictEqual(inYear(-1), '-0001 01')
+  })
+
+  it('format Do prints an ordinal day', () => {
+    const ordinals = {
+      1: '1st',
+      2: '2nd',
+      3: '3rd',
+      4: '4th',
+      11: '11th',
+      12: '12th',
+      13: '13th',
+      21: '21st',
+      22: '22nd',
+      23: '23rd',
+      30: '30th',
+      31: '31st'
+    }
+    for (const [day, ordinal] of Object.entries(ordinals)) {
+      assert.strictEqual(mockDate(new Date(2021, 0, Number(day))).format('Do'), ordinal)
+    }
+    const date = new Date(2021, 0, 2)
+    assert.strictEqual(mockDate(date).format('MMMM Do, YYYY'), 'January 2nd, 2021')
+    assert.strictEqual(mockDate(date).format('[Do] DD'), 'Do 02')
+    assert.strictEqual(mockDate(date, { locale: 'de-DE' }).format('Do'), '2')
   })
 
   it('strftime format', () => {

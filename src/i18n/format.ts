@@ -3,12 +3,17 @@ const NATIVE_DATE =
 const REGEX_PARSE =
   /^(\d{4})[-/]?(\d{1,2})?[-/]?(\d{0,2})[Tt\s]*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?[.:]?(\d+)?$/
 const REGEX_FORMAT =
-  /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
+  /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|Do|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
+const ORDINAL_SUFFIXES = { one: 'st', two: 'nd', few: 'rd', other: 'th' }
 
 function padStart(string, length, pad) {
   return String(string).padStart(length, pad)
+}
+
+function padYear(year: number) {
+  return `${year < 0 ? '-' : ''}${padStart(Math.abs(year), 4, '0')}`
 }
 
 function padZoneStr(instance: Date) {
@@ -16,7 +21,7 @@ function padZoneStr(instance: Date) {
   const minutes = Math.abs(negMinutes)
   const hourOffset = Math.floor(minutes / 60)
   const minuteOffset = minutes % 60
-  return `${negMinutes <= 0 ? '+' : '-'}${padStart(hourOffset, 2, '0')}:${padStart(
+  return `${negMinutes >= 0 ? '+' : '-'}${padStart(hourOffset, 2, '0')}:${padStart(
     minuteOffset,
     2,
     '0'
@@ -154,8 +159,6 @@ const TOKENS = {
   NNN: { era: s, year: dd },
   NNNN: { era: l, year: dd },
   // timeZoneName
-  ZZ: { timeZoneName: 'longOffset', year: dd },
-  Z: { timeZoneName: 'shortOffset', year: dd },
   zzz: { timeZoneName: l, year: dd },
   z: { timeZoneName: s, year: dd }
 }
@@ -175,6 +178,12 @@ function formatHour(h, maxLength) {
 function formatMeridiem(hour, isLowercase?) {
   const m = hour < 12 ? 'AM' : 'PM'
   return isLowercase ? m.toLowerCase() : m
+}
+
+function formatOrdinal(day: number, locale?: string) {
+  const rules = new Intl.PluralRules(locale, { type: 'ordinal' })
+  const isEnglish = rules.resolvedOptions().locale.split('-')[0] === 'en'
+  return isEnglish ? `${day}${ORDINAL_SUFFIXES[rules.select(day)]}` : String(day)
 }
 
 function formatPart(locale, t, date) {
@@ -217,8 +226,8 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     NN: formatPart(locale, 'NN', date),
     NNN: formatPart(locale, 'NNN', date),
     NNNN: formatPart(locale, 'NNNN', date),
-    YY: String(date.getFullYear()).slice(-2),
-    YYYY: date.getFullYear(),
+    YY: padStart(Math.abs(date.getFullYear()) % 100, 2, '0'),
+    YYYY: padYear(date.getFullYear()),
     M: date.getMonth() + 1,
     MM: padStart(date.getMonth() + 1, 2, '0'),
     MMM: formatter(locale, TOKENS.MMM).format(date),
@@ -226,11 +235,12 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     Q: Math.ceil((date.getMonth() + 1) / 3),
     D: date.getDate(),
     DD: padStart(date.getDate(), 2, '0'),
+    Do: formatOrdinal(date.getDate(), locale),
     d: date.getDay(),
     ddd: formatter(locale, TOKENS.ddd).format(date),
     dddd: formatter(locale, TOKENS.dddd).format(date),
-    Z: formatPart(locale, 'Z', date),
-    ZZ: formatPart(locale, 'ZZ', date),
+    Z: zoneStr,
+    ZZ: zoneStr.replace(':', ''),
     z: formatPart(locale, 'z', date),
     zzz: formatPart(locale, 'zzz', date),
     LT: `${time.h}:${time.mm} ${time.A}`,
@@ -245,7 +255,7 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     llll: formatter(locale, DATE_MED_WITH_WEEKDAY).format(date)
   }
 
-  return str.replace(REGEX_FORMAT, (match, $1) => $1 || matches[match] || zoneStr.replace(':', '')) // 'ZZ'
+  return str.replace(REGEX_FORMAT, (match, $1) => $1 ?? matches[match] ?? match)
 }
 
 /**
