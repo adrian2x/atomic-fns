@@ -48,7 +48,7 @@ export function* accumulate<T>(iterable: Iterable<T>, func = add, initial?: any)
  * @example
 ```js
 all([0])
-// true
+// false
 
 all([1, 2, 3])
 // true
@@ -103,9 +103,6 @@ export function chain<T>(...iterables: Array<Iterable<T>>) {
 ```js
 contains([1, 2, 3], 1)
 // true
-
-contains([1, 2, 3], 1, 2)
-// false
 
 contains({ 'a': 1, 'b': 2 }, 1)
 // true
@@ -189,11 +186,11 @@ export function first<T>(iterable: Iterable<T>) {
 
 /**
  * Creates a new generator that filters all falsy and empty values from iterable.
- * @param arr The array to compact
- * @returns A new array with the filtered values.
+ * @param iterable The iterable to compact
+ * @returns A generator with the filtered values.
  * @example
 ```js
-compact([0, 1, false, 2, '', 3])
+[...icompact([0, 1, false, 2, '', 3])]
 // [1, 2, 3]
 ```
  */
@@ -293,7 +290,7 @@ export function partition<T>(iterable: Iterable<T>, predicate: Predicate<T, bool
 /**
  * Returns a generator for a sequence of numbers in the given range, starting from `start` (default 0) to `stop` (not-inclusive) in increments of `step` (default 1).
  *
- * `range(x)` is a shorthand for `range(0, x, 1)`.
+ * `range(x)` is a shorthand for `range(0, x, 1)`, or `range(0, x, -1)` when `x` is negative.
  * @param args When called with a single argument, it is assigned to `stop` param. If two arguments are given, it will assign them to `(start, stop)`. When three arguments, it means `(start, stop, step)`.
  * @example
 ```js
@@ -310,7 +307,7 @@ range(5, 0, -1)
 // [5, 4, 3, 2, 1]
 
 range(-3)
-// []
+// [0, -1, -2]
 ```
  */
 export function* range(...args: number[]) {
