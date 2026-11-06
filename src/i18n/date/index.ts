@@ -1,6 +1,6 @@
 import { isObject, ValueError } from '../../globals/index.js'
 import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
-import { asDate, formatDate, strftime } from '../format.js'
+import { asDate, formatDate, fromFields, strftime } from '../format.js'
 import {
   asNumber,
   DateObject,
@@ -78,26 +78,18 @@ export class IntlDate {
       let { year, month, day, hour, minute, second, millisecond } = obj
 
       // NOTE month is from 1-12, not from 0-11
-      if (typeof month === 'number') {
-        month -= 1
-      }
+      month = (month ?? 1) - 1
 
-      if (utc) {
-        // from UTC to current
-        this._date = new Date(
-          Date.UTC(year, month, day || 1, hour || 0, minute || 0, second || 0, millisecond || 0)
-        )
-      } else {
-        this._date = new Date(
-          year,
-          month,
-          day || 1,
-          hour || 0,
-          minute || 0,
-          second || 0,
-          millisecond || 0
-        )
-      }
+      this._date = fromFields(
+        utc,
+        Number(year),
+        month,
+        day || 1,
+        hour || 0,
+        minute || 0,
+        second || 0,
+        millisecond || 0
+      )
     } else {
       this._date = asDate(obj, utc)
     }
