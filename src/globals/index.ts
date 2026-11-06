@@ -27,10 +27,11 @@ export class CustomError extends Error {
   /**
    * Returns a new CustomError with the specified message.
    * @param {string} message
+   * @param {ErrorOptions} [options] Standard error options such as `cause`.
    * @constructor
    */
-  constructor(message?: string) {
-    super(message)
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options)
     this.name = this.constructor.name
     if (typeof Error.captureStackTrace === 'function') {
       Error.captureStackTrace(this, this.constructor)
