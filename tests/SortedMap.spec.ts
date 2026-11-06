@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { SortedMap } from '../src/collections/SortedMap.js'
 
 describe('SortedMap', () => {

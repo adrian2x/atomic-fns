@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { Deque } from '../src/collections/deque.js'
 import { KeyError } from '../src/globals/index.js'
 

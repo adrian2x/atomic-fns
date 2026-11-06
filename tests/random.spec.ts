@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { any, times } from '../src/itertools/index.js'
 import { choice, random, randomInt, sample, shuffle } from '../src/random/index.js'
 

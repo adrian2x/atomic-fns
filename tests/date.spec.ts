@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { dayOfYear, weekOfYear } from '../src/i18n/date/utils.js'
 import {
   addDuration,
