@@ -64,6 +64,17 @@ describe('collections', () => {
     assert(Object.getPrototypeOf(pick(source, ['__proto__'])) === Object.prototype)
   })
 
+  it('count keeps keys with dots or inherited names', () => {
+    const identity = (x) => x
+    assert.deepEqual(count(['1.5', '1.5'], identity), { '1.5': 2 })
+    assert.deepEqual(count(['constructor', 'constructor'], identity), { constructor: 2 })
+    assert.deepEqual(count([1, '1'], identity), { '1': 2 })
+
+    const counters = count(['__proto__', '__proto__'], identity)
+    assert(Object.getPrototypeOf(counters) === Object.prototype)
+    assert.deepEqual(Object.entries(counters), [['__proto__', 2]])
+  })
+
   it('clone array', () => {
     let arr = [4, 7, 1, 9]
     assert.deepEqual(clone(arr), arr)
@@ -381,6 +392,22 @@ describe('collections', () => {
 
   it('groupBy', () => {
     assert.deepEqual(groupBy([6.1, 4.2, 6.3], Math.floor), { '4': [4.2], '6': [6.1, 6.3] })
+  })
+
+  it('groupBy accepts keys named after inherited properties', () => {
+    const identity = (x) => x
+    assert.deepEqual(groupBy(['constructor', 'toString'], identity), {
+      constructor: ['constructor'],
+      toString: ['toString']
+    })
+
+    const groups = groupBy(['__proto__', '__proto__'], identity)
+    assert(Object.getPrototypeOf(groups) === Object.prototype)
+    assert.deepEqual(Object.entries(groups), [['__proto__', ['__proto__', '__proto__']]])
+
+    const coerced = groupBy([1], () => ['__proto__'])
+    assert(Object.getPrototypeOf(coerced) === Object.prototype)
+    assert.deepEqual(Object.entries(coerced), [['__proto__', [1]]])
   })
 
   it('map', () => {
