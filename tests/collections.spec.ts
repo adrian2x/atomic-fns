@@ -224,7 +224,13 @@ describe('collections', () => {
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]
-    assert.deepEqual(sortedUniq(difference(a, b)), [1, 2, 3, 4])
+    assert.deepEqual(sortedUniq(difference(a, b)), [1, 2])
+    assert.deepEqual([...difference([2, 1], [2, 3])], [1])
+    assert.deepEqual([...difference([1, 2, 3], [2], [2, 3])], [1])
+  })
+
+  it('difference with no arguments is empty', () => {
+    assert.deepEqual([...difference()], [])
   })
 
   it('intersection', () => {
@@ -237,6 +243,12 @@ describe('collections', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]
     assert.deepEqual(sortedUniq(union(a, b)), [1, 2, 3, 4, 5])
+  })
+
+  it('uniq and union treat null and undefined as empty', () => {
+    assert.deepEqual(uniq(null), [])
+    assert.deepEqual(sortedUniq(undefined), [])
+    assert.deepEqual([...union(null, [1], undefined)], [1])
   })
 
   it('filter', () => {
@@ -550,7 +562,12 @@ describe('collections', () => {
   it('uniqBy', () => {
     let arr = [4, 7, 1, 1, 9, 4, 7]
     let distinct = uniq(arr, (x) => x * 2)
-    assert.deepEqual(distinct, [8, 14, 2, 18])
+    assert.deepEqual(distinct, [4, 7, 1, 9])
+    assert.deepEqual(uniq([2.1, 1.2, 2.3], Math.floor), [2.1, 1.2])
+    const first = { a: 1, b: 1 }
+    assert.deepEqual(uniq([first, { a: 1, b: 2 }], 'a'), [first])
+    assert.deepEqual(sortedUniq([2.3, 1.2, 2.1], Math.floor), [1.2, 2.3])
+    assert(Object.is(uniq([-0])[0], 0))
   })
 
   it('binarySearch', () => {
@@ -644,5 +661,10 @@ describe('collections', () => {
     for (let i = 0; i < 12; i++) shared = { a: shared, b: shared }
     merge({}, { root: shared }, { root: shared })
     assert(reads === 2)
+  })
+
+  it('sortedUniq sorts by the iteratee', () => {
+    assert.deepEqual(sortedUniq([{ id: 2 }, { id: 1 }, { id: 2 }], 'id'), [{ id: 1 }, { id: 2 }])
+    assert.deepEqual(sortedUniq([3.2, 1.1, 3.9], Math.floor), [1.1, 3.2])
   })
 })
