@@ -268,18 +268,22 @@ export function shallowEqual(obj, other): boolean {
  * @returns `true` if the objects are considered equal.
  */
 export function deepEqual(obj, other, checker?: Function, seen?): boolean
-export function deepEqual(obj, other, checker = eq, seen = new WeakSet()): boolean {
+export function deepEqual(obj, other, checker = eq, seen = new WeakMap()): boolean {
+  if (!(seen instanceof WeakMap)) seen = new WeakMap()
   if (checker(obj, other)) return true
   if (!sameKind(obj, other)) return false
   if (isDateOrRegExp(obj)) return sameDateOrRegExp(obj, other)
-  if (seen.has(obj) && seen.has(other)) return false
+  // A pair that was compared before needs no second walk: it either held, or the call has returned.
+  const partners = seen.get(obj) ?? new WeakSet()
+  if (partners.has(other)) return true
+  seen.set(obj, partners.add(other))
 
   if (Array.isArray(obj)) {
     // compare the arrays
     if (obj.length !== other.length) return false
 
     for (let i = 0; i < obj.length; i++) {
-      if (!deepEqual(obj[i], other[i], checker)) {
+      if (!deepEqual(obj[i], other[i], checker, seen)) {
         return false
       }
     }
@@ -298,8 +302,6 @@ export function deepEqual(obj, other, checker = eq, seen = new WeakSet()): boole
   if (obj instanceof Map) {
     // compare keys and values
     if (obj.size !== other.size) return false
-    seen.add(obj)
-    seen.add(other)
     for (const key of obj.keys()) {
       if (!other.has(key)) return false
       if (!deepEqual(obj.get(key), other.get(key), checker, seen)) {
@@ -316,8 +318,6 @@ export function deepEqual(obj, other, checker = eq, seen = new WeakSet()): boole
 
     if (objKeys.length !== otherKeys.length) return false
 
-    seen.add(obj)
-    seen.add(other)
     for (const key of objKeys) {
       if (
         !Object.prototype.hasOwnProperty.call(other, key) ||
