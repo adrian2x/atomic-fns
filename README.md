@@ -36,7 +36,7 @@ Just import any function or class you need.
 ```js
 import { sorted, times, uniqueId } from 'atomic-fns'
 
-times(5, (i) => i)
+[...times(5, (i) => i)]
 // -> [0, 1, 2, 3, 4]
 
 sorted([4, 3, 2, 1])
@@ -90,6 +90,39 @@ Some common base interfaces and typing patterns you may have seen like `Optional
   - [FrozenSet](https://atomic-stack.github.io/atomic-fns/classes/collections.FrozenSet.html)
   - [LRUCache](https://atomic-stack.github.io/atomic-fns/classes/collections.LRUCache.html)
 
+
+## Upgrading to 1.2
+
+1.2 removes the exports that only repeated a native function, along with the deprecated `id` and the experimental `cache` decorator.
+
+| Removed                         | Use instead                            |
+| ------------------------------- | -------------------------------------- |
+| `isArray`                       | `Array.isArray`                        |
+| `isInteger`                     | `Number.isInteger`                     |
+| `keys`, `values`                | `Object.keys`, `Object.values`         |
+| `bind`                          | `Function.prototype.bind`              |
+| `callAsync`                     | `new Promise`                          |
+| `floor`, `ceil`, `log2`         | `Math.floor`, `Math.ceil`, `Math.log2` |
+| `cloneArray`, `cloneTypedArray` | `clone`, `structuredClone`, `slice`    |
+| `IterableIterator`              | `Iterator.from`                        |
+| `id`                            | `identity`                             |
+| `cache`                         | `memoize`                              |
+
+The rest of 1.2 fixes bugs. These fixes change results that code may have worked around:
+
+- `eq`, `lt`, `lte`, `gt` and `gte` now ask an object's own method first and honor a `false` answer, so comparing two `Decimal` values gives the right answer. `eq(0, -0)` is `true`.
+- `deepEqual` and `shallowEqual` tell kinds apart, and compare Dates, RegExps and typed arrays by value.
+- `merge` copies plain objects from its sources and skips `__proto__`, so it no longer changes a source or `Object.prototype`.
+- `difference` removes the values of the other arrays, where it returned a symmetric difference.
+- `uniq` with an iteratee returns the original elements, not the computed keys, and `sortedUniq` sorts them by that key.
+- `memoize` caches an `undefined` result.
+- `divmod` follows Python, so the quotient and remainder add back up to the input.
+- `bisect` and `insort` find the right position in every case.
+- `Deque.set` throws `KeyError` past the end, where the value was lost.
+- A frozen `BTree` refuses `remove`, as it does `set`.
+- `IntlDate` adds months with a clamp to the last day of the month, keeps the wall clock across DST for calendar units, and `diff` counts calendar months, quarters and years. `exact` keeps the averaged result.
+- `addDuration` and `subDuration` read a date-only string as local time, as `IntlDate` does.
+- `format('Z')` prints the numeric offset, such as `-05:00`.
 
 ## Contributing
 If you want to contribute to the project and make it better, your help is very welcome. Contributing is also a great way to learn more about social coding on Github, new technologies and and their ecosystems and how to make constructive, helpful bug reports, feature requests and the noblest of all contributions: a good, clean pull request. You will be listed as a **Champion** on the official site as well.
