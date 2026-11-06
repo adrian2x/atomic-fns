@@ -203,4 +203,29 @@ describe('BTree', () => {
       assert.deepEqual(nextSeen, [4, 2])
     }
   })
+
+  it('keeps its size when the comparator cannot order a key', () => {
+    const tree = new BTree(undefined, (x, y) => x - y)
+    tree.set(Number.NaN, 'nan')
+    assert(tree.set(1, 'one') === true)
+    assert(tree.size === 2)
+    assert(tree.get(0, 'none') === 'none')
+    assert(tree.remove(0) === false)
+    assert(tree.size === 2)
+  })
+
+  it('freeze blocks every mutator', () => {
+    const tree = new BTree()
+    for (let i = 10; i > 0; i--) {
+      tree.set(i, i)
+    }
+    tree.freeze()
+    assert.throws(() => tree.remove(1), TypeError)
+    assert.throws(() => tree.removeRange(1, 5, true), TypeError)
+    assert.throws(() => tree.removeKeys([1, 2]), TypeError)
+    assert.throws(() => tree.rangeUpdate(1, 5, true, () => ({ value: 0 })), TypeError)
+    assert.throws(() => tree.extend([[11, 11]]), TypeError)
+    assert(tree.size === 10)
+    assert(tree.get(1) === 1)
+  })
 })
