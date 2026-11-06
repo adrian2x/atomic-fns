@@ -141,4 +141,11 @@ describe('SortedMap', () => {
       ]
     )
   })
+
+  it('add keeps the value of an existing key', () => {
+    let tree = new SortedMap([['a', 1]])
+    tree.add('a')
+    assert(tree.get('a') === 1)
+    assert(tree.size === 1)
+  })
 })

@@ -31,7 +31,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @returns {this} Returns the Map object.
    */
   add(key: K): this {
-    this.store.set(key, null as V)
+    this.store.add(key)
     return this
   }
 
