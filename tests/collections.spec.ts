@@ -196,6 +196,31 @@ describe('collections', () => {
     assert(clone(frozen) === frozen)
   })
 
+  it('clone deep accepts functions and symbols in arrays', () => {
+    const fn = () => 1
+    const symbol = Symbol('s')
+    const inner = { fn, list: [1] }
+    const copy = clone([fn, symbol, inner], true) as [typeof fn, symbol, typeof inner]
+    assert(copy[0] === fn)
+    assert(copy[1] === symbol)
+    assert(copy[2] !== inner)
+    assert(copy[2].fn === fn)
+    assert(copy[2].list !== inner.list)
+
+    const cyclic: unknown[] = [fn]
+    cyclic.push(cyclic)
+    const cycleCopy = clone(cyclic, true)
+    assert(cycleCopy !== cyclic)
+    assert(cycleCopy[1] === cycleCopy)
+  })
+
+  it('clone deep still uses structuredClone for arrays it accepts', () => {
+    const item = {}
+    const copy = clone([item, item, new Date(0)], true)
+    assert(copy[0] === copy[1])
+    assert(copy[2] instanceof Date)
+  })
+
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]
