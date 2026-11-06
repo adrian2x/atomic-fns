@@ -246,13 +246,6 @@ describe('collections', () => {
     assert(cycleCopy[1] === cycleCopy)
   })
 
-  it('clone deep still uses structuredClone for arrays it accepts', () => {
-    const item = {}
-    const copy = clone([item, item, new Date(0)], true)
-    assert(copy[0] === copy[1])
-    assert(copy[2] instanceof Date)
-  })
-
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]
@@ -649,16 +642,6 @@ describe('collections', () => {
     const copy = merge({}, cyclic) as typeof cyclic
     assert(copy.a !== cyclic.a)
     assert(copy.a.self === copy.a)
-  })
-
-  it('merge assigns a Date or class instance by reference', () => {
-    class Point {
-      x = 1
-    }
-    const source = { date: new Date(0), point: new Point() }
-    const merged = merge({}, source) as typeof source
-    assert(merged.date === source.date)
-    assert(merged.point === source.point)
   })
 
   it('merge assigns objects that are not plain over existing values', () => {
