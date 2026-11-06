@@ -7,8 +7,11 @@
     "rootDir": "src",
     "outDir": "./dist",
     "strict": false,
+    "erasableSyntaxOnly": true,
     "noImplicitOverride": true,
+    "noUncheckedSideEffectImports": true,
     "noUnusedLocals": true,
+    "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true
   },
   "include": ["src"],
