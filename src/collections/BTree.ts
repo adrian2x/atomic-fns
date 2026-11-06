@@ -438,7 +438,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   add(key: K): boolean {
-    return this.set(key, null as V)
+    return this.set(key, this.get(key, null as V))
   }
 
   /**
@@ -537,16 +537,15 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     reusedArray?: Array<K | V>,
     skipHighest?: boolean
   ): IterableIterator<[K, V]> {
-    if (highestKey === undefined) {
-      highestKey = this.maxKey()
-      skipHighest = undefined
-      if (highestKey === undefined) return iterator<[K, V]>() // collection is empty
-    }
     // eslint-disable-next-line
-    let { nodequeue, nodeindex, leaf } = this.findPath(highestKey)! || this.findPath(this.maxKey())!
+    let { nodequeue, nodeindex, leaf } =
+      this.findPath(highestKey, true)! || this.findPath(undefined, true)!
     assert(!nodequeue[0] || leaf === nodequeue[0][nodeindex[0]], 'wat!')
-    let i = leaf.indexOf(highestKey, 0, this._compare)
-    if (!skipHighest && i < leaf.keys.length && this._compare(leaf.keys[i], highestKey) <= 0) i++
+    let i = leaf.keys.length
+    if (highestKey !== undefined) {
+      i = leaf.indexOf(highestKey, 0, this._compare)
+      if (!skipHighest && i < leaf.keys.length && this._compare(leaf.keys[i], highestKey) <= 0) i++
+    }
     let state = reusedArray !== undefined ? 1 : 0
 
     return iterator<[K, V]>(() => {
@@ -609,7 +608,8 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    * @private
    */
   private findPath(
-    key?: K
+    key?: K,
+    fromEnd = false
   ): { nodequeue: Array<Array<BNode<K, V>>>; nodeindex: number[]; leaf: BNode<K, V> } | undefined {
     let nextnode = this.root
     let nodequeue: Array<Array<BNode<K, V>>>, nodeindex: number[]
@@ -623,7 +623,8 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
       nodeindex = []
       for (let d = 0; !nextnode.isLeaf; d++) {
         nodequeue[d] = (nextnode as BNodeInternal<K, V>).children
-        nodeindex[d] = key === undefined ? 0 : nextnode.indexOf(key, 0, this._compare)
+        if (key !== undefined) nodeindex[d] = nextnode.indexOf(key, 0, this._compare)
+        else nodeindex[d] = fromEnd ? nodequeue[d].length - 1 : 0
         if (nodeindex[d] >= nodequeue[d].length) return // first key > maxKey()
         nextnode = nodequeue[d][nodeindex[d]]
       }
@@ -700,11 +701,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
 
   /** Gets an array filled with the contents of the tree, sorted by key */
   toArray(): Array<[K, V]> {
-    const min = this.minKey()
-    const max = this.maxKey()
-    const maxLength = 2147483647
-    if (min !== undefined) return this.keysRange(min, max, true, maxLength)
-    return []
+    return [...this.entries()]
   }
 
   /** Gets a string representing the tree's data based on toArray(). */
@@ -1168,8 +1165,8 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     }
 
     const result = child.set(key, value, overwrite, tree)
-    if (result === false) return false
     this.keys[i] = child.maxKey()
+    if (result === false) return false
     if (result === true) return true
 
     // The child has split and `result` is a new right child... does it fit?
