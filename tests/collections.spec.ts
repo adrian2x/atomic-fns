@@ -43,6 +43,23 @@ describe('collections', () => {
     )
   })
 
+  it('copies keep a __proto__ key as data', () => {
+    const source = JSON.parse('{"__proto__": {"admin": true}, "a": 1}')
+    const copies = [
+      clone(source),
+      clone(source, true),
+      compact(source),
+      pick(source, () => true),
+      omit(source, ['b']),
+      omit(source, () => false)
+    ]
+    for (const copy of copies) {
+      assert(Object.getPrototypeOf(copy) === Object.prototype)
+      assert.deepEqual(Object.keys(copy), ['__proto__', 'a'])
+    }
+    assert(Object.getPrototypeOf(pick(source, ['__proto__'])) === Object.prototype)
+  })
+
   it('clone array', () => {
     let arr = [4, 7, 1, 9]
     assert.deepEqual(clone(arr), arr)
@@ -232,6 +249,25 @@ describe('collections', () => {
       foo: null,
       bar: true
     })
+  })
+
+  it('merge skips __proto__ keys', () => {
+    try {
+      merge({}, JSON.parse('{"__proto__": {"polluted": 1}}'))
+      merge({ a: {} }, JSON.parse('{"a": {"__proto__": {"polluted": 1}}}'))
+      assert(!('polluted' in {}))
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'polluted')
+    }
+    assert(Object.getPrototypeOf(merge({}, JSON.parse('{"__proto__": null}'))) === Object.prototype)
+    assert(Object.getPrototypeOf(merge({}, JSON.parse('{"__proto__": [1]}'))) === Object.prototype)
+    assert.deepEqual(Object.keys(merge({}, JSON.parse('{"__proto__": 1, "a": 2}'))), ['a'])
+  })
+
+  it('merge keeps a constructor key as data', () => {
+    const merged = merge({}, JSON.parse('{"constructor": {"prototype": {"polluted": 1}}}'))
+    assert(!('polluted' in {}))
+    assert.deepEqual(Object.keys(merged), ['constructor'])
   })
 
   it('pick', () => {

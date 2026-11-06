@@ -34,6 +34,15 @@ export * from './SortedTree.js'
 export * from './SplayTree.js'
 export * from './Trie.js'
 
+/** Assigns `key`, defining it where a plain write would set the prototype instead. */
+function setOwn(obj, key, value) {
+  if (typeof key === 'string' && key !== '__proto__') {
+    obj[key] = value
+  } else {
+    Object.defineProperty(obj, key, { value, enumerable: true, writable: true, configurable: true })
+  }
+}
+
 /**
  * Creates a new array with all falsy and empty values removed.
  * @param arr The array to compact
@@ -52,7 +61,7 @@ export function compact<T>(arr: T | T[]): T[] | Partial<T> {
   const result = {}
   for (const key of Object.keys(arr)) {
     if (!isEmpty(arr[key])) {
-      result[key] = arr[key]
+      setOwn(result, key, arr[key])
     }
   }
   return result
@@ -475,14 +484,14 @@ export function pick<T>(obj: T, paths: Iteratee | PropertyKey[]): Partial<T> {
   if (isFunction(paths)) {
     for (const key of Object.keys(obj)) {
       if (paths(obj[key], key)) {
-        result[key] = obj[key]
+        setOwn(result, key, obj[key])
       }
     }
     return result
   }
 
   for (const key of paths) {
-    result[key] = get(key, obj)
+    if (key !== '__proto__') result[key] = get(key, obj)
   }
   return result
 }
@@ -514,17 +523,17 @@ export function omit<T>(obj: T, paths: Iteratee | PropertyKey[]): Partial<T> {
   if (isFunction(paths)) {
     for (const key of Object.keys(obj)) {
       if (!paths(obj[key], key)) {
-        result[key] = obj[key]
+        setOwn(result, key, obj[key])
       }
     }
     return result
   }
 
-  Object.assign(result, obj)
+  const kept: Partial<T> = { ...obj }
   for (const key of paths) {
-    delete result[key]
+    delete kept[key]
   }
-  return result
+  return kept
 }
 
 /**
@@ -705,9 +714,9 @@ export function clone(value, deep = false) {
     const copy = {}
     for (const key in value) {
       if (deep) {
-        copy[key] = clone(value[key], deep)
+        setOwn(copy, key, clone(value[key], deep))
       } else {
-        copy[key] = value[key]
+        setOwn(copy, key, value[key])
       }
     }
     return copy
@@ -830,6 +839,7 @@ function baseMergeDeep(obj, source, key, stack) {
 function baseMerge(obj, source, stack?) {
   if (obj === source) return obj
   for (const key of Object.keys(source)) {
+    if (key === '__proto__') continue
     const srcValue = source[key]
     const objValue = obj[key]
     if (typeof srcValue === 'object' && srcValue !== null) {
