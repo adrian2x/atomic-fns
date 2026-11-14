@@ -1,4 +1,5 @@
 /**
+ * String helpers: `words`.
  * @module string
  */
-export {}
+export { words } from './words.ts'
