@@ -66,6 +66,12 @@ function isNonPrimitive(value: unknown): value is object {
   return Object(value) === value
 }
 
+function assertOptions(options: unknown): void {
+  if (options !== undefined && !isNonPrimitive(options)) {
+    throw new TypeError('options must be an object')
+  }
+}
+
 /** A `-0` key is stored as `+0`, as `Map` does. */
 function positiveZero<K>(key: K): K {
   return key === 0 ? (0 as K) : key
@@ -83,11 +89,21 @@ function readEntries<K, V>(entries: Iterable<readonly [K, V]>): { keys: K[]; val
   return { keys, values }
 }
 
+function resolveLimit(limit: number | undefined): number {
+  if (limit === undefined || limit === Infinity) return Infinity
+  if (typeof limit !== 'number') throw new TypeError('limit must be a number')
+  if (!Number.isInteger(limit) || limit < 0) {
+    throw new RangeError('limit must be a non-negative integer or Infinity')
+  }
+  return limit
+}
+
 /**
  * A map whose keys stay sorted, on a copy-on-write B+ tree with subtree counts. It has `Map`'s
  * method names and iterates in key order, adds order queries (`firstKey`, `lastKey`, `lower`,
- * `higher`, `floor`, `ceiling`) and position queries (`at`, `rank`), and clones in O(1): a clone
- * shares nodes with its source until either one writes. Keys the comparator calls equal are the
+ * `higher`, `floor`, `ceiling`), position queries (`at`, `rank`) and range operations
+ * (`entriesBetween`, `updateRange`, `removeRange`), and clones in O(1): a clone shares nodes with
+ * its source until either one writes. Keys the comparator calls equal are the
  * same key, and a `-0` key is stored as `+0`, as `Map` does. With the default comparator, keys are
  * numbers, bigints or strings: `NaN` throws `RangeError`, and `null`, `undefined` and other values
  * throw `TypeError`; pass a comparator to order them.
@@ -327,6 +343,104 @@ export class SortedMap<K = unknown, V = unknown> {
   /** The entry with the greatest key at or below `key`, or `undefined`. */
   floor(key: K): [K, V] | undefined {
     return this.#entryAt(this.#seek(DESCENDING, { key, exclusive: false }))
+  }
+
+  /**
+   * The entries whose keys lie in `[from, to)`, or `[from, to]` with `inclusiveEnd`, in key order.
+   * @param options `inclusiveEnd` includes `to` (default false); `limit` caps how many entries are
+   * collected (a non-negative integer or `Infinity`, the default).
+   * @throws {TypeError} when `limit` is not a number.
+   * @throws {RangeError} when `limit` is negative or not an integer.
+   * @example
+   * ```ts
+   * new SortedMap([[1, 'a'], [2, 'b'], [3, 'c']]).entriesBetween(1, 3) // [[1, 'a'], [2, 'b']]
+   * ```
+   */
+  entriesBetween(from: K, to: K, options?: { inclusiveEnd?: boolean; limit?: number }): [K, V][] {
+    assertOptions(options)
+    const limit = resolveLimit(options?.limit)
+    if (limit === 0) return []
+    const out: [K, V][] = []
+    for (const entry of this.#range(from, to, options?.inclusiveEnd === true)) {
+      out.push(entry)
+      if (out.length >= limit) break
+    }
+    return out
+  }
+
+  /**
+   * Visit the entries whose keys lie in `[from, to)`, or `[from, to]` with `inclusiveEnd`, in key
+   * order, and change them in one atomic step: if `update` or the comparator throws, the map is
+   * left as it was. `update(value, key, map)` returns `{ replace: value }`, `{ remove: true }`,
+   * either with `stop: true` to end after this entry, `{ stop: true }`, or `null`/`undefined` to
+   * leave the entry alone.
+   * @returns The number of entries visited.
+   * @throws {TypeError} when `update` returns a primitive, an object with none of `replace`,
+   * `remove` and `stop`, or both `replace` and a truthy `remove`.
+   * @example
+   * ```ts
+   * const stock = new SortedMap([['apple', 3], ['pear', 0]])
+   * stock.updateRange('a', 'z', (n) => (n === 0 ? { remove: true } : { replace: n - 1 }))
+   * ;[...stock] // [['apple', 2]]
+   * ```
+   */
+  updateRange(
+    from: K,
+    to: K,
+    update: (
+      value: V,
+      key: K,
+      map: this
+    ) =>
+      | { replace: V; stop?: true }
+      | { remove: true; stop?: true }
+      | { stop: true }
+      | null
+      | undefined,
+    options?: { inclusiveEnd?: boolean }
+  ): number {
+    assertOptions(options)
+    const range = this.#range(from, to, options?.inclusiveEnd === true)
+    let next = range.next()
+    // An empty range writes nothing, so it keeps the copy-on-write token and later writes in place.
+    if (next.done === true) return 0
+    return this.#atomic(() => {
+      let visited = 0
+      for (; next.done !== true; next = range.next()) {
+        const [k, v] = next.value
+        visited++
+        const r = update(v, k, this)
+        if (r == null) continue
+        if (!isNonPrimitive(r)) {
+          throw new TypeError('update must return an object, null or undefined')
+        }
+        if (!('replace' in r || 'remove' in r || 'stop' in r)) {
+          throw new TypeError('update must return { replace }, { remove } or { stop }')
+        }
+        const remove = 'remove' in r && r.remove
+        if (remove && 'replace' in r) {
+          throw new TypeError('an update cannot both replace and remove')
+        }
+        if (remove) this.delete(k)
+        else if ('replace' in r) this.set(k, r.replace)
+        if ('stop' in r && r.stop) break
+      }
+      return visited
+    })
+  }
+
+  /**
+   * Remove the entries whose keys lie in `[from, to)`, or `[from, to]` with `inclusiveEnd`, in one
+   * atomic step: a comparator that throws leaves the map unchanged.
+   * @returns The number of entries removed.
+   * @example
+   * ```ts
+   * const log = new SortedMap([[1, 'a'], [5, 'b'], [9, 'c']])
+   * log.removeRange(0, 5, { inclusiveEnd: true }) // 2
+   * ```
+   */
+  removeRange(from: K, to: K, options?: { inclusiveEnd?: boolean }): number {
+    return this.updateRange(from, to, () => ({ remove: true }), options)
   }
 
   /**
@@ -671,6 +785,30 @@ export class SortedMap<K = unknown, V = unknown> {
         this.#version === seenVersion
           ? this.#step(cursor, direction)
           : this.#seek(direction, { key: k, exclusive: true })
+    }
+  }
+
+  /** The entries from `from` up to `to`, in key order; it re-seeks after the map changes. */
+  *#range(from: K, to: K, inclusiveEnd: boolean): Generator<[K, V], void, unknown> {
+    if (this.#cmp(from, to) > 0) return
+    for (const entry of this.#walk(ASCENDING, { key: from, exclusive: false })) {
+      const c = this.#cmp(entry[0], to)
+      if (inclusiveEnd ? c > 0 : c >= 0) return
+      yield entry
+    }
+  }
+
+  #atomic<T>(fn: () => T): T {
+    const snapshotRoot = this.#root
+    const snapshotSize = this.#size
+    this.#token = {}
+    try {
+      return fn()
+    } catch (err) {
+      this.#root = snapshotRoot
+      this.#size = snapshotSize
+      this.#version++
+      throw err
     }
   }
 
