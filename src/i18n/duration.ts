@@ -198,7 +198,7 @@ export class Duration {
     return this.values.hours || 0
   }
 
-  /** et the minutes. */
+  /** Get the minutes. */
   get minutes() {
     return this.values.minutes || 0
   }
@@ -216,9 +216,9 @@ export class Duration {
   /**
    * Get the value of unit.
    * @param {string} unit - a unit such as 'minute' or 'day'
-   * @example Duration.fromObject({years: 2, days: 3}).get('years') // 2
-   * @example Duration.fromObject({years: 2, days: 3}).get('months') // 0
-   * @example Duration.fromObject({years: 2, days: 3}).get('days') // 3
+   * @example new Duration({years: 2, days: 3}).get('years') // 2
+   * @example new Duration({years: 2, days: 3}).get('months') // 0
+   * @example new Duration({years: 2, days: 3}).get('days') // 3
    * @return {number}
    */
   get(unit: string): number {
@@ -379,11 +379,11 @@ new Duration({ hours: 1, seconds: -30 }).abs().toObject()
   /**
    * Returns an ISO 8601-compliant string representation of this Duration.
    * @see https://en.wikipedia.org/wiki/ISO_8601#Durations
-   * @example Duration.fromObject({ years: 3, seconds: 45 }).toString() // 'P3YT45S'
-   * @example Duration.fromObject({ months: 4, seconds: 45 }).toString() // 'P4MT45S'
-   * @example Duration.fromObject({ months: 5 }).toString() // 'P5M'
-   * @example Duration.fromObject({ minutes: 5 }).toString() // 'PT5M'
-   * @example Duration.fromObject({ milliseconds: 6 }).toString() // 'PT0.006S'
+   * @example new Duration({ years: 3, seconds: 45 }).toString() // 'P3YT45S'
+   * @example new Duration({ months: 4, seconds: 45 }).toString() // 'P4MT45S'
+   * @example new Duration({ months: 5 }).toString() // 'P5M'
+   * @example new Duration({ minutes: 5 }).toString() // 'PT5M'
+   * @example new Duration({ milliseconds: 6 }).toString() // 'PT0.006S'
    * @return {string}
    */
   toISOString() {
