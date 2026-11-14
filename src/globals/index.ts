@@ -184,7 +184,7 @@ export function isPromise(x): x is Promise<any> {
 
 /** Check if value is a function type. */
 export function isFunction(x): x is Function {
-  return x?.constructor === Function
+  return typeof x === 'function'
 }
 
 /** Check if value is an async function type. */
