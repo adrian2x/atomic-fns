@@ -12,6 +12,11 @@ import {
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })
 
+const at = (year, month, day, hour = 0, minute = 0) =>
+  mockDate(new Date(year, month, day, hour, minute))
+
+const clock = (date: IntlDate) => date.format('YYYY-MM-DD HH:mm Z')
+
 const inZone = (zone: string, test: () => void) => {
   const previous = process.env.TZ
   process.env.TZ = zone
@@ -569,6 +574,54 @@ describe('IntlDate', () => {
     assert.strictEqual(end('2021-08-31', 'month'), '2021-08-31')
     assert.strictEqual(end('2021-03-31', 'quarter'), '2021-03-31')
     assert.strictEqual(end('2021-12-31', 'quarter'), '2021-12-31')
+  })
+
+  it('calendar units keep the wall clock across DST', () => {
+    inZone('America/New_York', () => {
+      assert.strictEqual(clock(at(2021, 2, 13, 12).add({ days: 1 })), '2021-03-14 12:00 -04:00')
+      assert.strictEqual(clock(at(2021, 2, 13, 12).add({ weeks: 1 })), '2021-03-20 12:00 -04:00')
+      assert.strictEqual(clock(at(2021, 0, 15, 12).add({ months: 6 })), '2021-07-15 12:00 -04:00')
+      assert.strictEqual(
+        clock(at(2021, 6, 15, 12).subtract({ months: 6 })),
+        '2021-01-15 12:00 -05:00'
+      )
+      assert.strictEqual(clock(at(2021, 10, 6, 12).add({ days: 1 })), '2021-11-07 12:00 -05:00')
+      assert.strictEqual(clock(at(2021, 2, 13, 2, 30).add({ days: 1 })), '2021-03-14 03:30 -04:00')
+    })
+
+    inZone('Pacific/Auckland', () => {
+      assert.strictEqual(clock(at(2021, 8, 25, 12).add({ days: 1 })), '2021-09-26 12:00 +13:00')
+      assert.strictEqual(clock(at(2021, 3, 3, 12).add({ days: 1 })), '2021-04-04 12:00 +12:00')
+    })
+  })
+
+  it('time units count exact time across DST', () => {
+    inZone('America/New_York', () => {
+      assert.strictEqual(clock(at(2021, 2, 14, 1, 30).add({ hours: 1 })), '2021-03-14 03:30 -04:00')
+      assert.strictEqual(
+        clock(at(2021, 2, 14, 1, 30).add({ minutes: 30 })),
+        '2021-03-14 03:00 -04:00'
+      )
+      assert.strictEqual(
+        clock(at(2021, 2, 14, 3, 30).subtract({ hours: 1 })),
+        '2021-03-14 01:30 -05:00'
+      )
+      assert.strictEqual(clock(at(2021, 10, 7, 0, 30).add({ hours: 2 })), '2021-11-07 01:30 -05:00')
+
+      const secondPass = mockDate(new Date('2021-11-07T06:30:00Z'))
+      assert.strictEqual(clock(secondPass.add({ minutes: 10 })), '2021-11-07 01:40 -05:00')
+      assert.strictEqual(clock(secondPass.subtract({ hours: 1 })), '2021-11-07 01:30 -04:00')
+      assert.strictEqual(clock(secondPass.add({ days: 0, hours: 1 })), '2021-11-07 02:30 -05:00')
+    })
+  })
+
+  it('endOf stays in the current day and month across DST', () => {
+    const end = (date: IntlDate, unit) => date.endOf(unit).format('YYYY-MM-DD HH:mm:ss.SSS')
+    inZone('America/New_York', () => {
+      assert.strictEqual(end(at(2021, 10, 7, 0, 30), 'day'), '2021-11-07 23:59:59.999')
+      assert.strictEqual(end(at(2021, 2, 13, 23, 30), 'day'), '2021-03-13 23:59:59.999')
+      assert.strictEqual(end(at(2021, 10, 1, 0, 30), 'month'), '2021-11-30 23:59:59.999')
+    })
   })
 
   it('strftime format', () => {

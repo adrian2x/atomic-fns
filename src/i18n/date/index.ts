@@ -528,29 +528,18 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
   }
 }
 
-// Check if the new offset is different because we crossed to DST
-function fixOffset(startDate: Date, endDate: Date) {
-  const startOffset = startDate.getTimezoneOffset()
-  const endOffset = endDate.getTimezoneOffset()
-  if (startOffset === endOffset) return new Date(endDate)
-  const postoffset = (startOffset - endOffset) * 60 * 1000
-  return new Date(+endDate + postoffset)
-}
-
 export function addDuration(
   date: number | string | Date,
   duration: number | Duration | TDuration,
   exact = false
 ): Date {
-  // Get the current offset of this date timezone
   const newDate = new Date(date)
   // Get the number of ticks forward
   const { values } = new Duration(duration, exact).normalize()
-  // Apply any time changes that may have happened
   for (const unit in values) {
     setDateUnit(newDate, unit, Math.floor(values[unit]))
   }
-  return fixOffset(new Date(date), newDate)
+  return newDate
 }
 
 function addMonths(date: Date, months: number) {
@@ -561,6 +550,9 @@ function addMonths(date: Date, months: number) {
 }
 
 function setDateUnit(date: Date, unit: string, value: number) {
+  // writing a date field again would move a repeated hour to its first pass
+  if (value === 0) return date
+
   switch (unit) {
     case 'years':
       addMonths(date, value * 12)
@@ -583,19 +575,19 @@ function setDateUnit(date: Date, unit: string, value: number) {
       break
 
     case 'hours':
-      date.setHours(date.getHours() + value)
+      date.setTime(date.getTime() + value * 36e5)
       break
 
     case 'minutes':
-      date.setMinutes(date.getMinutes() + value)
+      date.setTime(date.getTime() + value * 6e4)
       break
 
     case 'seconds':
-      date.setSeconds(date.getSeconds() + value)
+      date.setTime(date.getTime() + value * 1e3)
       break
 
     case 'milliseconds':
-      date.setMilliseconds(date.getMilliseconds() + value)
+      date.setTime(date.getTime() + value)
       break
 
     default:
