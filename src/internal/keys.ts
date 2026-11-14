@@ -13,3 +13,13 @@ export function enumerableKeys(value: object): (string | symbol)[] {
   if (symbols.length === 0) return Object.keys(value)
   return [...Object.keys(value), ...symbols.filter((key) => isEnumerable(value, key))]
 }
+
+/**
+ * Location keys JavaScriptCore puts on every error as own enumerable properties, like `stack`, so
+ * `isEqual` and `hash` leave them out of an error's content.
+ */
+export const ERROR_LOCATION_KEYS: ReadonlySet<PropertyKey> = new Set([
+  'line',
+  'column',
+  'sourceURL'
+])
