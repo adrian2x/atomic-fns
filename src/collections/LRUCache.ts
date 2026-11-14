@@ -24,14 +24,14 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
    * @returns {this}
    */
   set(key: K, value: V): this {
-    if (this.items.size === this.maxSize) {
+    // Delete the previous key to update the new insertion order
+    this.items.delete(key)
+    this.items.set(key, value)
+    if (this.items.size > this.maxSize) {
       // Because ES6 maps remember insertion order, we can evict the first key
       const lastKey = this.items.keys().next().value
       this.items.delete(lastKey)
     }
-    // Delete the previous key to update the new insertion order
-    this.items.delete(key)
-    this.items.set(key, value)
     return this
   }
 

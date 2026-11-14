@@ -193,4 +193,39 @@ describe('LRUCache', () => {
       [3, 3]
     ])
   })
+
+  it('overwriting a key at capacity evicts nothing', () => {
+    let cache = new LRUCache(2)
+    cache.set(1, 'foo')
+    cache.set(2, 'bar')
+    cache.set(2, 'baz')
+    assert(cache.size === 2)
+    assert.deepEqual(
+      [...cache.entries()],
+      [
+        [1, 'foo'],
+        [2, 'baz']
+      ]
+    )
+    cache.set(1, 'qux')
+    assert.deepEqual(
+      [...cache.entries()],
+      [
+        [2, 'baz'],
+        [1, 'qux']
+      ]
+    )
+  })
+
+  it('never holds more than its capacity', () => {
+    for (const capacity of [0, -1, 2.5]) {
+      let cache = new LRUCache(capacity)
+      for (let i = 0; i < 100; i++) {
+        cache.set(i, i)
+        assert(cache.size <= Math.max(capacity, 0))
+      }
+    }
+    assert(new LRUCache(0).set(1, 1).get(1) === undefined)
+    assert.deepEqual([...new LRUCache(2.5).set(1, 1).set(2, 2).set(3, 3).keys()], [2, 3])
+  })
 })
