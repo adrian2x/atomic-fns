@@ -815,12 +815,16 @@ uniq([2.1, 1.2, 2.3], Math.floor)
 export function uniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
 export function uniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
 export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
-  const keys = new Set<T>()
+  const keys = new Set()
+  const results: T[] = []
   const it = isFunction(fn) ? fn : (x) => get(fn, x)
-  for (const x of arr) {
-    keys.add(it(x))
+  for (const x of arr ?? []) {
+    const key = it(x)
+    if (keys.has(key)) continue
+    keys.add(key)
+    results.push(Object.is(x, -0) ? (0 as T) : x)
   }
-  return Array.from(keys.values())
+  return results
 }
 
 /**
@@ -838,9 +842,8 @@ uniq([2, 1, 2])
 export function sortedUniq<T>(arr: Iterable<T>, fn?: Iteratee<T>): T[]
 export function sortedUniq<T>(arr: Iterable<T>, fn?: PropertyKey): T[]
 export function sortedUniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identity): T[] {
-  const values = uniq(arr, fn as Iteratee<T>)
-  values.sort(compare)
-  return values
+  const it = isFunction(fn) ? fn : (x) => get(fn, x)
+  return uniq(arr, it).sort((x, y) => compare(it(x), it(y)))
 }
 
 /** True for an object made by `{}`, `JSON.parse` or `Object.create(null)`, in any realm. */
@@ -983,11 +986,11 @@ export function defaults(object: Object, ...sources: Object[]): Object {
  */
 export function* difference<T>(...args: Array<Iterable<T>>): Generator<T> {
   const sets = args.map((arr) => new Set(arr))
-  const setA = sets[0]
+  const setA = sets[0] ?? new Set<T>()
 
   for (let i = 1; i < sets.length; i++) {
     for (const x of sets[i].values()) {
-      if (!setA.delete(x)) setA.add(x)
+      setA.delete(x)
     }
   }
 
@@ -1039,7 +1042,7 @@ export function* intersection<T>(...args: Array<Iterable<T>>): Generator<T> {
 export function* union<T>(...args: Array<Iterable<T>>): Generator<T> {
   const results = new Set<T>()
   for (const arr of args) {
-    for (const item of arr) {
+    for (const item of arr ?? []) {
       results.add(item)
     }
   }
