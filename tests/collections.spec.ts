@@ -13,6 +13,7 @@ import {
   findLast,
   flatten,
   forEach,
+  FrozenSet,
   groupBy,
   insort,
   insortLeft,
@@ -144,6 +145,55 @@ describe('collections', () => {
     assert(copy !== node)
     assert(copy.name === 'a')
     assert(copy.self === copy)
+  })
+
+  it('clone copies Map and Set', () => {
+    const item = { a: 1 }
+    const map = new Map([['key', item]])
+    const set = new Set([item])
+
+    const mapCopy = clone(map)
+    assert(mapCopy !== map)
+    assert(mapCopy.get('key') === item)
+    const setCopy = clone(set)
+    assert(setCopy !== set)
+    assert(setCopy.has(item))
+
+    const deepMap = clone(map, true)
+    assert(deepMap.get('key') !== item)
+    assert.deepEqual(deepMap.get('key'), item)
+    const [deepItem] = clone(set, true)
+    assert(deepItem !== item)
+    assert.deepEqual(deepItem, item)
+
+    const key = {}
+    assert(clone(new Map([[key, 1]]), true).has(key))
+  })
+
+  it('clone deep keeps a cycle through Map and Set', () => {
+    const map = new Map()
+    map.set('self', map)
+    const mapCopy = clone(map, true)
+    assert(mapCopy !== map)
+    assert(mapCopy.get('self') === mapCopy)
+
+    const set = new Set()
+    set.add(set)
+    const setCopy = clone(set, true)
+    assert(setCopy !== set)
+    assert(setCopy.has(setCopy))
+  })
+
+  it('clone keeps Map and Set subclasses by reference', () => {
+    class Registry extends Map {
+      lookup() {
+        return 1
+      }
+    }
+    const registry = new Registry()
+    assert(clone(registry).lookup() === 1)
+    const frozen = new FrozenSet([1])
+    assert(clone(frozen) === frozen)
   })
 
   it('difference', () => {
