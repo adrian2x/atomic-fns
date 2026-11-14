@@ -296,7 +296,7 @@ class BNode<K, V = any> {
       for (let i = iLow; i < iHigh; i++) {
         const key = keys[i]
         const result = onFound(key, this.values[i], count++)
-        if (result !== undefined) {
+        if (result != null) {
           if (editMode) {
             if (!Object.is(key, keys[i]) || this.isShared)
               throw new Error('BTree illegally changed or cloned in editRange')
@@ -306,7 +306,7 @@ class BNode<K, V = any> {
               tree.count--
               i--
               iHigh--
-            } else if (result.value) {
+            } else if ('value' in Object(result)) {
               this.reifyValues()[i] = result.value
             }
           }
@@ -870,7 +870,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    *        function can return `{value:v}` to change the value associated
    *        with the current key, `{delete:true}` to delete the current pair,
    *        `{done:R}` to stop early with result R, or it can return nothing
-   *        (undefined or {}) to cause no effect and continue iterating.
+   *        (undefined, null or {}) to cause no effect and continue iterating.
    *        `{done:R}` can be combined with one of the other two commands.
    *        The third argument `counter` is the number of items iterated
    *        previously; it equals 0 when `onFound` is called the first time.

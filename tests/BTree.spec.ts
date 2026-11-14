@@ -265,4 +265,29 @@ describe('BTree', () => {
     assert(tree.contains(5.5) === false)
     assert(tree.contains(99) === false)
   })
+
+  it('rangeUpdate stores falsy values', () => {
+    for (const value of [0, '', false, null, undefined]) {
+      const tree = new BTree([[1, 'old']])
+      tree.rangeUpdate(1, 1, true, () => ({ value }))
+      assert(tree.get(1) === value)
+    }
+  })
+
+  it('rangeUpdate ignores a primitive result', () => {
+    const tree = new BTree([[1, 'old']])
+    assert(tree.rangeUpdate(1, 1, true, () => 1) === 1)
+    assert(tree.get(1) === 'old')
+  })
+
+  it('a range callback that returns null changes nothing', () => {
+    const tree = new BTree([
+      [1, 'one'],
+      [2, 'two']
+    ])
+    assert(tree.rangeForEach(1, 2, true, () => null) === 2)
+    assert(tree.rangeUpdate(1, 2, true, () => null) === 2)
+    assert(tree.get(1) === 'one')
+    assert(tree.size === 2)
+  })
 })
