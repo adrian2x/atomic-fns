@@ -81,4 +81,11 @@ describe('SortedSet', () => {
     }
     assert.deepEqual([...tree.values()], [2, 4, 6, 8, 10])
   })
+
+  it('delete uses the comparator', () => {
+    let tree = new SortedSet([{ id: 1 }, { id: 2 }], (x, y) => x.id - y.id)
+    assert(tree.delete({ id: 1 }))
+    assert(tree.size === 1)
+    assert(!tree.has({ id: 1 }))
+  })
 })
