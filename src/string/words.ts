@@ -3,6 +3,8 @@
  * @module
  */
 
+import { isAsciiString, toText } from '../internal/text.ts'
+
 /** Lazy: Intl.Segmenter at module load fails where Intl is incomplete. */
 let wordSegmenter: Intl.Segmenter | undefined
 
@@ -28,19 +30,6 @@ const ORDINAL_LOWER = new Set(['st', 'nd', 'rd', 'th'])
 const ORDINAL_UPPER = new Set(['ST', 'ND', 'RD', 'TH'])
 
 type CharClass = 'U' | 'L' | 'O' | 'D' | 'K' | 'A' | 'X'
-
-/** Lodash `toString`: `null` and `undefined` become `''`, anything else goes through `String`. */
-export function toText(value: unknown): string {
-  return value == null ? '' : String(value)
-}
-
-/** Whether every UTF-16 code unit of `s` is ASCII. */
-export function isAsciiString(s: string): boolean {
-  for (let i = 0; i < s.length; i++) {
-    if (s.charCodeAt(i) > 0x7f) return false
-  }
-  return true
-}
 
 function isAsciiDigit(code: number): boolean {
   return code >= 0x30 && code <= 0x39
