@@ -30,7 +30,7 @@ export function curry(func: Function): Function<ReturnType<typeof func>> {
  * @param {...*} [args] The arguments to apply to `fn`.
  * @returns {Function} Returns the new partially applied function
  */
-export function partial(fn: Function, ...args): Function<ReturnType<typeof fn>> {
+export function partial(fn: Function, ...args: any[]): Function<ReturnType<typeof fn>> {
   return fn.bind(undefined, ...args)
 }
 
@@ -52,7 +52,7 @@ export function flow(...args: Function[]): Function {
  * This is just an alias for the {@link flow} function.
  * @see {@link flow}
  */
-export const pipe = flow
+export const pipe: typeof flow = flow
 
 /**
  * Creates a function composition from a given set of functions that will be each applied on the result of the previous one from right to left.
@@ -215,7 +215,7 @@ export function resultAsync<T = any, E = unknown>(
  * @param {*} thisArg
  * @returns {Function<Promise<T>>} A function that wraps `fun` and returns a `Promise`.
  */
-export function promisify<T>(fun: Function, thisArg?): Function<Promise<T>> {
+export function promisify<T>(fun: Function, thisArg?: any): Function<Promise<T>> {
   const original = thisArg ? fun.bind(thisArg) : fun
   return async (...args) => {
     return await new Promise<T>((resolve, reject) =>

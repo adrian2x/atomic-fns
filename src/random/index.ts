@@ -12,7 +12,7 @@ import { isObject } from '../globals/index.ts'
  * @param {number} max
  * @returns {number}
  */
-export function random(min = 0, max = 1) {
+export function random(min = 0, max = 1): number {
   const value = Math.random() * (max - min) + min
   return value === max ? min : value
 }
@@ -23,7 +23,7 @@ export function random(min = 0, max = 1) {
  * @param {number} max
  * @returns {number}
  */
-export function randomInt(min = 0, max = 1) {
+export function randomInt(min = 0, max = 1): number {
   const low = Math.ceil(Math.min(min, max))
   const high = Math.floor(Math.max(min, max))
   return low + Math.floor(random(0, high - low + 1))
