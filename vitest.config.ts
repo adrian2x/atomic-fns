@@ -6,6 +6,7 @@ process.env.TZ = 'UTC'
 
 export default defineConfig({
   test: {
+    execArgv: ['--expose-gc'],
     globals: true,
     include: ['tests/**/*.spec.ts']
   }

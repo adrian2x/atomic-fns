@@ -7,6 +7,8 @@ import { Mapping } from './abc.js'
 export class LRUCache<K = any, V = any> extends Mapping<K, V> {
   protected items = new Map<K, V>()
   protected maxSize: number
+  // A new iterator would rescan every deleted slot at the front of the Map on each eviction
+  declare private eviction: { keys: Iterator<K>; writes: number }
 
   /**
    * Creates a new instance of fixed size.
@@ -15,6 +17,8 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
   constructor(capacity = 1024) {
     super()
     this.maxSize = capacity
+    // Not enumerable, so two caches compare by their items
+    Object.defineProperty(this, 'eviction', { value: { keys: this.items.keys(), writes: 0 } })
   }
 
   /**
@@ -27,12 +31,22 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
     // Delete the previous key to update the new insertion order
     this.items.delete(key)
     this.items.set(key, value)
+    this.wrote()
     if (this.items.size > this.maxSize) {
       // Because ES6 maps remember insertion order, we can evict the first key
-      const lastKey = this.items.keys().next().value
+      const lastKey = this.eviction.keys.next().value
       this.items.delete(lastKey)
     }
     return this
+  }
+
+  /** An idle Map iterator pins every hash table the Map has outgrown, so it cannot live forever. */
+  private wrote() {
+    const { eviction } = this
+    if (++eviction.writes >= this.items.size) {
+      eviction.writes = 0
+      eviction.keys = this.items.keys()
+    }
   }
 
   /**
@@ -64,6 +78,7 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
       // Delete the previous key to update the new insertion order
       this.items.delete(key)
       this.items.set(key, value)
+      this.wrote()
       return value
     }
   }
