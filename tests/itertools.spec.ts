@@ -354,4 +354,9 @@ describe('operators', () => {
   it('zip yields nothing without iterables', () => {
     assert.deepEqual(take(1, zip()), [])
   })
+
+  it('icompact keeps functions, Dates and RegExps', () => {
+    const values = [() => 1, new Date(0), /x/]
+    assert.deepEqual([...icompact(values)], values)
+  })
 })
