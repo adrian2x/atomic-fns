@@ -66,6 +66,18 @@ describe('operators', () => {
     assert.deepEqual([...it], [true, '', []])
   })
 
+  it('dropWhile stops at the end of the iterable', () => {
+    const seen = []
+    const dropAll = (x) => {
+      seen.push(x)
+      assert(seen.length <= 2)
+      return x !== 5
+    }
+    assert.deepEqual([...dropWhile([1, 2], dropAll)], [])
+    assert.deepEqual(seen, [1, 2])
+    assert.deepEqual([...dropWhile([{ a: 1 }], (x) => x.a)], [])
+  })
+
   it('enumerate', () => {
     let iter = enumerate(['foo', 'bar', 'baz'])
     let values = [...iter]
@@ -262,5 +274,9 @@ describe('operators', () => {
     let [second1, second2] = results[1]
     assert(second1 === users1[1])
     assert(second2 === users2[1])
+  })
+
+  it('zip yields nothing without iterables', () => {
+    assert.deepEqual(take(1, zip()), [])
   })
 })

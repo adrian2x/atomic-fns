@@ -121,8 +121,8 @@ export function* dropWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
   const it = iter<T>(iterable)
   while (true) {
     const head = it.next()
+    if (head.done) return head.value
     if (!predicate(head.value)) {
-      if (head.done) return head.value
       yield head.value
       break
     }
@@ -463,6 +463,7 @@ for item of zip([1, 2, 3], ['sugar', 'spice', 'nice'])
 ```
  */
 export function* zip(...args: Array<Iterable<any>>) {
+  if (args.length === 0) return
   const iterables = args.map(iter)
   while (true) {
     const items = [] as any[]
