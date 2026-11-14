@@ -142,15 +142,6 @@ export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
   }
 }
 
-export function IterableIterator<T = any>(next: Iterator<T>['next']): Iterable<T> & Iterator<T> {
-  return {
-    next,
-    [Symbol.iterator]() {
-      return this
-    }
-  }
-}
-
 /**
  * Yields elements like `[index, item]` from an iterable. Index starts at zero by default.
  * @template T
