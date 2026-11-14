@@ -1,5 +1,5 @@
 import assert from 'assert'
-import { IntlDate, strftime } from '../src/i18n/index.js'
+import { formatDate, IntlDate, strftime } from '../src/i18n/index.js'
 
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })
@@ -412,6 +412,27 @@ describe('IntlDate', () => {
     assert.strictEqual(mockDate(date).format('MMMM Do, YYYY'), 'January 2nd, 2021')
     assert.strictEqual(mockDate(date).format('[Do] DD'), 'Do 02')
     assert.strictEqual(mockDate(date, { locale: 'de-DE' }).format('Do'), '2')
+  })
+
+  it('invalid dates format as Invalid Date', () => {
+    const invalid = mockDate('garbage')
+    assert.strictEqual(formatDate('YYYY', new Date(NaN)), 'Invalid Date')
+    assert.strictEqual(strftime('%y', new Date(NaN)), 'Invalid Date')
+    assert.strictEqual(invalid.format('YYYY'), 'Invalid Date')
+    assert.strictEqual(invalid.zone(), 'Invalid Date')
+    assert.strictEqual(invalid.zoneName(), 'Invalid Date')
+    assert.strictEqual(invalid.inspect(), 'new IntlDate(NaN)')
+  })
+
+  it('era and zone names read their own part in every locale', () => {
+    const date = new Date(2021, 5, 15)
+    assert.strictEqual(formatDate('N', date, 'ja-JP'), '西暦')
+    assert.strictEqual(formatDate('NNNN', date, 'zh-CN'), '公元')
+    assert.strictEqual(formatDate('NNNN', date, 'ko-KR'), '서기')
+    assert.strictEqual(formatDate('N', date, 'th-TH'), 'พ.ศ.')
+    assert.strictEqual(formatDate('z zzz', date, 'th-TH'), 'UTC เวลาสากลเชิงพิกัด')
+    assert.strictEqual(strftime('%n %N', date, 'ja-JP'), '西暦 西暦')
+    assert.strictEqual(strftime('%-Z %Z', date, 'th-TH'), 'UTC เวลาสากลเชิงพิกัด')
   })
 
   it('strftime format', () => {

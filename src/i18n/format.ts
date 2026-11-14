@@ -6,6 +6,7 @@ const REGEX_FORMAT =
   /\[([^\]]+)]|Y{1,4}|M{1,4}|Q|Do|D{1,2}|d{1,4}|H{1,2}|h{1,2}|a|A|m{1,2}|s{1,2}|Z{1,2}|z{1,4}|N{1,4}|LTS?|L{1,4}|l{1,4}|x|X|SSS/g
 
 const FORMAT_DEFAULT = 'YYYY-MM-DDTHH:mm:ssZ'
+const INVALID_DATE_STRING = 'Invalid Date'
 const ORDINAL_SUFFIXES = { one: 'st', two: 'nd', few: 'rd', other: 'th' }
 
 function padStart(string, length, pad) {
@@ -186,9 +187,12 @@ function formatOrdinal(day: number, locale?: string) {
   return isEnglish ? `${day}${ORDINAL_SUFFIXES[rules.select(day)]}` : String(day)
 }
 
-function formatPart(locale, t, date) {
-  const value = formatter(locale, TOKENS[t]).format(date)
-  return value.split(/\s+/g).slice(1).join(' ')
+function formatPart(locale, opts, date, type) {
+  return (
+    formatter(locale, opts)
+      .formatToParts(date)
+      .find((part) => part.type === type)?.value ?? ''
+  )
 }
 
 /**
@@ -201,6 +205,8 @@ formatDate(new Date(), 'MM/DD/YYYY') // '10/31/2022'
 ```
   */
 export function formatDate(formatStr: string, date: Date, locale?: string): string {
+  if (Number.isNaN(date.getTime())) return INVALID_DATE_STRING
+
   const str = formatStr || FORMAT_DEFAULT
   const zoneStr = padZoneStr(date)
 
@@ -222,10 +228,10 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
 
   const matches = {
     ...time,
-    N: formatPart(locale, 'N', date),
-    NN: formatPart(locale, 'NN', date),
-    NNN: formatPart(locale, 'NNN', date),
-    NNNN: formatPart(locale, 'NNNN', date),
+    N: formatPart(locale, TOKENS.N, date, 'era'),
+    NN: formatPart(locale, TOKENS.NN, date, 'era'),
+    NNN: formatPart(locale, TOKENS.NNN, date, 'era'),
+    NNNN: formatPart(locale, TOKENS.NNNN, date, 'era'),
     YY: padStart(Math.abs(date.getFullYear()) % 100, 2, '0'),
     YYYY: padYear(date.getFullYear()),
     M: date.getMonth() + 1,
@@ -241,8 +247,8 @@ export function formatDate(formatStr: string, date: Date, locale?: string): stri
     dddd: formatter(locale, TOKENS.dddd).format(date),
     Z: zoneStr,
     ZZ: zoneStr.replace(':', ''),
-    z: formatPart(locale, 'z', date),
-    zzz: formatPart(locale, 'zzz', date),
+    z: formatPart(locale, TOKENS.z, date, 'timeZoneName'),
+    zzz: formatPart(locale, TOKENS.zzz, date, 'timeZoneName'),
     LT: `${time.h}:${time.mm} ${time.A}`,
     LTS: `${time.h}:${time.mm}:${time.ss} ${time.A}`,
     L: formatter(locale, DATE_SHORT_DD).format(date),
@@ -272,6 +278,8 @@ strftime('%A, %d/%m/%y', new Date())
 ```
  */
 export function strftime(fmt: string, date: Date, locale?: string): string {
+  if (date != null && Number.isNaN(+date)) return INVALID_DATE_STRING
+
   const results: string[] = []
   let dayPeriod: string = ''
   let dayPeriodIndex = -1
@@ -311,9 +319,8 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
       }
 
       if (ERA_PARTS[part] || TZ_PARTS[part]) {
-        // the formatting includes the date/year so we take what comes after
-        const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
-        results.push(res.slice(1).join(' '))
+        const type = ERA_PARTS[part] ? 'era' : 'timeZoneName'
+        results.push(formatPart(locale, STRFTIME[part], date, type))
         continue
       }
 
