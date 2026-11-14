@@ -33,8 +33,12 @@ export class CustomError extends Error {
   constructor(message?: string, options?: ErrorOptions) {
     super(message, options)
     this.name = this.constructor.name
-    if (typeof Error.captureStackTrace === 'function') {
-      Error.captureStackTrace(this, this.constructor)
+    // V8 and Bun have it, and only Node's types declare it, which JSR's type check does not load
+    const errorType: ErrorConstructor & {
+      captureStackTrace?: (target: object, ctor?: unknown) => void
+    } = Error
+    if (typeof errorType.captureStackTrace === 'function') {
+      errorType.captureStackTrace(this, this.constructor)
     } else {
       this.stack = new Error(message).stack
     }
