@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ceil, clamp, floor, inRange, round } from '../src/number/index.ts'
+import { ceil, clamp, floor, formatBytes, inRange, mean, round, sum } from '../src/number/index.ts'
 
 describe('round', () => {
   it('rounds ties toward +Infinity, as Math.round does', () => {
@@ -164,5 +164,106 @@ describe('inRange', () => {
     expect(() => (inRange as (...args: unknown[]) => boolean)(...args)).toThrow(
       new TypeError(`${name} must be a number`)
     )
+  })
+})
+
+describe('sum and mean', () => {
+  it('add and average any iterable of numbers', () => {
+    expect(sum([4, 2, 8, 6])).toBe(20)
+    expect(sum(new Set([1, 2]))).toBe(3)
+    expect(sum([])).toBe(0)
+    expect(mean([4, 2, 8, 6])).toBe(5)
+    expect(mean(new Map([[1, 2]]).values())).toBe(2)
+    expect(mean([])).toBeNaN()
+  })
+
+  it('add left to right, as a loop with + does', () => {
+    expect(sum([0.1, 0.2, 0.3])).toBe(0.1 + 0.2 + 0.3)
+    expect(sum([Number.POSITIVE_INFINITY, 1])).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it('refuse non-numbers and non-iterables', () => {
+    expect(() => sum([1, '2'] as never)).toThrow(new TypeError('sum expects numbers, got string'))
+    expect(() => mean([1, undefined] as never)).toThrow(TypeError)
+    expect(() => sum(null as never)).toThrow(
+      new TypeError('sum expects an iterable of numbers, got null')
+    )
+    expect(() => sum(undefined as never)).toThrow(
+      new TypeError('sum expects an iterable of numbers, got undefined')
+    )
+    expect(() => mean({ length: 2 } as never)).toThrow(
+      new TypeError('mean expects an iterable of numbers, got object')
+    )
+  })
+})
+
+describe('formatBytes', () => {
+  it('uses powers of 1000 and SI units by default', () => {
+    expect(formatBytes(0)).toBe('0 B')
+    expect(formatBytes(999)).toBe('999 B')
+    expect(formatBytes(1000)).toBe('1 kB')
+    expect(formatBytes(1536)).toBe('1.54 kB')
+    expect(formatBytes(1234567)).toBe('1.23 MB')
+    expect(formatBytes(12345678)).toBe('12.3 MB')
+    expect(formatBytes(123456789)).toBe('123 MB')
+  })
+
+  it('uses powers of 1024 and IEC units when binary', () => {
+    expect(formatBytes(1023, { binary: true })).toBe('1,023 B')
+    expect(formatBytes(1024, { binary: true })).toBe('1 KiB')
+    expect(formatBytes(1536, { binary: true })).toBe('1.5 KiB')
+    expect(formatBytes(1048575, { binary: true })).toBe('1 MiB')
+    expect(formatBytes(2 ** 80, { binary: true })).toBe('1 YiB')
+  })
+
+  it('moves to the next unit when rounding reaches it', () => {
+    expect(formatBytes(999_950)).toBe('1 MB')
+    expect(formatBytes(999_499)).toBe('999 kB')
+  })
+
+  it('keeps the sign and fractions, and the largest unit past yottabytes', () => {
+    expect(formatBytes(-1536)).toBe('-1.54 kB')
+    expect(formatBytes(0.5)).toBe('0.5 B')
+    expect(formatBytes(1e30)).toBe('1,000,000 YB')
+  })
+
+  it('rounds the size the same whatever the sign', () => {
+    expect(formatBytes(1535)).toBe('1.54 kB')
+    expect(formatBytes(-1535)).toBe('-1.54 kB')
+    expect(formatBytes(-1005)).toBe('-1.01 kB')
+    expect(formatBytes(-100.5)).toBe('-101 B')
+    expect(formatBytes(-999_500)).toBe('-1 MB')
+    expect(formatBytes(-0.001)).toBe('0 B')
+    expect(formatBytes(-0)).toBe('0 B')
+  })
+
+  it('formats the number for the locale', () => {
+    expect(formatBytes(1234567, { locale: 'de' })).toBe('1,23 MB')
+    expect(formatBytes(1e30, { locale: 'de' })).toBe('1.000.000 YB')
+    expect(formatBytes(1234567, { locale: ['de'] })).toBe('1,23 MB')
+    expect(formatBytes(1234567, { locale: new Intl.Locale('de') })).toBe('1,23 MB')
+  })
+
+  it('keeps each locale apart when it reuses formatters', () => {
+    const locales = Intl.NumberFormat.supportedLocalesOf(
+      ['de', 'en', 'fr', 'hi', 'ar-EG', 'ja'].flatMap((tag) =>
+        Array.from({ length: 20 }, (_, i) => `${tag}-u-cu-x${String(i).padStart(2, '0')}`)
+      )
+    )
+    for (const locale of locales) {
+      const expected = `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(1.23)} MB`
+      expect(formatBytes(1234567, { locale })).toBe(expected)
+      const other = expected.startsWith('1,23') ? 'en' : 'de'
+      expect(formatBytes(1234567, { locale: other })).toBe(other === 'en' ? '1.23 MB' : '1,23 MB')
+      expect(formatBytes(1234567, { locale })).toBe(expected)
+    }
+    expect(formatBytes(1)).toBe('1 B')
+    expect(() => formatBytes(1, { locale: '' })).toThrow(RangeError)
+  })
+
+  it('refuses non-numbers and non-finite numbers', () => {
+    expect(() => formatBytes('1' as never)).toThrow(TypeError)
+    expect(() => formatBytes(Number.NaN)).toThrow(new RangeError('n must be finite'))
+    expect(() => formatBytes(Number.POSITIVE_INFINITY)).toThrow(RangeError)
   })
 })
