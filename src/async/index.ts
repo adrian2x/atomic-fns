@@ -1,4 +1,5 @@
 /**
+ * Async helpers: `sleep` and `timeout`.
  * @module async
  */
-export {}
+export { type SleepOptions, sleep, type TimeoutOptions, timeout } from './sleep.ts'
