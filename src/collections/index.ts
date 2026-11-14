@@ -4,3 +4,4 @@
  * @module collections
  */
 export { binarySearch, bisect, bisectLeft, bisectRight, insort, insortLeft } from './bisect.ts'
+export { Heap } from './heap.ts'
