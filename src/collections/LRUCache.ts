@@ -112,27 +112,28 @@ export class LRUCache<K = any, V = any> extends Mapping<K, V> {
   }
 
   /**
-   * Returns an iterable of all the keys in the cache, in insertion order.
+   * Returns an iterable of all the keys in the cache, from least to most recently used.
    * @returns {IterableIterator<K>}
    */
   keys(): IterableIterator<K> {
-    return this.items.keys()
+    // A snapshot: get and set re-insert keys, so a live Map iterator would never reach the end
+    return [...this.items.keys()].values()
   }
 
   /**
-   * Returns an iterable of all the values in the cache, in insertion order.
+   * Returns an iterable of all the values in the cache, from least to most recently used.
    * @returns {IterableIterator<V>}
    */
   values(): IterableIterator<V> {
-    return this.items.values()
+    return [...this.items.values()].values()
   }
 
   /**
-   * Returns an iterable of all the [key, value] pairs in the cache, in insertion order.
+   * Returns an iterable of all the [key, value] pairs in the cache, from least to most recently used.
    * @returns {IterableIterator<[K, V]>}
    */
   entries(): IterableIterator<[K, V]> {
-    return this.items.entries()
+    return [...this.items.entries()].values()
   }
 
   [Symbol.iterator](): IterableIterator<[K, V]> {
