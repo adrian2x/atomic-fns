@@ -35,7 +35,9 @@ export class Deque<T = any> extends Sequence<T> {
 
     this.ArrayConstructor = arrType.constructor
     this.capacity = capacity
-    this.items = new this.ArrayConstructor(arrType.length || this.capacity)
+    // A typed array cannot grow, so it takes the whole capacity up front
+    const length = ArrayBuffer.isView(arrType) ? capacity : arrType.length || capacity
+    this.items = new this.ArrayConstructor(length)
     this.clear()
 
     if (arrType.length) {
@@ -156,14 +158,10 @@ export class Deque<T = any> extends Sequence<T> {
    * @returns {?T} The element if exists
    */
   get(index): T | undefined {
-    if (this.count === 0) return
-
-    index = this.start + index
     if (index < 0) index += this.count
+    if (index < 0 || index >= this.count) return
 
-    if (index > this.capacity) index -= this.capacity
-
-    return this.items[index]
+    return this.items[(this.start + index) % this.capacity]
   }
 
   /**
@@ -172,8 +170,10 @@ export class Deque<T = any> extends Sequence<T> {
    */
   set(index: number, value: T): void {
     if (index < 0) index += this.count
-    if (index > this.count) throw new KeyError(`Invalid index: ${index} not in Deque.`)
-    this.items[index] = value
+    if (index < 0 || index >= this.count) {
+      throw new KeyError(`Invalid index: ${index} not in Deque.`)
+    }
+    this.items[(this.start + index) % this.capacity] = value
   }
 
   /**
