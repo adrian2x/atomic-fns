@@ -20,7 +20,7 @@
     "tsc:w": "tsc -p . --declaration --watch",
     "lint": "biome check --diagnostic-level=error .",
     "build": "npm run lint && npm test && npm run tsc",
-    "docs": "npx --yes --package=typedoc@0.28.20 --package=typescript@6.0.3 -- typedoc",
+    "docs": "deno doc --html --name atomic-fns --output docs src/index.ts src/*/index.ts",
     "check": "npm run lint && npm run tsc && npm test && npm run jsr",
     "format": "biome format --write .",
     "jsr": "deno publish --dry-run --allow-dirty --set-version $npm_package_version"
@@ -65,5 +65,5 @@
   "bugs": {
     "url": "https://github.com/adrian2x/atomic-fns/issues"
   },
-  "homepage": "https://atomic-stack.github.io/atomic-fns/"
+  "homepage": "https://jsr.io/@atomic-stack/atomic-fns"
 }

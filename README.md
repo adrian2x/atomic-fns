@@ -1,6 +1,6 @@
 # atomic-fns
 
-[Read the Docs](https://atomic-stack.github.io/atomic-fns/)
+[Read the Docs](https://jsr.io/@atomic-stack/atomic-fns/doc)
 
 ## Like Lodash, but in TypeScript and for ESNext.
 
@@ -17,7 +17,7 @@ You may prefer this library because:
 
 ## Docs
 
-📖 Available at [atomic-fns](https://atomic-stack.github.io/atomic-fns/)
+📖 Available at [atomic-fns](https://jsr.io/@atomic-stack/atomic-fns/doc)
 
 ## Get Started
 
@@ -27,6 +27,12 @@ To install the package you need to have [npm](https://www.npmjs.com/get-npm) (or
 
 ```bash
 npm install atomic-fns
+```
+
+It is also on [JSR](https://jsr.io/@atomic-stack/atomic-fns), for Deno and other runtimes that read TypeScript directly:
+
+```bash
+npx jsr add @atomic-stack/atomic-fns
 ```
 
 ## How to use
@@ -47,7 +53,7 @@ uniqueId('user_')
 ...
 ```
 
-See the full list of [modules](https://atomic-stack.github.io/atomic-fns/modules.html).
+See the full list of [modules](https://jsr.io/@atomic-stack/atomic-fns/doc).
 
 ## Data model
 This library features a data model similar to [Python](https://docs.python.org/3/reference/datamodel.html#special-method-names) but not always. Only the missing parts have been implemented, while respecting the JS standards.
@@ -67,7 +73,7 @@ When working with objects, functions in this library use these custom operators 
 
 ## New Types
 
-[`Decimal`](https://atomic-stack.github.io/atomic-fns/classes/decimal.Decimal.html) provides support for correct rounded floating point arithmetic, with arbitrary precision.
+[`Decimal`](https://jsr.io/@atomic-stack/atomic-fns/doc/decimal/~/Decimal) provides support for correct rounded floating point arithmetic, with arbitrary precision.
 
 This fixes precision issues with float arithmetic, for example:
 ```
@@ -81,14 +87,14 @@ decimal('0.1').add('0.1').add('0.1').toNumber()
 Some common base interfaces and typing patterns you may have seen like `Optional`, `Result`, `Comparable`, `Iterator`, and others.
 
 ### Sorted Containers
-  - [SortedSet](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedSet.html)
-  - [SortedMap](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedMap.html)
-  - [SortedTree](https://atomic-stack.github.io/atomic-fns/classes/collections.SortedTree.html)
+  - [SortedSet](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/SortedSet)
+  - [SortedMap](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/SortedMap)
+  - [SortedTree](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/SortedTree)
 
 ### Other Containers
-  - [Deque](https://atomic-stack.github.io/atomic-fns/classes/collections.Deque.html)
-  - [FrozenSet](https://atomic-stack.github.io/atomic-fns/classes/collections.FrozenSet.html)
-  - [LRUCache](https://atomic-stack.github.io/atomic-fns/classes/collections.LRUCache.html)
+  - [Deque](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/Deque)
+  - [FrozenSet](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/FrozenSet)
+  - [LRUCache](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/LRUCache)
 
 
 ## Contributing
