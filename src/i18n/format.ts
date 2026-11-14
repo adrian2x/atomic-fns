@@ -280,7 +280,7 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
 
   const results: string[] = []
   let dayPeriod: string = ''
-  let dayPeriodIndex = -1
+  const dayPeriodIndexes: number[] = []
   for (let i = 0; i < fmt.length; i++) {
     let part = fmt[i]
     if (part === '%') {
@@ -304,19 +304,15 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
       }
 
       if (HOUR_PARTS[part]) {
-        const res = formatter(locale, STRFTIME[part]).format(date).split(/\s+/g)
+        results.push(formatPart(locale, STRFTIME[part], date, 'hour'))
         // save the AM/PM for the correct spot
-        results.push(res[0])
-        dayPeriod = res[1]
+        dayPeriod = formatPart(locale, STRFTIME[part], date, 'dayPeriod')
         continue
       }
 
       if (part === '%P' || part === '%p') {
         // leave this flag in place for later
-        dayPeriodIndex = results.length
-        if (part === '%p' && dayPeriod) {
-          dayPeriod = dayPeriod.toLowerCase()
-        }
+        dayPeriodIndexes.push(results.length)
         results.push(part)
         continue
       }
@@ -327,10 +323,18 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
         continue
       }
 
-      // format any other parts
-      let res = formatter(locale, STRFTIME[part]).format(date)
+      // format any other parts, numbers without the unit text of the locale
+      const [type, style] = Object.entries(STRFTIME[part]).at(-1)
+      let res =
+        style === n || style === dd
+          ? formatPart(locale, STRFTIME[part], date, type)
+          : formatter(locale, STRFTIME[part]).format(date)
       // fix bugs in time formatter
       if ((part === '%S' || part === '%M') && res.length === 1) res = '0' + res
+      if (part === '%-H') {
+        const hours = (date === undefined ? new Date() : new Date(date)).getHours()
+        res = new Intl.NumberFormat(locale).format(hours)
+      }
       results.push(res)
     } else {
       // output as literal
@@ -338,8 +342,10 @@ export function strftime(fmt: string, date: Date, locale?: string): string {
     }
   }
 
-  // insert the AM/PM at the correct spot
-  if (dayPeriodIndex >= 0) results[dayPeriodIndex] = dayPeriod || ''
+  // insert the AM/PM at the correct spots
+  for (const index of dayPeriodIndexes) {
+    results[index] = results[index] === '%p' ? dayPeriod.toLowerCase() : dayPeriod
+  }
 
   return results.join('').trim()
 }
