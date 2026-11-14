@@ -374,15 +374,15 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
     return this.getTime() === other.getTime()
   }
 
-  lt(other: Date | IntlDate) {
+  lt(other: Date | IntlDate): boolean {
     return this.isBefore(other)
   }
 
-  eq(other: Date | IntlDate) {
+  eq(other: Date | IntlDate): boolean {
     return this.isSame(other)
   }
 
-  compare(other: Date | IntlDate) {
+  compare(other: Date | IntlDate): number {
     if (!this.isValid()) return 1
 
     const dt = new IntlDate(other)
@@ -391,7 +391,7 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
     return this.getTime() - dt.getTime()
   }
 
-  set(values: DateObject) {
+  set(values: DateObject): IntlDate {
     if (!this.isValid()) return this
 
     const normalized = normalizeObject(values, normalizeUnit)
@@ -412,37 +412,37 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
       : result.add({ days: normalized.weekday - result.dayOfWeek })
   }
 
-  get relativeFormat() {
+  get relativeFormat(): Intl.RelativeTimeFormat {
     if (this.intlRelativeFormat) return this.intlRelativeFormat
     this.intlRelativeFormat = new Intl.RelativeTimeFormat(this.locale)
     return new Intl.RelativeTimeFormat(this.locale)
   }
 
-  relativeTime(n: number, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
+  relativeTime(n: number, unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
     return Number.isNaN(n) ? INVALID_DATE_STRING : this.relativeFormat.format(n, unit)
   }
 
-  fromNow(unit: Intl.RelativeTimeFormatUnit = 'seconds') {
+  fromNow(unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
     const diff = this.diff(new Date(), unit)
     return this.relativeTime(diff, unit)
   }
 
-  from(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
+  from(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
     const diff = this.diff(other, unit)
     return this.relativeTime(diff, unit)
   }
 
-  toNow(unit: Intl.RelativeTimeFormatUnit = 'seconds') {
+  toNow(unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
     const diff = this.diff(new Date(), unit)
     return this.relativeTime(-diff, unit)
   }
 
-  to(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds') {
+  to(other: DateLike, unit: Intl.RelativeTimeFormatUnit = 'seconds'): string {
     const diff = this.diff(other, unit)
     return this.relativeTime(-diff, unit)
   }
 
-  diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false) {
+  diff(other: DateLike, unit: DurationUnit = 'milliseconds', exact = false): number {
     const dt = new IntlDate(other)
     const normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
     const monthsInUnit = MONTHS_IN_UNIT[normalizedUnit]
@@ -464,15 +464,15 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
     return total
   }
 
-  add(duration: TDuration, exact = false) {
+  add(duration: TDuration, exact = false): IntlDate {
     return this.clone(addDuration(this._date, duration, exact))
   }
 
-  subtract(duration: TDuration, exact = false) {
+  subtract(duration: TDuration, exact = false): IntlDate {
     return this.clone(subDuration(this._date, duration, exact))
   }
 
-  startOf(unit: DurationUnit) {
+  startOf(unit: DurationUnit): any {
     if (!this.isValid()) return this
     const obj: DateObject = {}
     const normalizedUnit = UNITS_PLURAL[unit.toLowerCase()]
@@ -520,7 +520,7 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
     return kept.getTimezoneOffset() === offset ? this.clone(kept) : start
   }
 
-  endOf(unit: DurationUnit) {
+  endOf(unit: DurationUnit): any {
     return this.isValid()
       ? this.add({ [unit]: 1 })
           .startOf(unit)
@@ -528,19 +528,19 @@ new IntlDate().toISOTime() // '22:44:30.652Z'
       : this
   }
 
-  clone(date?: DateLike) {
+  clone(date?: DateLike): IntlDate {
     return new IntlDate(date ?? this, { locale: this.locale })
   }
 
-  static max(...args) {
+  static max(...args: any[]): any {
     return maxDate.apply(undefined, args)
   }
 
-  static min(...args) {
+  static min(...args: any[]): any {
     return minDate.apply(undefined, args)
   }
 
-  inspect() {
+  inspect(): string {
     return this.isValid() ? `new IntlDate("${this.toISOString()}")` : 'new IntlDate(NaN)'
   }
 }
