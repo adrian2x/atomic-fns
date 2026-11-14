@@ -5,7 +5,7 @@
  */
 
 import { call, isEmpty, isObject, notNull, ValueError } from '../globals/index.js'
-import { add, bool, compare, Comparer, eq, id } from '../operators/index.js'
+import { add, bool, compare, Comparer, eq, identity } from '../operators/index.js'
 import { Function, Iteratee, Predicate } from '../types.js'
 
 /**
@@ -231,7 +231,7 @@ export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>) {
   }
 }
 
-export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = id) {
+export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = identity) {
   return iflatten<T>(imap(iterable, mapFn))
 }
 
@@ -397,10 +397,10 @@ export function sorted<T>(
     } else {
       reverse = true
     }
-    key = id
+    key = identity
   }
   const copy = Array.from(args as T[])
-  const _compare = compKey(compareFn || compare, key || id)
+  const _compare = compKey(compareFn || compare, key || identity)
   copy.sort(_compare)
   if (reverse) copy.reverse()
   return copy

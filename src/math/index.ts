@@ -6,7 +6,7 @@
 
 import { call } from '../globals/index.js'
 import { reduce } from '../itertools/index.js'
-import { gt, id, lt } from '../operators/index.js'
+import { gt, identity, lt } from '../operators/index.js'
 import { Predicate } from '../types.js'
 
 /**
@@ -84,24 +84,24 @@ export function logBase(x: number, y: number): number {
 /**
  * Returns the smallest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `lt` method, this will be called to compare.
  * @param iterable The iterable to inspect.
- * @param key Optional key function to transform the elements (default `id`).
+ * @param key Optional key function to transform the elements (default `identity`).
  * @returns The smallest element in the iterable.
  */
 export function min(iterable: number[]): number
 export function min<T>(iterable: Iterable<T>, key?: Predicate<T>): T
-export function min<T>(iterable: Iterable<T>, key = id): T {
+export function min<T>(iterable: Iterable<T>, key = identity): T {
   return reduce(iterable, (x, y) => (lt(key(x), key(y)) ? x : y))
 }
 
 /**
  * Returns the largest element in an iterable. The optional `key` argument specifies a transform on the elements before comparing them. If the elements in the iterable are objects that implement a custom `gt` method, this will be called to compare.
  * @param iterable The iterable to inspect.
- * @param key Optional key function to transform the elements (default `id`).
+ * @param key Optional key function to transform the elements (default `identity`).
  * @returns The largest element in the iterable.
  */
 export function max(iterable: number[]): number
 export function max<T>(iterable: Iterable<T>, key?: Predicate<T>): T
-export function max<T>(iterable: Iterable<T>, key = id): T {
+export function max<T>(iterable: Iterable<T>, key = identity): T {
   return reduce(iterable, (x, y) => (gt(key(x), key(y)) ? x : y))
 }
 
@@ -121,7 +121,7 @@ mean(objects, o => o.n)
  */
 export function mean(iterable: number[]): number
 export function mean<T>(iterable: Iterable<T>, key?: Predicate<T>): number
-export function mean<T>(iterable: Iterable<T>, key = id): number {
+export function mean<T>(iterable: Iterable<T>, key = identity): number {
   let total = 0
   let count = 0
   for (const value of iterable) {
@@ -148,7 +148,7 @@ sum([1, 2, 3, 4], 5)
  */
 export function sum(args: number[]): number
 export function sum<T>(args: Iterable<T>, key?: Predicate<T>): number
-export function sum<T>(args: Iterable<T>, key: Predicate<T> = id): number {
+export function sum<T>(args: Iterable<T>, key: Predicate<T> = identity): number {
   let initial = 0
   for (const x of args) {
     initial += key(x)
