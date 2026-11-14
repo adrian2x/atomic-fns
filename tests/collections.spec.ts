@@ -643,6 +643,19 @@ describe('collections', () => {
     )
   })
 
+  it('pick leaves out keys the object does not have', () => {
+    assert.deepEqual(Object.keys(pick({ a: 1 }, ['a', 'b'])), ['a'])
+    assert.deepEqual(Object.keys(pick({ a: { c: 1 } }, ['a.b'])), [])
+    const defaults = { retries: 3 }
+    const options = { ...defaults, ...pick({ timeout: 1 }, ['timeout', 'retries']) }
+    assert.deepEqual(options, { retries: 3, timeout: 1 })
+
+    assert.deepEqual(Object.keys(pick({ a: undefined }, ['a'])), ['a'])
+    assert.deepEqual(pick({ a: { b: 1 } }, ['a.b']), { 'a.b': 1 })
+    assert.deepEqual(pick(Object.create({ a: 1 }), ['a']), { a: 1 })
+    assert.deepEqual(pick('abc', ['length']), { length: 3 })
+  })
+
   it('pickBy', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(
@@ -827,5 +840,13 @@ describe('collections', () => {
   it('sortedUniq sorts by the iteratee', () => {
     assert.deepEqual(sortedUniq([{ id: 2 }, { id: 1 }, { id: 2 }], 'id'), [{ id: 1 }, { id: 2 }])
     assert.deepEqual(sortedUniq([3.2, 1.1, 3.9], Math.floor), [1.1, 3.2])
+  })
+
+  it('pick keeps __proto__ out when the key is an array', () => {
+    const body = JSON.parse('{"__proto__": {"inherited": 1}, "a": 2}')
+    const picked: any = pick(body, JSON.parse('[["__proto__"], "a"]'))
+    assert(Object.getPrototypeOf(picked) === Object.prototype)
+    assert(picked.inherited === undefined)
+    assert(picked.a === 2)
   })
 })
