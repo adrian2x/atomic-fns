@@ -5,6 +5,20 @@
  */
 export { entries, includes, isEmpty, keys, size, values } from './entries.ts'
 export {
+  countBy,
+  groupBy,
+  keyBy,
+  maxBy,
+  meanBy,
+  minBy,
+  orderBy,
+  partition,
+  type SortKey,
+  type SortOrder,
+  sortBy,
+  sumBy
+} from './group.ts'
+export {
   type CollectionReducer,
   every,
   filter,
