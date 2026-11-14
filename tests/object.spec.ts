@@ -1,6 +1,20 @@
 import vm from 'node:vm'
-import { describe, expect, expectTypeOf, it, test } from 'vitest'
-import { get, has, omit, omitBy, pick, pickBy, set, unset } from '../src/object/index.ts'
+import { describe, expect, expectTypeOf, it, test, vi } from 'vitest'
+import {
+  flattenObject,
+  get,
+  has,
+  invert,
+  isEqualWith,
+  mapKeys,
+  mapValues,
+  omit,
+  omitBy,
+  pick,
+  pickBy,
+  set,
+  unset
+} from '../src/object/index.ts'
 import { sparse } from './sparse.ts'
 
 const context = vm.createContext()
@@ -745,5 +759,215 @@ describe('pickBy and omitBy', () => {
       expect(Object.keys(out)).toEqual(['__proto__'])
       expect((out as { role?: string }).role).toBeUndefined()
     }
+  })
+})
+
+describe('flattenObject', () => {
+  it('joins nested keys and writes array indices as brackets, so get reads each key', () => {
+    const src = { a: { b: 1, c: [2, { d: 3 }] } }
+    const flat = flattenObject(src)
+    expect(flat).toEqual({ 'a.b': 1, 'a.c[0]': 2, 'a.c[1].d': 3 })
+    for (const [key, value] of Object.entries(flat)) expect(get(src, key)).toBe(value)
+    expect(flattenObject({ a: { b: 1 } }, { delimiter: '/' })).toEqual({ 'a/b': 1 })
+    expect(flattenObject([{ a: 1 }])).toEqual({ '[0].a': 1 })
+  })
+
+  it('joins the non-index keys of an array by the delimiter, so get reads them', () => {
+    const src = { m: 'ab'.match(/b/) }
+    const flat = flattenObject(src)
+    expect(flat).toStrictEqual({
+      'm[0]': 'b',
+      'm.index': 1,
+      'm.input': 'ab',
+      'm.groups': undefined
+    })
+    for (const [key, value] of Object.entries(flat)) expect(get(src, key)).toBe(value)
+    expect(flattenObject(Object.assign([7], { total: 5 }))).toEqual({ '[0]': 7, total: 5 })
+  })
+
+  it('refuses a non-index array key that holds the delimiter', () => {
+    expect(() => flattenObject({ a: Object.assign([], { 'x.y': 1 }) })).toThrow(TypeError)
+  })
+
+  it('keeps every leaf, null and class instances included, and drops empty containers', () => {
+    const date = new Date(0)
+    expect(flattenObject({ a: null, b: undefined, c: {}, d: [], e: date })).toStrictEqual({
+      a: null,
+      b: undefined,
+      e: date
+    })
+  })
+
+  it('keeps __proto__ as an own data key', () => {
+    const flat = flattenObject(JSON.parse('{"__proto__": 1, "a": 2}') as object)
+    expect(Object.getPrototypeOf(flat)).toBe(Object.prototype)
+    expect(Object.keys(flat)).toEqual(['__proto__', 'a'])
+  })
+
+  it('refuses keys whose path would read as another one', () => {
+    expect(() => flattenObject({ 'a.b': 1 })).toThrow(TypeError)
+    expect(() => flattenObject({ '': 1 })).toThrow(TypeError)
+    expect(() => flattenObject({ 'a[0]': 1 })).toThrow(TypeError)
+    expect(() => flattenObject({ 'a[0': 1 })).toThrow(TypeError)
+    expect(() => flattenObject({ 'a]': 1 })).toThrow(TypeError)
+    expect(() => flattenObject({ 'a/b': 1 }, { delimiter: '/' })).toThrow(TypeError)
+    expect(flattenObject({ 'a/b': 1 })).toEqual({ 'a/b': 1 })
+  })
+
+  it('refuses two paths that flatten to the same key', () => {
+    expect(() => flattenObject({ b: { ab: 1 }, ba: { b: 2 } }, { delimiter: 'aa' })).toThrow(
+      /two paths flatten to "baaab"/
+    )
+  })
+
+  it('refuses a delimiter that is empty or not a string', () => {
+    expect(() => flattenObject({}, { delimiter: '' })).toThrow(TypeError)
+    expect(() => flattenObject({}, { delimiter: 1 as unknown as string })).toThrow(TypeError)
+  })
+
+  it('refuses input that is not a plain object or array', () => {
+    expect(() => flattenObject(new Date(0))).toThrow(TypeError)
+  })
+
+  it('refuses a cycle', () => {
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    expect(() => flattenObject(cyclic)).toThrow(TypeError)
+  })
+
+  it('flattens an object shared by two keys at each place it appears', () => {
+    const shared = { x: 1 }
+    expect(flattenObject({ a: shared, b: shared })).toEqual({ 'a.x': 1, 'b.x': 1 })
+  })
+
+  it('throws RangeError past the depth limit', () => {
+    let deep: object = { leaf: 1 }
+    for (let i = 0; i < 1500; i++) deep = { a: deep }
+    expect(() => flattenObject(deep)).toThrow(RangeError)
+  })
+
+  it('throws RangeError when shared objects repeat past the budget', () => {
+    let dag: object = { leaf: 1 }
+    for (let i = 0; i < 40; i++) dag = { a: dag, b: dag }
+    expect(() => flattenObject(dag)).toThrowError(
+      new RangeError('input repeats shared objects beyond 250000 containers')
+    )
+    let empty: object = {}
+    for (let i = 0; i < 19; i++) empty = { a: empty, b: empty }
+    expect(() => flattenObject(empty)).toThrow(/repeats shared objects/)
+  })
+
+  it('throws RangeError when output keys pass 2^27 characters', () => {
+    const longKey = 'x'.repeat(2 ** 20)
+    let chain: object = { leaf: 1 }
+    for (let i = 0; i < 130; i++) chain = { [longKey]: chain }
+    expect(() => flattenObject(chain)).toThrow(/output keys exceed 134217728 characters/)
+  })
+
+  it('leaves its open frames when it throws inside another walk', () => {
+    const rows = Array.from({ length: 600 }, () => ({ r: { 'a.b': 1 } }))
+    const flattenRows = (a: unknown): undefined => {
+      if (typeof a === 'object' && a !== null && 'r' in a) {
+        try {
+          flattenObject(a)
+        } catch {
+          // the bad key throws; the outer walk must keep its own depth count
+        }
+      }
+      return undefined
+    }
+    expect(isEqualWith(rows, structuredClone(rows), flattenRows)).toBe(true)
+  })
+})
+
+describe('invert, mapKeys and mapValues', () => {
+  it('invert swaps keys and values, a later key winning', () => {
+    expect(invert({ a: 'x', b: 'y', c: 'x' })).toEqual({ x: 'c', y: 'b' })
+    expect(invert({ a: 1 })).toEqual({ 1: 'a' })
+  })
+
+  it('invert keeps __proto__ as an own data key', () => {
+    const inverted = invert({ a: '__proto__' })
+    expect(Object.getPrototypeOf(inverted)).toBe(Object.prototype)
+    expect(Object.keys(inverted)).toEqual(['__proto__'])
+  })
+
+  it('invert keeps a symbol value as a symbol key', () => {
+    const sym = Symbol('s')
+    const inverted = invert({ a: sym })
+    expect(Object.keys(inverted)).toEqual([])
+    expect(Object.getOwnPropertySymbols(inverted)).toEqual([sym])
+    expect(inverted[sym]).toBe('a')
+  })
+
+  it('invert refuses object and function values without calling their methods', () => {
+    const toString = vi.fn(() => 'k')
+    expect(() => invert({ a: { toString } })).toThrow(TypeError)
+    expect(toString).not.toHaveBeenCalled()
+    expect(() => invert({ a: Object.create(null) })).toThrow(/invert cannot make a key/)
+    expect(() => invert({ a: () => 1 })).toThrow(TypeError)
+  })
+
+  it('invert, mapKeys and mapValues give {} for null and undefined', () => {
+    expect(invert(null)).toEqual({})
+    expect(mapKeys(undefined, () => 'k')).toEqual({})
+    expect(mapValues(null, () => 0)).toEqual({})
+  })
+
+  it('mapKeys passes (value, key, obj)', () => {
+    const obj = { a: 1, b: 2 }
+    expect(mapKeys(obj, (_value, key) => key.toUpperCase())).toEqual({ A: 1, B: 2 })
+    expect(mapKeys(obj, (value, key, o) => `${key}${value}${o === obj}`)).toEqual({
+      a1true: 1,
+      b2true: 2
+    })
+  })
+
+  it('mapKeys reads each value once', () => {
+    let reads = 0
+    const obj = {
+      get a() {
+        reads++
+        return reads
+      }
+    }
+    expect(mapKeys(obj, (value) => `k${value}`)).toEqual({ k1: 1 })
+    expect(reads).toBe(1)
+  })
+
+  it('mapKeys keeps __proto__ as an own data key', () => {
+    const mapped = mapKeys({ a: { isAdmin: true } }, () => '__proto__')
+    expect(Object.getPrototypeOf(mapped)).toBe(Object.prototype)
+    expect(Object.keys(mapped)).toEqual(['__proto__'])
+  })
+
+  it('mapValues passes (value, key, obj)', () => {
+    const obj = { a: 1, b: 2 }
+    expect(mapValues(obj, (value, key, o) => `${key}${value}${o === obj}`)).toEqual({
+      a: 'a1true',
+      b: 'b2true'
+    })
+  })
+
+  it('mapValues reads own keys only', () => {
+    expect(mapValues(Object.create({ inherited: 1 }), () => 0)).toEqual({})
+  })
+
+  it('mapValues keeps __proto__ as an own data key', () => {
+    const mapped = mapValues(JSON.parse('{"__proto__":{"isAdmin":true}}') as object, (v) => v)
+    expect(Object.getPrototypeOf(mapped)).toBe(Object.prototype)
+    expect(Object.keys(mapped)).toEqual(['__proto__'])
+    expect((mapped as { isAdmin?: unknown }).isAdmin).toBeUndefined()
+  })
+
+  it('mapValues and mapKeys type an array argument as an index-keyed object', () => {
+    const mapped = mapValues([1, 2], (value, key) => `${key}${value}`)
+    expectTypeOf(mapped).toEqualTypeOf<Record<number, string>>()
+    expect(mapped).toEqual({ 0: '01', 1: '12' })
+    // @ts-expect-error the result is a plain object, not an array
+    expect(() => mapped.map(String)).toThrow(TypeError)
+    expectTypeOf(mapKeys(['x'], (value) => value)).toEqualTypeOf<Record<string, string>>()
+    const sym = Symbol('s')
+    expectTypeOf(mapValues({ a: 1, [sym]: 2 }, () => true)).toEqualTypeOf<{ a: boolean }>()
   })
 })
