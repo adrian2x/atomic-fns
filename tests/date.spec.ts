@@ -1,5 +1,13 @@
 import assert from 'assert'
-import { asDate, formatDate, IntlDate, strftime } from '../src/i18n/index.js'
+import {
+  addDuration,
+  asDate,
+  Duration,
+  formatDate,
+  IntlDate,
+  strftime,
+  subDuration
+} from '../src/i18n/index.js'
 
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })
@@ -596,4 +604,46 @@ it('strftime %-H accepts a timestamp and no date', () => {
   assert(/^\d+$/.test(strftime('%-H', undefined as any)))
 
   assert(strftime('%-H', null as any) === '0')
+})
+
+describe('Duration', () => {
+  it('reads quarters like any other unit', () => {
+    assert.strictEqual(new Duration({ quarters: 2 }).get('quarters'), 2)
+    assert.strictEqual(new Duration({ quarter: 2 }).get('quarter'), 2)
+    assert.strictEqual(new Duration({ hours: 1 }).get('quarters'), 0)
+    assert.strictEqual(new Duration({ years: 1 }).total('quarters'), 4)
+    assert.strictEqual(new Duration({ months: 3 }).total('quarters'), 1)
+
+    const sum = new Duration({ quarters: 1 }).add({ quarters: 1 })
+    assert.deepStrictEqual(sum.toObject(), { quarters: 2 })
+    const difference = new Duration({ quarters: 2 }).subtract({ quarters: 1 })
+    assert.deepStrictEqual(difference.toObject(), { quarters: 1 })
+
+    const start = mockDate('2021-01-01')
+    assert.strictEqual(mockDate('2021-12-01').from(start, 'quarters'), 'in 3 quarters')
+    assert.strictEqual(mockDate('2021-12-01').to(start, 'quarter'), '3 quarters ago')
+    assert.strictEqual(mockDate('2021-12-01').diff(start, 'quarters'), 3)
+  })
+
+  it('fromISO keeps only the units in the text', () => {
+    assert.deepStrictEqual(Duration.fromISO('PT23H').toObject(), { hours: 23 })
+    assert.deepStrictEqual(Duration.fromISO('P5Y3M').toObject(), { years: 5, months: 3 })
+    assert.deepStrictEqual(Duration.fromISO('PT1H').negated().toObject(), { hours: -1 })
+    assert.deepStrictEqual(Duration.fromISO('-PT1H').abs().toObject(), { hours: 1 })
+    assert.strictEqual(Duration.fromISO('PT1H').total('minutes'), 60)
+    assert.strictEqual(Duration.fromISO('P1D').total('hours'), 24)
+    assert.deepStrictEqual(Duration.fromISO('PT90M').rescale().toObject(), {
+      hours: 1,
+      minutes: 30
+    })
+
+    const date = new Date(Date.UTC(2021, 0, 15, 12))
+    const later = addDuration(date, Duration.fromISO('PT1H'))
+    const earlier = subDuration(date, Duration.fromISO('PT1H'))
+    assert.strictEqual(later.toISOString(), '2021-01-15T13:00:00.000Z')
+    assert.strictEqual(earlier.toISOString(), '2021-01-15T11:00:00.000Z')
+    assert.deepStrictEqual(new Duration({ hours: undefined, minutes: 5 }).toObject(), {
+      minutes: 5
+    })
+  })
 })
