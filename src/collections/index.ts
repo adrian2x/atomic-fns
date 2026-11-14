@@ -7,7 +7,6 @@
 import {
   call,
   get,
-  isArray,
   isArrayLike,
   isBool,
   isEmpty,
@@ -17,7 +16,6 @@ import {
   isNumber,
   isObject,
   isString,
-  keys,
   set
 } from '../globals/index.js'
 import { enumerate } from '../itertools/index.js'
@@ -250,7 +248,7 @@ export function forEach<T>(collection: Iterable<T> | Object, fn: Iteratee<T>): v
       if (res === false) return
     }
   } else {
-    for (const key of keys(collection)) {
+    for (const key of Object.keys(collection)) {
       const res = fn(collection[key], key, collection)
       if (res === false) return
     }
@@ -384,10 +382,10 @@ function flattenObj(obj, prefix = '', result = {}, keepNull = false) {
     return result
   }
 
-  if (isArray(obj) || isObject(obj)) {
+  if (Array.isArray(obj) || isObject(obj)) {
     for (const i of Object.keys(obj)) {
       let pref = prefix
-      if (isArray(obj)) {
+      if (Array.isArray(obj)) {
         pref = `${pref}[${i}]`
       } else {
         if (prefix) {
@@ -699,7 +697,7 @@ export function clone(value, deep = false) {
   if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
     return cloneTypedArray(value, deep)
   }
-  if (isArray(value) || isArrayLike(value)) {
+  if (Array.isArray(value) || isArrayLike(value)) {
     return cloneArray(value, deep)
   }
   if (isObject(value)) {
@@ -1062,7 +1060,11 @@ export function remove<T>(arr: T[], func: T): T[]
 export function remove<T>(arr: T[], func: T[]): T[]
 export function remove<T>(arr: T[], func: Iteratee<T>): T[]
 export function remove<T>(arr: T[], func: T | T[] | Iteratee<T>): T[] {
-  const it = isFunction(func) ? func : isArray(func) ? (x) => func.includes(x) : (x) => func === x
+  const it = isFunction(func)
+    ? func
+    : Array.isArray(func)
+      ? (x) => func.includes(x)
+      : (x) => func === x
   return arr.filter((x, i) => !it(x, i, arr))
 }
 

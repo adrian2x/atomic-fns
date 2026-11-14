@@ -158,11 +158,6 @@ export function isString(x): x is string {
   return type(x) === 'string'
 }
 
-/** Check if value is an Array type. */
-export function isArray(x): x is any[] {
-  return Array.isArray(x)
-}
-
 /**
  * Check if value is Array-like type.
  * A value is considered array-like if it's not a function and has a `.length` number property.
@@ -175,11 +170,6 @@ export function isArrayLike(x): boolean {
 /** Check if value is a number type. */
 export function isNumber(x): x is number {
   return type(x) === 'number'
-}
-
-/** Check if value is an integer number type. */
-export function isInteger(x): x is number {
-  return type(x) === 'number' && Math.trunc(x) === x
 }
 
 /** Check if value is a bigint type. */
@@ -334,26 +324,6 @@ export function chr(x: number): string {
 /** Convert character to Unicode code point */
 export function ord(x: string): number {
   return x.charCodeAt(0)
-}
-
-/**
- * Returns an array of the own enumerable property names of `object`.
- * @param object The given object.
- * @returns The array of object keys.
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys Object.keys()}
- */
-export function keys<T>(object: T): Array<keyof T> {
-  return Object.keys(object) as Array<keyof T>
-}
-
-/**
- * Returns an array of the own enumerable property values of `object`.
- * @param object The given object.
- * @returns The array of object keys.
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/values Object.values()}
- */
-export function values<T = any>(object): T[] {
-  return Object.values(object)
 }
 
 /**
