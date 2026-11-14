@@ -9,7 +9,8 @@ import {
   eq,
   gt,
   lt,
-  gte
+  gte,
+  deepEqual
 } from '../src/operators/index.js'
 
 describe('operators', () => {
@@ -69,5 +70,35 @@ describe('operators', () => {
     assert(gte(2, 1))
     assert(gte(2, 2))
     assert(!gte(1, 2))
+  })
+
+  it('shallowEqual tells kinds apart', () => {
+    assert(!shallowEqual({}, []))
+    assert(!shallowEqual({}, 5))
+    assert(!shallowEqual([1], { 0: 1, length: 1 }))
+    assert(!shallowEqual({}, new Date(0)))
+    class Point {}
+    assert(!shallowEqual(new Point(), {}))
+    assert(shallowEqual(Object.create(null), {}))
+  })
+
+  it('deepEqual tells kinds apart', () => {
+    assert(!deepEqual({}, []))
+    assert(!deepEqual({}, new Date(0)))
+    class Point {
+      x = 1
+    }
+    assert(!deepEqual(new Point(), { x: 1 }))
+    assert(deepEqual(new Point(), new Point()))
+    assert(deepEqual(Object.create(null), {}))
+  })
+  it('a forged class name is not a built-in', () => {
+    const date = JSON.parse('{"constructor":{"name":"Date"}}')
+    assert(!deepEqual(new Date(0), date))
+    assert(!deepEqual(date, new Date(0)))
+    assert(!shallowEqual(new Date(0), date))
+    assert(!deepEqual(/a/, JSON.parse('{"constructor":{"name":"RegExp"},"toString":1}')))
+    const bytes = JSON.parse('{"constructor":{"name":"Uint8Array"},"length":1,"0":1}')
+    assert(!deepEqual(new Uint8Array([1]), bytes))
   })
 })

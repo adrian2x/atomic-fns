@@ -203,6 +203,14 @@ export function pow(x, y) {
   return x ** y
 }
 
+/** Class names tell kinds apart across realms, where prototypes differ. */
+function sameKind(x, y): boolean {
+  if (!x || !y || typeof x !== 'object' || typeof y !== 'object') return false
+  const tag = Object.prototype.toString
+  if (tag.call(x) !== tag.call(y)) return false
+  return (x.constructor?.name ?? 'Object') === (y.constructor?.name ?? 'Object')
+}
+
 /**
  * Performs a shallow comparison of two objects or arrays to check if they have the same keys, length and values.
  * @param obj
@@ -213,7 +221,7 @@ export function pow(x, y) {
 export function shallowEqual(obj, other): boolean {
   if (obj === other) return true
 
-  if (!obj || !other) return false
+  if (!sameKind(obj, other)) return false
 
   if (Array.isArray(obj)) {
     // compare the arrays
@@ -252,8 +260,7 @@ export function shallowEqual(obj, other): boolean {
 export function deepEqual(obj, other, checker?: Function, seen?): boolean
 export function deepEqual(obj, other, checker = eq, seen = new WeakSet()): boolean {
   if (checker(obj, other)) return true
-  if (!obj || !other) return false
-  if (obj.prototype !== other.prototype) return false
+  if (!sameKind(obj, other)) return false
   if (seen.has(obj) && seen.has(other)) return false
 
   if (Array.isArray(obj)) {
