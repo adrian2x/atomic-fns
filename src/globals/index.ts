@@ -311,7 +311,7 @@ export function uuid(): string {
  * @return `obj.key(...args)` or `undefined`.
  */
 export function call<T = any>(obj: any, key: PropertyKey, ...args: any[]): T {
-  if (isFunction(get(key, obj))) {
+  if (isFunction(get([key], obj))) {
     return obj[key](...args)
   }
 }
