@@ -14,7 +14,7 @@ const MAX_EXPONENT = 10_000
 /**
  * Casts the given value as a {@link Decimal}.
  */
-export function decimal(x): Decimal {
+export function decimal(x: any): Decimal {
   return new Decimal(x)
 }
 
@@ -131,7 +131,7 @@ a.add(b)  // 50000000000.000000005
 ```
    * @returns {Decimal}
    */
-  add(x): Decimal {
+  add(x: any): Decimal {
     let a = new Decimal(this)
     let b = new Decimal(x)
     // a+b = a.i * 10^a.e + b.i * 10^b.e
@@ -166,7 +166,7 @@ a.sub(b)  // 0.9999999999999999999
 ```
    * @returns {Decimal}
    */
-  sub(x): Decimal {
+  sub(x: any): Decimal {
     return this.add(decimal(x).negated())
   }
 
@@ -181,7 +181,7 @@ a.mul(b)  // 1
 ```
    * @returns {Decimal}
    */
-  mul(x): Decimal {
+  mul(x: any): Decimal {
     const a = new Decimal(this)
     const b = new Decimal(x)
     // a * b = (a.i * b.i) * 10^(a.e + b.e)
@@ -363,7 +363,7 @@ a.div(b)  // 0.33333333333333333333
     return Decimal.PRECISION
   }
 
-  static set precision(value) {
+  static set precision(value: number) {
     Decimal.PRECISION = value
   }
 
@@ -388,7 +388,7 @@ a.div(b)  // 0.33333333333333333333
    * @param {*} x
    * @returns {boolean}
    */
-  lt(x): boolean {
+  lt(x: any): boolean {
     const other = decimal(x)
     if (this.e === other.e) return this.i < other.i
     const e = this.e - other.e
@@ -406,7 +406,7 @@ a.div(b)  // 0.33333333333333333333
    * @param {*} x
    * @returns {number}
    */
-  compare(x): 0 | 1 | -1 {
+  compare(x: any): 0 | 1 | -1 {
     const other = x == null || typeof x === 'boolean' ? decimal(x) : x
     if (this.eq(other)) return 0
     if (this.lt(other)) return -1
@@ -418,7 +418,7 @@ a.div(b)  // 0.33333333333333333333
    * @param {*} x
    * @returns {boolean}
    */
-  gt(x): boolean {
+  gt(x: any): boolean {
     return this.compare(x) > 0
   }
 
@@ -427,7 +427,7 @@ a.div(b)  // 0.33333333333333333333
    * @param {*} x
    * @returns {boolean}
    */
-  lte(x): boolean {
+  lte(x: any): boolean {
     return this.compare(x) <= 0
   }
 
@@ -436,7 +436,7 @@ a.div(b)  // 0.33333333333333333333
    * @param {*} x
    * @returns {boolean}
    */
-  gte(x): boolean {
+  gte(x: any): boolean {
     return this.compare(x) >= 0
   }
 }
