@@ -34,8 +34,8 @@ import {
   isGenerator,
   has,
   set
-} from '../src/globals/index.js'
-import { enumerate, take } from '../src/itertools/index.js'
+} from '../src/globals/index.ts'
+import { enumerate, take } from '../src/itertools/index.ts'
 
 describe('globals', () => {
   it('CustomError', () => {

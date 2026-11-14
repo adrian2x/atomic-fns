@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import * as string from '../src/string/index.js'
+import * as string from '../src/string/index.ts'
 
 describe('string', () => {
   it('capitalize', () => {

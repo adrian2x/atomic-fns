@@ -13,9 +13,9 @@ import {
   isRegExp,
   notNull,
   ValueError
-} from '../globals/index.js'
-import { add, bool, compare, type Comparer, eq, identity } from '../operators/index.js'
-import type { Function, Iteratee, Predicate } from '../types.js'
+} from '../globals/index.ts'
+import { add, bool, compare, type Comparer, eq, identity } from '../operators/index.ts'
+import type { Function, Iteratee, Predicate } from '../types.ts'
 
 /**
  * Make an iterator that returns accumulated sums, or accumulated results of other binary functions (specified via the optional `func` argument).

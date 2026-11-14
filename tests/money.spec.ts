@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { Currency } from '../src/i18n/index.js'
+import { Currency } from '../src/i18n/index.ts'
 
 describe('Money', () => {
   const locale = 'en-US'

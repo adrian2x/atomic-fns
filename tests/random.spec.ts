@@ -1,6 +1,6 @@
 import assert from 'node:assert'
-import { any, times } from '../src/itertools/index.js'
-import { choice, random, randomInt, sample, shuffle } from '../src/random/index.js'
+import { any, times } from '../src/itertools/index.ts'
+import { choice, random, randomInt, sample, shuffle } from '../src/random/index.ts'
 
 const randomArr = () => [...times(100, (i) => randomInt(i, 100))]
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { FrozenSet } from '../src/collections/frozenset.js'
+import { FrozenSet } from '../src/collections/frozenset.ts'
 
 describe('FrozenSet', () => {
   it('holds the items it was built from', () => {

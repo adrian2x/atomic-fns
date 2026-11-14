@@ -1,6 +1,6 @@
-import type { Comparer } from '../operators/index.js'
-import { compare } from '../operators/index.js'
-import { Collection } from './abc.js'
+import type { Comparer } from '../operators/index.ts'
+import { compare } from '../operators/index.ts'
+import { Collection } from './abc.ts'
 
 export class Heap<T> extends Collection {
   private readonly heap: T[]

@@ -31,7 +31,7 @@ import {
   sortedUniq,
   union,
   uniq
-} from '../src/collections/index.js'
+} from '../src/collections/index.ts'
 
 describe('collections', () => {
   it('compact', () => {

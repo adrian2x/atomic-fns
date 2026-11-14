@@ -4,10 +4,10 @@
  * @module math
  */
 
-import { call } from '../globals/index.js'
-import { reduce } from '../itertools/index.js'
-import { gt, identity, lt } from '../operators/index.js'
-import type { Predicate } from '../types.js'
+import { call } from '../globals/index.ts'
+import { reduce } from '../itertools/index.ts'
+import { gt, identity, lt } from '../operators/index.ts'
+import type { Predicate } from '../types.ts'
 
 /**
  * Returns the absolute value of a number. The argument may be a number or an object implementing the `abs()`.

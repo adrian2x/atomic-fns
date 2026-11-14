@@ -1,5 +1,5 @@
-import { itake } from '../itertools/index.js'
-import { Collection } from './abc.js'
+import { itake } from '../itertools/index.ts'
+import { Collection } from './abc.ts'
 
 type TrieNode = {
   isWord?: boolean

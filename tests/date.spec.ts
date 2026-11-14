@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { dayOfYear, weekOfYear } from '../src/i18n/date/utils.js'
+import { dayOfYear, weekOfYear } from '../src/i18n/date/utils.ts'
 import {
   addDuration,
   asDate,
@@ -11,7 +11,7 @@ import {
   minDate,
   strftime,
   subDuration
-} from '../src/i18n/index.js'
+} from '../src/i18n/index.ts'
 
 const mockDate = (val?, { utc = false, locale = 'en-US' } = {}) =>
   new IntlDate(val, { locale, utc })

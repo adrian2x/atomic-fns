@@ -1,6 +1,6 @@
 import assert from 'node:assert'
-import { Heap } from '../src/collections/Heap.js'
-import { sorted } from '../src/itertools/index.js'
+import { Heap } from '../src/collections/Heap.ts'
+import { sorted } from '../src/itertools/index.ts'
 
 describe('Heap', () => {
   it('empty', () => {
