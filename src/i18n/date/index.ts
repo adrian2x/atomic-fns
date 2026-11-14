@@ -321,7 +321,8 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
 
   /** Returns the timezone GMT offset as a string  */
   zone(): string {
-    return this.format('ZZ')
+    const zoneFormat = new Intl.DateTimeFormat(this.locale, { timeZoneName: 'longOffset' })
+    return zoneFormat.formatToParts(this._date).find((part) => part.type === 'timeZoneName').value
   }
 
   /** Returns the difference in `minutes` between this date and UTC  */
