@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { decimal, Decimal } from '../src/decimal/index.js'
 import { ValueError } from '../src/globals/index.js'
 

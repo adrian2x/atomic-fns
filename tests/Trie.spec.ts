@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { Trie } from '../src/collections/Trie.js'
 
 describe('Trie', () => {

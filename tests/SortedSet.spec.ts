@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { SortedSet } from '../src/collections/SortedSet.js'
 
 describe('SortedSet', () => {

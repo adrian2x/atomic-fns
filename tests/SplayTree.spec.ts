@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { SplayTree } from '../src/collections/SplayTree.js'
 
 describe('SplayTree', () => {

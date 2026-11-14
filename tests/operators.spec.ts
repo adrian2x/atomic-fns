@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { decimal } from '../src/decimal/index.js'
 import {
   bool,

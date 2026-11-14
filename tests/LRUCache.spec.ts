@@ -1,4 +1,4 @@
-import assert from 'assert'
+import assert from 'node:assert'
 import { LRUCache } from '../src/collections/LRUCache.js'
 import { deepEqual } from '../src/operators/index.js'
 
