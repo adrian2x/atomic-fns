@@ -675,6 +675,11 @@ describe('collections', () => {
     assert(overObject.date === source.date)
   })
 
+  it('merge ignores a length key when the source is an array', () => {
+    assert.deepEqual(merge({ box: { length: 2 ** 32, width: 5 } }, { box: [1] }), { box: [1] })
+    assert.deepEqual(merge({ a: { 0: 'x', 1: 'z', length: 2 } }, { a: ['y'] }), { a: ['y', 'z'] })
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })
