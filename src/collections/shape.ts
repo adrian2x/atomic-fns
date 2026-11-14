@@ -36,6 +36,13 @@ export type CollectionValue<C> = C extends string
           : C[keyof C]
         : never
 
+/** `(value, key, collection)`, as `Map.prototype.forEach` passes them. */
+export type CollectionCallback<C, R> = (
+  value: CollectionValue<C>,
+  key: CollectionKey<C>,
+  collection: C
+) => R
+
 const mapEntries = Map.prototype.entries
 const setValues = Set.prototype.values
 
@@ -101,4 +108,16 @@ export function eachEntry(collection: unknown, visit: Visit): boolean {
   const record = collection as Record<string, unknown>
   for (const key of Object.keys(record)) if (visit(record[key], key) === true) return true
   return false
+}
+
+/**
+ * Every `[key, value]` of `collection` in order, as `entries` lists them, for the helpers that
+ * walk from the end.
+ */
+export function entryList(collection: unknown): [key: unknown, value: unknown][] {
+  const out: [unknown, unknown][] = []
+  eachEntry(collection, (value, key) => {
+    out.push([key, value])
+  })
+  return out
 }

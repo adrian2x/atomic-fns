@@ -1,6 +1,25 @@
 import vm from 'node:vm'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { entries, includes, isEmpty, keys, size, values } from '../src/collections/index.ts'
+import {
+  entries,
+  every,
+  filter,
+  find,
+  findLast,
+  flatMap,
+  forEach,
+  forEachRight,
+  includes,
+  isEmpty,
+  keys,
+  map,
+  reduce,
+  reduceRight,
+  reject,
+  size,
+  some,
+  values
+} from '../src/collections/index.ts'
 
 function* gen(): Generator<string> {
   yield 'a'
@@ -218,5 +237,174 @@ describe('includes', () => {
     }
     expect(includes(endless(), 3)).toBe(true)
     expect(reads).toBe(4)
+  })
+})
+
+describe('forEach and forEachRight', () => {
+  it('pass (value, key, collection) for every entry', () => {
+    const obj = { a: 1, b: 2 }
+    const seen: unknown[] = []
+    forEach(obj, (value, key, collection) => {
+      seen.push([value, key, collection === obj])
+    })
+    expect(seen).toEqual([
+      [1, 'a', true],
+      [2, 'b', true]
+    ])
+  })
+
+  it.each([false, true])('visit every entry when the callback returns %s', (result) => {
+    const seen: number[] = []
+    forEach([1, 2, 3], (value) => {
+      seen.push(value)
+      return result
+    })
+    expect(seen).toStrictEqual([1, 2, 3])
+  })
+
+  it('forEachRight walks from the end, holes skipped', () => {
+    const seen: unknown[] = []
+    forEachRight(sparse(3, { 0: 'a', 2: 'c' }), (value, key) => {
+      seen.push([key, value])
+    })
+    expect(seen).toEqual([
+      [2, 'c'],
+      [0, 'a']
+    ])
+    const set: string[] = []
+    forEachRight(new Set(['x', 'y']), (value) => {
+      set.push(value)
+    })
+    expect(set).toEqual(['y', 'x'])
+  })
+})
+
+describe('map and flatMap', () => {
+  it('map collects one result per entry of any shape', () => {
+    expect(map({ a: 1, b: 2 }, (value) => value * 2)).toEqual([2, 4])
+    expect(map(new Map([['x', 1]]), (value, key) => `${key}=${value}`)).toEqual(['x=1'])
+    expect(map('ab', (ch, i) => ch + i)).toEqual(['a0', 'b1'])
+    expect(map(null, () => 1)).toEqual([])
+  })
+
+  it('flatMap spreads array results one level, as the native method does', () => {
+    expect(flatMap({ a: 1, b: 2 }, (value, key) => [key, value])).toEqual(['a', 1, 'b', 2])
+    expect(
+      flatMap<number[], number | number[]>([1, 2], (value) => (value === 1 ? [[value]] : value))
+    ).toEqual([[1], 2])
+    expect(flatMap(new Set(['a']), () => 'abc')).toEqual(['abc'])
+  })
+
+  it('flatMap skips holes in an array result, as the native method does', () => {
+    expect(flatMap([1], () => sparse(2 ** 32 - 1, { 0: 'a' }))).toEqual(['a'])
+  })
+})
+
+describe('filter, reject, find and findLast', () => {
+  it('filter and reject split the values', () => {
+    const obj = { a: 1, b: 2, c: 3 }
+    expect(filter(obj, (value) => value % 2 === 1)).toEqual([1, 3])
+    expect(reject(obj, (value) => value % 2 === 1)).toEqual([2])
+    expect(filter(new Map([['k', 'v']]), (_value, key) => key === 'k')).toEqual(['v'])
+  })
+
+  it('filter narrows with a type guard', () => {
+    const mixed: (number | string)[] = [1, 'a', 2]
+    const nums: number[] = filter(mixed, (value): value is number => typeof value === 'number')
+    expect(nums).toEqual([1, 2])
+  })
+
+  it('find and findLast narrow with a type guard', () => {
+    const mixed: (number | string)[] = ['a', 1, 2, 'b']
+    const isNumber = (value: number | string): value is number => typeof value === 'number'
+    const first: number | undefined = find(mixed, isNumber)
+    const last: number | undefined = findLast(mixed, isNumber)
+    expect(first).toBe(1)
+    expect(last).toBe(2)
+  })
+
+  it('find stops at its match', () => {
+    let reads = 0
+    function* endless(): Generator<number> {
+      for (;;) yield reads++
+    }
+    expect(find(endless(), (value) => value === 2)).toBe(2)
+    expect(reads).toBe(3)
+    expect(find({ a: 1 }, (value) => value > 5)).toBeUndefined()
+  })
+
+  it('findLast searches from the end', () => {
+    expect(findLast([1, 2, 3], (value) => value < 3)).toBe(2)
+    expect(findLast('abc', (ch) => ch < 'c')).toBe('b')
+  })
+})
+
+describe('some and every', () => {
+  it('stop at the first decisive entry', () => {
+    const seen: number[] = []
+    expect(
+      some([1, 2, 3], (value) => {
+        seen.push(value)
+        return value === 2
+      })
+    ).toBe(true)
+    expect(seen).toEqual([1, 2])
+    let reads = 0
+    function* endless(): Generator<number> {
+      for (;;) yield reads++
+    }
+    expect(every(endless(), (value) => value < 2)).toBe(false)
+    expect(reads).toBe(3)
+  })
+
+  it('every is true when every entry passes and false when one fails', () => {
+    expect(every(new Set([2, 4]), (value) => value % 2 === 0)).toBe(true)
+    expect(every({ a: 2, b: 3 }, (value) => value % 2 === 0)).toBe(false)
+  })
+
+  it('some counts a truthy non-boolean result as a pass', () => {
+    expect(some(['', 'x'], (value) => value)).toBe(true)
+  })
+
+  it('answer false and true for an empty collection', () => {
+    expect(some({}, () => true)).toBe(false)
+    expect(every(null, () => false)).toBe(true)
+  })
+})
+
+describe('reduce and reduceRight', () => {
+  it('fold with an initial value and the key', () => {
+    expect(reduce({ a: 1, b: 2 }, (sum, value) => sum + value, 0)).toBe(3)
+    expect(reduce(new Map([['x', 1]]), (out, value, key) => `${out}${key}${value}`, '')).toBe('x1')
+    expect(reduceRight(['a', 'b', 'c'], (out, value) => out + value, '')).toBe('cba')
+  })
+
+  it('start from the first value without one', () => {
+    expect(reduce([1, 2, 3], (sum, value) => sum + value)).toBe(6)
+    expect(reduceRight([1, 2, 3], (out, value) => out - value)).toBe(0)
+  })
+
+  it('reduce reads each value when it reaches it, as the native method does', () => {
+    const arr = [1, 2, 3]
+    const total = reduce(
+      arr,
+      (sum, value, index) => {
+        if (index === 0) arr[2] = 99
+        return sum + value
+      },
+      0
+    )
+    expect(total).toBe(102)
+  })
+
+  it('throw on empty without an initial value, as the native method does', () => {
+    const empty: number[] = []
+    expect(() => reduceRight(empty, (a, b) => a + b)).toThrow(TypeError)
+    expect(() => reduce(empty, (a, b) => a + b)).toThrow(TypeError)
+    expect(reduce(empty, (a, b) => a + b, 5)).toBe(5)
+  })
+
+  it('an explicit undefined initial value counts', () => {
+    expect(reduce([1], (acc: unknown) => acc, undefined)).toBeUndefined()
   })
 })
