@@ -55,7 +55,7 @@ export class Deque<T = any> extends Sequence<T> {
   /**
    * Method used to clear the structure.
    */
-  clear() {
+  clear(): void {
     // Properties
     this.start = 0
     this.count = 0
@@ -66,7 +66,7 @@ export class Deque<T = any> extends Sequence<T> {
    * @param {T} item Item to append.
    * @returns {number} Returns the new size of the deque.
    */
-  add(item): number {
+  add(item: any): number {
     return this.append(item)
   }
 
@@ -75,7 +75,7 @@ export class Deque<T = any> extends Sequence<T> {
    * @param {T} item Item to append.
    * @returns {number} Returns the new size of the deque.
    */
-  append(item): number {
+  append(item: any): number {
     if (this.count === this.capacity) this.popleft()
 
     const index = (this.start + this.count) % this.capacity
@@ -90,7 +90,7 @@ export class Deque<T = any> extends Sequence<T> {
    * @param {T} item Item to prepend.
    * @returns {number} Returns the new size of the deque.
    */
-  appendleft(item): number {
+  appendleft(item: any): number {
     if (this.count === this.capacity) this.pop()
 
     let index = this.start - 1
@@ -157,7 +157,7 @@ export class Deque<T = any> extends Sequence<T> {
    * @param {number} index The given index
    * @returns {?T} The element if exists
    */
-  get(index): T | undefined {
+  get(index: any): T | undefined {
     if (index < 0) index += this.count
     if (index < 0 || index >= this.count) return
 
@@ -181,7 +181,7 @@ export class Deque<T = any> extends Sequence<T> {
    * @param {T} x The value to find
    * @returns {boolean} `true` if the value is found
    */
-  contains(x): boolean {
+  contains(x: any): boolean {
     for (const value of this.values()) {
       if (eq(x, value)) return true
     }
@@ -203,7 +203,7 @@ export class Deque<T = any> extends Sequence<T> {
    * Calls `iteratee` function for every element in the deque.
    * @param {Iteratee<T>} iteratee A function that will be invoked per element
    */
-  forEach(iteratee) {
+  forEach(iteratee: any): void {
     const c = this.capacity
     const l = this.count
     let i = this.start

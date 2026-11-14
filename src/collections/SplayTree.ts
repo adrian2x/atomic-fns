@@ -62,7 +62,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @param compareFn
    * @param p When an element is accessed, with probability `p` splay the tree. With probability `1 - p`, leave the tree as it is.
    */
-  constructor(compareFn?, p = 0.5) {
+  constructor(compareFn?: any, p = 0.5) {
     super()
     this.cmp = compareFn ?? compare
     this.count = 0
@@ -127,7 +127,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @param {V} value A value associated with the key
    * @returns
    */
-  set(key: K, value: V) {
+  set(key: K, value: V): void {
     this.insert(key, value, true)
   }
 
@@ -204,7 +204,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * Returns the minimum key in the tree or subtree.
    * @returns The minimum key.
    */
-  min(root = this.root): K | undefined {
+  min(root: Node<K, V> = this.root): K | undefined {
     if (!root) return
     while (root.left) {
       root = root.left
@@ -216,7 +216,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * Returns the maximum key in the tree or subtree.
    * @returns The maximum key.
    */
-  max(root = this.root): K | undefined {
+  max(root: Node<K, V> = this.root): K | undefined {
     if (!root) return
     while (root.right) {
       root = root.right
@@ -229,7 +229,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @param key The given key
    * @returns {?K} The largest key found or `undefined`.
    */
-  lowerBound(key): K | undefined {
+  lowerBound(key: any): K | undefined {
     if (!this.root) return
 
     // Splay on the key to move the node with the given key or the last
@@ -250,7 +250,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @param key
    * @see {@link https://doi.org/10.1145%2F3828.3835 Self-Adjusting Binary Search Trees}
    */
-  splay(key) {
+  splay(key: any): void {
     if (!this.root) return
 
     let stub, left, right

@@ -363,7 +363,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   /** Releases the tree so that its size is 0. */
-  clear() {
+  clear(): void {
     this.root = EmptyLeaf as BNode<K, V>
     this.count = 0
   }
@@ -922,7 +922,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    *  that throws an Error. Compared to using a property (e.g. this.isFrozen)
    *  this implementation gives better performance in non-frozen BTrees.
    */
-  freeze() {
+  freeze(): void {
     const t = this as any
     // Note: all other mutators ultimately call set() or rangeUpdate()
     //       so we don't need to override those others.
