@@ -17,6 +17,87 @@ Supports Node `^24.22.3 || >=26.13.1`, Deno, Bun, browsers at Baseline and worke
 
 The 1.x line lives on the [`1.x` branch](https://github.com/adrian2x/atomic-fns/tree/1.x).
 
+## Collections
+
+Sorted maps and sets, trees, heap, deque, LRU cache, trie, frozen set and bisect: the data structures the platform does not ship. No dependencies, no Node APIs.
+
+### Conventions
+
+- Classes use `Map` and `Set` method names where the concept matches: `get`, `set`, `has`, `delete`, `clear`, `size`, `keys`, `values`, `entries`, `forEach(callback(value, key, collection))` and `[Symbol.iterator]`. `Deque` follows Array's names instead: `push`, `pop`, `shift`, `unshift`, `at`, `set(index, value)` and `includes`.
+- Sorted structures and the bisect functions take an optional comparator `(a, b) => number`. The default orders numbers and bigints by value (compared exactly with each other) and strings by UTF-16 code units, as `<` does. `NaN` throws `RangeError`; mixed strings and numbers, `null`, `undefined` and every other value throw `TypeError` asking for a comparator. Keys the comparator calls equal are the same key.
+- `Heap`, `Deque` and `FrozenSet` membership is SameValueZero, as in `Set` and `includes`.
+- Errors are native `TypeError` and `RangeError`, never custom classes.
+
+### Ordered maps and sets
+
+```ts
+import { SortedMap, SortedSet, SplayTree } from 'atomic-fns/collections'
+
+const scores = new SortedMap([
+  ['carol', 7],
+  ['alice', 9]
+])
+scores.set('bob', 8)
+;[...scores.keys()] // ['alice', 'bob', 'carol']
+scores.at(-1) // ['carol', 7]
+scores.rank('bob') // 1
+scores.ceiling('b') // ['bob', 8]
+scores.entriesBetween('a', 'c') // [['alice', 9], ['bob', 8]]
+scores.removeRange('a', 'b') // 1 (alice)
+const snapshot = scores.clone() // O(1), copy-on-write
+
+const ids = new SortedSet([30, 10, 20])
+ids.higher(10) // 20
+
+const byDate = new SortedMap<Date, string>(undefined, (a, b) => a.getTime() - b.getTime())
+```
+
+`SortedMap` is a copy-on-write B+ tree with subtree counts: lookups, `at` and `rank` take O(log n), range queries O(log n + k), and `updateRange` and `removeRange` are atomic, so a throwing callback or comparator leaves the map unchanged. A comparator that returns a non-finite number, or does not return 0 for a key against itself, is rejected before anything changes. `SortedSet` has the same ordered queries over values (`first`, `last`, `lower`, `higher`, `floor`, `ceiling`, `at`, `rank`, `valuesBetween`). `SplayTree` is an ordered map on a randomized splay tree, for skewed access patterns: `get` and `has` move the key they find to the root with probability 0.5, and `firstKey`, `lastKey`, `lower` and `higher` always do.
+
+### Heap, Deque, LRUCache
+
+```ts
+import { Deque, Heap, LRUCache } from 'atomic-fns/collections'
+
+const tasks = new Heap([5, 1, 3]) // pass (a, b) => b - a for a max-heap
+tasks.pop() // 1
+
+const recent = new Deque<number>([], { maxlen: 3 })
+recent.push(1, 2, 3, 4) // 3, the new size
+;[...recent] // [2, 3, 4]
+recent.unshift(0) // 3
+;[...recent] // [0, 2, 3]
+
+const cache = new LRUCache<string, string>(100)
+cache.set('/a', '<html>')
+cache.get('/a') // refreshes recency; has() does not
+```
+
+### Trie and FrozenSet
+
+```ts
+import { FrozenSet, Trie } from 'atomic-fns/collections'
+
+const words = new Trie(['car', 'cart', 'cat'])
+;[...words.withPrefix('car')] // ['car', 'cart']
+
+const roles = new FrozenSet(['admin', 'editor'])
+roles.add('guest') // throws TypeError
+```
+
+### Bisect
+
+```ts
+import { binarySearch, bisectLeft, bisectRight, insort } from 'atomic-fns/collections'
+
+bisectLeft([1, 2, 2, 3], 2) // 1
+bisectRight([1, 2, 2, 3], 2) // 3
+insort([1, 3], 2) // [1, 2, 3]
+binarySearch([1, 3, 5], 4) // -3: absent, belongs at index 2
+const rows = [{ id: 1 }, { id: 4 }]
+bisectLeft(rows, { id: 3 }, (a, b) => a.id - b.id) // 1; lo and hi follow the comparator
+```
+
 `sample` and `sampleSize` draw from arrays and typed arrays by reading only selected positions unless an array hole triggers a full scan, but `sampleSize` copies all values for full samples and when `n >= 5 && n >= length / 2`; sparse arrays may consume extra draws, so seeded results can differ from sampling their collected values, and `sampleSize(xs, 0)` reads no values.
 
 ## Decimal
