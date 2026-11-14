@@ -3,6 +3,7 @@ import {
   binarySearch,
   bisect,
   bisectLeft,
+  BTree,
   clone,
   compact,
   count,
@@ -112,6 +113,28 @@ describe('collections', () => {
     const merged = merge({}, { view }) as { view: DataView }
     assert(merged.view !== view)
     assert(merged.view.getUint8(1) === 3)
+  })
+
+  it('clone calls a clone method on array-like objects', () => {
+    const tree = new BTree([[1, 2]])
+    assert(clone(tree) instanceof BTree)
+    assert(clone(tree, true) instanceof BTree)
+  })
+
+  it('clone keeps a plain object with a length key', () => {
+    assert.deepEqual(clone({ length: 10, width: 5 }), { length: 10, width: 5 })
+    assert.deepEqual(clone({ length: 0, width: 5 }), { length: 0, width: 5 })
+    assert.deepEqual(clone({ length: 2 ** 32 }), { length: 2 ** 32 })
+  })
+
+  it('clone turns a real array-like into an array', () => {
+    const args = function (..._items) {
+      // biome-ignore lint/complexity/noArguments: this spec needs a real arguments object
+      return arguments
+    }
+    assert.deepEqual(clone(args(1, 2)), [1, 2])
+    assert.deepEqual(clone(args()), [])
+    assert.deepEqual(clone({ 0: 'a', 1: 'b', length: 2 }), ['a', 'b'])
   })
 
   it('difference', () => {

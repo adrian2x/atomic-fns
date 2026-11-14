@@ -707,13 +707,16 @@ export function clone(value, deep = false) {
   if (ArrayBuffer.isView(value)) {
     return cloneTypedArray(value, deep)
   }
-  if (Array.isArray(value) || isArrayLike(value)) {
+  if (isObject(value) && isFunction(value.clone)) {
+    return value.clone()
+  }
+  if (
+    Array.isArray(value) ||
+    (isArrayLike(value) && (isIterable(value) || value.length - 1 in value))
+  ) {
     return cloneArray(value, deep)
   }
   if (isObject(value)) {
-    if (isFunction(value.clone)) {
-      return value.clone()
-    }
     if (isDate(value)) return new Date(value.getTime())
     if (isRegExp(value)) {
       const regex = new RegExp(value.source, value.flags)
