@@ -72,6 +72,48 @@ describe('collections', () => {
     assert.deepEqual(clone(target), target)
   })
 
+  it('clone copies Date and RegExp', () => {
+    const date = new Date(5)
+    const dateCopy = clone(date)
+    assert(dateCopy !== date)
+    assert(dateCopy instanceof Date)
+    assert(dateCopy.getTime() === 5)
+    assert(clone({ date }, true).date.getTime() === 5)
+
+    const regex = /a/gi
+    regex.lastIndex = 3
+    const regexCopy = clone(regex)
+    assert(regexCopy !== regex)
+    assert(regexCopy.source === 'a')
+    assert(regexCopy.flags === 'gi')
+    assert(regexCopy.lastIndex === 3)
+  })
+
+  it('clone copies an ArrayBuffer', () => {
+    const buffer = new Uint8Array([1, 2, 3]).buffer
+    const copy = clone(buffer)
+    assert(copy !== buffer)
+    assert.deepEqual([...new Uint8Array(copy)], [1, 2, 3])
+    assert(clone(buffer, true).byteLength === 3)
+  })
+
+  it('clone and merge keep a DataView', () => {
+    const view = new DataView(new Uint8Array([1, 2, 3, 4]).buffer, 1, 2)
+    const shallow = clone(view)
+    assert(shallow.buffer === view.buffer)
+    assert(shallow.byteOffset === 1)
+    assert(shallow.byteLength === 2)
+
+    const deep = clone(view, true)
+    assert(deep.buffer !== view.buffer)
+    assert(deep.byteLength === 2)
+    assert(deep.getUint8(0) === 2)
+
+    const merged = merge({}, { view }) as { view: DataView }
+    assert(merged.view !== view)
+    assert(merged.view.getUint8(1) === 3)
+  })
+
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]

@@ -9,12 +9,14 @@ import {
   get,
   isArrayLike,
   isBool,
+  isDate,
   isEmpty,
   isFunction,
   isIterable,
   isNull,
   isNumber,
   isObject,
+  isRegExp,
   isString,
   set
 } from '../globals/index.js'
@@ -701,7 +703,8 @@ export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
 export function clone<T>(value: T, deep?: boolean): T
 export function clone<T>(value: T[], deep?: boolean): T[]
 export function clone(value, deep = false) {
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+  if (value instanceof ArrayBuffer) return value.slice(0)
+  if (ArrayBuffer.isView(value)) {
     return cloneTypedArray(value, deep)
   }
   if (Array.isArray(value) || isArrayLike(value)) {
@@ -710,6 +713,12 @@ export function clone(value, deep = false) {
   if (isObject(value)) {
     if (isFunction(value.clone)) {
       return value.clone()
+    }
+    if (isDate(value)) return new Date(value.getTime())
+    if (isRegExp(value)) {
+      const regex = new RegExp(value.source, value.flags)
+      regex.lastIndex = value.lastIndex
+      return regex
     }
     const copy = {}
     for (const key in value) {
@@ -744,6 +753,10 @@ function cloneArray<T>(arr: T[], deep = false): T[] {
  * @see {@link clone}
  */
 function cloneTypedArray(typedArray, isDeep = false) {
+  if (typedArray instanceof DataView) {
+    const viewed = isDeep ? typedArray.buffer.slice(0) : typedArray.buffer
+    return new DataView(viewed, typedArray.byteOffset, typedArray.byteLength)
+  }
   const buffer = isDeep ? structuredClone(typedArray) : typedArray.buffer
   return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length)
 }
