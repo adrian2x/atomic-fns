@@ -607,6 +607,32 @@ it('strftime %-H accepts a timestamp and no date', () => {
 })
 
 describe('Duration', () => {
+  it('exact durations stay exact', () => {
+    const exact = new Duration({ months: 1 }, true)
+    assert.strictEqual(new Duration(exact).total('days'), 30.436875)
+    assert.strictEqual(exact.negated().total('days'), -30.436875)
+    assert.strictEqual(exact.abs().total('days'), 30.436875)
+    assert.strictEqual(exact.add({ days: 1 }).total('days'), 31.436875)
+    assert.strictEqual(exact.subtract({ days: 1 }).total('days'), 29.436875)
+    assert.strictEqual(exact.normalize().total('days'), 30.436875)
+    assert.strictEqual(new Duration({ days: 365 }, true).rescale().get('years'), 0)
+    assert.strictEqual(new Duration({ months: 1 }).abs().total('days'), 30)
+  })
+
+  it('exact with a unit leaves the receiver alone', () => {
+    const duration = new Duration({ months: 1 })
+    assert.strictEqual(duration.exact('days'), 30.436875)
+    assert.strictEqual(duration.total('days'), 30)
+  })
+
+  it('normalize and rescale leave the receiver alone', () => {
+    const duration = new Duration({ hours: 1, minutes: 90 })
+    assert.deepStrictEqual(duration.normalize().toObject(), { hours: 2, minutes: 30 })
+    assert.deepStrictEqual(duration.toObject(), { hours: 1, minutes: 90 })
+    assert.deepStrictEqual(duration.rescale().toObject(), { hours: 2, minutes: 30 })
+    assert.deepStrictEqual(duration.toObject(), { hours: 1, minutes: 90 })
+  })
+
   it('reads quarters like any other unit', () => {
     assert.strictEqual(new Duration({ quarters: 2 }).get('quarters'), 2)
     assert.strictEqual(new Duration({ quarter: 2 }).get('quarter'), 2)
