@@ -56,6 +56,16 @@ describe('Money', () => {
     assert(a.div(b).toString() === '$0.3333333333333333')
   })
 
+  it('prints every digit past 2^53', () => {
+    assert(Money('9007199254740993').toString() === '$9,007,199,254,740,993.00')
+    assert(Money('-9007199254740993').toString() === '-$9,007,199,254,740,993.00')
+    assert(Money('9007199254740992.5').format() === '$9,007,199,254,740,992.50')
+    assert(Money('12345678901234567890.12').toString() === '$12,345,678,901,234,567,890.12')
+    assert(Money('12345678901234567890.125').precision(2) === '$12,345,678,901,234,567,890.13')
+    assert(Money('9007199254740991').toString() === '$9,007,199,254,740,991.00')
+    assert(Money('1e21').toString() === '$1,000,000,000,000,000,000,000.00')
+  })
+
   it('clone', () => {
     assert(Money(5).clone().toString() === '$5.00')
     assert(Money(5).clone(Money(7)).toString() === '$7.00')
