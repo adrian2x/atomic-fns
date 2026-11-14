@@ -292,11 +292,10 @@ class BNode<K, V = any> {
       else if (includeHigh) iHigh++
     }
     const keys = this.keys
-    const values = this.values
     if (onFound !== undefined) {
       for (let i = iLow; i < iHigh; i++) {
         const key = keys[i]
-        const result = onFound(key, values[i], count++)
+        const result = onFound(key, this.values[i], count++)
         if (result !== undefined) {
           if (editMode) {
             if (key !== keys[i] || this.isShared)
@@ -308,7 +307,7 @@ class BNode<K, V = any> {
               i--
               iHigh--
             } else if (result.value) {
-              values[i] = result.value
+              this.reifyValues()[i] = result.value
             }
           }
           if (result.done !== undefined) return result
@@ -323,7 +322,7 @@ class BNode<K, V = any> {
     this.keys.push.apply(this.keys, rhs.keys)
     if (this.values === undefVals) {
       if (rhs.values === undefVals) return
-      this.values = this.values.slice(0, this.keys.length)
+      this.values = this.values.slice(0, this.keys.length - rhs.keys.length)
     }
     this.values.push.apply(this.values, rhs.reifyValues())
   }
