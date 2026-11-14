@@ -1,4 +1,5 @@
 import assert from 'assert'
+import { decimal } from '../src/decimal/index.js'
 import {
   bool,
   identity,
@@ -10,7 +11,8 @@ import {
   gt,
   lt,
   gte,
-  deepEqual
+  deepEqual,
+  lte
 } from '../src/operators/index.js'
 
 describe('operators', () => {
@@ -156,5 +158,61 @@ describe('operators', () => {
     assert(compare(new Date(0), new Date(0)) === 0)
     assert(compare(new Date(0), new Date(1)) === -1)
     assert(compare(new Date(1), new Date(0)) === 1)
+  })
+
+  it('a hook answers before the native comparison', () => {
+    assert(!lt(decimal(10), decimal(9)))
+    assert(gt(decimal(10), decimal(9)))
+    assert(!lte(decimal(10), decimal(9)))
+    assert(gte(decimal(10), decimal(9)))
+
+    class Version {
+      constructor(public n: number) {}
+      lt(other: Version) {
+        return this.n < other.n
+      }
+      eq(other: Version) {
+        return this.n === other.n
+      }
+    }
+    const [one, two] = [new Version(1), new Version(2)]
+    assert(lte(one, two))
+    assert(lte(one, new Version(1)))
+    assert(!lte(two, one))
+    assert(compare(one, two) === -1)
+    assert(compare(two, one) === 1)
+  })
+  it('lte and gte hold for equal values with only a lt or gt hook', () => {
+    class Money {
+      constructor(public n: number) {}
+      lt(other: Money) {
+        return this.n < other.n
+      }
+      gt(other: Money) {
+        return this.n > other.n
+      }
+    }
+    assert(lte(new Money(1), new Money(1)))
+    assert(gte(new Money(1), new Money(1)))
+    assert(!lte(new Money(2), new Money(1)))
+    assert(!gte(new Money(1), new Money(2)))
+  })
+
+  it('lte and gte stay false for values that cannot be ordered', () => {
+    class Reading {
+      constructor(public n: number) {}
+      lt(other: Reading) {
+        return this.n < other.n
+      }
+      gt(other: Reading) {
+        return this.n > other.n
+      }
+      valueOf() {
+        return this.n
+      }
+    }
+    assert(!lte(new Reading(NaN), new Reading(0)))
+    assert(!gte(new Reading(NaN), new Reading(0)))
+    assert(lte(new Reading(1), new Reading(1)))
   })
 })
