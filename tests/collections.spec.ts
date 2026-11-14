@@ -270,6 +270,22 @@ describe('collections', () => {
     assert.deepEqual(Object.keys(merged), ['constructor'])
   })
 
+  it('merge assigns Map, Set and other objects it cannot merge', () => {
+    const source = { map: new Map([['a', 1]]), set: new Set([1]), error: new Error('x') }
+    assert.deepStrictEqual(merge({}, source), source)
+    assert.deepStrictEqual(merge({ map: 1, set: 2, error: 3 }, source), source)
+  })
+
+  it('merge skips null and undefined sources', () => {
+    assert.deepEqual(merge({ a: 1 }, null, undefined, { b: 2 }), { a: 1, b: 2 })
+  })
+
+  it('merge keeps a value when the source has undefined', () => {
+    assert.deepEqual(merge({ a: 1 }, { a: undefined }), { a: 1 })
+    assert.deepEqual(merge({ a: { b: 1 } }, { a: { b: undefined } }), { a: { b: 1 } })
+    assert.deepEqual(merge({ a: [1, 2] }, { a: [undefined, 3] }), { a: [1, 3] })
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })

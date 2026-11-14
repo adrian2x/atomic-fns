@@ -827,6 +827,7 @@ function baseMergeDeep(obj, source, key, stack) {
     }
   } else {
     isCommon = false
+    newValue = srcValue
   }
   if (isCommon) {
     stack.set(srcValue, newValue)
@@ -845,7 +846,7 @@ function baseMerge(obj, source, stack?) {
     if (typeof srcValue === 'object' && srcValue !== null) {
       baseMergeDeep(obj, source, key, stack || new WeakMap())
     } else {
-      if (objValue !== srcValue) {
+      if (srcValue !== undefined && objValue !== srcValue) {
         obj[key] = srcValue
       }
     }
@@ -878,7 +879,7 @@ merge(object, other)
  */
 export function merge(object: Object, ...sources: Object[]): Object {
   for (const source of sources) {
-    baseMerge(object, source)
+    if (source != null) baseMerge(object, source)
   }
   return object
 }
