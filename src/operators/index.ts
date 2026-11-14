@@ -7,14 +7,14 @@
 import { call, isObject } from '../globals/index.ts'
 
 /** This is the identity function. It always returns the same value that was passed in. */
-export const identity = <T>(x: T) => x
+export const identity = <T>(x: T): T => x
 
 /**
  * Called to implement truth value testing.
  * @param x
  * @returns {boolean} `x.bool()` if exists or `!!x`.
  */
-export function bool(x) {
+export function bool(x: any): any {
   const r = call(x, 'bool')
   if (r != null) return r
   return !!x
@@ -24,7 +24,7 @@ export function bool(x) {
  * Returns `true` if `x` is a falsy value.
  * @see {@link bool}
  */
-export function not(x) {
+export function not(x: any): boolean {
   return !bool(x)
 }
 
@@ -34,7 +34,7 @@ export function not(x) {
  * @param y The parent class
  * @returns {boolean}
  */
-export function isinstance(x, y) {
+export function isinstance(x: any, y: any): boolean {
   return x instanceof y
 }
 
@@ -54,7 +54,7 @@ export type Comparer<T = any> = (x: T, y: T) => number
  * @see {@link operators.eq}
  * @see {@link operators.lt}
  */
-export function compare(x, y): number {
+export function compare(x: any, y: any): number {
   if (x === y || eq(x, y)) return 0
   const op = call(x, 'compare', y)
   if (typeof op === 'number') return op
@@ -70,7 +70,7 @@ export function compare(x, y): number {
  * @param {*} y
  * @returns {boolean} `true` if `x` and `y` are equal or `false` otherwise.
  */
-export function eq(x, y): boolean {
+export function eq(x: any, y: any): boolean {
   return x === y || Object.is(x, y) || !!call(x, 'eq', y)
 }
 
@@ -81,7 +81,7 @@ export function eq(x, y): boolean {
  * @param {*} y
  * @returns {boolean} `true` if `x` is strictly less than `y` or `false` otherwise.
  */
-export function lt(x, y): boolean {
+export function lt(x: any, y: any): boolean {
   const op = call(x, 'lt', y)
   return op != null ? !!op : x < y
 }
@@ -95,7 +95,7 @@ export function lt(x, y): boolean {
  * @see {@link eq}
  * @see {@link lt}
  */
-export function lte(x, y): boolean {
+export function lte(x: any, y: any): boolean {
   const op = call(x, 'lte', y)
   if (op != null) return !!op
   const less = call(x, 'lt', y)
@@ -110,7 +110,7 @@ export function lte(x, y): boolean {
  * @param {*} y
  * @returns {boolean} `true` if `x` is strictly greater than `y` or `false` otherwise.
  */
-export function gt(x, y): boolean {
+export function gt(x: any, y: any): boolean {
   const op = call(x, 'gt', y)
   return op != null ? !!op : x > y
 }
@@ -124,7 +124,7 @@ export function gt(x, y): boolean {
  * @see {@link eq}
  * @see {@link gt}
  */
-export function gte(x, y): boolean {
+export function gte(x: any, y: any): boolean {
   const op = call(x, 'gte', y)
   if (op != null) return !!op
   const greater = call(x, 'gt', y)
@@ -139,7 +139,7 @@ export function gte(x, y): boolean {
  * @param {*} y
  * @returns {*} x + y
  */
-export function add(x, y) {
+export function add(x: any, y: any): any {
   const op = call(x, 'add', y)
   if (op != null) return op
   return x + y
@@ -152,7 +152,7 @@ export function add(x, y) {
  * @param {*} y
  * @returns {*} x - y
  */
-export function sub(x, y) {
+export function sub(x: any, y: any): any {
   const op = call(x, 'sub', y)
   if (op != null) return op
   return x - y
@@ -165,7 +165,7 @@ export function sub(x, y) {
  * @param {*} y
  * @returns {*} x * y
  */
-export function mul(x, y) {
+export function mul(x: any, y: any): any {
   const op = call(x, 'mul', y)
   if (op != null) return op
   return x * y
@@ -177,7 +177,7 @@ export function mul(x, y) {
  * @param {*} y
  * @returns {*} x / y
  */
-export function div(x, y) {
+export function div(x: any, y: any): any {
   const op = call(x, 'div', y)
   if (op != null) return op
   return x / y
@@ -189,7 +189,7 @@ export function div(x, y) {
  * @param {*} y
  * @returns {*} x % y
  */
-export function mod(x, y) {
+export function mod(x: any, y: any): any {
   const op = call(x, 'mod', y)
   if (op != null) return op
   return x % y
@@ -202,7 +202,7 @@ export function mod(x, y) {
  * @param {*} y
  * @returns {*} x ** y
  */
-export function pow(x, y) {
+export function pow(x: any, y: any): any {
   const op = call(x, 'pow', y)
   if (op != null) return op
   return x ** y
@@ -236,7 +236,7 @@ function sameDateOrRegExp(x, y): boolean {
  * @returns `true` if the objects are considered equal.
  * @see {@link deepEqual}
  */
-export function shallowEqual(obj, other): boolean {
+export function shallowEqual(obj: any, other: any): boolean {
   if (obj === other) return true
 
   if (!sameKind(obj, other)) return false
@@ -276,7 +276,7 @@ export function shallowEqual(obj, other): boolean {
  * @param other
  * @returns `true` if the objects are considered equal.
  */
-export function deepEqual(obj, other, checker?: Function, seen?): boolean
+export function deepEqual(obj: any, other: any, checker?: Function, seen?: any): boolean
 export function deepEqual(obj, other, checker = eq, seen = new WeakMap()): boolean {
   if (!(seen instanceof WeakMap)) seen = new WeakMap()
   if (checker(obj, other)) return true
