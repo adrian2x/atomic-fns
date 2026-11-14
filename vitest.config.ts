@@ -5,6 +5,7 @@ process.env.LC_ALL = 'en_US.UTF-8'
 
 export default defineConfig({
   test: {
+    execArgv: ['--expose-gc'],
     include: ['tests/**/*.spec.ts']
   }
 })
