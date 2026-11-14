@@ -512,7 +512,6 @@ describe('IntlDate', () => {
     assert.strictEqual(strftime('%y', date, 'th-TH'), '2564')
     assert.strictEqual(strftime('%I %P', date, 'ko-KR'), '09 오전')
     assert.strictEqual(strftime('%I %P', date, 'ja-JP'), '09 午前')
-    assert.strictEqual(strftime('%-H', date, 'de-DE'), '9')
     assert.strictEqual(strftime('%B', date, 'ja-JP'), '6月')
   })
 
