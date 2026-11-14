@@ -125,15 +125,18 @@ export function isFloatView(
   return FLOAT_ARRAY_NAMES.has(Reflect.apply(TYPED_ARRAY_NAME, view, []))
 }
 
-/** A typed array's type name, such as `'Float64Array'`, or `undefined` for a `DataView`. */
-export function typedArrayName(view: ArrayBufferView): string | undefined {
-  return Reflect.apply(TYPED_ARRAY_NAME, view, []) as string | undefined
+/**
+ * A typed array's type name, such as `'Float64Array'`, from any realm, or `undefined` for anything
+ * else, a `DataView` included. It never throws.
+ */
+export function typedArrayName(x: object): string | undefined {
+  return Reflect.apply(TYPED_ARRAY_NAME, x, []) as string | undefined
 }
 
 /** A typed array's element count (0 when detached), or `undefined` for other objects. */
-export function typedArrayLength(view: ArrayBufferView): number | undefined {
-  if (typedArrayName(view) === undefined) return undefined
-  return (view as Uint8Array).length
+export function typedArrayLength(x: object): number | undefined {
+  if (typedArrayName(x) === undefined) return undefined
+  return (x as Uint8Array).length
 }
 
 export function mapSize(map: Map<unknown, unknown>): number {

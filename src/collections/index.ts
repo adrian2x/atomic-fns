@@ -3,6 +3,8 @@
  * Sorted containers, trees, heaps, deques, caches, tries and bisect.
  * @module collections
  */
+export { entries, includes, isEmpty, keys, size, values } from './entries.ts'
+export type { Collection, CollectionKey, CollectionValue } from './shape.ts'
 export { binarySearch, bisect, bisectLeft, bisectRight, insort, insortLeft } from './bisect.ts'
 export { Deque } from './deque.ts'
 export { FrozenSet } from './frozen-set.ts'
