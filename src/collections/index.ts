@@ -90,7 +90,7 @@ export function count<T>(obj: T[] | Object, func: Iteratee<T>): Record<string, n
   const counters = {}
   forEach(obj, (value, key) => {
     const result = func(value as T, key)
-    counters[result] = get(result, counters, 0) + 1
+    setOwn(counters, result, Object.hasOwn(counters, result) ? counters[result] + 1 : 1)
   })
   return counters
 }
@@ -1080,9 +1080,8 @@ export function groupBy<T>(
   const results: Record<PropertyKey, T[]> = {}
   forEach(arr, (value: T) => {
     const groupKey = useKey(value)
-    const values = results[groupKey] || []
-    values.push(value)
-    results[groupKey] = values
+    if (!Object.hasOwn(results, groupKey)) setOwn(results, groupKey, [])
+    results[groupKey].push(value)
   })
   return results
 }
