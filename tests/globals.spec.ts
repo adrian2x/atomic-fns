@@ -310,4 +310,11 @@ describe('globals', () => {
     set('a', obj, 2)
     assert(obj['a'] === 2)
   })
+
+  it('hash accepts null and frozen objects', () => {
+    assert(hash(null) === null)
+    const frozen = Object.freeze({})
+    assert(hash(frozen) === hash(frozen))
+    assert(hash(frozen) !== hash(Object.freeze({})))
+  })
 })
