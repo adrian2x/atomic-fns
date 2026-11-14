@@ -63,7 +63,8 @@ class BNode<K, V = any> {
     while (lo < hi) {
       const c = cmp(keys[mid], key)
       if (c < 0) lo = mid + 1
-      else if (c > 0) hi = mid // key < keys[mid]
+      else if (c > 0)
+        hi = mid // key < keys[mid]
       else if (c === 0) return mid
       else {
         // c is NaN or otherwise invalid
