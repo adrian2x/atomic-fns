@@ -29,7 +29,7 @@ function padZoneStr(instance: Date) {
   )}`
 }
 
-function fromFields(utc: boolean, year: number, month, day, hour, minute, second, ms): Date {
+export function fromFields(utc: boolean, year: number, month, day, hour, minute, second, ms): Date {
   // Date reads the years 0 to 99 as 1900 to 1999, 400 years later the leap years still match
   const shift = year >= 0 && year < 100 ? 400 : 0
   if (utc) {
