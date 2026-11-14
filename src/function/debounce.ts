@@ -1,10 +1,10 @@
 import { assertFunction, timerWait } from './shared.ts'
 
-/** A debounced function with `cancel`, `flush` and `pending`. */
+/** A debounced or throttled function with `cancel`, `flush` and `pending`. */
 export interface Debounced<F extends (...args: never[]) => unknown> {
   /** Schedules a call and returns the result of the last invocation, if any. */
   (this: ThisParameterType<F>, ...args: Parameters<F>): ReturnType<F> | undefined
-  /** Drops the pending call. */
+  /** Drops the pending call and ends the current wait, so the next call starts fresh. */
   cancel(): void
   /** Runs the pending call now and returns its result, or the last result when none is pending. */
   flush(): ReturnType<F> | undefined
@@ -23,6 +23,14 @@ export interface DebounceOptions {
    * first call after `maxWait` last ran it. Has no effect when `trailing` is `false`.
    */
   maxWait?: number | null
+}
+
+/** Options for {@link throttle}. */
+export interface ThrottleOptions {
+  /** Invoke when a window opens (default `true`). */
+  leading?: boolean
+  /** Invoke at the end of a window with the latest arguments (default `true`). */
+  trailing?: boolean
 }
 
 /** A call held back for later: its `this` and arguments. */
@@ -154,4 +162,106 @@ export function debounce<F extends (...args: never[]) => unknown>(
   debounced.pending = willRun
 
   return debounced
+}
+
+/**
+ * Creates a function that invokes `fn` at most once per `wait` milliseconds: on the leading edge,
+ * and once more at the end of the window with the latest arguments when calls arrived during it
+ * (Lodash's leading and trailing defaults). The window opens before `fn` runs, so a reentrant
+ * call or a throw from `fn` stays throttled. Idle windows use `performance.now()` (faked by
+ * default in Vitest 5 and Jest) and hold no timer when `wait > 0`. Held trailing calls use timers;
+ * `wait === 0` keeps one trailing invocation per macrotask. Waits are checked as in {@link debounce}.
+ * @param fn The function to throttle.
+ * @param wait Milliseconds per window.
+ * @param options `leading` and `trailing`.
+ * @returns The throttled function with `cancel`, `flush` and `pending`.
+ * @example
+ * ```ts
+ * const onScroll = throttle(() => console.log(window.scrollY), 100)
+ * addEventListener('scroll', onScroll)
+ * ```
+ */
+export function throttle<F extends (...args: never[]) => unknown>(
+  fn: F,
+  wait?: number | null,
+  options?: ThrottleOptions
+): Debounced<F> {
+  assertFunction(fn, 'fn')
+  const delay = timerWait(wait ?? 0, 'wait')
+  const leading = options?.leading ?? true
+  const trailing = options?.trailing ?? true
+  let lastResult: ReturnType<F> | undefined
+  let trailingCall: HeldCall<F> | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let deadline = -Infinity
+  let activeCalls = 0
+
+  function scheduleWindowEnd(ms: number): void {
+    timer = setTimeout(() => {
+      timer = undefined
+      deadline = -Infinity
+      const call = trailingCall
+      trailingCall = undefined
+      if (call) invoke(call)
+    }, ms)
+  }
+
+  function startWindow(): void {
+    deadline = performance.now() + delay
+    if (delay === 0) scheduleWindowEnd(delay)
+  }
+
+  function invoke(call: HeldCall<F>): ReturnType<F> {
+    startWindow()
+    activeCalls++
+    try {
+      lastResult = fn.apply(call.thisArg, call.args) as ReturnType<F>
+      return lastResult
+    } finally {
+      activeCalls--
+    }
+  }
+
+  function clearWindow(): void {
+    deadline = -Infinity
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+  }
+
+  function throttled(this: unknown, ...args: Parameters<F>): ReturnType<F> | undefined {
+    const call = { thisArg: this, args }
+    if (
+      timer === undefined &&
+      (deadline === -Infinity || (activeCalls === 0 && performance.now() >= deadline))
+    ) {
+      if (leading) return invoke(call)
+      startWindow()
+    }
+    if (trailing) {
+      trailingCall = call
+      if (timer === undefined) {
+        scheduleWindowEnd(Math.max(0, Math.min(delay, Math.ceil(deadline - performance.now()))))
+      }
+    }
+    return lastResult
+  }
+
+  throttled.cancel = (): void => {
+    clearWindow()
+    trailingCall = undefined
+  }
+
+  throttled.flush = (): ReturnType<F> | undefined => {
+    if (trailingCall === undefined) return lastResult
+    const call = trailingCall
+    trailingCall = undefined
+    clearWindow()
+    return invoke(call)
+  }
+
+  throttled.pending = (): boolean => trailingCall !== undefined
+
+  return throttled
 }
