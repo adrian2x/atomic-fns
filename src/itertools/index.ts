@@ -24,7 +24,11 @@ import type { Function, Iteratee, Predicate } from '../types.ts'
  * @param initial Optional initial value (defaults to the first element in iterable)
  * @returns A sequence of accumulated values
  */
-export function* accumulate<T>(iterable: Iterable<T>, func = add, initial?: any): Generator<T> {
+export function* accumulate<T>(
+  iterable: Iterable<T>,
+  func: typeof add = add,
+  initial?: any
+): Generator<T> {
   const it = iter(iterable)
   let total = initial
   if (initial == null) {
@@ -58,7 +62,7 @@ all([2, 4, 6], n => n > 1)
 ```
 @see {@link any}
  */
-export function all<T>(iterable: Iterable<T>, fn: Predicate<T> = bool) {
+export function all<T>(iterable: Iterable<T>, fn: Predicate<T> = bool): boolean {
   for (const item of iterable) {
     if (!fn(item)) return false
   }
@@ -83,14 +87,14 @@ any([1, 4, 5], n => n % 2 === 0)
 ```
 @see {@link all}
  */
-export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool) {
+export function any<T>(iterable: Iterable<T>, fn: Predicate<T> = bool): boolean {
   for (const item of iterable) {
     if (fn(item)) return true
   }
   return false
 }
 
-export function chain<T>(...iterables: Array<Iterable<T>>) {
+export function chain<T>(...iterables: Array<Iterable<T>>): Generator<T, void, unknown> {
   return iflatten(iterables)
 }
 
@@ -127,7 +131,10 @@ export function contains(collection: Iterable<any>, value: any): boolean {
  * @param predicate A function invoked per element to check if it should be dropped.
  * @returns Elements
  */
-export function* dropWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
+export function* dropWhile<T>(
+  iterable: Iterable<T>,
+  predicate: Predicate<T>
+): Generator<T, T, unknown> {
   const it = iter<T>(iterable)
   while (true) {
     const head = it.next()
@@ -144,7 +151,7 @@ export function* dropWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
   }
 }
 
-export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>) {
+export function iforEach<T>(iterable: Iterable<T>, fun: Iteratee<T>): void {
   for (const [index, value] of enumerate(iterable)) {
     if (fun(value, index, iterable) === false) {
       return
@@ -168,7 +175,10 @@ console.log([...enumerate(['hello', 'world'], 1)])
 // [[1, 'hello'], [2, 'world']]
 ```
  */
-export function* enumerate<T>(iterable: Iterable<T>, start = 0) {
+export function* enumerate<T>(
+  iterable: Iterable<T>,
+  start = 0
+): Generator<[number, T], void, unknown> {
   let index = start
   for (const item of iterable) {
     yield [index++, item] as [number, T]
@@ -180,7 +190,7 @@ export function* enumerate<T>(iterable: Iterable<T>, start = 0) {
  * @param iterable The iterable to inspect.
  * @returns The first element found or undefined if iterable is empty.
  */
-export function first<T>(iterable: Iterable<T>) {
+export function first<T>(iterable: Iterable<T>): T {
   return iter(iterable).next().value as T
 }
 
@@ -194,7 +204,7 @@ export function first<T>(iterable: Iterable<T>) {
 // [1, 2, 3]
 ```
  */
-export function* icompact<T>(iterable: Iterable<T>) {
+export function* icompact<T>(iterable: Iterable<T>): Generator<T, void, unknown> {
   for (const value of iterable) {
     // `isEmpty` reads arity and keys, which say nothing about these values
     if (!isEmpty(value) || typeof value === 'function' || isDate(value) || isRegExp(value)) {
@@ -206,13 +216,19 @@ export function* icompact<T>(iterable: Iterable<T>) {
 /**
  * Iterates over elements of collection, producing only those elements where predicate returns a `truthy` value.
  */
-export function* ifilter<T>(iterable: Iterable<T>, predicate: Predicate<T, boolean>) {
+export function* ifilter<T>(
+  iterable: Iterable<T>,
+  predicate: Predicate<T, boolean>
+): Generator<T, void, unknown> {
   for (const value of iterable) {
     if (predicate(value)) yield value
   }
 }
 
-export function* imap<T, TReturn = any>(iterable: Iterable<T>, mapFn: Predicate<T, TReturn>) {
+export function* imap<T, TReturn = any>(
+  iterable: Iterable<T>,
+  mapFn: Predicate<T, TReturn>
+): Generator<TReturn, void, unknown> {
   for (const item of iterable) {
     yield mapFn(item)
   }
@@ -227,7 +243,7 @@ export function* imap<T, TReturn = any>(iterable: Iterable<T>, mapFn: Predicate<
 // [0, 1, 2, 3]
 ```
  */
-export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>) {
+export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>): Generator<T, void, unknown> {
   for (const iterator of iterables) {
     for (const item of iterator) {
       yield item
@@ -235,7 +251,10 @@ export function* iflatten<T = any>(iterables: Iterable<Iterable<T>>) {
   }
 }
 
-export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = identity) {
+export function flatMap<T>(
+  iterable: Iterable<T>,
+  mapFn: (x: T) => any = identity
+): Generator<T, void, unknown> {
   const toIterable = (x: T) => {
     const mapped = mapFn(x)
     return isIterable(mapped) ? mapped : [mapped]
@@ -243,7 +262,12 @@ export function flatMap<T>(iterable: Iterable<T>, mapFn: (x: T) => any = identit
   return iflatten<T>(imap(iterable, toIterable))
 }
 
-export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, step = 1) {
+export function* islice<T>(
+  iterable: Iterable<T>,
+  start: number,
+  stop?: number,
+  step = 1
+): Generator<T, void, unknown> {
   if (stop != null && stop < 0) throw new ValueError(`stop parameter can't be negative`)
   if (start < 0) throw new ValueError(`start parameter can't be negative`)
   if (stop != null && start > stop) throw new ValueError(`start parameter can't be after stop`)
@@ -257,7 +281,7 @@ export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, 
   }
 }
 
-export function* itake<T>(n: number, iterable: Iterable<T>) {
+export function* itake<T>(n: number, iterable: Iterable<T>): Generator<T, void, unknown> {
   const it = iter<T>(iterable)
   while (n-- > 0) {
     const item = it.next()
@@ -310,7 +334,7 @@ range(-3)
 // [0, -1, -2]
 ```
  */
-export function* range(...args: number[]) {
+export function* range(...args: number[]): Generator<number, void, unknown> {
   let start = 0
   let stop = 0
   let step = 1
@@ -346,8 +370,8 @@ reduce([1, 2, 3, 4, 5], (x, y) => x + y, 0)
 export function reduce<T>(
   iterable: Iterable<T>,
   reducer: (prev: T, value: T, index: any) => T,
-  initial?
-) {
+  initial?: any
+): any {
   const it = iter<T>(iterable)
   let output = initial ?? it.next().value
   for (const [index, value] of enumerate<T>({ [Symbol.iterator]: () => it })) {
@@ -445,7 +469,10 @@ export function take<T>(n: number, iterable: Iterable<T>): T[] {
  * @param predicate A function invoked per element to check if it should be taken.
  * @returns Elements
  */
-export function* takeWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
+export function* takeWhile<T>(
+  iterable: Iterable<T>,
+  predicate: Predicate<T>
+): Generator<T, void, unknown> {
   for (const value of iterable) {
     if (!predicate(value)) return
     yield value
@@ -458,7 +485,7 @@ export function* takeWhile<T>(iterable: Iterable<T>, predicate: Predicate<T>) {
  * @param n The number of times to invoke `fn`.
  * @param fn A function used to produce the results.
  */
-export function* times(n: number, fn: (index: number) => any) {
+export function* times(n: number, fn: (index: number) => any): Generator<any, void, unknown> {
   for (let i = 0; i < n; i++) yield fn(i)
 }
 
@@ -475,7 +502,7 @@ for item of zip([1, 2, 3], ['sugar', 'spice', 'nice'])
 // [3, 'nice']
 ```
  */
-export function* zip(...args: Array<Iterable<any>>) {
+export function* zip(...args: Array<Iterable<any>>): Generator<any[], void, unknown> {
   if (args.length === 0) return
   const iterables = args.map(iter)
   while (true) {
