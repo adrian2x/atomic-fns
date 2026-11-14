@@ -2,6 +2,7 @@
  * The built-in kinds a deep walk handles, including values from other realms.
  */
 
+import { isError } from '../is/isError.ts'
 import { isPlainObject } from '../is/isPlainObject.ts'
 
 function getterOf(prototype: object, key: PropertyKey): (this: unknown) => unknown {
@@ -18,17 +19,6 @@ export function isMap(x: unknown): x is Map<unknown, unknown> {
 /** A native `Set`, from any realm. */
 export function isSet(x: unknown): x is Set<unknown> {
   return Object.prototype.toString.call(x) === '[object Set]'
-}
-
-const nativeIsError = (Error as { isError?: (value: unknown) => boolean }).isError
-
-/**
- * An error from any realm, as `Error.isError` decides; without it, the object tag decides, which a
- * `Symbol.toStringTag` of `'Error'` can fool.
- */
-export function isError(x: unknown): x is Error {
-  if (nativeIsError !== undefined) return nativeIsError(x)
-  return Object.prototype.toString.call(x) === '[object Error]'
 }
 
 /** An `arguments` object, from any realm. `kindOf` calls it `other`; `isEqual` reads it like an array. */

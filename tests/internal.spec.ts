@@ -5,7 +5,6 @@ import {
   bytesOf,
   contentKindOf,
   isArguments,
-  isError,
   isFloatView,
   kindOf,
   mapSize,
@@ -462,12 +461,6 @@ describe('kinds', () => {
     const first = class Point {}
     const second = class Point {}
     expect(sameClass(new first(), new second())).toBe(false)
-  })
-
-  it('isError accepts errors from any realm and refuses look-alikes', () => {
-    expect(isError(new TypeError('x'))).toBe(true)
-    expect(isError(runInNewContext('new Error("x")'))).toBe(true)
-    expect(isError({ name: 'Error', message: 'x' })).toBe(false)
   })
 
   it('isArguments accepts arguments objects from any realm and refuses look-alikes', () => {
