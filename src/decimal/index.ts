@@ -10,4 +10,4 @@
  * @module
  */
 export { Decimal } from './decimal.ts'
-export type { DecimalInput } from './decimal.ts'
+export type { DecimalInput, DivideOptions, RoundingMode } from './decimal.ts'

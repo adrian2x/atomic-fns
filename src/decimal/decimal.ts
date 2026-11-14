@@ -1,7 +1,56 @@
 import { bitLength } from './internal/bits.ts'
 import { quoteForError } from './internal/echo.ts'
+import { isqrtRoot } from './internal/isqrt.ts'
 import { canonicalLocales } from './internal/locale.ts'
 import { pow10, pow10Squares } from './internal/pow10.ts'
+
+/**
+ * How {@link Decimal.divide}, {@link Decimal.round}, {@link Decimal.sqrt} and
+ * {@link Decimal.toFixed} round, with the names `Intl.NumberFormat` uses:
+ * - `ceil`: toward +Infinity.
+ * - `floor`: toward -Infinity.
+ * - `expand`: away from zero.
+ * - `trunc`: toward zero.
+ * - `halfCeil`: nearest, ties toward +Infinity (as `Math.round`).
+ * - `halfFloor`: nearest, ties toward -Infinity.
+ * - `halfExpand`: nearest, ties away from zero (as `Number.prototype.toFixed`).
+ * - `halfTrunc`: nearest, ties toward zero.
+ * - `halfEven`: nearest, ties to the even neighbor (the default).
+ */
+export type RoundingMode =
+  | 'ceil'
+  | 'floor'
+  | 'expand'
+  | 'trunc'
+  | 'halfCeil'
+  | 'halfFloor'
+  | 'halfExpand'
+  | 'halfTrunc'
+  | 'halfEven'
+
+/** Every {@link RoundingMode}, keyed so the type check fails when the two lists drift apart. */
+const ROUNDING_MODES: Readonly<Record<RoundingMode, true>> = {
+  ceil: true,
+  floor: true,
+  expand: true,
+  trunc: true,
+  halfCeil: true,
+  halfFloor: true,
+  halfExpand: true,
+  halfTrunc: true,
+  halfEven: true
+}
+
+/** Options for {@link Decimal.divide} and {@link Decimal.sqrt}. */
+export interface DivideOptions {
+  /**
+   * Significant digits of the result, from 1 to `Decimal.MAX_DIGITS` (default 34, as the TC39
+   * draft's 128-bit decimals carry). It counts significant digits, not fractional ones.
+   */
+  precision?: number
+  /** How the last digit rounds (default `'halfEven'`). */
+  roundingMode?: RoundingMode
+}
 
 /**
  * A value {@link Decimal} reads: a Decimal, a decimal string, a bigint or a finite number.
@@ -13,7 +62,10 @@ import { pow10, pow10Squares } from './internal/pow10.ts'
  */
 export type DecimalInput = Decimal | string | bigint | number
 
+/** Significant digits {@link Decimal.divide} and {@link Decimal.sqrt} keep by default. */
+const DEFAULT_PRECISION = 34
 const MAX_EXPONENT = 10_000
+const MAX_PRECISION = 10_000
 const MAX_DIGITS = 10_000
 const MAX_INPUT_LENGTH = 2 * MAX_EXPONENT + MAX_DIGITS + 32
 
@@ -104,6 +156,66 @@ function compareIE(a: Operand, b: Operand): -1 | 0 | 1 {
   return orderBySign(left < right, negative)
 }
 
+/** `n / d` rounded to an integer by `mode`. */
+function roundQuotient(n: bigint, d: bigint, mode: RoundingMode): bigint {
+  const q = n / d
+  const r = n % d
+  if (r === 0n) return q
+  const sign = r < 0n !== d < 0n ? -1n : 1n
+  const twice = 2n * absBig(r)
+  const ad = absBig(d)
+  const half = twice < ad ? -1 : twice > ad ? 1 : 0
+  let away: boolean
+  switch (mode) {
+    case 'ceil':
+      away = sign > 0n
+      break
+    case 'floor':
+      away = sign < 0n
+      break
+    case 'expand':
+      away = true
+      break
+    case 'trunc':
+      away = false
+      break
+    case 'halfCeil':
+      away = half > 0 || (half === 0 && sign > 0n)
+      break
+    case 'halfFloor':
+      away = half > 0 || (half === 0 && sign < 0n)
+      break
+    case 'halfExpand':
+      away = half >= 0
+      break
+    case 'halfTrunc':
+      away = half > 0
+      break
+    case 'halfEven':
+      away = half > 0 || (half === 0 && q % 2n !== 0n)
+      break
+  }
+  return away ? q + sign : q
+}
+
+function assertRoundingMode(mode: RoundingMode): void {
+  if (typeof mode !== 'string' || !Object.hasOwn(ROUNDING_MODES, mode)) {
+    throw new RangeError(`roundingMode must be one of ${Object.keys(ROUNDING_MODES).join(', ')}`)
+  }
+}
+
+function assertOptions(options: unknown): void {
+  if (options !== undefined && Object(options) !== options) {
+    throw new TypeError('options must be an object')
+  }
+}
+
+function assertIntegerIn(name: string, value: number, least: number, most: number): void {
+  if (!Number.isInteger(value) || value < least || value > most) {
+    throw new RangeError(`${name} must be an integer from ${String(least)} to ${String(most)}`)
+  }
+}
+
 function assertDigitsBound(digits: number): void {
   if (digits > MAX_DIGITS) throw new RangeError(`result exceeds ${String(MAX_DIGITS)} digits`)
 }
@@ -135,6 +247,11 @@ export class Decimal {
   /** Largest absolute exponent a Decimal stores; larger values throw `RangeError`. */
   static get MAX_EXPONENT(): number {
     return MAX_EXPONENT
+  }
+
+  /** Largest fractional `digits` {@link Decimal.round} and {@link Decimal.toFixed} take. */
+  static get MAX_PRECISION(): number {
+    return MAX_PRECISION
   }
 
   /**
@@ -250,6 +367,19 @@ export class Decimal {
     return d
   }
 
+  /** Rounds `(n / d) * 10^e` to `fractionDigits` fractional digits. */
+  static #scaleRound(
+    n: bigint,
+    d: bigint,
+    e: number,
+    fractionDigits: number,
+    mode: RoundingMode
+  ): Decimal {
+    const k = e + fractionDigits
+    const q = k >= 0 ? roundQuotient(n * pow10(k), d, mode) : roundQuotient(n, d * pow10(-k), mode)
+    return Decimal.#fromIE(q, -fractionDigits)
+  }
+
   /**
    * The exact sum.
    * @example
@@ -289,6 +419,55 @@ export class Decimal {
   }
 
   /**
+   * The quotient rounded to `precision` significant digits (default 34), as the TC39 draft
+   * rounds, so `new Decimal('1e-30').divide(3)` keeps its scale. An exact quotient with fewer
+   * digits is returned whole.
+   * @throws {TypeError} for `options` that is not an object.
+   * @throws {RangeError} for a zero divisor, a `precision` out of range, an unknown mode, or a
+   * rounded quotient past the exponent bound: one too large, or one whose last digit falls below
+   * `10^-Decimal.MAX_EXPONENT`, as `new Decimal('1e-9990').divide(3)` does at 34 digits.
+   * @example
+   * ```ts
+   * new Decimal(1).divide(3).toString() // '0.3333333333333333333333333333333333'
+   * new Decimal(2).divide(3, { precision: 2, roundingMode: 'trunc' }).toString() // '0.66'
+   * new Decimal(1).divide(8).toString() // '0.125'
+   * ```
+   */
+  divide(other: DecimalInput, options?: DivideOptions): Decimal {
+    assertOptions(options)
+    const precision = options?.precision ?? DEFAULT_PRECISION
+    const mode = options?.roundingMode ?? 'halfEven'
+    assertIntegerIn('precision', precision, 1, MAX_DIGITS)
+    assertRoundingMode(mode)
+    const b = Decimal.#from(other)
+    if (b.#i === 0n) throw new RangeError('division by zero')
+    if (this.#i === 0n) return this
+    // The quotient's order of magnitude is the difference of the operands', or one less.
+    const lead = compareIE(
+      { i: absBig(this.#i), e: 1 - this.#digits, digits: this.#digits },
+      { i: absBig(b.#i), e: 1 - b.#digits, digits: b.#digits }
+    )
+    const magnitude = this.#e + this.#digits - (b.#e + b.#digits) - (lead < 0 ? 1 : 0)
+    return Decimal.#scaleRound(this.#i, b.#i, this.#e - b.#e, precision - 1 - magnitude, mode)
+  }
+
+  /**
+   * The exact remainder of truncating division, with the sign of this value, as `%` gives.
+   * @throws {RangeError} for a zero divisor.
+   * @example
+   * ```ts
+   * new Decimal('7.5').remainder(2).toString() // '1.5'
+   * new Decimal('-7.5').remainder(2).toString() // '-1.5'
+   * ```
+   */
+  remainder(other: DecimalInput): Decimal {
+    const b = Decimal.#from(other)
+    if (b.#i === 0n) throw new RangeError('division by zero')
+    const e = Math.min(this.#e, b.#e)
+    return Decimal.#fromIE((this.#i * pow10(this.#e - e)) % (b.#i * pow10(b.#e - e)), e)
+  }
+
+  /**
    * This value with the opposite sign.
    * @example
    * ```ts
@@ -308,6 +487,61 @@ export class Decimal {
    */
   abs(): Decimal {
     return this.#i < 0n ? this.negate() : this
+  }
+
+  /**
+   * Rounds to `digits` fractional digits; a negative count rounds to tens, hundreds, and so on.
+   * @param digits Fractional digits, from `-Decimal.MAX_EXPONENT` to `Decimal.MAX_PRECISION`
+   * (default 0).
+   * @param roundingMode How ties and remainders round (default `'halfEven'`).
+   * @throws {RangeError} for `digits` out of range, an unknown mode, or a result past the
+   * exponent bound.
+   * @example
+   * ```ts
+   * new Decimal('2.5').round().toString() // '2'
+   * new Decimal('2.5').round(0, 'halfExpand').toString() // '3'
+   * new Decimal('1234').round(-2).toString() // '1200'
+   * ```
+   */
+  round(digits = 0, roundingMode: RoundingMode = 'halfEven'): Decimal {
+    assertIntegerIn('digits', digits, -MAX_EXPONENT, MAX_PRECISION)
+    assertRoundingMode(roundingMode)
+    if (-this.#e <= digits) return this
+    return Decimal.#scaleRound(this.#i, 1n, this.#e, digits, roundingMode)
+  }
+
+  /**
+   * The square root rounded to `precision` significant digits (default 34). An exact root with
+   * fewer digits is returned whole.
+   * @throws {TypeError} for `options` that is not an object.
+   * @throws {RangeError} for a negative value, a `precision` out of range, an unknown mode, or a
+   * rounded root whose last digit falls below `10^-Decimal.MAX_EXPONENT`.
+   * @example
+   * ```ts
+   * new Decimal(2).sqrt().toString() // '1.414213562373095048801688724209698'
+   * new Decimal('6.25').sqrt().toString() // '2.5'
+   * new Decimal(2).sqrt({ precision: 5 }).toString() // '1.4142'
+   * ```
+   */
+  sqrt(options?: DivideOptions): Decimal {
+    assertOptions(options)
+    const precision = options?.precision ?? DEFAULT_PRECISION
+    const mode = options?.roundingMode ?? 'halfEven'
+    assertIntegerIn('precision', precision, 1, MAX_DIGITS)
+    assertRoundingMode(mode)
+    if (this.#i < 0n) throw new RangeError('square root of a negative number')
+    if (this.#i === 0n) return this
+    // The root's order of magnitude is half this value's, rounded down.
+    const fractionDigits = precision - 1 - Math.floor((this.#e + this.#digits - 1) / 2)
+    // i * 10^e = coeff * 10^(2 * half), with coeff = i or 10i.
+    const odd = this.#e % 2 !== 0
+    const coeff = odd ? this.#i * 10n : this.#i
+    const half = (odd ? this.#e - 1 : this.#e) / 2
+    // Rounding boundaries fall on whole root units, so a sticky digit stands in for the rest.
+    const scale = Math.max(0, half + fractionDigits + 1)
+    const { root, exact } = isqrtRoot(coeff * pow10(2 * scale))
+    const sticky = root * 10n + (exact ? 0n : 1n)
+    return Decimal.#scaleRound(sticky, 1n, half - scale - 1, fractionDigits, mode)
   }
 
   /**
@@ -414,6 +648,26 @@ export class Decimal {
       return `${sign}0.${'0'.repeat(-this.#e - digits.length)}${digits}`
     }
     return `${sign}${digits.slice(0, this.#e)}.${digits.slice(this.#e)}`
+  }
+
+  /**
+   * Plain notation with exactly `digits` fractional digits. Ties round half away from zero
+   * (`'halfExpand'`), as `Number.prototype.toFixed` rounds, not half to even as
+   * {@link Decimal.round} does by default; pass `roundingMode` to choose another.
+   * @param digits Fractional digits, from 0 to `Decimal.MAX_PRECISION` (default 0).
+   * @param roundingMode How the last digit rounds (default `'halfExpand'`).
+   * @throws {RangeError} for `digits` out of range or an unknown mode.
+   * @example
+   * ```ts
+   * new Decimal('2.5').toFixed() // '3'
+   * new Decimal('1.005').toFixed(2) // '1.01'
+   * new Decimal('3').toFixed(2) // '3.00'
+   * ```
+   */
+  toFixed(digits = 0, roundingMode: RoundingMode = 'halfExpand'): string {
+    assertIntegerIn('digits', digits, 0, MAX_PRECISION)
+    const [whole, fraction = ''] = this.round(digits, roundingMode).toPlainString().split('.')
+    return digits === 0 ? whole : `${whole}.${fraction.padEnd(digits, '0')}`
   }
 
   /** The canonical string, as {@link Decimal.toString}, so `JSON.stringify` keeps every digit. */
