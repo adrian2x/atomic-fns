@@ -78,7 +78,7 @@ export class SortedSet<T> extends Collection {
    * Check if there are no values in the set.
    * @returns {boolean} `true` if is empty.
    */
-  empty(): boolean {
+  override empty(): boolean {
     return this.store.empty()
   }
 

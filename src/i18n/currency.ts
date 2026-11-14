@@ -84,7 +84,7 @@ export class Currency extends Decimal {
     return Decimal.prototype.toString.call(this) as Intl.StringNumericLiteral
   }
 
-  toString(): string {
+  override toString(): string {
     return this.numberFormat.format(this.formattable())
   }
 
@@ -109,7 +109,7 @@ export class Currency extends Decimal {
     return this.format({ maximumFractionDigits: digits })
   }
 
-  eq(x: any): boolean {
+  override eq(x: any): boolean {
     if (x?.currency && x.currency !== this.currency) {
       return false
     }

@@ -99,7 +99,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * Check if there are no key/value pairs in the tree.
    * @returns {boolean} `true` if is empty.
    */
-  empty(): boolean {
+  override empty(): boolean {
     return this.store.empty()
   }
 
