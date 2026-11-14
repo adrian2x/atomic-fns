@@ -101,4 +101,18 @@ describe('operators', () => {
     const bytes = JSON.parse('{"constructor":{"name":"Uint8Array"},"length":1,"0":1}')
     assert(!deepEqual(new Uint8Array([1]), bytes))
   })
+
+  it('Dates and RegExps compare by value', () => {
+    assert(!deepEqual(new Date(1), new Date(2)))
+    assert(deepEqual(new Date(1), new Date(1)))
+    assert(deepEqual(new Date(NaN), new Date(NaN)))
+    assert(!deepEqual(/a/, /b/))
+    assert(!deepEqual(/a/g, /a/i))
+    assert(deepEqual(/a/g, /a/g))
+    assert(deepEqual({ at: new Date(1) }, { at: new Date(1) }))
+
+    assert(!shallowEqual(new Date(1), new Date(2)))
+    assert(shallowEqual(new Date(1), new Date(1)))
+    assert(!shallowEqual(/a/, /b/))
+  })
 })
