@@ -18,11 +18,14 @@ import { Function, Iteratee, Predicate } from '../types.js'
 export function* accumulate<T>(iterable: Iterable<T>, func = add, initial?: any): Generator<T> {
   const it = iter(iterable)
   let total = initial
-  let current = it.next()
-  if (initial == null) total = current.value
-  while (!current.done) {
+  if (initial == null) {
+    const head = it.next()
+    if (head.done) return
+    total = head.value
+  }
+  while (true) {
     yield total
-    current = it.next()
+    const current = it.next()
     if (current.done) return
     total = func(total, current.value)
   }
@@ -232,8 +235,8 @@ export function* islice<T>(iterable: Iterable<T>, start: number, stop?: number, 
   if (stop != null && start > stop) throw new ValueError(`start parameter can't be after stop`)
   if (step < 0) throw new ValueError(`step parameter can't be negative`)
   for (const [i, value] of enumerate(iterable)) {
+    if (stop != null && i >= stop) return
     if (i === start) {
-      if (stop && start + step > stop) return value
       yield value
       start += step
     }

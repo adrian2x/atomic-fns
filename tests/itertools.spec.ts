@@ -39,6 +39,15 @@ describe('operators', () => {
     )
   })
 
+  it('accumulate with initial', () => {
+    const add = (x, y) => x + y
+    assert.deepEqual([...accumulate([1, 2, 3], add, 10)], [10, 11, 13, 16])
+    assert.deepEqual([...accumulate([1, 2, 3], add, 0)], [0, 1, 3, 6])
+    assert.deepEqual([...accumulate([], add, 10)], [10])
+    assert.deepEqual([...accumulate([1, 2, 3], add, null)], [1, 3, 6])
+    assert.deepEqual([...accumulate([], add)], [])
+  })
+
   it('all', () => {
     assert(all([1, true, [], 'test', {}]))
     assert(!all([[], {}, '']))
@@ -151,6 +160,14 @@ describe('operators', () => {
     assert.deepEqual([...islice([1, 2, 3, 4], 1, 3)], [2, 3])
     assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 4)], [1, 2, 3, 4])
     assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 4, 2)], [1, 3])
+  })
+
+  it('islice stops at stop', () => {
+    assert.deepEqual([...islice([1, 2, 3], 0, 0)], [])
+    assert.deepEqual(take(1, islice(range(Infinity), 0, 0)), [])
+    assert.deepEqual([...islice(range(10), 2, 5, 2)], [2, 4])
+    assert.deepEqual([...islice([1, 2, 3, 4, 5], 0, 5, 2)], [1, 3, 5])
+    assert.deepEqual([...islice(range(10), 0, 10, 3)], [0, 3, 6, 9])
   })
 
   it('itake', () => {
