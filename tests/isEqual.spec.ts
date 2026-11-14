@@ -2,6 +2,7 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
 import { DEPTH_ERROR } from '../src/internal/walk.ts'
 import { isEqual, isEqualWith } from '../src/object/isEqual.ts'
+import { omit } from '../src/object/pick.ts'
 import { sparse } from './sparse.ts'
 
 const overflow = () => new RangeError('Maximum call stack size exceeded')
@@ -317,6 +318,26 @@ describe('isEqualWith', () => {
     expect(isEqualWith({ p: new Point(1, 2) }, { p: new Point(1, 3) }, byFields)).toBe(false)
     expect(isEqualWith({ a: 1 }, { a: 1 }, () => undefined)).toBe(true)
     expect(isEqualWith(1, 2, () => true)).toBe(true)
+  })
+
+  it.each([
+    { value: 1, equal: true },
+    { value: 2, equal: false }
+  ])('can omit a missing key by deciding the parent pair: $value', ({ value, equal }) => {
+    const a = { value: 1, creation: 100 }
+    const b = { value }
+
+    const result = isEqualWith(a, b, (left, right, key) =>
+      key === undefined &&
+      typeof left === 'object' &&
+      left !== null &&
+      typeof right === 'object' &&
+      right !== null
+        ? isEqual(omit(left, ['creation']), omit(right, ['creation']))
+        : undefined
+    )
+
+    expect(result).toBe(equal)
   })
 
   it('leaves Set members and Map keys to SameValueZero', () => {

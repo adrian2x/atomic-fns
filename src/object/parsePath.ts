@@ -17,6 +17,24 @@ export const DANGEROUS_KEYS: ReadonlySet<PropertyKey> = new Set([
   'prototype'
 ])
 
+/**
+ * Write `value` under `key`: a plain assignment for an ordinary string key, so a setter on `target`
+ * runs, and an own data property for a symbol or one of {@link DANGEROUS_KEYS}, so `__proto__`
+ * stays a key and no write reaches a prototype.
+ */
+export function writeKey(target: object, key: PropertyKey, value: unknown): void {
+  if (typeof key === 'string' && !DANGEROUS_KEYS.has(key)) {
+    ;(target as Record<string, unknown>)[key] = value
+  } else {
+    Object.defineProperty(target, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true
+    })
+  }
+}
+
 function malformed(path: string): TypeError {
   return new TypeError(`malformed path ${truncateForError(path)}`)
 }
