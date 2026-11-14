@@ -703,6 +703,11 @@ export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
 export function clone<T>(value: T, deep?: boolean): T
 export function clone<T>(value: T[], deep?: boolean): T[]
 export function clone(value, deep = false) {
+  return cloneValue(value, deep, new Map())
+}
+
+function cloneValue(value, deep, ancestors) {
+  if (ancestors.has(value)) return ancestors.get(value)
   if (value instanceof ArrayBuffer) return value.slice(0)
   if (ArrayBuffer.isView(value)) {
     return cloneTypedArray(value, deep)
@@ -724,13 +729,15 @@ export function clone(value, deep = false) {
       return regex
     }
     const copy = {}
+    ancestors.set(value, copy)
     for (const key in value) {
       if (deep) {
-        setOwn(copy, key, clone(value[key], deep))
+        setOwn(copy, key, cloneValue(value[key], deep, ancestors))
       } else {
         setOwn(copy, key, value[key])
       }
     }
+    ancestors.delete(value)
     return copy
   }
   return value

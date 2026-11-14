@@ -137,6 +137,15 @@ describe('collections', () => {
     assert.deepEqual(clone({ 0: 'a', 1: 'b', length: 2 }), ['a', 'b'])
   })
 
+  it('clone deep keeps a cycle through objects', () => {
+    const node = { name: 'a', self: null }
+    node.self = node
+    const copy = clone(node, true)
+    assert(copy !== node)
+    assert(copy.name === 'a')
+    assert(copy.self === copy)
+  })
+
   it('difference', () => {
     let a = [1, 2, 5]
     let b = [3, 4, 5]
