@@ -719,7 +719,7 @@ function cloneValue(value, deep, ancestors) {
     Array.isArray(value) ||
     (isArrayLike(value) && (isIterable(value) || value.length - 1 in value))
   ) {
-    return cloneArray(value, deep)
+    return cloneArray(value, deep, ancestors)
   }
   if (value?.constructor === Map) {
     const map = new Map()
@@ -758,15 +758,26 @@ function cloneValue(value, deep, ancestors) {
 }
 
 /**
- * Clones an array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used.
+ * Clones an array. If `deep` is `false` (default) the clone will be shallow. Otherwise {@link https://developer.mozilla.org/en-US/docs/Web/API/structuredClone structuredClone} is used, and each item is cloned in turn when it rejects the array.
  * @param arr The array to clone
  * @param [deep=false] Creates a deep clone using `structuredClone` if true.
+ * @param ancestors The copies of the objects on the current path.
  * @returns The new array
  * @see {@link clone}
  */
-function cloneArray<T>(arr: T[], deep = false): T[] {
+function cloneArray<T>(arr: T[], deep: boolean, ancestors: Map<unknown, unknown>): T[] {
   if (!deep) return Array.from(arr)
-  return structuredClone(arr)
+  try {
+    return structuredClone(arr)
+  } catch {
+    const copy = Array.from(arr)
+    ancestors.set(arr, copy)
+    copy.forEach((item, index) => {
+      copy[index] = cloneValue(item, deep, ancestors)
+    })
+    ancestors.delete(arr)
+    return copy
+  }
 }
 
 /**
