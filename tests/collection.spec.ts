@@ -30,17 +30,11 @@ import {
   sumBy,
   values
 } from '../src/collections/index.ts'
+import { sparse } from './sparse.ts'
 
 function* gen(): Generator<string> {
   yield 'a'
   yield 'b'
-}
-
-function sparse(length: number, at: Record<number, unknown>): unknown[] {
-  const arr: unknown[] = []
-  arr.length = length
-  for (const [k, v] of Object.entries(at)) arr[Number(k)] = v
-  return arr
 }
 
 describe('keys, values, entries', () => {

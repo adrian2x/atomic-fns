@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { digest, hash, hashString, stableStringify } from '../src/hash/index.ts'
 import { DEPTH_ERROR } from '../src/internal/walk.ts'
 import { isEqual } from '../src/object/isEqual.ts'
+import { sparse } from './sparse.ts'
 
 /** FNV-1a over the bytes `TextEncoder` writes, as an oracle independent of `hashString`. */
 const fnv1aOfUtf8 = (str: string): number =>
@@ -187,11 +188,8 @@ describe('hash', () => {
     expectUnsignedHash(deep)
     let wide: unknown = { leaf: 1 }
     for (let i = 0; i < 200; i++) wide = Array(64).fill(wide)
-    expect(typeof hash(wide)).toBe('number')
-    const sparse: unknown[] = []
-    sparse.length = 4_294_967_294
-    sparse[4e9] = 1
-    expect(typeof hash(sparse)).toBe('number')
+    expectUnsignedHash(wide)
+    expectUnsignedHash(sparse(4_294_967_294, { 4e9: 1 }))
   })
 
   it('never throws on cyclic Maps, errors or arguments', () => {
@@ -348,9 +346,9 @@ describe('stableStringify', () => {
   })
 
   it('refuses a huge sparse array instead of writing its holes', () => {
-    const sparse: unknown[] = []
-    sparse.length = 4_294_967_294
-    expect(() => stableStringify(sparse)).toThrow(new RangeError('sparse array too large'))
+    expect(() => stableStringify(sparse(4_294_967_294, {}))).toThrow(
+      new RangeError('sparse array too large')
+    )
   })
 })
 

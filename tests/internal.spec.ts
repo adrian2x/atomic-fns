@@ -33,6 +33,7 @@ import {
   MAX_DEPTH,
   RevisitBudget
 } from '../src/internal/walk.ts'
+import { sparse as holey } from './sparse.ts'
 
 function descend(levels: number): number {
   if (levels === 0) return 0
@@ -44,21 +45,8 @@ function descend(levels: number): number {
   }
 }
 
-/** An array of `length` with only the `entries` indices present. */
-function holey(length: number, entries: Record<number, unknown>): unknown[] {
-  const arr: unknown[] = []
-  arr.length = length
-  for (const [index, value] of Object.entries(entries)) arr[Number(index)] = value
-  return arr
-}
-
 function hugeSparse(): unknown[] {
-  const a: unknown[] = []
-  a.length = 4_294_967_294
-  a[0] = 'x'
-  a[1e9] = 'y'
-  a[4e9] = 'admin'
-  return a
+  return holey(4_294_967_294, { 0: 'x', 1e9: 'y', 4e9: 'admin' })
 }
 
 describe('depth guard', () => {
