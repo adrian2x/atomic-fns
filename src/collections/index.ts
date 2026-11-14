@@ -5,6 +5,7 @@
  */
 export { binarySearch, bisect, bisectLeft, bisectRight, insort, insortLeft } from './bisect.ts'
 export { Deque } from './deque.ts'
+export { FrozenSet } from './frozen-set.ts'
 export { Heap } from './heap.ts'
 export { LRUCache } from './lru-cache.ts'
 export { Trie } from './trie.ts'
