@@ -3,6 +3,7 @@
  * object helpers that copy, merge and match.
  * @module object
  */
+export { cloneDeep } from './cloneDeep.ts'
 export { type EqualityCustomizer, isEqual, isEqualWith } from './isEqual.ts'
 export type { Path } from './parsePath.ts'
 export { get, has, set, unset } from './path.ts'
