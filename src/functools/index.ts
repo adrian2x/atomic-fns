@@ -94,8 +94,9 @@ export function debounce(
   wait: number,
   { maxWait }: { maxWait?: number } = {}
 ): Function {
-  let timer, maxTimer, lastResult
+  let timer, maxTimer, lastResult, latestCall
   return function (...args) {
+    latestCall = () => func.apply(this, args)
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       clearTimeout(maxTimer)
@@ -107,7 +108,7 @@ export function debounce(
       maxTimer = setTimeout(() => {
         clearTimeout(timer)
         maxTimer = null
-        lastResult = func.apply(this, args)
+        lastResult = latestCall()
       }, maxWait)
     }
 
@@ -124,13 +125,15 @@ export function debounce(
  */
 export function throttle(func: Function, wait: number): Function {
   let pending = false
+  let lastResult
   return function (...args) {
-    if (pending) return
-    func.apply(this, args)
+    if (pending) return lastResult
+    lastResult = func.apply(this, args)
     pending = true
     setTimeout(() => {
       pending = false
     }, wait)
+    return lastResult
   }
 }
 
