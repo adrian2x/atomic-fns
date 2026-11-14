@@ -12,7 +12,7 @@
   "sideEffects": false,
   "scripts": {
     "preversion": "npm test",
-    "version": "npm run build && npm run docs && git add -A dist",
+    "version": "npm run build",
     "postversion": "git push && git push --tags",
     "prepublishOnly": "npm run build",
     "test": "vitest run",
