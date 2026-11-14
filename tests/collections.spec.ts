@@ -286,6 +286,64 @@ describe('collections', () => {
     assert.deepEqual(merge({ a: [1, 2] }, { a: [undefined, 3] }), { a: [1, 3] })
   })
 
+  it('merge handles a cycle the target already has', () => {
+    const source = { a: [] as unknown[] }
+    source.a.push(source.a)
+    const target: { a?: unknown[] } = {}
+    merge(target, source)
+    merge(target, source)
+    assert(target.a[0] === target.a)
+
+    const cyclic = { a: { self: null } }
+    cyclic.a.self = cyclic.a
+    const other = { a: { self: null } }
+    other.a.self = other.a
+    merge(other, cyclic)
+    assert(other.a.self === other.a)
+  })
+
+  it('merge copies plain objects from sources', () => {
+    const source = { a: { b: 1 }, list: [{ c: 1 }] }
+    const merged = merge({}, source) as typeof source
+    merged.a.b = 2
+    merged.list[0].c = 2
+    assert.deepEqual(source, { a: { b: 1 }, list: [{ c: 1 }] })
+
+    const first = { options: { a: 1 } }
+    merge({}, first, { options: { b: 2 } })
+    assert.deepEqual(first, { options: { a: 1 } })
+
+    const cyclic = { a: { self: null } }
+    cyclic.a.self = cyclic.a
+    const copy = merge({}, cyclic) as typeof cyclic
+    assert(copy.a !== cyclic.a)
+    assert(copy.a.self === copy.a)
+  })
+
+  it('merge assigns a Date or class instance by reference', () => {
+    class Point {
+      x = 1
+    }
+    const source = { date: new Date(0), point: new Point() }
+    const merged = merge({}, source) as typeof source
+    assert(merged.date === source.date)
+    assert(merged.point === source.point)
+  })
+
+  it('merge assigns objects that are not plain over existing values', () => {
+    class Point {
+      x = 1
+    }
+    const source = { date: new Date(0), regex: /b/, point: new Point() }
+    const target = { date: new Date(1), regex: /a/, point: { y: 1 } }
+    const merged = merge(target, source) as typeof source
+    assert(merged.date === source.date)
+    assert(merged.regex === source.regex)
+    assert(merged.point === source.point)
+    const overObject = merge({ date: { x: 1 } }, source) as typeof source
+    assert(overObject.date === source.date)
+  })
+
   it('pick', () => {
     let target = { user: 'fred', age: 40, active: false }
     assert.deepEqual(pick(target, ['user']), { user: 'fred' })
@@ -382,5 +440,30 @@ describe('collections', () => {
     assert.deepEqual(insortLeft([1], 2), [1, 2])
     assert.deepEqual(insortLeft([1, 1, 4, 4, 7, 7, 9], 5), [1, 1, 4, 4, 5, 7, 7, 9])
     assert.deepEqual(insortLeft([1, 1, 4, 4, 7, 7, 9], 10), [1, 1, 4, 4, 7, 7, 9, 10])
+  })
+  it('merge copies a shared source object once', () => {
+    let shared: any = { leaf: 1 }
+    for (let i = 0; i < 20; i++) shared = { a: shared, b: shared }
+    const result: any = merge({}, { root: shared })
+    assert(result.root !== shared)
+    assert(result.root.a === result.root.b)
+
+    const part = { r: 3 }
+    assert.deepEqual(merge({ a: { p: 1 }, b: { q: 2 } }, { a: part, b: part }), {
+      a: { p: 1, r: 3 },
+      b: { q: 2, r: 3 }
+    })
+  })
+  it('merge walks a shared source object once per target', () => {
+    let reads = 0
+    let shared: any = {
+      get leaf() {
+        reads++
+        return 1
+      }
+    }
+    for (let i = 0; i < 12; i++) shared = { a: shared, b: shared }
+    merge({}, { root: shared }, { root: shared })
+    assert(reads === 2)
   })
 })
