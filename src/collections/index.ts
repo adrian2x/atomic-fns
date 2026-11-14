@@ -688,8 +688,6 @@ export function lastIndexOf<T>(obj: T[], value: T, start?: number): number {
  * @param {*} value
  * @param {boolean} [deep=false]
  * @return The clone value
- * @see {@link cloneArray}
- * @see {@link cloneTypedArray}
  */
 export function clone<T>(value: T, deep?: boolean): T
 export function clone<T>(value: T[], deep?: boolean): T[]
@@ -724,7 +722,7 @@ export function clone(value, deep = false) {
  * @returns The new array
  * @see {@link clone}
  */
-export function cloneArray<T>(arr: T[], deep = false): T[] {
+function cloneArray<T>(arr: T[], deep = false): T[] {
   if (!deep) return Array.from(arr)
   return structuredClone(arr)
 }
@@ -736,7 +734,7 @@ export function cloneArray<T>(arr: T[], deep = false): T[] {
  * @returns The new array
  * @see {@link clone}
  */
-export function cloneTypedArray(typedArray, isDeep = false) {
+function cloneTypedArray(typedArray, isDeep = false) {
   const buffer = isDeep ? structuredClone(typedArray) : typedArray.buffer
   return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length)
 }
