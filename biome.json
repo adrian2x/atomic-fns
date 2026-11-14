@@ -23,17 +23,28 @@
   "linter": {
     "rules": {
       "preset": "recommended",
+      "complexity": {
+        "noArguments": "error"
+      },
       "correctness": {
         "noConstructorReturn": "off",
         "noSwitchDeclarations": "off",
         "noVoidTypeReturn": "off"
+      },
+      "style": {
+        "useExponentiationOperator": "error",
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error",
+        "useTemplate": "error"
       },
       "suspicious": {
         "noAssignInExpressions": "off",
         "noControlCharactersInRegex": "off",
         "noDoubleEquals": "off",
         "noFallthroughSwitchClause": "off",
+        "noGlobalIsFinite": "error",
         "noImplicitAnyLet": "off",
+        "noPrototypeBuiltins": "error",
         "noSelfCompare": "off",
         "noShadowRestrictedNames": "off"
       }
