@@ -68,11 +68,9 @@ class BNode<K, V = any> {
       else if (c === 0) return mid
       else {
         // c is NaN or otherwise invalid
-        // eslint-disable-next-line
         if (key === key)
           // at least the search key is not NaN
           return keys.length ^ failXor
-        // eslint-disable-next-line
         else throw new KeyError(`Btree found an invalid key: ${key}`)
       }
       mid = (lo + hi) >> 1
@@ -187,7 +185,6 @@ class BNode<K, V = any> {
         // This leaf node is full and must split
         const newRightSibling = this.splitOffRightSide()
 
-        // eslint-disable-next-line
         let target: BNode<K, V> = this
         if (i > this.keys.length) {
           i -= this.keys.length
@@ -236,10 +233,8 @@ class BNode<K, V = any> {
       if (v !== undefVals) v.push(undefined as any)
     } else {
       v = this.reifyValues()
-      // eslint-disable-next-line
       v.push(rhs.values.shift()!)
     }
-    // eslint-disable-next-line
     this.keys.push(rhs.keys.shift()!)
   }
 
@@ -252,10 +247,8 @@ class BNode<K, V = any> {
       if (v !== undefVals) v.unshift()
     } else {
       v = this.reifyValues()
-      // eslint-disable-next-line
       v.unshift(lhs.values.pop()!)
     }
-    // eslint-disable-next-line
     this.keys.unshift(lhs.keys.pop()!)
   }
 
@@ -403,7 +396,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   // private forEachPair<R = number>(callback: Iteratee<K, V>, initialCounter?: number): R | number {
   //   const low = this.minKey()
   //   const high = this.maxKey()
-  //   // eslint-disable-next-line
+  //
   //   return this.rangeForEach(low!, high, true, callback, initialCounter)
   // }
 
@@ -476,7 +469,6 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     let i = lowestKey === undefined ? -1 : leaf.indexOf(lowestKey, 0, this._compare) - 1
 
     return iterator<[K, V]>(() => {
-      // eslint-disable-next-line
       jump: while (true) {
         switch (state) {
           case 0:
@@ -486,22 +478,17 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
             continue
           case 1:
             if (++i < leaf.keys.length) {
-              // eslint-disable-next-line
               reusedArray![0] = leaf.keys[i]!
-              // eslint-disable-next-line
               reusedArray![1] = leaf.values[i]!
               return { done: false, value: reusedArray as [K, V] }
             }
             state = 2
-          // eslint-disable-next-line
           case 2:
             // Advance to the next leaf node
-            // eslint-disable-next-line
             let level = -1
             while (true) {
               if (++level >= nodequeue.length) {
                 state = 3
-                // eslint-disable-next-line
                 continue jump
               }
               if (++nodeindex[level] < nodequeue[level].length) break
@@ -537,7 +524,6 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     reusedArray?: Array<K | V>,
     skipHighest?: boolean
   ): IterableIterator<[K, V]> {
-    // eslint-disable-next-line
     let { nodequeue, nodeindex, leaf } =
       this.findPath(highestKey, true)! || this.findPath(undefined, true)!
     assert(!nodequeue[0] || leaf === nodequeue[0][nodeindex[0]], 'wat!')
@@ -549,7 +535,6 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     let state = reusedArray !== undefined ? 1 : 0
 
     return iterator<[K, V]>(() => {
-      // eslint-disable-next-line
       jump: while (true) {
         switch (state) {
           case 0:
@@ -560,22 +545,17 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
           case 1:
             i = Math.min(i, leaf.keys.length) - 1
             if (i >= 0) {
-              // eslint-disable-next-line
               reusedArray![0] = leaf.keys[i]!
-              // eslint-disable-next-line
               reusedArray![1] = leaf.values[i]!
               return { done: false, value: reusedArray as [K, V] }
             }
             state = 2
-          // eslint-disable-next-line
           case 2:
             // Advance to the next leaf node
-            // eslint-disable-next-line
             let level = -1
             while (true) {
               if (++level >= nodequeue.length) {
                 state = 3
-                // eslint-disable-next-line
                 continue jump
               }
               if (--nodeindex[level] >= 0) break
@@ -1211,9 +1191,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     // Reminder: parent node must update its copy of key for this node
     // assert: neither node is shared
     // assert rhs.keys.length > (maxNodeSize/2 && this.keys.length<maxNodeSize)
-    // eslint-disable-next-line
     this.keys.push(rhs.keys.shift()!)
-    // eslint-disable-next-line
     this.children.push((rhs as BNodeInternal<K, V>).children.shift()!)
   }
 
@@ -1221,9 +1199,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
     // Reminder: parent node must update its copy of key for this node
     // assert: neither node is shared
     // assert rhs.keys.length > (maxNodeSize/2 && this.keys.length<maxNodeSize)
-    // eslint-disable-next-line
     this.keys.unshift(lhs.keys.pop()!)
-    // eslint-disable-next-line
     this.children.unshift((lhs as BNodeInternal<K, V>).children.pop()!)
   }
 
