@@ -6,7 +6,8 @@
     "types": ["node"],
     "rootDir": "src",
     "outDir": "./dist",
-    "strict": false
+    "strict": false,
+    "verbatimModuleSyntax": true
   },
   "include": ["src"],
   "typedocOptions": {

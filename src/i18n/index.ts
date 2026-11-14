@@ -5,4 +5,5 @@
  */
 export * from './currency.js'
 export * from './date/index.js'
-export { Duration, TDuration, DurationUnit } from './duration.js'
+export { Duration } from './duration.js'
+export type { DurationUnit, TDuration } from './duration.js'

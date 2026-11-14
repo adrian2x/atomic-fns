@@ -1,4 +1,4 @@
-import { Comparer } from '../operators/index.js'
+import type { Comparer } from '../operators/index.js'
 import { Mapping } from './abc.js'
 import { BTree } from './BTree.js'
 

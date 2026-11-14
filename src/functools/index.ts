@@ -4,7 +4,7 @@
  * @module functools
  */
 
-import { Function } from '../globals/index.js'
+import type { Function } from '../globals/index.js'
 
 /**
  * Creates a function that accepts arguments of `func` and either invokes `func` returning its result, if at least `func.length` arguments have been provided, or returns a function that accepts the remaining `func` arguments, and so on.

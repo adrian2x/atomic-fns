@@ -1,9 +1,9 @@
 import { isObject, ValueError } from '../../globals/index.js'
-import { Duration, DurationUnit, TDuration, UNITS_PLURAL } from '../duration.js'
+import { Duration, type DurationUnit, type TDuration, UNITS_PLURAL } from '../duration.js'
 import { asDate, formatDate, fromFields, strftime } from '../format.js'
 import {
   asNumber,
-  DateObject,
+  type DateObject,
   dayOfYear,
   daysInMonth,
   daysInYear,
@@ -27,7 +27,7 @@ export {
   weeksInYear
 }
 
-export { DateObject }
+export type { DateObject }
 export type DateLike = number | string | Date | IntlDate | DateObject
 
 const INVALID_DATE_STRING = 'Invalid Date'
