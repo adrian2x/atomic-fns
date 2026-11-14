@@ -63,4 +63,13 @@ describe('Heap', () => {
     assert(h.size === arr.length - 1)
     assert(h.pop() === 2)
   })
+
+  it('remove finds what contains finds', () => {
+    let h = new Heap([NaN, 1, 2])
+    assert(h.contains(NaN))
+    assert(h.remove(NaN))
+    assert(!h.contains(NaN))
+    assert(h.size === 2)
+    assert(h.remove(NaN) === false)
+  })
 })

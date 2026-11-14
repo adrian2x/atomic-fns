@@ -94,7 +94,7 @@ export class Heap<T> extends Collection {
    * @return `true` if the item was removed.
    */
   remove(item: T): boolean {
-    const index = this.heap.indexOf(item)
+    const index = Number.isNaN(item) ? this.heap.findIndex(Number.isNaN) : this.heap.indexOf(item)
     if (index < 0) return false
     if (index === 0) {
       this.pop()
