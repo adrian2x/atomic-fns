@@ -114,7 +114,7 @@ export function daysInMonth(date: string | number | Date): number {
 
 // COERCION
 
-export function asNumber(value) {
+export function asNumber(value: any): number {
   const numericValue = Number(value)
   if (typeof value === 'boolean' || value === '' || Number.isNaN(numericValue))
     throw new Error(`Invalid unit value ${value}`)
@@ -162,7 +162,7 @@ function parse(s, ...patterns) {
   return [null, null]
 }
 
-export function parseISODuration(s) {
+export function parseISODuration(s: any): any {
   return parse(s, [isoDuration, extractISODuration])
 }
 
@@ -212,7 +212,14 @@ export function weeksInYear(year: number, firstDayOfWeek = 1, firstDayOfYear = 1
  * @param firstDayOfYear Picks week 1: the week holding January `7 + firstDayOfWeek - firstDayOfYear`, so `1, 4` gives ISO weeks
  * @returns The week and the year that week belongs to
  */
-export function weekOfYear(date: string | number | Date, firstDayOfWeek = 1, firstDayOfYear = 1) {
+export function weekOfYear(
+  date: string | number | Date,
+  firstDayOfWeek = 1,
+  firstDayOfYear = 1
+): {
+  week: any
+  year: any
+} {
   const year = asDate(date).getFullYear()
   const doy = dayOfYear(date)
   let weekOffset = firstWeekOffset(year, firstDayOfWeek, firstDayOfYear),

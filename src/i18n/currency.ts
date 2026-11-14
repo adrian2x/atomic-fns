@@ -20,7 +20,7 @@ export class Currency extends Decimal {
     maximumFractionDigits: 20
   }
 
-  constructor(amount, currency: string, locale?: string, opts: Intl.NumberFormatOptions = {}) {
+  constructor(amount: any, currency: string, locale?: string, opts: Intl.NumberFormatOptions = {}) {
     super(amount)
     if (isObject(locale)) {
       opts = locale as any
