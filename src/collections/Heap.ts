@@ -32,11 +32,11 @@ export class Heap<T> extends Collection {
     }
   }
 
-  at(n: number) {
+  at(n: number): T {
     return this.heap.at(n)
   }
 
-  get size() {
+  get size(): number {
     return this.count
   }
 
@@ -58,7 +58,7 @@ export class Heap<T> extends Collection {
   /**
    * Removes the top element.
    */
-  pop() {
+  pop(): T | undefined {
     if (!this.count) return
     const value = this.heap[0]
     const last = this.heap.pop()
@@ -73,7 +73,7 @@ export class Heap<T> extends Collection {
   /**
    * Accesses the top element.
    */
-  top() {
+  top(): T | undefined {
     if (!this.count) return
     return this.heap[0]
   }
@@ -83,7 +83,7 @@ export class Heap<T> extends Collection {
    * @param item The item want to find.
    * @return `true` if element exists.
    */
-  contains(item: T) {
+  contains(item: T): boolean {
     if (!this.count) return false
     return this.heap.includes(item)
   }
@@ -93,7 +93,7 @@ export class Heap<T> extends Collection {
    * @param item The item want to remove.
    * @return `true` if the item was removed.
    */
-  remove(item: T) {
+  remove(item: T): boolean {
     const index = this.heap.indexOf(item)
     if (index < 0) return false
     if (index === 0) {
@@ -114,7 +114,7 @@ export class Heap<T> extends Collection {
    * Returns an iterable with all the values in the heap.
    * @returns {Iterable<T>} The values in the heap.
    */
-  values() {
+  values(): IterableIterator<T> {
     return this.heap[Symbol.iterator]()
   }
 }
@@ -177,7 +177,7 @@ export function heappush<T>(heap: T[], item: T, compareFn = compare) {
  * @param {Array} heap
  * @param {Comparer} [compareFn=compare] Custom compare function
  */
-export function heappop<T>(heap: T[], compareFn = compare) {
+export function heappop<T>(heap: T[], compareFn = compare): T {
   const last = heap.pop()
   if (heap.length) {
     const item = heap[0]

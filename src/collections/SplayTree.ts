@@ -16,7 +16,7 @@ class Node<K = any, V = any> {
     this.value = value
   }
 
-  get height() {
+  get height(): number {
     if (this.left && this.right) return 1 + Math.max(this.right.height, this.left.height)
     if (this.right) return 1 + this.right.height
     if (this.left) return 1 + this.left.height
@@ -59,19 +59,19 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     this.randSplay = p
   }
 
-  top() {
+  top(): K | undefined {
     return this.root?.key
   }
 
-  get size() {
+  get size(): number {
     return this.count
   }
 
-  empty() {
+  empty(): boolean {
     return !this.root
   }
 
-  get height() {
+  get height(): number {
     if (!this.root) return 0
     return this.root.height
   }
@@ -81,7 +81,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * @param key The key to find.
    * @returns {?V} The value for the key or `undefined`.
    */
-  get(key: K) {
+  get(key: K): V | undefined {
     if (!this.root) return
 
     // Note: deterministic splaying (always moves key to front):
@@ -145,9 +145,9 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
   /**
    * Removes a specified key if it exists in the tree. The removed value is returned or `undefined` if not found.
    * @param {K} key The key to remove.
-   * @returns {V} The removed value associated with `key`.
+   * @returns {?V} The removed value associated with `key`.
    */
-  remove(key: K) {
+  remove(key: K): V | undefined {
     if (!this.root) {
       return
     }
@@ -186,7 +186,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * Returns the minimum key in the tree or subtree.
    * @returns The minimum key.
    */
-  min(root = this.root) {
+  min(root = this.root): K | undefined {
     if (!root) return
     while (root.left) {
       root = root.left
@@ -198,7 +198,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
    * Returns the maximum key in the tree or subtree.
    * @returns The maximum key.
    */
-  max(root = this.root) {
+  max(root = this.root): K | undefined {
     if (!root) return
     while (root.right) {
       root = root.right
@@ -209,9 +209,9 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
   /**
    * Returns the largest key that is less than a given key.
    * @param key The given key
-   * @returns The largest key found or `undefined`.
+   * @returns {?K} The largest key found or `undefined`.
    */
-  lowerBound(key) {
+  lowerBound(key): K | undefined {
     if (!this.root) return
 
     // Splay on the key to move the node with the given key or the last
@@ -221,7 +221,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     // Now the result is either the root node or the greatest node in
     // the left subtree.
     if (this.cmp(this.root.key, key) < 0) {
-      return this.root
+      return this.root.key
     } else if (this.root.left) {
       return this.max(this.root.left)
     }
@@ -294,7 +294,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     this.root = root
   }
 
-  add(key: K) {
+  add(key: K): void {
     return this.set(key, null as V)
   }
 
@@ -314,7 +314,7 @@ export class SplayTree<K, V = any> extends Mapping<K, V> {
     return true
   }
 
-  clear() {
+  clear(): void {
     if (!this.root) return
     this.root.left = undefined
     this.root.right = undefined

@@ -26,7 +26,7 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {this} Returns the Tree object.
    */
-  add(key: K) {
+  add(key: K): this {
     this.store.set(key, null as V)
     return this
   }
@@ -36,7 +36,7 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {?V} The key value or `undefined`.
    */
-  get(key: K) {
+  get(key: K): V | undefined {
     return this.store.get(key)
   }
 
@@ -46,7 +46,7 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * @param {V} value
    * @returns {this} Returns the Tree object.
    */
-  set(key: K, value: V) {
+  set(key: K, value: V): this {
     this.store.set(key, value)
     return this
   }
@@ -55,7 +55,7 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * Returns the smallest key in the tree.
    * @returns {?K}
    */
-  min() {
+  min(): K | undefined {
     return this.store.minKey()
   }
 
@@ -63,7 +63,7 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * Returns the largest key in the tree.
    * @returns {?K}
    */
-  max() {
+  max(): K | undefined {
     return this.store.maxKey()
   }
 
@@ -72,14 +72,14 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {boolean} `true` if key was removed, otherwise `false`.
    */
-  delete(key: K) {
+  delete(key: K): boolean {
     return this.store.remove(key)
   }
 
   /**
    * Removes all key/value pairs in the tree.
    */
-  clear() {
+  clear(): void {
     return this.store.clear()
   }
 
@@ -87,16 +87,16 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * Freezes the tree which prevents adding, updating or removing any keys.
    * @returns {this}
    */
-  freeze() {
+  freeze(): this {
     this.store.freeze()
     return this
   }
 
   /**
    * Returns a new iterator of `[K, V]` pairs in reverse order of keys.
-   * @returns {Iterable<[K, V]>}
+   * @returns {IterableIterator<[K, V]>}
    */
-  reversed() {
+  reversed(): IterableIterator<[K, V]> {
     return this.store.reversed()
   }
 
@@ -104,7 +104,7 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * Returns the total key/value pairs in the tree.
    * @returns {number}
    */
-  get size() {
+  get size(): number {
     return this.store.size
   }
 
@@ -112,7 +112,7 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * Check if there are no key/value pairs in the tree.
    * @returns {boolean} `true` if is empty.
    */
-  empty() {
+  empty(): boolean {
     return this.store.empty()
   }
 
@@ -121,7 +121,7 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {boolean} `true` if key is found, otherwise `false`.
    */
-  contains(key: K) {
+  contains(key: K): boolean {
     return this.store.contains(key)
   }
 
@@ -130,31 +130,31 @@ export class SortedTree<K, V> extends Mapping<K, V> {
    * @param {K} key
    * @returns {boolean} `true` if key is found, otherwise `false`.
    */
-  has(key: K) {
+  has(key: K): boolean {
     return this.store.contains(key)
   }
 
   /**
    * Returns a new iterator of all **ordered** keys in the tree.
-   * @returns {Iterable<K>}
+   * @returns {IterableIterator<K>}
    */
-  keys() {
+  keys(): IterableIterator<K> {
     return this.store.keys()
   }
 
   /**
    * Returns a new iterator of all values **ordered** by their keys.
-   * @returns {Iterable<V>}
+   * @returns {IterableIterator<V>}
    */
-  values() {
+  values(): IterableIterator<V> {
     return this.store.values()
   }
 
   /**
    * Returns a new iterator of all key value pairs **ordered** by their keys.
-   * @returns {Iterable<[K, V]>}
+   * @returns {IterableIterator<[K, V]>}
    */
-  entries() {
+  entries(): IterableIterator<[K, V]> {
     return this.store.entries()
   }
 }

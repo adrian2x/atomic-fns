@@ -14,7 +14,7 @@ import { Function } from '../globals/index.js'
  * @returns {Function} Returns the new bound function.
  * @see {@link partial}
  */
-export function bind(fn: Function, thisArg, ...partials) {
+export function bind(fn: Function, thisArg, ...partials): Function {
   return fn.bind(thisArg, ...partials)
 }
 
@@ -23,7 +23,7 @@ export function bind(fn: Function, thisArg, ...partials) {
  * @param {Function} func The function to curry.
  * @returns Returns the new curried function.
  */
-export function curry(func: Function) {
+export function curry(func: Function): Function<ReturnType<typeof func>> {
   return function curried(...args) {
     if (args.length >= func.length) {
       return func.apply(this, args)
@@ -42,7 +42,7 @@ export function curry(func: Function) {
  * @param {...*} [args] The arguments to apply to `fn`.
  * @returns {Function} Returns the new partially applied function
  */
-export function partial(fn, ...args) {
+export function partial(fn: Function, ...args): Function<ReturnType<typeof fn>> {
   return bind(fn, undefined, ...args)
 }
 
@@ -51,7 +51,7 @@ export function partial(fn, ...args) {
  * @param {...*} [args] The set of functions to apply.
  * @returns {Function} A new function that applies each given function on the result of the previous one.
  */
-export function flow(...args) {
+export function flow(...args: Function[]): Function {
   return (x) => {
     for (const fn of args) {
       x = fn(x)
@@ -71,8 +71,8 @@ export const pipe = flow
  * @param {...*} [args] The set of functions to apply.
  * @returns {Function} A new function that applies each given function on the result of the previous step.
  */
-export function compose(...args) {
-  return flow(args.reverse())
+export function compose(...args: Function[]): Function {
+  return flow(...args.reverse())
 }
 
 /**
@@ -102,7 +102,7 @@ export function memoize<T>(func: Function<T>, resolver?: Function): Function<T> 
  * @param descriptor
  * @returns A memoized version of the given function
  */
-export function cache(target, name, descriptor) {
+export function cache(target, name, descriptor): any {
   const original = descriptor.value
   if (typeof original === 'function') {
     descriptor.value = memoize(original)
@@ -260,6 +260,6 @@ export function promisify<T>(fun: Function, thisArg?): Function<Promise<T>> {
  */
 export async function callAsync<T = any>(
   fn: (successCallback: (data: T) => any, errorCallback: Function) => any
-) {
+): Promise<T> {
   return await new Promise<T>(fn)
 }
