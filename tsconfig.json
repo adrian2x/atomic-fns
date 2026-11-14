@@ -1,19 +1,21 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ESNext", "DOM"],
+    "target": "ES2024",
+    "lib": ["ESNext", "WebWorker"],
     "module": "NodeNext",
-    "types": ["node"],
-    "rootDir": "src",
-    "outDir": "./dist",
+    "declaration": true,
     "rewriteRelativeImportExtensions": true,
-    "strict": false,
+    "strict": true,
     "erasableSyntaxOnly": true,
     "noImplicitOverride": true,
     "noUncheckedSideEffectImports": true,
     "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "useUnknownInCatchVariables": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src", "tests", "scripts", "vitest.config.ts"]
 }

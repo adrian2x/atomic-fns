@@ -1,0 +1,4 @@
+/**
+ * @module hash
+ */
+export {}

@@ -1,0 +1,23 @@
+{
+  "name": "@atomic-stack/atomic-fns",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./collections": "./src/collections/index.ts",
+    "./object": "./src/object/index.ts",
+    "./array": "./src/array/index.ts",
+    "./function": "./src/function/index.ts",
+    "./async": "./src/async/index.ts",
+    "./string": "./src/string/index.ts",
+    "./number": "./src/number/index.ts",
+    "./random": "./src/random/index.ts",
+    "./id": "./src/id/index.ts",
+    "./hash": "./src/hash/index.ts",
+    "./encoding": "./src/encoding/index.ts",
+    "./is": "./src/is/index.ts",
+    "./decimal": "./src/decimal/index.ts"
+  },
+  "publish": {
+    "include": ["LICENSE", "README.md", "src/**/*.ts"]
+  }
+}
