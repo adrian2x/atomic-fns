@@ -323,7 +323,7 @@ export function chr(x: number): string {
 
 /** Convert character to Unicode code point */
 export function ord(x: string): number {
-  return x.charCodeAt(0)
+  return x.codePointAt(0) ?? Number.NaN
 }
 
 /**

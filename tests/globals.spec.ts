@@ -317,4 +317,10 @@ describe('globals', () => {
     assert(hash(frozen) === hash(frozen))
     assert(hash(frozen) !== hash(Object.freeze({})))
   })
+
+  it('ord reads a full code point', () => {
+    assert(ord('😀') === 0x1f600)
+    assert(chr(ord('😀')) === '😀')
+    assert(Number.isNaN(ord('')))
+  })
 })
