@@ -162,4 +162,45 @@ describe('BTree', () => {
     other.set(7, undefined)
     assert(other.get(7) === undefined)
   })
+
+  it('entries survives keys removed while it runs', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 80; i++) {
+      tree.set(i, i)
+    }
+    const entries = tree.entries(33)
+    entries.next()
+    tree.removeRange(0, 15, true)
+    tree.removeRange(0, 80, true)
+    assert.doesNotThrow(() => [...entries])
+  })
+
+  it('reversed survives keys removed while it runs', () => {
+    for (const reusedArray of [undefined, []]) {
+      const lower = new BTree(undefined, undefined, 4)
+      for (let i = 0; i < 12; i++) {
+        lower.set(i, i)
+      }
+      const lowerSeen: number[] = []
+      for (const [key] of lower.reversed(undefined, reusedArray)) {
+        lowerSeen.push(key)
+        lower.removeRange(0, key, true)
+      }
+      assert.deepEqual(lowerSeen, [11])
+
+      const next = new BTree([
+        [1, 'a'],
+        [2, 'b'],
+        [3, 'c'],
+        [4, 'd']
+      ])
+      const nextSeen: number[] = []
+      for (const [key] of next.reversed(undefined, reusedArray)) {
+        nextSeen.push(key)
+        next.remove(key)
+        next.remove(key - 1)
+      }
+      assert.deepEqual(nextSeen, [4, 2])
+    }
+  })
 })

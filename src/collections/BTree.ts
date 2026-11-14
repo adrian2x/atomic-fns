@@ -506,13 +506,13 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
               }
               if (++nodeindex[level] < nodequeue[level].length) break
             }
+            // Keys removed during iteration can leave this path empty.
             for (; level > 0; level--) {
-              nodequeue[level - 1] = (
-                nodequeue[level][nodeindex[level]] as BNodeInternal<K, V>
-              ).children
+              const parent = nodequeue[level][nodeindex[level]] as BNodeInternal<K, V>
+              nodequeue[level - 1] = parent?.children ?? EmptyArray
               nodeindex[level - 1] = 0
             }
-            leaf = nodequeue[0][nodeindex[0]]
+            leaf = nodequeue[0][nodeindex[0]] ?? EmptyLeaf
             i = -1
             state = reusedArray !== undefined ? 1 : 0
             continue
@@ -554,11 +554,13 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
       jump: while (true) {
         switch (state) {
           case 0:
-            if (--i >= 0) return { done: false, value: [leaf.keys[i], leaf.values[i]] }
+            i = Math.min(i, leaf.keys.length) - 1
+            if (i >= 0) return { done: false, value: [leaf.keys[i], leaf.values[i]] }
             state = 2
             continue
           case 1:
-            if (--i >= 0) {
+            i = Math.min(i, leaf.keys.length) - 1
+            if (i >= 0) {
               // eslint-disable-next-line
               reusedArray![0] = leaf.keys[i]!
               // eslint-disable-next-line
@@ -579,13 +581,13 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
               }
               if (--nodeindex[level] >= 0) break
             }
+            // Keys removed during iteration can leave this path empty.
             for (; level > 0; level--) {
-              nodequeue[level - 1] = (
-                nodequeue[level][nodeindex[level]] as BNodeInternal<K, V>
-              ).children
+              const parent = nodequeue[level][nodeindex[level]] as BNodeInternal<K, V>
+              nodequeue[level - 1] = parent?.children ?? EmptyArray
               nodeindex[level - 1] = nodequeue[level - 1].length - 1
             }
-            leaf = nodequeue[0][nodeindex[0]]
+            leaf = nodequeue[0][nodeindex[0]] ?? EmptyLeaf
             i = leaf.keys.length
             state = reusedArray !== undefined ? 1 : 0
             continue
