@@ -228,4 +228,41 @@ describe('BTree', () => {
     assert(tree.size === 10)
     assert(tree.get(1) === 1)
   })
+
+  it('removes a NaN key that the comparator orders', () => {
+    const nanFirst = (x: number, y: number) => {
+      if (Number.isNaN(x)) return Number.isNaN(y) ? 0 : -1
+      return Number.isNaN(y) ? 1 : x - y
+    }
+    const tree = new BTree(undefined, nanFirst)
+    tree.set(Number.NaN, 'nan')
+    tree.set(1, 'one')
+    assert(tree.remove(Number.NaN) === true)
+    assert(tree.size === 1)
+    assert.deepEqual([...tree.keys()], [1])
+
+    tree.set(Number.NaN, 'nan')
+    assert(tree.removeRange(Number.NaN, 5, true) === 2)
+    assert(tree.size === 0)
+  })
+
+  it('get returns the default past the last key', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, i)
+    }
+    assert(tree.height > 0)
+    assert(tree.get(-1, 'none') === 'none')
+    assert(tree.get(99, 'none') === 'none')
+  })
+
+  it('contains finds a key whose value is undefined', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, undefined)
+    }
+    assert(tree.contains(5) === true)
+    assert(tree.contains(5.5) === false)
+    assert(tree.contains(99) === false)
+  })
 })

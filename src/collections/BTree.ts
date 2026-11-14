@@ -298,7 +298,7 @@ class BNode<K, V = any> {
         const result = onFound(key, this.values[i], count++)
         if (result !== undefined) {
           if (editMode) {
-            if (key !== keys[i] || this.isShared)
+            if (!Object.is(key, keys[i]) || this.isShared)
               throw new Error('BTree illegally changed or cloned in editRange')
             if (result.delete) {
               this.keys.splice(i, 1)
@@ -447,7 +447,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    * @description Computational complexity: O(log size)
    */
   contains(key: K): boolean {
-    return this.get(key) !== undefined
+    return this.rangeForEach(key, key, true) !== 0
   }
 
   /**
@@ -1021,7 +1021,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
   get(key: K, defaultValue: V | undefined, tree: BTree<K, V>): V | undefined {
     const i = this.indexOf(key, 0, tree._compare)
     const children = this.children
-    return i < children.length ? children[i].get(key, defaultValue, tree) : undefined
+    return i < children.length ? children[i].get(key, defaultValue, tree) : defaultValue
   }
 
   getPairOrNextLower(
