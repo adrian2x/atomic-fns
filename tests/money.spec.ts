@@ -56,6 +56,18 @@ describe('Money', () => {
     assert(a.div(b).toString() === '$0.3333333333333333')
   })
 
+  it('clone', () => {
+    assert(Money(5).clone().toString() === '$5.00')
+    assert(Money(5).clone(Money(7)).toString() === '$7.00')
+    assert(Money(5).clone(null).toString() === '$0.00')
+  })
+
+  it('sqrt', () => {
+    assert(Money(4).sqrt().toString() === '$2.00')
+    assert(Money('0.25').sqrt().toString() === '$0.50')
+    assert(Money(0).sqrt().toString() === '$0.00')
+  })
+
   it('precision', () => {
     let a = Money('1')
     let b = Money('3')
@@ -65,6 +77,16 @@ describe('Money', () => {
   it('displayName', () => {
     let a = Money('1')
     assert(a.displayName() === '1.00 US dollars')
+  })
+
+  it('leaves the options object alone', () => {
+    const opts = { currencyDisplay: 'code' } as const
+    const copy = { ...opts }
+    assert(new Currency(1, 'USD', locale, opts).toString() === 'USD\u00a01.00')
+    assert(new Currency(1, 'EUR', locale, opts).toString() === 'EUR\u00a01.00')
+    assert(Money(1).format(opts) === 'USD\u00a01.00')
+    assert(new Currency(1, 'EUR', locale).format(opts) === 'EUR\u00a01.00')
+    assert.deepStrictEqual(opts, copy)
   })
 
   it('accounting', () => {
