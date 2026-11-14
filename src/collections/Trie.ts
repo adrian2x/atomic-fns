@@ -4,13 +4,14 @@ type TrieNode = {
   isWord?: boolean
 } & { [key: string]: TrieNode }
 
-function* traverse(node: TrieNode, path: string, total = 20, count = 0): Generator<string> {
-  if (node.isWord) {
-    count++
-    yield path
-  }
-  for (const key of Object.keys(node)) {
-    yield* traverse(node[key], path + key, total, count)
+function* traverse(root: TrieNode, prefix: string): Generator<string> {
+  const stack: Array<[TrieNode, string]> = [[root, prefix]]
+  while (stack.length) {
+    const [node, path] = stack.pop()
+    if (node.isWord) yield path
+    for (const key of Object.keys(node).reverse()) {
+      stack.push([node[key], path + key])
+    }
   }
 }
 
@@ -59,15 +60,11 @@ export class Trie extends Collection {
    * @returns {boolean} Returns `true` if the string was found and removed.
    */
   remove(word: string): boolean {
-    for (let i = 0, node = this.root; i < word.length && node; i++) {
-      node = node[word[i]]
-      if (i === word.length - 1 && node.isWord) {
-        node.isWord = false
-        this.count--
-        return true
-      }
-    }
-    return false
+    const node = this.findNode(word)
+    if (!node?.isWord) return false
+    node.isWord = false
+    this.count--
+    return true
   }
 
   private findNode(word: string): TrieNode | undefined {
@@ -87,7 +84,7 @@ export class Trie extends Collection {
   matches = function* (word: string, limit = 20): Generator<string> {
     const node = this.findNode(word)
     if (node) {
-      yield* traverse(node, word, limit)
+      yield* traverse(node, word)
     }
   }
 
