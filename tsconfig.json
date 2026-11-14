@@ -8,6 +8,7 @@
     "outDir": "./dist",
     "strict": false,
     "noImplicitOverride": true,
+    "noUnusedLocals": true,
     "verbatimModuleSyntax": true
   },
   "include": ["src"],

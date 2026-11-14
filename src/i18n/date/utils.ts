@@ -21,21 +21,6 @@ function floorMod(x: number, n: number) {
   return x - n * Math.floor(x / n)
 }
 
-function padStart(input: number, n = 2) {
-  const isNeg = input < 0
-  let padded
-  if (isNeg) {
-    padded = '-' + ('' + -input).padStart(n, '0')
-  } else {
-    padded = ('' + input).padStart(n, '0')
-  }
-  return padded
-}
-
-function parseInteger(str: string) {
-  if (str != null && str !== '') return parseInt(str, 10)
-}
-
 function parseFloating(str: string) {
   if (str != null && str !== '') return parseFloat(str)
 }
@@ -127,66 +112,6 @@ export function daysInMonth(date: string | number | Date): number {
   }
 }
 
-// covert a calendar object to a local timestamp (epoch, but with the offset baked in)
-function objToLocalTS(obj: DateObject): number {
-  let d = Date.UTC(
-    obj.year,
-    obj.month - 1,
-    obj.day,
-    obj.hour,
-    obj.minute,
-    obj.second,
-    obj.millisecond
-  )
-  // for legacy reasons, years between 0 and 99 are interpreted as 19XX; revert that
-  if (obj.year < 100 && obj.year >= 0) {
-    let dt = new Date(d)
-    dt.setUTCFullYear(dt.getUTCFullYear() - 1900)
-    d = dt.getTime()
-  }
-  return +d
-}
-
-function untruncateYear(year: number): number {
-  if (year > 99) {
-    return year
-  } else return year > 60 ? 1900 + year : 2000 + year
-}
-
-// PARSING
-
-function parseZoneInfo(ts: number | Date, offsetFormat, locale, timeZone?) {
-  const date = new Date(ts),
-    intlOpts: Intl.DateTimeFormatOptions = {
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone,
-      timeZoneName: offsetFormat
-    }
-  const parsed = new Intl.DateTimeFormat(locale, intlOpts)
-    .formatToParts(date)
-    .find((m) => m.type === 'timeZoneName')
-  return parsed?.value
-}
-
-// signedOffset('-5', '30') -> -330
-function signedOffset(offHourStr: string, offMinuteStr: string) {
-  let offHour = parseInt(offHourStr, 10)
-
-  // don't || this because we want to preserve -0
-  if (Number.isNaN(offHour)) {
-    offHour = 0
-  }
-
-  const offMin = parseInt(offMinuteStr, 10) || 0,
-    offMinSigned = offHour < 0 || Object.is(offHour, -0) ? -offMin : offMin
-  return offHour * 60 + offMinSigned
-}
-
 // COERCION
 
 export function asNumber(value) {
@@ -195,30 +120,6 @@ export function asNumber(value) {
     throw new Error(`Invalid unit value ${value}`)
   return numericValue
 }
-
-function formatOffset(offset: number, format: 'short' | 'narrow' | 'techie') {
-  const hours = Math.trunc(Math.abs(offset / 60)),
-    minutes = Math.trunc(Math.abs(offset % 60)),
-    sign = offset >= 0 ? '+' : '-'
-
-  switch (format) {
-    case 'short':
-      return `${sign}${padStart(hours, 2)}:${padStart(minutes, 2)}`
-    case 'narrow':
-      return `${sign}${hours}${minutes > 0 ? `:${minutes}` : ''}`
-    case 'techie':
-      return `${sign}${padStart(hours, 2)}${padStart(minutes, 2)}`
-    default:
-      throw new RangeError(`Value format ${format} is out of range for property format`)
-  }
-}
-
-function timeObject(obj: DateObject) {
-  const { hour, minute, second, millisecond } = obj
-  return { hour, minute, second, millisecond }
-}
-
-const ianaRegex = /[A-Za-z_+-]{1,256}(?::?\/[A-Za-z0-9_+-]{1,256}(?:\/[A-Za-z0-9_+-]{1,256})?)?/
 
 const isoDuration =
   /^-?P(?:(?:(-?\d{1,20}(?:\.\d{1,20})?)Y)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20}(?:\.\d{1,20})?)W)?(?:(-?\d{1,20}(?:\.\d{1,20})?)D)?(?:T(?:(-?\d{1,20}(?:\.\d{1,20})?)H)?(?:(-?\d{1,20}(?:\.\d{1,20})?)M)?(?:(-?\d{1,20})(?:[.,](-?\d{1,20}))?S)?)?)$/
@@ -291,31 +192,6 @@ function firstWeekOffset(year, dow, doy) {
     fwdlw = (7 + createUTCDate(year, 0, fwd).getUTCDay() - dow) % 7
 
   return -fwdlw + fwd - 1
-}
-
-// https://en.wikipedia.org/wiki/ISO_week_date#Calculating_a_date_given_the_year.2C_week_number_and_weekday
-function dayOfYearFromWeeks(year, week, weekday, dow, doy) {
-  var localWeekday = (7 + weekday - dow) % 7,
-    weekOffset = firstWeekOffset(year, dow, doy),
-    dayOfYear = 1 + 7 * (week - 1) + localWeekday + weekOffset,
-    resYear,
-    resDayOfYear
-
-  if (dayOfYear <= 0) {
-    resYear = year - 1
-    resDayOfYear = daysInYear(resYear) + dayOfYear
-  } else if (dayOfYear > daysInYear(year)) {
-    resYear = year + 1
-    resDayOfYear = dayOfYear - daysInYear(year)
-  } else {
-    resYear = year
-    resDayOfYear = dayOfYear
-  }
-
-  return {
-    year: resYear,
-    dayOfYear: resDayOfYear
-  }
 }
 
 /**
