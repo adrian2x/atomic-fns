@@ -4,6 +4,8 @@
  * @module decimal
  */
 
+import { ValueError } from '../globals/index.js'
+
 const NUMBER_REGEX = /^(-?)([0-9]+)(\.([0-9]+))?$/
 
 /**
@@ -41,7 +43,8 @@ export class Decimal {
       return this
     }
 
-    const result = NUMBER_REGEX.exec(value.toString())
+    const text = value.toString()
+    const result = NUMBER_REGEX.exec(text)
 
     if (result) {
       // console.log(result);
@@ -54,6 +57,10 @@ export class Decimal {
       this._normalize()
     } else {
       // Conversion to string failed, so construct from number
+      value = Number(value)
+      if (Number.isNaN(value) || (value === 0 && text.trim() === '')) {
+        throw new ValueError('Decimal value must be numeric')
+      }
       let m = 1n
       if (value < 0) {
         value = -value
@@ -344,7 +351,13 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {boolean}
    */
   eq(x: any): boolean {
-    const other = decimal(x)
+    if (x == null || typeof x === 'boolean') return false
+    let other: Decimal
+    try {
+      other = decimal(x)
+    } catch {
+      return false
+    }
     return this.i === other.i && this.e === other.e
   }
 
@@ -372,8 +385,9 @@ a.div(b)  // 0.333333333333333333333333333333
    * @returns {number}
    */
   compare(x): 0 | 1 | -1 {
-    if (this.eq(x)) return 0
-    if (this.lt(x)) return -1
+    const other = x == null || typeof x === 'boolean' ? decimal(x) : x
+    if (this.eq(other)) return 0
+    if (this.lt(other)) return -1
     return 1
   }
 
