@@ -2,6 +2,10 @@ import { defaults } from '../collections/index.js'
 import { isObject } from '../globals/index.js'
 import { Decimal } from '../decimal/index.js'
 
+/** `Intl` options that set the digits shown. Some reject each other, so they replace as a group. */
+const DIGIT_OPTION =
+  /^(minimum|maximum)(Fraction|Significant)Digits$|^rounding(Increment|Priority)$/
+
 /**
  * Currency represents a local currency amount that can be formatted using the `Intl` apis.
  */
@@ -9,6 +13,7 @@ export class Currency extends Decimal {
   private readonly locale: string
   private readonly currency: string
   private readonly numberFormat: Intl.NumberFormat
+  private readonly overrides: Intl.NumberFormatOptions
   private readonly options: Intl.NumberFormatOptions = {
     style: 'currency',
     currencyDisplay: 'symbol',
@@ -28,13 +33,14 @@ export class Currency extends Decimal {
     const resolved = systemLocale.resolvedOptions()
     this.numberFormat = systemLocale
     this.options.currency = currency
+    this.overrides = defaults({}, opts)
     this.currency = resolved.currency
     this.locale = resolved.locale
   }
 
   // @ts-expect-error overrides
   clone(n: Currency): Currency {
-    return new Currency(n === undefined ? this : n, this.currency, this.locale, this.options)
+    return new Currency(n === undefined ? this : n, this.currency, this.locale, this.overrides)
   }
 
   // @ts-expect-error overrides
@@ -78,7 +84,11 @@ export class Currency extends Decimal {
 
   format(opts: Intl.NumberFormatOptions = {}, locale?: string): string {
     const number = this.toNumber()
-    opts = defaults({}, opts, this.options)
+    const overrides = { ...this.overrides }
+    if (Object.keys(opts).some((key) => DIGIT_OPTION.test(key) && opts[key] !== undefined)) {
+      for (const key in overrides) if (DIGIT_OPTION.test(key)) delete overrides[key]
+    }
+    opts = defaults({}, opts, overrides, this.options)
     return new Intl.NumberFormat(locale ?? this.locale, opts).format(number)
   }
 

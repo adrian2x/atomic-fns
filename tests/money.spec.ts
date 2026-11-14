@@ -89,6 +89,58 @@ describe('Money', () => {
     assert.deepStrictEqual(opts, copy)
   })
 
+  it('keeps its constructor options', () => {
+    const coded = new Currency(100, 'USD', locale, { currencyDisplay: 'code' })
+    assert(coded.add(1).toString() === 'USD\u00a0101.00')
+    assert(coded.negated().toString() === '-USD\u00a0100.00')
+    assert(coded.format() === 'USD\u00a0100.00')
+    assert(coded.accounting() === 'USD\u00a0100.00')
+    assert(coded.format({ currencyDisplay: 'symbol' }) === '$100.00')
+
+    const rounded = new Currency('1.2345', 'USD', locale, { maximumFractionDigits: 2 })
+    assert(rounded.mul(1).toString() === '$1.23')
+    assert(rounded.format() === '$1.23')
+    assert(rounded.precision(3) === '$1.235')
+
+    const opts = { currencyDisplay: 'code' } as const
+    assert(new Currency(1, 'USD', opts).add(1).format({}, locale) === 'USD\u00a02.00')
+  })
+
+  it('digit options in format replace the constructor ones', () => {
+    const padded = new Currency(100, 'USD', locale, { minimumFractionDigits: 4 })
+    assert(padded.format() === '$100.0000')
+    assert(padded.precision(2) === '$100.00')
+
+    const rounded = new Currency('1.2345', 'USD', locale, { maximumFractionDigits: 2 })
+    assert(rounded.format({ minimumFractionDigits: 3 }) === '$1.2345')
+
+    const significant = new Currency('1234.5678', 'USD', locale, { maximumSignificantDigits: 3 })
+    assert(significant.format() === '$1,230')
+    assert(significant.precision(2) === '$1,234.57')
+
+    const least = new Currency('1234.5678', 'USD', locale, { minimumSignificantDigits: 5 })
+    assert(least.format({ maximumSignificantDigits: 3 }) === '$1,230')
+
+    const stepped = new Currency('1.25', 'USD', locale, {
+      roundingIncrement: 5,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+    assert(stepped.format({ maximumFractionDigits: 3 }) === '$1.25')
+
+    const coded = new Currency('1.2345', 'USD', locale, {
+      currencyDisplay: 'code',
+      maximumFractionDigits: 2
+    })
+    assert(coded.precision(3) === 'USD\u00a01.235')
+    assert(coded.precision(undefined) === 'USD\u00a01.23')
+
+    assert.throws(
+      () => Money(1).format({ minimumFractionDigits: 3, maximumFractionDigits: 2 }),
+      RangeError
+    )
+  })
+
   it('accounting', () => {
     assert(Money(0).accounting() === '$0.00')
     assert(Money(1).accounting() === '$1.00')
