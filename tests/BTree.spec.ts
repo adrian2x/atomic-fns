@@ -290,4 +290,41 @@ describe('BTree', () => {
     assert(tree.get(1) === 'one')
     assert(tree.size === 2)
   })
+
+  it('keysRange stops at maxLength', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, i)
+    }
+    assert.deepEqual(
+      tree.keysRange(0, 9, true, 3).map(([key]) => key),
+      [0, 1, 2]
+    )
+    assert.deepEqual(tree.keysRange(0, 9, true, 0), [])
+    assert(tree.keysRange(0, 9, true, 10).length === 10)
+    assert(tree.keysRange(0, 9, true, 100).length === 10)
+  })
+
+  it('extend counts only new keys', () => {
+    const tree = new BTree([[0, 'zero']])
+    assert(
+      tree.extend([
+        [0, 'a'],
+        [1, 'b'],
+        [1, 'c']
+      ]) === 1
+    )
+    assert(tree.get(0) === 'a')
+    assert(tree.get(1) === 'c')
+    assert(tree.size === 2)
+  })
+
+  it('rangeForEach counts nothing when low is above high', () => {
+    const tree = new BTree()
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, i)
+    }
+    assert(tree.rangeForEach(5, 2, true) === 0)
+    assert(tree.rangeForEach(5, 2, true, undefined, 3) === 3)
+  })
 })
