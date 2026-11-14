@@ -10,7 +10,7 @@
 export type Function<TReturn = any> = (...args: any) => TReturn
 
 /** This is just a noop function. */
-export function noop() {}
+export function noop(): void {}
 
 /** A function that always returns `true`. */
 export const True = () => true
@@ -124,38 +124,38 @@ export function type(value: any): string {
  * @returns `obj.toString()` or `''` if `obj` is `null` or `undefined`.
  * @see {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString | Object.toString }
  */
-export function str(obj): string {
+export function str(obj: any): string {
   return obj?.toString() ?? ''
 }
 
 /** Check if value is a boolean type. */
-export function isBool(x): x is boolean {
+export function isBool(x: any): x is boolean {
   return type(x) === 'boolean'
 }
 
 /** Check if value is an `Error` type. */
-export function isError(x): x is Error {
+export function isError(x: any): x is Error {
   return x instanceof Error
 }
 
 /** Check if value is an iterable type. */
-export function isIterable(x): x is IterableIterator<any> {
+export function isIterable(x: any): x is IterableIterator<any> {
   if (x == null) return false
   return typeof x[Symbol.iterator] === 'function'
 }
 
 /** Check if value is a native `Date` type. */
-export function isDate(x): x is Date {
+export function isDate(x: any): x is Date {
   return x instanceof Date
 }
 
 /** Check if value is an object type. */
-export function isObject(x): x is Object {
+export function isObject(x: any): x is Object {
   return type(x) === 'object'
 }
 
 /** Check if value is a string type. */
-export function isString(x): x is string {
+export function isString(x: any): x is string {
   return type(x) === 'string'
 }
 
@@ -163,88 +163,88 @@ export function isString(x): x is string {
  * Check if value is Array-like type.
  * A value is considered array-like if it's not a function and has a `.length` number property.
  */
-export function isArrayLike(x): boolean {
+export function isArrayLike(x: any): boolean {
   const T = type(x)
   return T === 'array' || (T === 'object' && isNumber(x.length))
 }
 
 /** Check if value is a number type. */
-export function isNumber(x): x is number {
+export function isNumber(x: any): x is number {
   return type(x) === 'number'
 }
 
 /** Check if value is a bigint type. */
-export function isBigint(x): x is BigInt {
+export function isBigint(x: any): x is BigInt {
   return type(x) === 'bigint'
 }
 
 /** Check if value is a Promise type. */
-export function isPromise(x): x is Promise<any> {
+export function isPromise(x: any): x is Promise<any> {
   return type(x) === 'Promise'
 }
 
 /** Check if value is a function type. */
-export function isFunction(x): x is Function {
+export function isFunction(x: any): x is Function {
   return typeof x === 'function'
 }
 
 /** Check if value is an async function type. */
-export function isAsyncFunction(x): boolean {
+export function isAsyncFunction(x: any): boolean {
   return x?.constructor?.name === 'AsyncFunction'
 }
 
 /** Check if value is a generator function type. */
-export function isGenerator(x): x is Generator {
+export function isGenerator(x: any): x is Generator {
   return x?.constructor?.constructor?.name === 'GeneratorFunction'
 }
 
 /** Check if value is `null` or `undefined`. */
-export function isNull(x): x is null | undefined {
+export function isNull(x: any): x is null | undefined {
   return x == null
 }
 
 /** Check if value === `undefined`. */
-export function isUndefined(x): x is undefined {
+export function isUndefined(x: any): x is undefined {
   return x === undefined
 }
 
 /** Check if value is not `null` or `undefined`. */
-export function notNull(x): boolean {
+export function notNull(x: any): boolean {
   return x != null
 }
 
 /** Returns `true` for objects without length or falsy values. */
-export function isEmpty(x): boolean {
+export function isEmpty(x: any): boolean {
   return len(x) === 0 ? true : !x
 }
 
 /** Check if value is a `RegExp` type */
-export function isRegExp(x): x is RegExp {
+export function isRegExp(x: any): x is RegExp {
   return x instanceof RegExp
 }
 
 /** Check if value is a `Symbol` type */
-export function isSymbol(x): x is symbol {
+export function isSymbol(x: any): x is symbol {
   return type(x) === 'symbol'
 }
 
 /** Check if value is a `Set` type. */
-export function isSet<T>(x): x is Set<T> {
+export function isSet<T>(x: any): x is Set<T> {
   return x instanceof Set
 }
 
 /** Check if value is a `Map` type. */
-export function isMap<K, V>(x): x is Map<K, V> {
+export function isMap<K, V>(x: any): x is Map<K, V> {
   return x instanceof Map
 }
 
 /** Check if value is a `WeakSet` type. */
-export function isWeakSet<T extends object>(x): x is WeakSet<T> {
+export function isWeakSet<T extends object>(x: any): x is WeakSet<T> {
   return x instanceof WeakSet
 }
 
 /** Check if value is a `WeakMap` type. */
-export function isWeakMap<K extends object, V>(x): x is WeakMap<K, V> {
+export function isWeakMap<K extends object, V>(x: any): x is WeakMap<K, V> {
   return x instanceof WeakMap
 }
 
@@ -256,7 +256,7 @@ export function isWeakMap<K extends object, V>(x): x is WeakMap<K, V> {
  * @param value
  * @returns The number of elements in the collection or `undefined`.
  */
-export function len(value): number {
+export function len(value: any): number {
   if (value == null) return
   if (isNumber(value.length)) {
     return value.length
@@ -333,7 +333,7 @@ export function ord(x: string): number {
  * @param attr A property key name.
  * @returns `true` if the object has the property name.
  */
-export function has(obj, attr: PropertyKey): boolean {
+export function has(obj: any, attr: PropertyKey): boolean {
   return obj != null && attr in Object(obj)
 }
 
@@ -400,7 +400,7 @@ export function set(
   })
 }
 
-export const HASH_KEY = Symbol.for('HASH_KEY')
+export const HASH_KEY: unique symbol = Symbol.for('HASH_KEY')
 
 const sealedHashes = new WeakMap<object, any>()
 
