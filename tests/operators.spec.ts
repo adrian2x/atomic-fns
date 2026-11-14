@@ -145,4 +145,10 @@ describe('operators', () => {
   it('deepEqual accepts a WeakSet as seen', () => {
     assert(deepEqual({ a: 1 }, { a: 1 }, eq, new WeakSet()))
   })
+
+  it('deepEqual compares typed arrays by element', () => {
+    assert(deepEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2])))
+    assert(!deepEqual(new Uint8Array([1, 2]), new Uint8Array([1, 3])))
+    assert(!deepEqual(new Uint8Array([1]), new Int8Array([1])))
+  })
 })
