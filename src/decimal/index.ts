@@ -268,10 +268,12 @@ a.div(b)  // 0.333333333333333333333333333333
    * Remove zeroes in the least-significant digit of this `Decimal`
    */
   private _normalize(): this {
-    while (this.i % 10n === 0n && this.i !== 0n) {
-      this.i /= 10n
-      this.e++
-    }
+    if (this.i === 0n || this.i % 10n !== 0n) return this
+    const digits = this.i.toString()
+    let end = digits.length
+    while (digits[end - 1] === '0') end--
+    this.i = BigInt(digits.slice(0, end))
+    this.e += digits.length - end
     return this
   }
 
@@ -421,11 +423,5 @@ a.div(b)  // 0.333333333333333333333333333333
 
 /** Returns a BigInt that is equal to `i` times `10^e` */
 function exp(i: bigint, e: number): bigint {
-  // TODO: Make this better
-  // The implementation is faster than 10n ** BigInt(e). But could we make it faster still?
-  let ii = i
-  for (let j = 0; j < e; j++) {
-    ii *= 10n
-  }
-  return ii
+  return i * 10n ** BigInt(e)
 }
