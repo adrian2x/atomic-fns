@@ -109,7 +109,7 @@ const TYPED_ARRAY_PROTOTYPE = Object.getPrototypeOf(Uint8Array.prototype) as obj
 const TYPED_ARRAY_NAME = getterOf(TYPED_ARRAY_PROTOTYPE, Symbol.toStringTag)
 
 /** The bytes a view covers, without copying. Throws for a detached or out-of-bounds view. */
-function viewBytes(view: ArrayBufferView): Uint8Array {
+export function viewBytes(view: ArrayBufferView): Uint8Array {
   return new Uint8Array(view.buffer, view.byteOffset, view.byteLength)
 }
 
