@@ -50,7 +50,7 @@ class BNode<K, V = any> {
   // Shared methods /////////////////////////////////////////////////////////
 
   maxKey() {
-    return this.keys[this.keys.length - 1]
+    return this.keys.at(-1)
   }
 
   // If key not found, returns i^failXor where i is the insertion index.
@@ -697,7 +697,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    * avoid creating a new array on every iteration.
    */
   lowerBound(key: K | undefined, reusedArray?: [K, V]): [K, V] | undefined {
-    reusedArray = reusedArray || ([] as unknown as [K, V])
+    reusedArray ||= [] as unknown as [K, V]
     if (key === undefined) {
       return this.root.minPair(reusedArray)
     }
@@ -719,7 +719,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    *        avoid creating a new array each time you call this method.
    */
   upperBound(key: K | undefined, reusedArray?: [K, V]): [K, V] | undefined {
-    reusedArray = reusedArray || ([] as unknown as [K, V])
+    reusedArray ||= [] as unknown as [K, V]
     if (key === undefined) {
       return this.root.maxPair(reusedArray)
     }
@@ -992,7 +992,7 @@ class BNodeInternal<K, V> extends BNode<K, V> {
   }
 
   override maxPair(reusedArray: [K, V]): [K, V] | undefined {
-    return this.children[this.children.length - 1].maxPair(reusedArray)
+    return this.children.at(-1).maxPair(reusedArray)
   }
 
   override get(key: K, defaultValue: V | undefined, tree: BTree<K, V>): V | undefined {

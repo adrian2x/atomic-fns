@@ -218,7 +218,7 @@ filter(objects, matches({ a: 4, c: 6 }))
  * @returns
  */
 export function matches(shape): (obj) => boolean {
-  return function (obj) {
+  return (obj) => {
     if (!shape || !obj) return false
     const seen = new Map()
     for (const key in shape) {
@@ -1183,7 +1183,7 @@ export function remove<T>(arr: T[], func: T | T[] | Iteratee<T>): T[] {
  * @returns {number} The index if the element is found or a negative integer.
  */
 export function binarySearch(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
-  hi = hi ?? arr.length - 1
+  hi ??= arr.length - 1
   while (lo < hi) {
     const mid = (lo + hi) >> 1
     const check = comp(x, arr[mid])
@@ -1207,7 +1207,7 @@ export function binarySearch(arr: any[], x: any, lo = 0, hi?, comp = compare): n
  * @returns {number}
  */
 export function bisect(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
-  hi = hi ?? arr.length
+  hi ??= arr.length
   while (lo < hi) {
     const mid = (lo + hi) >> 1
     const check = comp(x, arr[mid])
@@ -1227,7 +1227,7 @@ export function bisect(arr: any[], x: any, lo = 0, hi?, comp = compare): number 
  * @returns {number}
  */
 export function bisectLeft(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
-  hi = hi ?? arr.length
+  hi ??= arr.length
   while (lo < hi) {
     const mid = (lo + hi) >> 1
     const check = comp(x, arr[mid])

@@ -84,7 +84,7 @@ export class Decimal {
         // Multiply the number by 10 until it is an integer
         let e = -Math.floor(Math.log10(value))
         if (e > 0) {
-          value *= Math.pow(10, e)
+          value *= 10 ** e
         } else {
           e = 0
         }

@@ -260,7 +260,7 @@ export function shallowEqual(obj, other): boolean {
     if (objKeys.length !== otherKeys.length) return false
 
     for (const key of objKeys) {
-      if (!Object.prototype.hasOwnProperty.call(other, key) || obj[key] !== other[key]) {
+      if (!Object.hasOwn(other, key) || obj[key] !== other[key]) {
         return false
       }
     }
@@ -328,10 +328,7 @@ export function deepEqual(obj, other, checker = eq, seen = new WeakMap()): boole
     if (objKeys.length !== otherKeys.length) return false
 
     for (const key of objKeys) {
-      if (
-        !Object.prototype.hasOwnProperty.call(other, key) ||
-        !deepEqual(obj[key], other[key], checker, seen)
-      ) {
+      if (!Object.hasOwn(other, key) || !deepEqual(obj[key], other[key], checker, seen)) {
         return false
       }
     }
