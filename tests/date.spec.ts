@@ -32,7 +32,10 @@ const inZone = (zone: string, test: () => void) => {
 }
 
 describe('IntlDate', () => {
+  afterEach(() => vi.useRealTimers())
+
   it('now', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
     let date = new Date()
     let testDate = mockDate()
     assert(testDate.year === date.getFullYear())
@@ -44,6 +47,7 @@ describe('IntlDate', () => {
   })
 
   it('UTC', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
     let date = new Date()
     let testDate = IntlDate.UTC(undefined)
     assert(testDate.year === date.getUTCFullYear())
@@ -152,6 +156,7 @@ describe('IntlDate', () => {
   })
 
   it('toObject', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
     let date = new Date()
     let obj = mockDate().toObject()
     assert(obj.year === date.getFullYear())
