@@ -1,4 +1,4 @@
-name: Publish to NPM
+name: Publish
 on:
   release:
     types: [created]
@@ -44,3 +44,19 @@ jobs:
       - run: npm publish --ignore-scripts "$RUNNER_TEMP"/package/atomic-fns-*.tgz
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  jsr:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.6
+      - run: deno publish --set-version "$(jq -r .version package.json)"

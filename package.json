@@ -21,12 +21,14 @@
     "lint": "biome check --diagnostic-level=error .",
     "build": "npm run lint && npm test && npm run tsc",
     "docs": "npx --yes --package=typedoc@0.28.20 --package=typescript@6.0.3 -- typedoc",
-    "check": "npm run lint && npm run tsc && npm test",
-    "format": "biome format --write ."
+    "check": "npm run lint && npm run tsc && npm test && npm run jsr",
+    "format": "biome format --write .",
+    "jsr": "deno publish --dry-run --allow-dirty --set-version $npm_package_version"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.5",
     "@types/node": "^26.6.6",
+    "deno": "^2.9.6",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },
