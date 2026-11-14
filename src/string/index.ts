@@ -21,7 +21,7 @@ sentenceCase('TEST')
 ```
  * @see {@link capitalize}
  */
-export function sentenceCase(s: string) {
+export function sentenceCase(s: string): string {
   return `${(s[0] || '').toLocaleUpperCase()}${s.substring(1) || ''}`
 }
 
@@ -36,7 +36,7 @@ capitalize('TEST')
 ```
  * @see {@link titleCase}
  */
-export function capitalize(s: string) {
+export function capitalize(s: string): string {
   return `${(s[0] || '').toLocaleUpperCase()}${(s.substring(1) || '').toLocaleLowerCase()}`
 }
 
@@ -51,7 +51,7 @@ words('lord of the rings')
 // ['lord', 'of', 'the', 'rings']
 ```
  */
-export function words(s: string, pattern?: RegExp | string) {
+export function words(s: string, pattern?: RegExp | string): string[] {
   if (pattern != null) return s.split(pattern)
   return s.match(WORDS_REGEX) || ([] as string[])
 }
@@ -67,7 +67,7 @@ join('Lord Of The Rings', '-')
 // 'Lord-Of-The-Rings'
 ```
  */
-export function join(s: string, sep = ' ') {
+export function join(s: string, sep = ' '): string {
   return words(s).join(sep)
 }
 
@@ -84,7 +84,7 @@ isAlnum('oops!')
 // false
 ```
  */
-export function isAlnum(s: string) {
+export function isAlnum(s: string): boolean {
   return /^[\p{L}\p{N}]+$/gu.test(s)
 }
 
@@ -101,7 +101,7 @@ isAlpha('letters')
 // true
 ```
  */
-export function isAlpha(s: string) {
+export function isAlpha(s: string): boolean {
   return /^[\p{L}]+$/gu.test(s)
 }
 
@@ -118,7 +118,7 @@ isNumeric('1234')
 // true
 ```
  */
-export function isNumeric(s: string) {
+export function isNumeric(s: string): boolean {
   return /^[\p{N}]+$/gu.test(s)
 }
 
@@ -132,7 +132,7 @@ asciify('äÄçÇéÉêPHP-MySQLöÖÐþúÚ')
 // 'PHP-MySQL'
 ```
  */
-export function asciify(s: string) {
+export function asciify(s: string): string {
   return s.replace(/[^\x00-\x7F]/g, '')
 }
 
@@ -146,7 +146,7 @@ removeAccents('Antoine de Saint-Exupéry')
 // 'Antoine de Saint-Exupery'
 ```
  */
-export function removeAccents(s: string) {
+export function removeAccents(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
@@ -161,7 +161,7 @@ titleCase('lord of the rings')
 ```
 @see {@link capitalize}
  */
-export function titleCase(s: string) {
+export function titleCase(s: string): string {
   return words(s)
     .map((word) => capitalize(word))
     .join(' ')
@@ -177,7 +177,7 @@ camelCase('Equipment class name')
 // 'equipmentClassName'
 ```
  */
-export function camelCase(s: string) {
+export function camelCase(s: string): string {
   return words(s).reduce(
     (acc, next) =>
       `${acc}${!acc ? next.toLowerCase() : next[0].toUpperCase() + next.slice(1).toLowerCase()}`,
@@ -195,7 +195,7 @@ pascalCase('equipment class name')
 // 'EquipmentClassName'
 ```
  */
-export function pascalCase(s: string) {
+export function pascalCase(s: string): string {
   return sentenceCase(camelCase(s))
 }
 
@@ -209,7 +209,7 @@ snakeCase('Equipment Class Name')
 // 'equipment_class_name'
 ```
  */
-export function snakeCase(s: string) {
+export function snakeCase(s: string): string {
   return join(s, '_').toLowerCase()
 }
 
@@ -226,7 +226,7 @@ kebabCase('equipment_class_name')
 // 'equipment-class-name'
 ```
  */
-export function kebabCase(s: string) {
+export function kebabCase(s: string): string {
   return join(s, '-').toLowerCase()
 }
 
@@ -240,7 +240,7 @@ slugify('Antoine de Saint-Exupéry')
 // 'Antoine-de-Saint-Exupery'
 ```
  */
-export function slugify(s: string) {
+export function slugify(s: string): string {
   const slug = join(removeAccents(s), '-')
   const urlSafe = slug.replace(/[^a-zA-Z0-9-_]/g, '')
   return urlSafe
