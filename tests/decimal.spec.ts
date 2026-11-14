@@ -176,6 +176,31 @@ describe('Decimal', () => {
     assert(a.div(b).toString() === '0.333333333333333333333333333333', a.div(b).toString())
   })
 
+  it('div keeps the precision whatever the trailing zeros', () => {
+    assert(decimal(10).div(3).toString() === '3.33333333333333333333')
+    assert(decimal(1000).div(3).toString() === '333.33333333333333333333')
+    assert(decimal('1000').div('3000').toString() === '0.33333333333333333333')
+    assert(
+      decimal(`1${'0'.repeat(21)}`)
+        .div(3)
+        .toString() === `${'3'.repeat(21)}.${'3'.repeat(20)}`
+    )
+    assert(
+      decimal(`1${'0'.repeat(21)}`)
+        .div(`3${'0'.repeat(21)}`)
+        .eq(decimal(1).div(3))
+    )
+    assert(decimal(-1000).div(3).toString() === '-333.33333333333333333333')
+    assert(decimal(1000).div('0.3').toString() === '3333.33333333333333333333')
+    assert(
+      decimal(`1${'0'.repeat(30)}`)
+        .div(`1${'0'.repeat(30)}`)
+        .toString() === '1'
+    )
+    assert(decimal('0.1').div(3).toString() === '0.0333333333333333333333')
+    assert(decimal(11).div(3).toString() === '3.66666666666666666666')
+  })
+
   it('eq is false for values that are not numbers', () => {
     for (const value of ['abc', '', NaN, Infinity, -Infinity, {}, Symbol('x')]) {
       assert(decimal(1).eq(value) === false, String(value))
