@@ -151,4 +151,10 @@ describe('operators', () => {
     assert(!deepEqual(new Uint8Array([1, 2]), new Uint8Array([1, 3])))
     assert(!deepEqual(new Uint8Array([1]), new Int8Array([1])))
   })
+
+  it('compare orders Dates by time', () => {
+    assert(compare(new Date(0), new Date(0)) === 0)
+    assert(compare(new Date(0), new Date(1)) === -1)
+    assert(compare(new Date(1), new Date(0)) === 1)
+  })
 })
