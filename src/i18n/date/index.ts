@@ -409,10 +409,15 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     // if we didn't set the day but we ended up on an overflow date,
     // use the last day of the right month
     if (normalized.day === undefined) {
-      mixed.day = Math.min(daysInMonth(this._date), mixed.day)
+      const target = new Date(this._date)
+      target.setFullYear(mixed.year, mixed.month - 1, 1)
+      mixed.day = Math.min(daysInMonth(target), mixed.day)
     }
 
-    return this.clone(mixed)
+    const result = this.clone(mixed)
+    return normalized.weekday === undefined
+      ? result
+      : result.add({ days: normalized.weekday - result.dayOfWeek })
   }
 
   get relativeFormat() {
@@ -492,7 +497,7 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
     }
 
     if (normalizedUnit === 'weeks') {
-      obj.weekday = 1
+      return this.subtract({ days: this.dayOfWeek - 1 }).startOf('days')
     }
 
     if (normalizedUnit === 'quarters') {
@@ -500,7 +505,13 @@ new IntlDate().toISOTime() // 'T22:44:30.652Z'
       obj.month = (q - 1) * 3 + 1
     }
 
-    return this.set(obj)
+    const start = this.set(obj)
+    if (obj.hour !== undefined) return start
+
+    // Date reads a repeated wall clock as its first pass, this date may be on the second
+    const offset = this._date.getTimezoneOffset()
+    const kept = new Date(start.getTime() + (offset - start._date.getTimezoneOffset()) * 6e4)
+    return kept.getTimezoneOffset() === offset ? this.clone(kept) : start
   }
 
   endOf(unit: DurationUnit) {
@@ -643,7 +654,7 @@ function normalizeUnit(unit: keyof typeof UNITS_SINGULAR) {
 }
 
 function normalizeObject(obj, normalizer) {
-  const normalized = {} as Record<DurationUnit, number>
+  const normalized = {} as DateObject
   for (const key of Object.keys(obj)) {
     const value = obj[key]
     if (value == null) continue
