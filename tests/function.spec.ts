@@ -1,5 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { debounce } from '../src/function/index.ts'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import {
+  compose,
+  type Curried,
+  curry,
+  debounce,
+  flow,
+  type LooseFunction,
+  memoize,
+  once
+} from '../src/function/index.ts'
 import { throttle } from '../src/function/index.ts'
 
 beforeEach(() => {
@@ -806,5 +815,381 @@ describe('throttle', () => {
     vi.advanceTimersByTime(100)
     expect(t.pending()).toBe(false)
     expect(seen).toEqual([1, 2])
+  })
+})
+
+describe('curry', () => {
+  it('curry accumulates until arity then applies', () => {
+    const add = (a: number, b: number, c: number) => a + b + c
+    const curried = curry(add)
+    expect(curried(1)(2)(3)).toBe(6)
+    expect(curried(1, 2)(3)).toBe(6)
+    expect(curried(1)(2, 3)).toBe(6)
+    expect(curried(1, 2, 3)).toBe(6)
+  })
+
+  it('curry types each partial application and the result', () => {
+    const curried = curry((a: number, b: string, c: boolean) => `${a}${b}${c}`)
+    expectTypeOf(curried).toEqualTypeOf<Curried<[a: number, b: string, c: boolean], string>>()
+    expectTypeOf(curried(1)('x')(true)).toEqualTypeOf<string>()
+    expectTypeOf(curried(1, 'x')(true)).toEqualTypeOf<string>()
+    expectTypeOf(curried(1, 'x', true)).toEqualTypeOf<string>()
+    expectTypeOf(curried(1)).toEqualTypeOf<Curried<[b: string, c: boolean], string>>()
+    expectTypeOf(curry((a: number, b?: number) => a + (b ?? 0))(1)).toEqualTypeOf<number>()
+    expectTypeOf(curry(() => 1)()).toEqualTypeOf<number>()
+    const misuses = [
+      // @ts-expect-error a wrong argument type is rejected
+      () => curried('1', 'x', true),
+      // @ts-expect-error the result is not callable once every parameter is given
+      () => curried(1)('x')(true)(0)
+    ]
+    expectTypeOf(misuses).toBeArray()
+  })
+
+  it('curry partial applications can be reused', () => {
+    const curried = curry((a: number, b: number, c: number) => a + b + c)
+    const inc = curried(1)
+    expect(inc(2)(3)).toBe(6)
+    expect(inc(10)(20)).toBe(31)
+    const incTwice = inc(2)
+    expect(incTwice(3)).toBe(6)
+    expect(incTwice(4)).toBe(7)
+  })
+
+  it('curry uses the latest this and an explicit arity', () => {
+    const curried = curry(function (this: { n: number } | undefined, a: number, b: number) {
+      return [this?.n, a, b]
+    })
+    const host = { n: 1, finish: curried(2) }
+    expect(host.finish(3)).toEqual([1, 2, 3])
+    const variadic = curry((...args: number[]) => args, 2)
+    expectTypeOf(variadic).toEqualTypeOf<LooseFunction>()
+    expect(variadic(1)(2)).toEqual([1, 2])
+    expect(curry((a: number) => a, 0)()).toBeUndefined()
+  })
+})
+
+describe('flow and compose', () => {
+  it('flow applies left to right', () => {
+    const add1 = (x: number) => x + 1
+    const mul2 = (x: number) => x * 2
+    expect(flow(add1, mul2)(3)).toBe(8)
+    expect(flow(mul2, add1)(3)).toBe(7)
+  })
+
+  it('flow forwards all arguments to the first function', () => {
+    expect(
+      flow(
+        (a: number, b: number) => a + b,
+        (x: number) => x * 2
+      )(1, 2)
+    ).toBe(6)
+  })
+
+  it('flow forwards this to the first function', () => {
+    const obj = { n: 10 }
+    function add(this: { n: number }, a: number) {
+      return this.n + a
+    }
+    expect(flow(add, (x: number) => x * 2).call(obj, 3)).toBe(26)
+  })
+
+  it('flow and compose run every function with the caller this', () => {
+    const obj = { a: 1, b: 10 }
+    function first(this: typeof obj) {
+      return this.a
+    }
+    function second(this: typeof obj, x: number) {
+      return x + this.b
+    }
+    expect(flow(first, second).call(obj)).toBe(11)
+    expect(compose(second, first).call(obj)).toBe(11)
+  })
+
+  it('flow chains argument and return types', () => {
+    expectTypeOf(
+      flow(
+        (a: number, b: string) => a + b.length,
+        (n: number) => String(n)
+      )
+    ).toEqualTypeOf<(a: number, b: string) => string>()
+  })
+
+  it('compose applies right to left', () => {
+    const add1 = (x: number) => x + 1
+    const mul2 = (x: number) => x * 2
+    expect(compose(add1, mul2)(3)).toBe(7)
+    expect(compose(mul2, add1)(3)).toBe(8)
+  })
+
+  it('compose does not reverse an array passed to it', () => {
+    const add1 = (x: number) => x + 1
+    const mul2 = (x: number) => x * 2
+    const fns = [add1, mul2]
+    expect(compose(fns)(3)).toBe(7)
+    expect(fns).toEqual([add1, mul2])
+  })
+
+  it('compose chains argument and return types', () => {
+    expectTypeOf(
+      compose(
+        (n: number) => String(n),
+        (a: number, b: string) => a + b.length
+      )
+    ).toEqualTypeOf<(a: number, b: string) => string>()
+    expectTypeOf(
+      compose(
+        (n: number) => n * 2,
+        (s: string) => s.length
+      )
+    ).toEqualTypeOf<(s: string) => number>()
+  })
+
+  it('flow and compose return the first argument when empty', () => {
+    expect(flow()(1)).toBe(1)
+    expect(compose()(1)).toBe(1)
+  })
+
+  it('flow and compose flatten arrays one level', () => {
+    const add1 = (x: number) => x + 1
+    const mul2 = (x: number) => x * 2
+    expect(flow([add1, mul2])(1)).toBe(4)
+    expect(compose([add1, mul2])(1)).toBe(3)
+    expect(compose([add1], mul2)(1)).toBe(3)
+  })
+
+  it('flow and compose refuse holes in a nested array', () => {
+    const add1 = (x: number) => x + 1
+    const sparse = new Array<(x: number) => number>(3)
+    sparse[0] = add1
+    sparse[2] = add1
+    expect(() => flow(sparse)).toThrow(TypeError)
+    expect(() => compose(sparse)).toThrow(TypeError)
+    expect(() => flow(new Array<(x: number) => number>(2))).toThrow(TypeError)
+  })
+
+  it('flow chains any number of functions of one type', () => {
+    const steps = [(x: number) => x + 1, (x: number) => x * 2, (x: number) => x - 3]
+    expect(flow(...steps)(2)).toBe(3)
+  })
+})
+
+describe('memoize', () => {
+  it('memoize caches undefined results via Map.has', () => {
+    let calls = 0
+    const fn = memoize((x: number): number | undefined => {
+      calls++
+      return x < 0 ? x : undefined
+    })
+    expect(fn(1)).toBeUndefined()
+    expect(fn(1)).toBeUndefined()
+    expect(fn(1)).toBeUndefined()
+    expect(calls).toBe(1)
+    expect(fn(2)).toBeUndefined()
+    expect(calls).toBe(2)
+  })
+
+  it('memoize uses resolver and caller this', () => {
+    const obj = {
+      n: 10,
+      add(a: number, b: number) {
+        return this.n + a + b
+      }
+    }
+    let calls = 0
+    const mem = memoize(
+      function (this: typeof obj, a: number, b: number) {
+        calls++
+        return this.add(a, b)
+      },
+      (a, b) => `${String(a)}:${String(b)}`
+    )
+    expect(mem.call(obj, 1, 2)).toBe(13)
+    expect(mem.call(obj, 1, 2)).toBe(13)
+    expect(calls).toBe(1)
+    expect(mem.call(obj, 1, 3)).toBe(14)
+    expect(calls).toBe(2)
+  })
+
+  it('memoize resolver throwing propagates and caches nothing', () => {
+    let calls = 0
+    const fn = memoize(
+      (x: number) => {
+        calls++
+        return x * 2
+      },
+      () => {
+        throw new Error('bad key')
+      }
+    )
+    expect(() => fn(1)).toThrow(/bad key/)
+    expect(calls).toBe(0)
+    expect(() => fn(1)).toThrow(/bad key/)
+    expect(calls).toBe(0)
+  })
+
+  it('memoize exposes its cache', () => {
+    let calls = 0
+    const fn = memoize((x: number) => {
+      calls++
+      return x * 2
+    })
+    expect(fn(1)).toBe(2)
+    expect(fn.cache.get(1)).toBe(2)
+    fn.cache.clear()
+    expect(fn.cache.size).toBe(0)
+    expect(fn(1)).toBe(2)
+    expect(calls).toBe(2)
+  })
+
+  it('memoize calls resolver with this', () => {
+    const memoized = memoize(
+      (x: number) => x,
+      function (this: { id: number }) {
+        return this.id
+      }
+    )
+    expect(memoized.call({ id: 1 }, 2)).toBe(2)
+    expect(memoized.cache.has(1)).toBe(true)
+  })
+
+  it('memoize reads through memoized.cache', () => {
+    const memoized = memoize((x: number) => x + 1)
+    memoized(1)
+    memoized.cache = new Map([[1, 100]])
+    expect(memoized(1)).toBe(100)
+    expect(memoized(2)).toBe(3)
+    expect(memoized.cache.size).toBe(2)
+    memoized.cache.clear()
+    expect(memoized.cache.size).toBe(0)
+  })
+
+  it('memoize still surfaces other store failures', () => {
+    const memoized = memoize((x: number) => x + 1)
+    memoized.cache = new (class extends Map<unknown, number> {
+      override set(): never {
+        throw new TypeError('bad store')
+      }
+    })()
+    expect(() => memoized(1)).toThrow(/bad store/)
+  })
+
+  it('memoize surfaces a RangeError from a store that is not a Map', () => {
+    const memoized = memoize((x: number) => x + 1)
+    const store = new Map<unknown, number>()
+    memoized.cache = {
+      get: (key) => store.get(key),
+      set: () => {
+        throw new RangeError('store full')
+      },
+      has: (key) => store.has(key),
+      delete: (key) => store.delete(key),
+      clear: () => store.clear(),
+      get size() {
+        return store.size
+      }
+    }
+    expect(() => memoized(1)).toThrow(RangeError)
+  })
+
+  it('memoize takes any store with the Map interface', () => {
+    const seen: unknown[] = []
+    const memoized = memoize((x: number) => x * 2)
+    const store = new Map<unknown, number>()
+    memoized.cache = {
+      get: (key) => store.get(key),
+      set: (key, value) => {
+        seen.push(key)
+        return store.set(key, value)
+      },
+      has: (key) => store.has(key),
+      delete: (key) => store.delete(key),
+      clear: () => store.clear(),
+      get size() {
+        return store.size
+      }
+    }
+    expect(memoized(2)).toBe(4)
+    expect(memoized(2)).toBe(4)
+    expect(seen).toEqual([2])
+  })
+})
+
+describe('once', () => {
+  it('once invokes only on the first call', () => {
+    let calls = 0
+    const f = once((x: number) => {
+      calls++
+      return x
+    })
+    expect(f(1)).toBe(1)
+    expect(f(2)).toBe(1)
+    expect(f(3)).toBe(1)
+    expect(calls).toBe(1)
+  })
+
+  it('once blocks a reentrant call', () => {
+    let calls = 0
+    const reentrant: () => unknown = once(() => {
+      calls++
+      return reentrant()
+    })
+    expect(reentrant()).toBeUndefined()
+    expect(calls).toBe(1)
+  })
+
+  it('once does not retry after a throw', () => {
+    let throws = 0
+    const failing = once(() => {
+      throws++
+      throw new Error('boom')
+    })
+    expect(failing).toThrow(/boom/)
+    expect(failing()).toBeUndefined()
+    expect(throws).toBe(1)
+  })
+
+  it('once types the result as possibly undefined', () => {
+    expectTypeOf(once((x: number) => x)).toEqualTypeOf<(x: number) => number | undefined>()
+  })
+
+  it('once keeps this', () => {
+    const counter = {
+      step: 2,
+      first: once(function (this: { step: number }) {
+        return this.step
+      })
+    }
+    expect(counter.first()).toBe(2)
+    expect(counter.first()).toBe(2)
+  })
+})
+
+describe('wrappers', () => {
+  it('reject a non-function at creation', () => {
+    const notFunction = undefined as never
+    const cases: [wrap: () => unknown, message: string][] = [
+      [() => curry(notFunction), 'fn must be a function'],
+      [() => memoize(notFunction), 'fn must be a function'],
+      [() => memoize((x: number) => x, 1 as never), 'resolver must be a function'],
+      [() => debounce(notFunction, 10), 'fn must be a function'],
+      [() => debounce('x' as never), 'fn must be a function'],
+      [() => throttle(notFunction, 10), 'fn must be a function'],
+      [() => throttle('x' as never), 'fn must be a function'],
+      [() => once(notFunction), 'fn must be a function'],
+      [() => flow(notFunction), 'each argument must be a function'],
+      [() => flow([notFunction]), 'each argument must be a function'],
+      [() => compose(notFunction), 'each argument must be a function']
+    ]
+    for (const [wrap, message] of cases) {
+      expect(wrap).toThrow(new TypeError(message))
+    }
+  })
+
+  it('curry rejects an arity that is not a non-negative safe integer', () => {
+    const add = (a: number, b: number) => a + b
+    for (const arity of [Number.NaN, Number.POSITIVE_INFINITY, 1.5, -1, 2 ** 53]) {
+      expect(() => curry(add, arity)).toThrow(RangeError)
+    }
   })
 })
