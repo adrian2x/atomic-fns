@@ -17,20 +17,30 @@ class Node<K = any, V = any> {
   }
 
   get height(): number {
-    if (this.left && this.right) return 1 + Math.max(this.right.height, this.left.height)
-    if (this.right) return 1 + this.right.height
-    if (this.left) return 1 + this.left.height
-    return 0
+    let height = -1
+    let level: Array<Node<K, V>> = [this]
+    while (level.length) {
+      height += 1
+      level = level.flatMap((node) => [node.left, node.right].filter(Boolean))
+    }
+    return height
   }
 }
 
-// In-order traversal of a tree
-function* traverse(node?: Node) {
-  while (node) {
-    yield* traverse(node.left)
-    yield node
+// In-order snapshot of a tree: reads splay it, so a live walk would lose its place
+function traverse(node?: Node): Node[] {
+  const nodes: Node[] = []
+  const stack: Node[] = []
+  while (node || stack.length) {
+    while (node) {
+      stack.push(node)
+      node = node.left
+    }
+    node = stack.pop()
+    nodes.push(node)
     node = node.right
   }
+  return nodes
 }
 
 /**

@@ -118,4 +118,64 @@ describe('SplayTree', () => {
       ]
     )
   })
+
+  it('iterates 1e5 sorted keys', () => {
+    let tree = new SplayTree()
+    let expected: number[] = []
+    for (let i = 0; i < 1e5; i++) {
+      tree.set(i, i)
+      expected.push(i)
+    }
+    assert.deepEqual([...tree.keys()], expected)
+    assert.deepEqual([...tree.values()], expected)
+    assert(tree.size === [...tree.entries()].length)
+  })
+
+  it('iteration visits each key once when the loop reads the tree', () => {
+    let tree = new SplayTree(undefined, 1)
+    for (const key of [3, 1, 2, 5, 4]) {
+      tree.set(key, key)
+    }
+    let seen: any[] = []
+    for (const key of tree.keys()) {
+      seen.push(key)
+      if (seen.length > 5) break
+      tree.get(key)
+    }
+    assert.deepEqual(seen, [1, 2, 3, 4, 5])
+  })
+
+  it('iteration visits each key once when the loop removes it', () => {
+    let tree = new SplayTree()
+    for (const key of [3, 1, 2, 5, 4]) {
+      tree.set(key, key)
+    }
+    let seen: any[] = []
+    for (const key of tree.keys()) {
+      seen.push(key)
+      if (seen.length > 5) break
+      tree.remove(key)
+    }
+    assert.deepEqual(seen, [1, 2, 3, 4, 5])
+    assert(tree.empty())
+  })
+
+  it('height of a chain of 1e5 keys', () => {
+    let tree = new SplayTree()
+    for (let i = 0; i < 1e5; i++) {
+      tree.set(i, i)
+    }
+    assert(tree.height === 1e5 - 1)
+  })
+
+  it('height counts edges', () => {
+    let tree = new SplayTree()
+    assert(tree.height === 0)
+    tree.set(2, 2)
+    assert(tree.height === 0)
+    tree.set(1, 1)
+    assert(tree.height === 1)
+    tree.set(3, 3)
+    assert(tree.height === 2)
+  })
 })
