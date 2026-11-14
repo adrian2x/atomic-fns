@@ -1,6 +1,6 @@
-import { defaults } from '../collections/index.js'
-import { isObject } from '../globals/index.js'
-import { Decimal } from '../decimal/index.js'
+import { defaults } from '../collections/index.ts'
+import { isObject } from '../globals/index.ts'
+import { Decimal } from '../decimal/index.ts'
 
 /** `Intl` options that set the digits shown. Some reject each other, so they replace as a group. */
 const DIGIT_OPTION =

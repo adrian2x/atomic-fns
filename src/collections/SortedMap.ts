@@ -1,5 +1,5 @@
-import { Mapping } from './abc.js'
-import { SplayTree } from './SplayTree.js'
+import { Mapping } from './abc.ts'
+import { SplayTree } from './SplayTree.ts'
 
 /**
  * A `SortedMap` is a map that holds key value pairs ordered by keys. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as keys or values.

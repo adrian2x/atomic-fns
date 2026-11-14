@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { debounce, memoize, once, result, resultAsync, throttle } from '../src/functools/index.js'
+import { debounce, memoize, once, result, resultAsync, throttle } from '../src/functools/index.ts'
 
 describe('functools', () => {
   beforeEach(() => {

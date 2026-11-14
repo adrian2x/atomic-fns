@@ -6,6 +6,7 @@
     "types": ["node"],
     "rootDir": "src",
     "outDir": "./dist",
+    "rewriteRelativeImportExtensions": true,
     "strict": false,
     "erasableSyntaxOnly": true,
     "noImplicitOverride": true,

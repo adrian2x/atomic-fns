@@ -25,8 +25,8 @@ import {
   takeWhile,
   times,
   zip
-} from '../src/itertools/index.js'
-import { max } from '../src/math/index.js'
+} from '../src/itertools/index.ts'
+import { max } from '../src/math/index.ts'
 
 const Falsy = (x) => !x
 

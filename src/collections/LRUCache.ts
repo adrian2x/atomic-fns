@@ -1,4 +1,4 @@
-import { Mapping } from './abc.js'
+import { Mapping } from './abc.ts'
 
 /**
  * Implements a Least Recently Used fixed-capacity cache which supports updating, removing, and accessing keys in O(1).

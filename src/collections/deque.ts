@@ -1,7 +1,7 @@
-import { KeyError, ValueError } from '../globals/index.js'
-import { eq } from '../operators/index.js'
-import type { Iteratee } from '../types.js'
-import { Sequence } from './abc.js'
+import { KeyError, ValueError } from '../globals/index.ts'
+import { eq } from '../operators/index.ts'
+import type { Iteratee } from '../types.ts'
+import { Sequence } from './abc.ts'
 
 function IterableIterator<T>(next: Iterator<T>['next']): IterableIterator<T> {
   return {

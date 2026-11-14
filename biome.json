@@ -4,7 +4,7 @@
     "enabled": false
   },
   "files": {
-    "includes": ["src/**", "tests/**", "*.json", "*.ts", "!tsconfig.json"]
+    "includes": ["src/**", "tests/**", "scripts/**", "*.json", "*.ts", "!tsconfig.json"]
   },
   "formatter": {
     "indentStyle": "space",

@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { divmod, max, min, round, sum } from '../src/math/index.js'
+import { divmod, max, min, round, sum } from '../src/math/index.ts'
 
 describe('math', () => {
   it('min', () => {

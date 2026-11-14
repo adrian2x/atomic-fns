@@ -1,6 +1,6 @@
-import type { Comparer } from '../operators/index.js'
-import { Mapping } from './abc.js'
-import { BTree } from './BTree.js'
+import type { Comparer } from '../operators/index.ts'
+import { Mapping } from './abc.ts'
+import { BTree } from './BTree.ts'
 
 /**
  * A `SortedTree` is a map that holds key value pairs ordered by keys. Any primitive value (and objects that implement {@link Comparable} or {@link Ordered} interfaces) can be used as keys or values.

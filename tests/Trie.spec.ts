@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { Trie } from '../src/collections/Trie.js'
+import { Trie } from '../src/collections/Trie.ts'
 
 describe('Trie', () => {
   it('empty', () => {

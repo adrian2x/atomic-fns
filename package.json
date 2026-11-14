@@ -16,7 +16,7 @@
     "postversion": "git push && git push --tags",
     "prepublishOnly": "npm run build",
     "test": "vitest run",
-    "tsc": "tsc -p . --declaration",
+    "tsc": "tsc -p . --declaration && node scripts/declaration-imports.ts",
     "tsc:w": "tsc -p . --declaration --watch",
     "lint": "biome check --diagnostic-level=error .",
     "build": "npm run lint && npm test && npm run tsc",

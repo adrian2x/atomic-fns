@@ -1,6 +1,6 @@
 import assert from 'node:assert'
-import { Deque } from '../src/collections/deque.js'
-import { KeyError } from '../src/globals/index.js'
+import { Deque } from '../src/collections/deque.ts'
+import { KeyError } from '../src/globals/index.ts'
 
 describe('deque', () => {
   const print = (x) => console.log(x.toArray())

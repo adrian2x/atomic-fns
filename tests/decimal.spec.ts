@@ -1,6 +1,6 @@
 import assert from 'node:assert'
-import { decimal, Decimal } from '../src/decimal/index.js'
-import { ValueError } from '../src/globals/index.js'
+import { decimal, Decimal } from '../src/decimal/index.ts'
+import { ValueError } from '../src/globals/index.ts'
 
 /** Fails a spin on `Math.round` instead of blocking vitest, which cannot interrupt it. */
 function failOnSpin(fn: () => void) {

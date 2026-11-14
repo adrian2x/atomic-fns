@@ -1,5 +1,5 @@
-import { compare, type Comparer } from '../operators/index.js'
-import { Mapping } from './abc.js'
+import { compare, type Comparer } from '../operators/index.ts'
+import { Mapping } from './abc.ts'
 
 /**
  * Base SplayTree node class.

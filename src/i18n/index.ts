@@ -3,7 +3,7 @@
  *
  * @module i18n
  */
-export * from './currency.js'
-export * from './date/index.js'
-export { Duration } from './duration.js'
-export type { DurationUnit, TDuration } from './duration.js'
+export * from './currency.ts'
+export * from './date/index.ts'
+export { Duration } from './duration.ts'
+export type { DurationUnit, TDuration } from './duration.ts'

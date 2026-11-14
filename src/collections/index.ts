@@ -15,22 +15,22 @@ import {
   isNull,
   isObject,
   isRegExp
-} from '../globals/index.js'
-import { enumerate } from '../itertools/index.js'
-import { compare, eq, identity } from '../operators/index.js'
-import type { Iteratee } from '../types.js'
+} from '../globals/index.ts'
+import { enumerate } from '../itertools/index.ts'
+import { compare, eq, identity } from '../operators/index.ts'
+import type { Iteratee } from '../types.ts'
 
-export * from './abc.js'
-export * from './BTree.js'
-export * from './deque.js'
-export * from './frozenset.js'
-export * from './Heap.js'
-export * from './LRUCache.js'
-export * from './SortedMap.js'
-export * from './SortedSet.js'
-export * from './SortedTree.js'
-export * from './SplayTree.js'
-export * from './Trie.js'
+export * from './abc.ts'
+export * from './BTree.ts'
+export * from './deque.ts'
+export * from './frozenset.ts'
+export * from './Heap.ts'
+export * from './LRUCache.ts'
+export * from './SortedMap.ts'
+export * from './SortedSet.ts'
+export * from './SortedTree.ts'
+export * from './SplayTree.ts'
+export * from './Trie.ts'
 
 /** Assigns `key`, defining it where a plain write would set the prototype instead. */
 function setOwn(obj, key, value) {

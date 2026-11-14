@@ -1,4 +1,4 @@
-import { asDate } from '../format.js'
+import { asDate } from '../format.ts'
 
 export interface DateObject {
   year?: number

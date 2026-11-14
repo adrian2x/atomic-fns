@@ -1,6 +1,6 @@
-import { isObject, ValueError } from '../../globals/index.js'
-import { Duration, type DurationUnit, type TDuration, UNITS_PLURAL } from '../duration.js'
-import { asDate, formatDate, fromFields, strftime } from '../format.js'
+import { isObject, ValueError } from '../../globals/index.ts'
+import { Duration, type DurationUnit, type TDuration, UNITS_PLURAL } from '../duration.ts'
+import { asDate, formatDate, fromFields, strftime } from '../format.ts'
 import {
   asNumber,
   type DateObject,
@@ -12,7 +12,7 @@ import {
   minDate,
   weekOfYear,
   weeksInYear
-} from './utils.js'
+} from './utils.ts'
 
 // Export date functions
 export {

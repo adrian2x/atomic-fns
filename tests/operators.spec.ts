@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { decimal } from '../src/decimal/index.js'
+import { decimal } from '../src/decimal/index.ts'
 import {
   bool,
   identity,
@@ -13,7 +13,7 @@ import {
   gte,
   deepEqual,
   lte
-} from '../src/operators/index.js'
+} from '../src/operators/index.ts'
 
 describe('operators', () => {
   it('identity', () => {

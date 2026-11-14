@@ -4,7 +4,7 @@
  * @module decimal
  */
 
-import { ValueError } from '../globals/index.js'
+import { ValueError } from '../globals/index.ts'
 
 const NUMBER_REGEX = /^\s*([+-]?)(?=\.?[0-9])([0-9]*)(\.([0-9]*))?(?:[eE]([+-]?[0-9]+))?\s*$/
 

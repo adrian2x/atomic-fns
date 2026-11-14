@@ -1,7 +1,7 @@
-import { pick } from '../collections/index.js'
-import { isNumber, isObject, ValueError } from '../globals/index.js'
-import { round } from '../math/index.js'
-import { parseISODuration } from './date/utils.js'
+import { pick } from '../collections/index.ts'
+import { isNumber, isObject, ValueError } from '../globals/index.ts'
+import { round } from '../math/index.ts'
+import { parseISODuration } from './date/utils.ts'
 
 export type DurationUnit =
   | 'year'

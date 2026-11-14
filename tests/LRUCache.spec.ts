@@ -1,6 +1,6 @@
 import assert from 'node:assert'
-import { LRUCache } from '../src/collections/LRUCache.js'
-import { deepEqual } from '../src/operators/index.js'
+import { LRUCache } from '../src/collections/LRUCache.ts'
+import { deepEqual } from '../src/operators/index.ts'
 
 declare const gc: () => void
 

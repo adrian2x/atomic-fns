@@ -4,7 +4,7 @@
  * @module random
  */
 
-import { isObject } from '../globals/index.js'
+import { isObject } from '../globals/index.ts'
 
 /**
  * Returns a random float between a [min, max) value (max exclusive).
