@@ -32,6 +32,8 @@ export class Decimal {
    * Returns a new `Decimal` instance from the value or `0`.
    * @param {*} value
    * @returns {Decimal}
+   * @throws {ValueError} if the value is not numeric.
+   * @throws {RangeError} if the value is infinite or its exponent is past 10,000.
    */
   constructor(value?: any) {
     if (value == null) {
@@ -199,7 +201,7 @@ a.mul(b)  // 1
 ```js
 let a = decimal('1')
 let b = decimal('3')
-a.div(b)  // 0.333333333333333333333333333333
+a.div(b)  // 0.33333333333333333333
 ```
    * @returns {Decimal}
    */
@@ -228,7 +230,8 @@ a.div(b)  // 0.333333333333333333333333333333
 
   /**
    * Returns the square root of this `Decimal`.
-   * @returns {TDecimal}
+   * @returns {Decimal}
+   * @throws {ValueError} if this value is negative.
    */
   sqrt(): Decimal {
     if (this.i < 0n) throw new ValueError('square root of a negative number')

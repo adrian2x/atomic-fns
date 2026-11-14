@@ -346,8 +346,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    * Initializes an empty B+ tree.
    * @param {?Iterable<[K, V]>} [entries] The initial key value pairs.
    * @param compareFn Custom function to compare pairs of elements in the tree.
-   *   If not specified, defaultComparator will be used which is valid as long as K extends DefaultComparable.
-   * @param entries A set of key-value pairs to initialize the tree
+   *   If not specified, {@link operators.compare} is used.
    * @param {number} [maxNodeSize=64] Branching factor (maximum items or children per node)
    *   Must be in range 4..256. If undefined or <4 then default is used; if >256 then 256.
    */
@@ -460,6 +459,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    *         starts at the next higher key (according to the comparator).
    *  @param reusedArray Optional array used repeatedly to store key-value
    *         pairs, to avoid creating a new array on every iteration.
+   *  Note: changing the tree during iteration may skip or repeat keys.
    */
   entries(lowestKey?: K, reusedArray?: Array<K | V>): IterableIterator<[K, V]> {
     const info = this.findPath(lowestKey)
@@ -518,6 +518,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    *         pairs, to avoid creating a new array on every iteration.
    *  @param skipHighest Iff this flag is true and the highestKey exists in the
    *         collection, the pair matching highestKey is skipped, not iterated.
+   *  Note: changing the tree during iteration may skip or repeat keys.
    */
   reversed(
     highestKey?: K,
@@ -577,7 +578,7 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
     })
   }
 
-  /* Used by entries() and entriesReversed() to prepare to start iterating.
+  /* Used by entries() and reversed() to prepare to start iterating.
    * It develops a "node queue" for each non-leaf level of the tree.
    * Levels are numbered "bottom-up" so that level 0 is a list of leaf
    * nodes from a low-level non-leaf node. The queue at a given level L
@@ -750,8 +751,8 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   /** Returns the key-value pair associated with the supplied key if it exists
-   *  or the pair associated with the next lower pair otherwise. If there is no
-   *  next lower pair, undefined is returned.
+   *  or the next higher pair otherwise. If there is no next higher pair,
+   *  undefined is returned.
    * @param key The key to search for.
    * @param reusedArray Optional array used repeatedly to store key-value pairs, to
    *        avoid creating a new array each time you call this method.
@@ -772,8 +773,9 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
    * @param high This method returns when a key larger than this is reached.
    * @param includeHigh If the `high` key is present, its pair will be included
    *        in the output if and only if this parameter is true. Note: if the
-   *        `low` key is present, it is always included in the output.
-   * @param maxLength Length limit. getRange will stop scanning the tree when
+   *        `low` key is present, it is included in the output unless `low`
+   *        equals `high` and this parameter is false.
+   * @param maxLength Length limit. keysRange will stop scanning the tree when
    *                  the array reaches this size.
    * @description Computational complexity: O(result.length + log size)
    */
@@ -916,7 +918,6 @@ export class BTree<K = any, V = any> extends Mapping<K, V> {
   }
 
   /** Makes the object read-only to ensure it is not accidentally modified.
-   *  Freezing does not have to be permanent; unfreeze() reverses the effect.
    *  This is accomplished by replacing mutator functions with a function
    *  that throws an Error. Compared to using a property (e.g. this.isFrozen)
    *  this implementation gives better performance in non-frozen BTrees.

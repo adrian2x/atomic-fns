@@ -43,7 +43,7 @@ export function capitalize(s: string) {
 /**
  * Split a string into an array of its words.
  * @param {string} s The string to split
- * @param {RegExp | string} [pattern] The pattern to match words
+ * @param {RegExp | string} [pattern] The separator to split on, instead of matching words
  * @returns {string[]} Returns the words array.
  * @example
 ```js

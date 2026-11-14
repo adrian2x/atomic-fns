@@ -82,7 +82,6 @@ export function compact<T>(arr: T | T[]): T[] | Partial<T> {
 count([6.1, 4.2, 6.3], Math.floor);
 // { '4': 1, '6': 2 }
 
-// property iteratee shorthand.
 count(['one', 'two', 'three'], x => x.length);
 // { '3': 2, '5': 1 }
 ```
@@ -259,7 +258,7 @@ forEach({ 'a': 1, 'b': 2 }, (value, key) => {
 ```
  * @param {Array|Object} collection The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
- * @returns {*} Returns `collection`.
+ * @returns {void}
  * @see {@link forEachRight}
  * @see {@link filter}
  * @see {@link map}
@@ -325,7 +324,7 @@ forEachRight([1, 2], console.log)
 ```
  * @param {Array|Object} collection The collection to iterate over.
  * @param {Iteratee} fn The function invoked per iteration.
- * @returns {*} Returns `collection`.
+ * @returns {void}
  * @see {@link forEach}
  * @see {@link filter}
  * @see {@link map}
@@ -535,7 +534,7 @@ export function pick<T>(obj: T, paths: Iteratee | PropertyKey[]): Partial<T> {
 }
 
 /**
- * The opposite of {@link pick} - this method creates an object composed of the own and inherited enumerable property paths of `object` that are not omitted.
+ * The opposite of {@link pick} - this method creates an object composed of the own enumerable properties of `object` that are not omitted.
  * @example
 ```js
 let object = { 'a': 1, 'b': '2', 'c': 3 }
@@ -867,7 +866,7 @@ export function uniq<T>(arr: Iterable<T>, fn: Iteratee<T> | PropertyKey = identi
  * @returns Returns the new duplicate free array
  * @example
 ```js
-uniq([2, 1, 2])
+sortedUniq([2, 1, 2])
 // [1, 2]
 ```
  * @see {@link uniq}
@@ -952,7 +951,7 @@ function baseMerge(obj, source, stack, copies, merged) {
 }
 
 /**
- * Recursively merges own and inherited enumerable string keyed properties of source objects into the destination object. Source properties that resolve to `undefined` are skipped if a destination value exists. Array and plain object properties are merged recursively. Other objects and value types are overridden by assignment. Source objects are applied from left to right. Subsequent sources overwrite property assignments of previous sources.
+ * Recursively merges own enumerable string keyed properties of source objects into the destination object. Source properties that resolve to `undefined` are skipped if a destination value exists. Array and plain object properties are merged recursively. Other objects and value types are overridden by assignment. Source objects are applied from left to right. Subsequent sources overwrite property assignments of previous sources.
  *
  * Note: this method mutates `object`
  *
@@ -1130,7 +1129,7 @@ export function groupBy<T>(
  * @example
 ```js
 groupByMap([6.1, 4.2, 6.3], Math.floor)
-// Map { 4: [4.2], 6: [6.1, 6.3] }
+// Map { 6: [6.1, 6.3], 4: [4.2] }
 
 // The `property` iteratee shorthand.
 groupByMap(['one', 'two', 'three'], 'length')
@@ -1177,7 +1176,7 @@ export function remove<T>(arr: T[], func: T | T[] | Iteratee<T>): T[] {
 /**
  * Returns the index of `x` in a **sorted** array if found, in `O(log n)` using binary search.
  * If the element is not found, returns `-n - 1`, where `n` is the index to insert `x` at.
- * @param arr The array to sort
+ * @param arr The sorted array
  * @param x The element to find
  * @param lo The starting index
  * @param hi The end index to search within
@@ -1201,7 +1200,7 @@ export function binarySearch(arr: any[], x: any, lo = 0, hi?, comp = compare): n
 
 /**
  * Returns an insertion index which comes after any existing entries of `x` in a **sorted** array, using binary search.
- * @param arr The array to sort
+ * @param arr The sorted array
  * @param x The element to find
  * @param lo The starting index
  * @param hi The end index to search within
@@ -1221,7 +1220,7 @@ export function bisect(arr: any[], x: any, lo = 0, hi?, comp = compare): number 
 
 /**
  * Returns an insertion index which comes before any existing entries of `x` in a **sorted** array, using binary search.
- * @param arr The array to sort
+ * @param arr The sorted array
  * @param x The element to find
  * @param lo The starting index
  * @param hi The end index to search within

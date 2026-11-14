@@ -113,17 +113,17 @@ export function mean<T>(iterable: Iterable<T>, key = identity): number {
 }
 
 /**
- * Sums `initial` and the items of an iterable and returns the total.
- * @param args The elements to add to `initial`.
- * @param initial The initial value to add to (default `0`).
- * @returns The total sum of initial and iterable elements.
+ * Sums the items of an iterable and returns the total. The optional `key` argument specifies a transform on the elements before adding them.
+ * @param args The elements to add.
+ * @param key Optional key function to transform the elements (default `identity`).
+ * @returns The total sum of the iterable elements.
  * @example
 ```js
 sum([1, 2, 3, 4])
 // 10
 
-sum([1, 2, 3, 4], 5)
-// 15
+sum([{ n: 1 }, { n: 2 }], o => o.n)
+// 3
 ```
  */
 export function sum(args: number[]): number
