@@ -5,6 +5,7 @@
  */
 export { cloneDeep } from './cloneDeep.ts'
 export { type EqualityCustomizer, isEqual, isEqualWith } from './isEqual.ts'
+export { defaults, defaultsDeep, merge } from './merge.ts'
 export type { Path } from './parsePath.ts'
 export { get, has, set, unset } from './path.ts'
 export { omit, omitBy, type Paths, type PickedBy, pick, pickBy, type PlainKey } from './pick.ts'
