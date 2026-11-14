@@ -27,7 +27,7 @@ function parseFloating(str: string) {
 
 function parseMilliseconds(str: string) {
   if (str != null && str !== '') {
-    const f = parseFloat('0.' + str) * 1000
+    const f = parseFloat(`0.${str}`) * 1000
     return Math.floor(f)
   }
 }

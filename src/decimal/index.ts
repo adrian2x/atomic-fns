@@ -339,9 +339,9 @@ a.div(b)  // 0.33333333333333333333
       return m + s + '0'.repeat(this.e)
     } else if (this.e < 0) {
       if (-this.e >= s.length) {
-        return m + '0.' + '0'.repeat(-this.e - s.length) + s
+        return `${m}0.${'0'.repeat(-this.e - s.length)}${s}`
       }
-      return m + s.slice(0, s.length + this.e) + '.' + s.slice(s.length + this.e, s.length)
+      return `${m}${s.slice(0, s.length + this.e)}.${s.slice(s.length + this.e, s.length)}`
     } else {
       return m + s
     }
