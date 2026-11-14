@@ -327,4 +327,51 @@ describe('BTree', () => {
     assert(tree.rangeForEach(5, 2, true) === 0)
     assert(tree.rangeForEach(5, 2, true, undefined, 3) === 3)
   })
+
+  it('toArray includes an undefined key', () => {
+    const tree = new BTree(undefined, (x, y) => (x ?? -1) - (y ?? -1))
+    tree.set(1, 'one')
+    tree.set(undefined, 'none')
+    assert.deepStrictEqual(tree.toArray(), [
+      [undefined, 'none'],
+      [1, 'one']
+    ])
+    assert.deepStrictEqual(new BTree([[undefined, 'only']]).toArray(), [[undefined, 'only']])
+  })
+
+  it('reversed starts at the last key when that key is undefined', () => {
+    const tree = new BTree(undefined, (x, y) => (x ?? 1000) - (y ?? 1000), 4)
+    const keys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, undefined]
+    for (const key of keys) {
+      tree.set(key, key)
+    }
+    assert.deepStrictEqual(
+      [...tree.reversed()].map(([key]) => key),
+      keys.toReversed()
+    )
+    assert.deepStrictEqual([...new BTree([[undefined, 'only']]).reversed()], [[undefined, 'only']])
+    assert.deepStrictEqual([...new BTree().reversed()], [])
+  })
+
+  it('maxKey returns the key object set last', () => {
+    const tree = new BTree(undefined, (x, y) => x.id - y.id, 4)
+    for (let id = 0; id < 10; id++) {
+      tree.set({ id }, id)
+    }
+    const replacement = { id: 9 }
+    tree.set(replacement, 'new')
+    assert(tree.maxKey() === replacement)
+  })
+
+  it('add keeps the value of an existing key', () => {
+    const tree = new BTree(undefined, undefined, 4)
+    for (let i = 0; i < 10; i++) {
+      tree.set(i, i * 2)
+    }
+    assert(tree.add(9) === false)
+    assert(tree.get(9) === 18)
+    assert(tree.add(100) === true)
+    assert(tree.get(100) === null)
+    assert(tree.size === 11)
+  })
 })
