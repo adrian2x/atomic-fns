@@ -91,6 +91,17 @@ export function kindOf(value: object): Kind {
   return 'other'
 }
 
+/** {@link Kind}, with the two `other` kinds `isEqual` and `hash` also read by content. */
+export type ContentKind = Kind | 'error' | 'arguments'
+
+/** The {@link ContentKind} of `value`: what `isEqual` compares and `hash` hashes it by. */
+export function contentKindOf(value: object): ContentKind {
+  const kind = kindOf(value)
+  if (kind !== 'other') return kind
+  if (isError(value)) return 'error'
+  return isArguments(value) ? 'arguments' : 'other'
+}
+
 /** `%TypedArray%.prototype`, which holds the getters every typed array shares. */
 const TYPED_ARRAY_PROTOTYPE = Object.getPrototypeOf(Uint8Array.prototype) as object
 
@@ -122,6 +133,25 @@ export function isFloatView(
   view: ArrayBufferView
 ): view is Float16Array | Float32Array | Float64Array {
   return FLOAT_ARRAY_NAMES.has(Reflect.apply(TYPED_ARRAY_NAME, view, []))
+}
+
+/** A typed array's type name, such as `'Float64Array'`, or `undefined` for a `DataView`. */
+export function typedArrayName(view: ArrayBufferView): string | undefined {
+  return Reflect.apply(TYPED_ARRAY_NAME, view, []) as string | undefined
+}
+
+/** A typed array's element count (0 when detached), or `undefined` for other objects. */
+export function typedArrayLength(view: ArrayBufferView): number | undefined {
+  if (typedArrayName(view) === undefined) return undefined
+  return (view as Uint8Array).length
+}
+
+export function mapSize(map: Map<unknown, unknown>): number {
+  return map.size
+}
+
+export function setSize(set: Set<unknown>): number {
+  return set.size
 }
 
 function classNameOf(prototype: object): string | undefined {
