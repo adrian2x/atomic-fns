@@ -215,4 +215,10 @@ describe('operators', () => {
     assert(!gte(new Reading(NaN), new Reading(0)))
     assert(lte(new Reading(1), new Reading(1)))
   })
+
+  it('eq treats 0 and -0 as equal', () => {
+    assert(eq(0, -0))
+    assert(eq(-0, 0))
+    assert(eq(NaN, NaN))
+  })
 })
