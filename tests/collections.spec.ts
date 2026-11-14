@@ -905,4 +905,12 @@ describe('collections', () => {
     Object.defineProperty(leaf, '__proto__', { value: date, enumerable: true })
     assert(Object.getPrototypeOf(flatten(leaf)) === Object.prototype)
   })
+
+  it('clone deep copies a shared object once', () => {
+    let shared: any = { leaf: 1 }
+    for (let i = 0; i < 20; i++) shared = { a: shared, b: shared }
+    const copy: any = clone(shared, true)
+    assert(copy !== shared)
+    assert(copy.a === copy.b)
+  })
 })
