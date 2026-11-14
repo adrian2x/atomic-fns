@@ -5,7 +5,7 @@ import { Mapping } from './abc.ts'
  * @template K, V
  */
 export class LRUCache<K = any, V = any> extends Mapping<K, V> {
-  protected items = new Map<K, V>()
+  protected items: Map<K, V> = new Map<K, V>()
   protected maxSize: number
   // A new iterator would rescan every deleted slot at the front of the Map on each eviction
   declare private eviction: { keys: Iterator<K>; writes: number }

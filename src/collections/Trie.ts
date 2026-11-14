@@ -99,7 +99,7 @@ export class Trie extends Collection {
   /**
    * Removes all strings from the tree.
    */
-  clear() {
+  clear(): void {
     this.root = Object.create(null)
     this.count = 0
   }

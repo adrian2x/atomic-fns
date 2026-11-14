@@ -40,7 +40,7 @@ export class Heap<T> extends Collection {
     return this.count
   }
 
-  clear() {
+  clear(): void {
     this.count = 0
     this.heap.length = 0
   }
@@ -49,7 +49,7 @@ export class Heap<T> extends Collection {
    * Push element into a container in order.
    * @param item The element to push.
    */
-  add(item: T) {
+  add(item: T): void {
     this.heap.push(item)
     heapifyUp(this.heap, this.count, this.compare)
     this.count += 1
@@ -153,7 +153,7 @@ function heapifyUp(heap, i: number, compareFn) {
  * @param {Array} heap
  * @param {Comparer} [compareFn=compare] Custom compare function
  */
-export function heapify(heap, compareFn = compare) {
+export function heapify(heap: any, compareFn: typeof compare = compare): void {
   const size = heap.length
   const halfLength = size >> 1
   for (let parent = (size - 1) >> 1; parent >= 0; --parent) {
@@ -167,7 +167,7 @@ export function heapify(heap, compareFn = compare) {
  * @param {*} item
  * @param {Comparer} [compareFn=compare] Custom compare function
  */
-export function heappush<T>(heap: T[], item: T, compareFn = compare) {
+export function heappush<T>(heap: T[], item: T, compareFn: typeof compare = compare): void {
   heap.push(item)
   heapifyUp(heap, heap.length - 1, compareFn)
 }
@@ -177,7 +177,7 @@ export function heappush<T>(heap: T[], item: T, compareFn = compare) {
  * @param {Array} heap
  * @param {Comparer} [compareFn=compare] Custom compare function
  */
-export function heappop<T>(heap: T[], compareFn = compare): T {
+export function heappop<T>(heap: T[], compareFn: typeof compare = compare): T {
   const last = heap.pop()
   if (heap.length) {
     const item = heap[0]

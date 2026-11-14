@@ -15,7 +15,7 @@ export class SortedMap<K, V> extends Mapping<K, V> {
    * @param {Iterable<[K, V]>} [iterable] Initialize the map with entries.
    * @param {Comparer} [compareFn] The `compare` function to sort keys.
    */
-  constructor(iterable?: Iterable<[K, V]>, compareFn?) {
+  constructor(iterable?: Iterable<[K, V]>, compareFn?: any) {
     super()
     this.store = new SplayTree(compareFn)
     if (iterable) {

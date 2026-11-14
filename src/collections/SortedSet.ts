@@ -14,7 +14,7 @@ export class SortedSet<T> extends Collection {
    * @param {Iterable<T>} [iterable] Initialize the set with entries.
    * @param {Comparer} [compareFn] The `compare` function to sort keys.
    */
-  constructor(iterable?: Iterable<T>, compareFn?) {
+  constructor(iterable?: Iterable<T>, compareFn?: any) {
     super()
     this.store = new SplayTree(compareFn)
     if (iterable) {

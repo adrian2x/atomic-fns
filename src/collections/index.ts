@@ -217,7 +217,7 @@ filter(objects, matches({ a: 4, c: 6 }))
  * @param shape
  * @returns
  */
-export function matches(shape): (obj) => boolean {
+export function matches(shape: any): (obj: any) => boolean {
   return (obj) => {
     if (!shape || !obj) return false
     const seen = new Map()
@@ -1182,7 +1182,13 @@ export function remove<T>(arr: T[], func: T | T[] | Iteratee<T>): T[] {
  * @param comp The compare function to check for `x`
  * @returns {number} The index if the element is found or a negative integer.
  */
-export function binarySearch(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
+export function binarySearch(
+  arr: any[],
+  x: any,
+  lo = 0,
+  hi?: any,
+  comp: typeof compare = compare
+): number {
   hi ??= arr.length - 1
   while (lo < hi) {
     const mid = (lo + hi) >> 1
@@ -1206,7 +1212,13 @@ export function binarySearch(arr: any[], x: any, lo = 0, hi?, comp = compare): n
  * @param comp The compare function to check for `x`
  * @returns {number}
  */
-export function bisect(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
+export function bisect(
+  arr: any[],
+  x: any,
+  lo = 0,
+  hi?: any,
+  comp: typeof compare = compare
+): number {
   hi ??= arr.length
   while (lo < hi) {
     const mid = (lo + hi) >> 1
@@ -1226,7 +1238,13 @@ export function bisect(arr: any[], x: any, lo = 0, hi?, comp = compare): number 
  * @param comp The compare function to check for `x`
  * @returns {number}
  */
-export function bisectLeft(arr: any[], x: any, lo = 0, hi?, comp = compare): number {
+export function bisectLeft(
+  arr: any[],
+  x: any,
+  lo = 0,
+  hi?: any,
+  comp: typeof compare = compare
+): number {
   hi ??= arr.length
   while (lo < hi) {
     const mid = (lo + hi) >> 1
@@ -1247,7 +1265,7 @@ export function bisectLeft(arr: any[], x: any, lo = 0, hi?, comp = compare): num
  * @param comp The compare function to check for `x`
  * @returns {Array}
  */
-export function insort<T>(arr: T[], x: any, lo = 0, hi?, comp = compare): T[] {
+export function insort<T>(arr: T[], x: any, lo = 0, hi?: any, comp: typeof compare = compare): T[] {
   const index = bisect(arr, x, lo, hi, comp)
   return insert(arr, index, x)
 }
@@ -1262,7 +1280,13 @@ export function insort<T>(arr: T[], x: any, lo = 0, hi?, comp = compare): T[] {
  * @param comp The compare function to check for `x`
  * @returns {Array}
  */
-export function insortLeft<T>(arr: T[], x: any, lo = 0, hi?, comp = compare): T[] {
+export function insortLeft<T>(
+  arr: T[],
+  x: any,
+  lo = 0,
+  hi?: any,
+  comp: typeof compare = compare
+): T[] {
   const index = bisectLeft(arr, x, lo, hi, comp)
   return insert(arr, index, x)
 }

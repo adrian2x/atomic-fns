@@ -5,7 +5,7 @@
  * @interface Container
  */
 export interface Container {
-  contains: (x) => boolean
+  contains: (x: any) => boolean
 }
 
 /**
@@ -13,7 +13,7 @@ export interface Container {
  * @interface Ordered
  */
 export interface Equals {
-  eq: (other) => boolean
+  eq: (other: any) => boolean
 }
 
 /**
@@ -21,7 +21,7 @@ export interface Equals {
  * @interface Ordered
  */
 export interface Comparable {
-  compare: (other) => number
+  compare: (other: any) => number
 }
 
 /**
@@ -29,7 +29,7 @@ export interface Comparable {
  * @interface Ordered
  */
 export interface Ordered<T> {
-  lt: (other) => boolean
+  lt: (other: any) => boolean
 }
 
 /**
@@ -54,19 +54,19 @@ export abstract class Collection implements Container {
    * Adds a new item to the collection.
    * @param item - The item to add to the collection.
    */
-  abstract add(item): any
+  abstract add(item: any): any
 
   /**
    * Checks if item is present in the collection.
    * @param item - The item to search for in the collection.
    * @returns `true` when the element is found, else `false`
    */
-  abstract contains(item): boolean
+  abstract contains(item: any): boolean
 
   /**
    * Remove all items from the collection
    */
-  abstract clear()
+  abstract clear(): any
 
   /**
    * Returns the total number of elements in the collection.
@@ -99,7 +99,7 @@ export abstract class Sequence<V = any, K = any> extends Collection {
    * @param {K} key
    * @memberof Sequence
    */
-  abstract get(key: K)
+  abstract get(key: K): any
 
   /**
    * Set a new value at the given key or index
@@ -108,7 +108,7 @@ export abstract class Sequence<V = any, K = any> extends Collection {
    * @param {V} value
    * @memberof Sequence
    */
-  abstract set(key: K, value: V)
+  abstract set(key: K, value: V): any
 
   /**
    * Adds a new item to the end of the sequence. Alias of {@link Collection.add}.
@@ -116,13 +116,13 @@ export abstract class Sequence<V = any, K = any> extends Collection {
    * @param {V} x
    * @memberof Sequence
    */
-  abstract append(x: V | Iterable<V>)
+  abstract append(x: V | Iterable<V>): any
 
   /**
    * Remove a given value from the collection if exists.
    * @returns the value that was removed or `undefined`.
    */
-  abstract remove(x: V)
+  abstract remove(x: V): any
 
   /**
    * Returns an iterator of all the `keys` in order.
@@ -152,13 +152,13 @@ export abstract class Mapping<K, V> extends Collection {
    * @param {K} key
    * @param {*} [defaults]
    */
-  abstract get(key: K, defaults?): V | undefined
+  abstract get(key: K, defaults?: any): V | undefined
 
   /**
    * Sets the value for the given key.
    * @param {K} key
    */
-  abstract set(key: K, value: V)
+  abstract set(key: K, value: V): any
 
   /**
    * Returns an iterator of all the `keys` in the map.
