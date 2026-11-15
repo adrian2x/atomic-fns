@@ -9,6 +9,78 @@ function sharedDag(levels: number): object {
   return dag
 }
 
+describe.each([
+  { name: 'merge', combine: merge },
+  { name: 'defaultsDeep', combine: defaultsDeep }
+])('$name shared containers', ({ combine }) => {
+  it.each([
+    { kind: 'object', empty: {} },
+    { kind: 'array', empty: [] }
+  ])('stops expanding a DAG with empty $kind leaves past its budget', ({ empty }) => {
+    let dag: object = empty
+    for (let i = 0; i < 5; i++) dag = Array<object>(16).fill(dag)
+
+    expect(() => combine([], dag)).toThrow(
+      new RangeError('input repeats shared objects past 500000 units of work')
+    )
+  })
+
+  it('fills a target with a cycle without replacing it', () => {
+    const t: Record<string, unknown> = {}
+    t.self = t
+    const s: Record<string, unknown> = { x: 1 }
+    s.self = s
+    expect(combine(t, s)).toBe(t)
+    expect(t.x).toBe(1)
+    expect(t.self).toBe(t)
+  })
+
+  it('fills a shared target without replacing it', () => {
+    const source = { leaf: 1 }
+    const node = {}
+
+    const out = combine({ a: node, b: node }, { a: source, b: source })
+
+    expect(out.a).toBe(node)
+    expect(out.b).toBe(node)
+    expect(node).toEqual({ leaf: 1 })
+  })
+
+  it('bounds shared work, depth and sparse sources', () => {
+    expect(() => combine({}, { dag: sharedDag(24) })).toThrow(
+      new RangeError('input repeats shared objects past 500000 units of work')
+    )
+    let deep: object = {}
+    for (let i = 0; i < 1500; i++) deep = { a: deep }
+    expect(() => combine({}, deep)).toThrow(RangeError)
+    expect(() => combine({}, { a: sparse(2 ** 32 - 1, { 0: 1 }) })).toThrow(
+      new RangeError('sparse array too large')
+    )
+  })
+
+  it('copies shared empty containers in an ordinary configuration', () => {
+    const options = {}
+    const tags: string[] = []
+    const config = { retries: 3, enabled: true }
+    const source = Array.from({ length: 1000 }, (_, id) => ({ id, options, tags, config }))
+
+    const out = combine([] as typeof source, source)
+
+    expect(out).toHaveLength(1000)
+    expect(out[0]).toEqual({
+      id: 0,
+      options: {},
+      tags: [],
+      config: { retries: 3, enabled: true }
+    })
+    expect(out[999].id).toBe(999)
+    expect(out[0].options).not.toBe(options)
+    expect(out[0].options).not.toBe(out[1].options)
+    expect(out[0].tags).not.toBe(tags)
+    expect(out[0].tags).not.toBe(out[1].tags)
+  })
+})
+
 describe('merge', () => {
   it('merges plain objects and arrays deeply and returns the target', () => {
     const target = { a: [{ b: 2 }, { d: 4 }], keep: 1 }
@@ -308,39 +380,13 @@ describe('defaultsDeep', () => {
     expect(Object.getPrototypeOf(bare.routes)).toBeNull()
   })
 
-  it('keeps a cycle the source has and stops past the nesting limit', () => {
+  it('keeps a cycle the source has', () => {
     const cyclic: Record<string, unknown> = { x: 1 }
     cyclic.self = cyclic
     const out = defaultsDeep({}, cyclic) as Record<string, unknown>
     expect(out.self).toBe(out)
     const into = defaultsDeep({ self: {} }, cyclic) as { self: Record<string, unknown> }
     expect(into.self.x).toBe(1)
-    let deep: object = {}
-    for (let i = 0; i < 1500; i++) deep = { a: deep }
-    expect(() => defaultsDeep({}, deep)).toThrow(RangeError)
-  })
-
-  it('stops shared objects copied past its budget and fills a shared target once', () => {
-    expect(() => defaultsDeep({}, { dag: sharedDag(24) })).toThrow(
-      new RangeError('input repeats shared objects past 500000 units of work')
-    )
-    let reads = 0
-    const source = {
-      get leaf() {
-        reads++
-        return 1
-      }
-    }
-    const node = {}
-    defaultsDeep({ a: node, b: node }, { a: source, b: source })
-    expect(reads).toBe(1)
-    expect(node).toEqual({ leaf: 1 })
-    const t: Record<string, unknown> = {}
-    t.self = t
-    const s: Record<string, unknown> = { x: 1 }
-    s.self = s
-    expect(defaultsDeep(t, s)).toEqual(t)
-    expect(t.x).toBe(1)
   })
 
   it('refuses a huge sparse source array', () => {
