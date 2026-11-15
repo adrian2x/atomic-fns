@@ -1,4 +1,5 @@
 /**
+ * Function wrappers: `debounce`.
  * @module function
  */
-export {}
+export { type DebounceOptions, type Debounced, debounce } from './debounce.ts'
