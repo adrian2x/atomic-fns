@@ -9,5 +9,6 @@
  * ```
  * @module
  */
+export { Currency } from './currency.ts'
 export { Decimal } from './decimal.ts'
 export type { DecimalInput, DivideOptions, RoundingMode } from './decimal.ts'
