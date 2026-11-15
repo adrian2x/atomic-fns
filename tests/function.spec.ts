@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { debounce } from '../src/function/index.ts'
+import { throttle } from '../src/function/index.ts'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -171,6 +172,7 @@ function windowTests(wrap: typeof debounce) {
 }
 
 describe('debounce windows', () => windowTests(debounce))
+describe('throttle windows', () => windowTests(throttle))
 
 describe('debounce', () => {
   it.each([
@@ -574,5 +576,235 @@ describe('debounce', () => {
     // @ts-expect-error fn needs a `this` of type { step: number }
     step()
     step.cancel()
+  })
+
+  it('debounce defaults the wait to 0 and reads null as absent', () => {
+    const { seen, fn } = recorder<number>()
+    debounce(fn)(1)
+    debounce(fn, null)(2)
+    expect(seen).toStrictEqual([])
+    vi.advanceTimersByTime(0)
+    expect(seen).toStrictEqual([1, 2])
+  })
+})
+
+describe('throttle', () => {
+  it.each([
+    { leading: true, trailing: false },
+    { leading: true, trailing: true }
+  ])('an idle window holds no timer: %o', (options) => {
+    const { seen, fn } = recorder<number>()
+    const wrapped = throttle(fn, 50, options)
+
+    wrapped(1)
+    expect(vi.getTimerCount()).toBe(0)
+    wrapped(2)
+    if (options.trailing) vi.advanceTimersByTime(50)
+
+    expect(seen).toStrictEqual(options.trailing ? [1, 2] : [1])
+    expect(wrapped.pending()).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('throttle checks its wait', () => {
+    const nop = (): undefined => undefined
+    expect(() => throttle(nop, NaN)).toThrowError(
+      new RangeError('wait must be between 0 and 2147483647 ms')
+    )
+  })
+
+  it('throttle leading and trailing with latest args', () => {
+    const seen: number[] = []
+    const t = throttle((x: number) => {
+      seen.push(x)
+      return x * 10
+    }, 40)
+    expect(t(1)).toBe(10)
+    expect(vi.getTimerCount()).toBe(0)
+    vi.advanceTimersByTime(10.5)
+    expect(t(2)).toBe(10)
+    expect(t(3)).toBe(10)
+    vi.advanceTimersByTime(28.5)
+    expect(seen).toStrictEqual([1])
+    vi.advanceTimersByTime(1)
+    expect(seen).toStrictEqual([1, 3])
+  })
+
+  it('throttle wait 0: leading plus one trailing per macrotask', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 0)
+    t(1)
+    t(2)
+    t(3)
+    expect(seen).toEqual([1])
+    vi.advanceTimersByTime(0)
+    expect(seen).toEqual([1, 3])
+  })
+
+  it('throttle cancel drops the trailing call and ends the window', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 40)
+    t(1)
+    t(2)
+    expect(seen).toEqual([1])
+    t.cancel()
+    t(3)
+    expect(t.pending()).toBe(false)
+    expect(seen).toEqual([1, 3])
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual([1, 3])
+  })
+
+  it('throttle flush invokes pending trailing once', () => {
+    const seen: number[] = []
+    const t = throttle((x: number) => {
+      seen.push(x)
+      return x * 10
+    }, 40)
+    expect(t(1)).toBe(10)
+    t(2)
+    t(3)
+    expect(seen).toEqual([1])
+    expect(t.flush()).toBe(30)
+    expect(vi.getTimerCount()).toBe(0)
+    expect(seen).toEqual([1, 3])
+    expect(t.flush()).toBe(30)
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual([1, 3])
+  })
+
+  it.each([undefined, null])('throttle treats wait %s as 0', (wait) => {
+    const { seen, fn } = recorder()
+    const t = wait === undefined ? throttle(fn) : throttle(fn, wait)
+    t(1)
+    t(2)
+    vi.advanceTimersByTime(0)
+    expect(seen).toEqual([1, 2])
+  })
+
+  it('a reentrant throttled call waits for the window', () => {
+    const seen: number[] = []
+    const t = throttle((x: number): void => {
+      seen.push(x)
+      if (x < 3) t(x + 1)
+    }, 100)
+    t(1)
+    expect(seen).toEqual([1])
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual([1, 2])
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual([1, 2, 3])
+  })
+
+  it('a reentrant call from the trailing edge waits too', () => {
+    const seen: number[] = []
+    const t = throttle((x: number): void => {
+      seen.push(x)
+      if (x === 2 && seen.length < 4) t(2)
+    }, 100)
+    t(1)
+    t(2)
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual([1, 2])
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual([1, 2, 2])
+  })
+
+  it('throttle stays throttled when fn throws', () => {
+    let calls = 0
+    const t = throttle(() => {
+      calls++
+      throw new Error('boom')
+    }, 100)
+    expect(t).toThrow(/boom/)
+    t()
+    t()
+    expect(calls).toBe(1)
+    t.cancel()
+  })
+
+  it('a call right after throttle flush waits for the window', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 100)
+    t(1)
+    t(2)
+    expect(t.flush()).toBe(2)
+    t(3)
+    t(4)
+    expect(seen).toEqual([1, 2])
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual([1, 2, 4])
+  })
+
+  it('throttle flush restarts the window from the flush', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 100)
+    t(1)
+    vi.advanceTimersByTime(60)
+    t(2)
+    t.flush()
+    vi.advanceTimersByTime(50)
+    t(3)
+    expect(seen).toEqual([1, 2])
+    vi.advanceTimersByTime(60)
+    expect(seen).toEqual([1, 2, 3])
+  })
+
+  it('throttle trailing false drops calls inside the window', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 100, { trailing: false })
+    t(1)
+    t(2)
+    vi.advanceTimersByTime(300)
+    expect(seen).toEqual([1])
+    t(3)
+    expect(seen).toEqual([1, 3])
+  })
+
+  it('throttle leading false waits for the end of the window', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 100, { leading: false })
+    expect(t(1)).toBeUndefined()
+    t(2)
+    expect(seen).toEqual([])
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual([2])
+  })
+
+  it('throttle keeps this', () => {
+    const seen: number[] = []
+    const counter = {
+      step: 2,
+      save: throttle(function (this: { step: number }) {
+        seen.push(this.step)
+      }, 100)
+    }
+    counter.save()
+    expect(seen).toEqual([2])
+  })
+
+  it('throttle types this from fn', () => {
+    const step = throttle(
+      function (this: { step: number }) {
+        return this.step
+      },
+      100,
+      { leading: false }
+    )
+    // @ts-expect-error fn needs a `this` of type { step: number }
+    step()
+    step.cancel()
+  })
+
+  it('throttle pending reports a trailing call', () => {
+    const { seen, fn } = recorder()
+    const t = throttle(fn, 100)
+    t(1)
+    expect(t.pending()).toBe(false)
+    t(2)
+    expect(t.pending()).toBe(true)
+    vi.advanceTimersByTime(100)
+    expect(t.pending()).toBe(false)
+    expect(seen).toEqual([1, 2])
   })
 })
