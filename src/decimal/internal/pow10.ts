@@ -2,16 +2,18 @@
  * Lazy power-of-ten caches for Decimal arithmetic and normalization.
  * Built on first use so importing decimal does not allocate large bigints.
  *
- * Bounded: a linear table only for k < 512, plus a 10^(2^k) squares table
+ * Bounded: linear powers below 64, blocks of 64 below 1024, and a squares table
  * persisted through 10^16384 (15 entries) under Decimal's public bounds.
  * Larger powers are built by binary decomposition and are never stored.
  */
 
-/** Max exclusive exponent kept in the linear table. */
-const LINEAR_MAX = 512
+const LINEAR_BITS = 6
+const LINEAR_MAX = 1 << LINEAR_BITS
+const BLOCK_MAX = 1024
 
 /** Cached `10^k` for k < LINEAR_MAX. Index 0 is always `1n`. Grows on demand. */
 const POW10_TABLE: bigint[] = [1n]
+const POW10_BLOCK_TABLE: bigint[] = [1n]
 
 const POW10_SQUARE_TABLE: bigint[] = []
 
@@ -36,12 +38,19 @@ function squareAt(bit: number): bigint {
 
 /** Return `10^k` for a non-negative integer `k`. */
 export function pow10(k: number): bigint {
-  if (k < LINEAR_MAX) {
-    while (POW10_TABLE.length <= k) {
+  if (k < BLOCK_MAX) {
+    const block = k >> LINEAR_BITS
+    const remainder = k & (LINEAR_MAX - 1)
+    while (POW10_TABLE.length <= remainder) {
       const last = POW10_TABLE[POW10_TABLE.length - 1]
       POW10_TABLE.push(last * 10n)
     }
-    return POW10_TABLE[k]
+    if (block === 0) return POW10_TABLE[remainder]
+    while (POW10_BLOCK_TABLE.length <= block) {
+      const last = POW10_BLOCK_TABLE[POW10_BLOCK_TABLE.length - 1]
+      POW10_BLOCK_TABLE.push(last * squareAt(LINEAR_BITS))
+    }
+    return POW10_BLOCK_TABLE[block] * POW10_TABLE[remainder]
   }
   // Binary decomposition: 10^k = product of 10^(2^i) for each set bit i of k.
   let result = 1n
@@ -88,6 +97,9 @@ export function getPow10CachedDigits(): number {
   }
   for (let j = 0; j < POW10_SQUARE_TABLE.length; j++) {
     total += (1 << j) + 1
+  }
+  for (let i = 0; i < POW10_BLOCK_TABLE.length; i++) {
+    total += i * LINEAR_MAX + 1
   }
   return total
 }
