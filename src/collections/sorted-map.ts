@@ -9,7 +9,7 @@ interface LeafNode<K, V> {
   readonly kind: 'leaf'
   owner: object
   keys: K[]
-  values: V[]
+  values: V[] | undefined
 }
 
 interface BranchNode<K, V> {
@@ -58,9 +58,20 @@ function lastKeyOf<K, V>(n: TreeNode<K, V>): K {
   return n.kind === 'leaf' ? n.keys[n.keys.length - 1] : n.maxKeys[n.maxKeys.length - 1]
 }
 
-function emptyLeaf<K, V>(owner: object): LeafNode<K, V> {
-  return { kind: 'leaf', owner, keys: [], values: [] }
+function emptyLeaf<K, V>(owner: object, keyOnly: boolean): LeafNode<K, V> {
+  return { kind: 'leaf', owner, keys: [], values: keyOnly ? undefined : [] }
 }
+
+function valueAt<K, V>(leaf: LeafNode<K, V>, index: number): V {
+  return leaf.values === undefined ? (true as V) : leaf.values[index]
+}
+
+export let createSetMap: <T>(
+  values?: Iterable<T> | null,
+  compareFn?: Comparator<T> | null
+) => SortedMap<T, true>
+
+export let insertIfAbsent: <K, V>(map: SortedMap<K, V>, key: K, value: V) => boolean
 
 function isNonPrimitive(value: unknown): value is object {
   return Object(value) === value
@@ -135,9 +146,22 @@ export class SortedMap<K = unknown, V = unknown> {
   readonly #compareFn: Comparator<K>
   #token: object = {}
   #version = 0
+  #keyOnly = false
 
   static {
     registerSortedMapCheck((map) => (map as SortedMap<unknown, unknown>).#checkInvariants())
+    createSetMap = <T>(values?: Iterable<T> | null, compareFn?: Comparator<T> | null) => {
+      const keys =
+        values == null
+          ? undefined
+          : arrayFromIterableMap<T>(values, (key) => positiveZero(key as T))
+      const map = new SortedMap<T, true>(undefined, compareFn)
+      map.#keyOnly = true
+      map.#root = emptyLeaf(map.#token, true)
+      if (keys !== undefined) map.#bulkLoad(keys, undefined)
+      return map
+    }
+    insertIfAbsent = (map, key, value) => map.#set(key, value, false)
   }
 
   /**
@@ -156,7 +180,7 @@ export class SortedMap<K = unknown, V = unknown> {
     if (typeof this.#compareFn !== 'function') {
       throw new TypeError('comparator must be a function')
     }
-    this.#root = emptyLeaf(this.#token)
+    this.#root = emptyLeaf(this.#token, this.#keyOnly)
     if (entries != null) {
       const { keys, values } = readEntries(entries)
       this.#bulkLoad(keys, values)
@@ -175,7 +199,7 @@ export class SortedMap<K = unknown, V = unknown> {
 
   /** Remove every entry. */
   clear(): void {
-    this.#root = emptyLeaf(this.#token)
+    this.#root = emptyLeaf(this.#token, this.#keyOnly)
     this.#size = 0
     this.#version++
   }
@@ -183,7 +207,7 @@ export class SortedMap<K = unknown, V = unknown> {
   /** The value for `key`, or `undefined` when it is absent. O(log n). */
   get(key: K): V | undefined {
     const { leaf, pos, found } = this.#locate(key)
-    return found ? leaf.values[pos] : undefined
+    return found ? valueAt(leaf, pos) : undefined
   }
 
   /**
@@ -192,24 +216,30 @@ export class SortedMap<K = unknown, V = unknown> {
    * @throws {TypeError} when the comparator cannot order `key`; the map is unchanged.
    */
   set(key: K, value: V): this {
+    this.#set(key, value, true)
+    return this
+  }
+
+  #set(key: K, value: V, replace: boolean): boolean {
     key = positiveZero(key)
     const { path, leaf, pos, found } = this.#locate(key)
     if (!found) this.#assertReflexive(key)
+    if (found && !replace) return false
     const ownedLeaf = this.#ownPath(path, leaf)
     if (found) {
       ownedLeaf.keys[pos] = key
-      ownedLeaf.values[pos] = value
+      if (ownedLeaf.values !== undefined) ownedLeaf.values[pos] = value
       this.#refreshSeparators(path)
     } else {
       ownedLeaf.keys.splice(pos, 0, key)
-      ownedLeaf.values.splice(pos, 0, value)
+      ownedLeaf.values?.splice(pos, 0, value)
       this.#size++
       for (const frame of path) frame.node.total++
       this.#refreshSeparators(path)
       this.#splitOverfull(path, ownedLeaf)
     }
     this.#version++
-    return this
+    return !found
   }
 
   /** Whether `key` is present. O(log n). */
@@ -226,7 +256,7 @@ export class SortedMap<K = unknown, V = unknown> {
     if (!found) return false
     const ownedLeaf = this.#ownPath(path, leaf)
     ownedLeaf.keys.splice(pos, 1)
-    ownedLeaf.values.splice(pos, 1)
+    ownedLeaf.values?.splice(pos, 1)
     this.#size--
     for (const frame of path) frame.node.total--
     this.#refreshSeparators(path)
@@ -252,7 +282,7 @@ export class SortedMap<K = unknown, V = unknown> {
       }
       node = node.children[c]
     }
-    return [node.keys[i], node.values[i]]
+    return [node.keys[i], valueAt(node, i)]
   }
 
   /**
@@ -458,6 +488,7 @@ export class SortedMap<K = unknown, V = unknown> {
     }
     copy.#root = this.#root
     copy.#size = this.#size
+    copy.#keyOnly = this.#keyOnly
     this.#token = {}
     return copy
   }
@@ -471,7 +502,8 @@ export class SortedMap<K = unknown, V = unknown> {
       const count = itemCount(node)
       if (count > NODE_CAPACITY || (!isRoot && count < MIN_FILL)) fail('fill')
       if (node.kind === 'leaf') {
-        if (node.keys.length !== node.values.length) fail('leaf-arrays')
+        if (this.#keyOnly ? node.values !== undefined : node.keys.length !== node.values?.length)
+          fail('leaf-arrays')
         depths.add(depth)
         for (let i = 1; i < node.keys.length; i++) {
           if (!(this.#cmp(node.keys[i - 1], node.keys[i]) < 0)) fail('order')
@@ -556,7 +588,12 @@ export class SortedMap<K = unknown, V = unknown> {
     if (node.owner === this.#token) return node
     const copy: TreeNode<K, V> =
       node.kind === 'leaf'
-        ? { kind: 'leaf', owner: this.#token, keys: node.keys.slice(), values: node.values.slice() }
+        ? {
+            kind: 'leaf',
+            owner: this.#token,
+            keys: node.keys.slice(),
+            values: node.values?.slice()
+          }
         : {
             kind: 'branch',
             owner: this.#token,
@@ -600,7 +637,7 @@ export class SortedMap<K = unknown, V = unknown> {
         kind: 'leaf',
         owner: this.#token,
         keys: node.keys.splice(mid),
-        values: node.values.splice(mid)
+        values: node.values?.splice(mid)
       }
     }
     const children = node.children.splice(mid)
@@ -675,13 +712,13 @@ export class SortedMap<K = unknown, V = unknown> {
     if (node.kind === 'leaf') {
       const donor = sibling as LeafNode<K, V>
       const keys = donor.keys.splice(at, 1)
-      const values = donor.values.splice(at, 1)
+      const values = donor.values?.splice(at, 1)
       if (from === DESCENDING) {
         node.keys.unshift(...keys)
-        node.values.unshift(...values)
+        if (values !== undefined) node.values?.unshift(...values)
       } else {
         node.keys.push(...keys)
-        node.values.push(...values)
+        if (values !== undefined) node.values?.push(...values)
       }
       return
     }
@@ -705,7 +742,7 @@ export class SortedMap<K = unknown, V = unknown> {
     if (left.kind === 'leaf') {
       const from = right as LeafNode<K, V>
       left.keys.push(...from.keys)
-      left.values.push(...from.values)
+      if (from.values !== undefined) left.values?.push(...from.values)
       return
     }
     const from = right as BranchNode<K, V>
@@ -716,7 +753,7 @@ export class SortedMap<K = unknown, V = unknown> {
 
   #entryAt(cursor: Cursor<K, V> | undefined): [K, V] | undefined {
     if (cursor === undefined) return undefined
-    return [cursor.leaf.keys[cursor.index], cursor.leaf.values[cursor.index]]
+    return [cursor.leaf.keys[cursor.index], valueAt(cursor.leaf, cursor.index)]
   }
 
   /** Descend from `node` to its first key (`ASCENDING`) or its last, pushing frames on `branches`. */
@@ -778,7 +815,7 @@ export class SortedMap<K = unknown, V = unknown> {
     let cursor = this.#seek(direction, start)
     while (cursor !== undefined) {
       const k = cursor.leaf.keys[cursor.index]
-      const v = cursor.leaf.values[cursor.index]
+      const v = valueAt(cursor.leaf, cursor.index)
       const seenVersion = this.#version
       yield [k, v]
       cursor =
@@ -812,10 +849,10 @@ export class SortedMap<K = unknown, V = unknown> {
     }
   }
 
-  #bulkLoad(keys: K[], values: V[]): void {
+  #bulkLoad(keys: K[], values: V[] | undefined): void {
     for (const key of keys) this.#assertReflexive(key)
     const alreadySorted = keys.every((key, i) => i === 0 || this.#cmp(keys[i - 1], key) < 0)
-    const sorted = alreadySorted ? { keys, values } : this.#sortedLastWins(keys, values)
+    const sorted = alreadySorted ? { keys, values } : this.#sortedColumns(keys, values)
     const n = sorted.keys.length
     const leafCount = Math.max(1, Math.ceil(n / NODE_CAPACITY))
     const leaves: LeafNode<K, V>[] = []
@@ -828,7 +865,7 @@ export class SortedMap<K = unknown, V = unknown> {
         kind: 'leaf',
         owner: this.#token,
         keys: sorted.keys.slice(offset, end),
-        values: sorted.values.slice(offset, end)
+        values: sorted.values?.slice(offset, end)
       })
       offset = end
     }
@@ -859,14 +896,18 @@ export class SortedMap<K = unknown, V = unknown> {
     this.#size = n
   }
 
-  #sortedLastWins(keys: K[], values: V[]): { keys: K[]; values: V[] } {
+  #sortedColumns(keys: K[], values: V[] | undefined): { keys: K[]; values: V[] | undefined } {
     const order = keys.map((_, i) => i).sort((a, b) => this.#cmp(keys[a], keys[b]))
-    const sorted: { keys: K[]; values: V[] } = { keys: [], values: [] }
+    const sorted: { keys: K[]; values: V[] | undefined } = {
+      keys: [],
+      values: values === undefined ? undefined : []
+    }
     for (const i of order) {
       const last = sorted.keys.length - 1
       const slot = last >= 0 && this.#cmp(sorted.keys[last], keys[i]) === 0 ? last : last + 1
+      if (slot === last && values === undefined) continue
       sorted.keys[slot] = keys[i]
-      sorted.values[slot] = values[i]
+      if (sorted.values !== undefined && values !== undefined) sorted.values[slot] = values[i]
     }
     return sorted
   }

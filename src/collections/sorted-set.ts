@@ -1,10 +1,4 @@
-import { arrayFromIterable } from './internal/iterable.ts'
-import { SortedMap } from './sorted-map.ts'
-
-/** `[value, true]` pairs from last to first, made one at a time so no pair outlives its read. */
-function* entriesLastToFirst<T>(values: readonly T[]): Generator<[T, true]> {
-  for (let i = values.length - 1; i >= 0; i--) yield [values[i], true]
-}
+import { createSetMap, insertIfAbsent, type SortedMap } from './sorted-map.ts'
 
 /**
  * A set whose values stay sorted, on the same B+ tree as {@link SortedMap}. It has `Set`'s core
@@ -40,12 +34,7 @@ export class SortedSet<T = unknown> {
    * comparator.
    */
   constructor(values?: Iterable<T> | null, compareFn?: ((a: T, b: T) => number) | null) {
-    if (values == null) {
-      this.#map = new SortedMap<T, true>(undefined, compareFn)
-      return
-    }
-    // SortedMap's bulk load keeps the last of equal keys, so loading back to front keeps the first.
-    this.#map = new SortedMap<T, true>(entriesLastToFirst(arrayFromIterable<T>(values)), compareFn)
+    this.#map = createSetMap(values, compareFn)
   }
 
   /** The number of values. */
@@ -64,7 +53,7 @@ export class SortedSet<T = unknown> {
    * @throws {TypeError} when the comparator cannot order `value`; the set is unchanged.
    */
   add(value: T): this {
-    if (!this.#map.has(value)) this.#map.set(value, true)
+    insertIfAbsent(this.#map, value, true)
     return this
   }
 

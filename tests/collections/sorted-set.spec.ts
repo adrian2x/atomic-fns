@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SortedSet } from '../../src/collections/index.ts'
+import { checkSortedMap } from '../../src/collections/internal/invariants.ts'
+import { createSetMap, insertIfAbsent } from '../../src/collections/sorted-map.ts'
 
 describe('SortedSet', () => {
   it('empty size and iteration', () => {
@@ -24,7 +26,7 @@ describe('SortedSet', () => {
   it('add has delete clear first last', () => {
     const s = new SortedSet<number>()
     for (let i = 10; i > 0; i--) {
-      s.add(i)
+      expect(s.add(i)).toBe(s)
       expect(s.has(i)).toBe(true)
     }
     expect(s.size).toBe(10)
@@ -126,11 +128,84 @@ describe('SortedSet', () => {
     const first = { id: 1, tag: 'first' }
     const s = new SortedSet([first, { id: 1, tag: 'second' }], byId)
     expect(s.first()).toBe(first)
-    s.add({ id: 1, tag: 'third' })
+    expect(s.add({ id: 1, tag: 'third' })).toBe(s)
+    expect(s.first()).toBe(first)
+    expect(s.add(first)).toBe(s)
     expect(s.size).toBe(1)
     expect(s.first()).toBe(first)
     expect(s.has({ id: 1, tag: 'other' })).toBe(true)
     expect(() => new SortedSet([{ id: 2 }, { id: 1 }])).toThrow(/pass a comparator/)
+  })
+
+  it('adds a missing value with one search', () => {
+    let comparisons = 0
+    const s = new SortedSet(
+      Array.from({ length: 512 }, (_, i) => i * 2),
+      (a, b) => {
+        comparisons++
+        return a - b
+      }
+    )
+    comparisons = 0
+    expect(s.has(513)).toBe(false)
+    const searchComparisons = comparisons
+    comparisons = 0
+
+    expect(s.add(513)).toBe(s)
+
+    expect(comparisons).toBe(searchComparisons + 1)
+    expect(s.size).toBe(513)
+    expect(s.at(257)).toBe(513)
+  })
+
+  it.each(['search', 'self'] as const)(
+    'keeps its values when the %s comparison throws',
+    (stage) => {
+      let fail = false
+      const values = Array.from({ length: 512 }, (_, i) => i * 2)
+      const s = new SortedSet(values, (a, b) => {
+        if (fail && (stage === 'self' ? a === b : a !== b)) throw new Error('cannot compare')
+        return a - b
+      })
+      fail = true
+
+      expect(() => s.add(513)).toThrow('cannot compare')
+
+      expect(s.size).toBe(512)
+      expect([...s]).toEqual(values)
+    }
+  )
+
+  it('key-only clones stay independent through splits and merges', () => {
+    const n = 8192
+    let comparisons = 0
+    const values = Array.from({ length: n }, (_, i) => i)
+    const map = createSetMap(values, (a, b) => {
+      comparisons++
+      return a - b
+    })
+    comparisons = 0
+    const copy = map.clone()
+    expect(comparisons).toBe(0)
+
+    for (let i = n; i < n + 128; i++) expect(insertIfAbsent(map, i, true)).toBe(true)
+    for (let i = -128; i < 0; i++) expect(insertIfAbsent(copy, i, true)).toBe(true)
+    expect(insertIfAbsent(copy, 0, true)).toBe(false)
+    checkSortedMap(map)
+    checkSortedMap(copy)
+    expect(map.has(-1)).toBe(false)
+    expect(copy.has(n)).toBe(false)
+    for (let i = 0; i < n + 127; i++) map.delete(i)
+    for (let i = n - 1; i >= 0; i--) copy.delete(i)
+
+    expect([...map.keys()]).toEqual([n + 127])
+    expect([...copy.keys()]).toEqual(Array.from({ length: 128 }, (_, i) => i - 128))
+    checkSortedMap(map)
+    checkSortedMap(copy)
+    copy.clear()
+    insertIfAbsent(copy, 9, true)
+    expect([...copy]).toEqual([[9, true]])
+    checkSortedMap(copy)
   })
 
   it('iterates like a Set, in order', () => {
