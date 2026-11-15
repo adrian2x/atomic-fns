@@ -11,6 +11,11 @@ env:
   NODE_VERSION: 26.13.1
   DENO_VERSION: 2.9.6
 jobs:
+  check:
+    needs: release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check.yml # zizmor: ignore[self-repository] -- actionlint 1.7.12 rejects the $/ syntax.
   release:
     runs-on: ubuntu-latest
     permissions:
@@ -26,6 +31,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
       - name: Match the tag to the package version
         id: tag
         env:
@@ -33,7 +39,7 @@ jobs:
           RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
         run: node scripts/release.ts tag
   pack:
-    needs: release
+    needs: [release, check]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -50,8 +56,9 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
       - run: npm ci --ignore-scripts
-      - run: npm run check
+      - run: npm run build
       - name: Pack and record the tarball hash
         id: pack
         run: |
@@ -59,9 +66,11 @@ jobs:
           cp scripts/release.ts "$RUNNER_TEMP/package/release.ts"
           tarball=$(npm pack --json --ignore-scripts --pack-destination "$RUNNER_TEMP/package" | jq -er 'if type == "array" then .[0].filename else .["atomic-fns"].filename end')
           sha256=$(sha256sum "$RUNNER_TEMP/package/$tarball" | cut -d' ' -f1)
-          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
-          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
-          echo "script_sha256=$(sha256sum "$RUNNER_TEMP/package/release.ts" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          {
+            echo "tarball=$tarball"
+            echo "sha256=$sha256"
+            echo "script_sha256=$(sha256sum "$RUNNER_TEMP/package/release.ts" | cut -d' ' -f1)"
+          } >> "$GITHUB_OUTPUT"
       - name: Upload package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -84,6 +93,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
       - name: Require npm 11.5.1 or later
         run: |
