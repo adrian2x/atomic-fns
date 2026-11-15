@@ -1,6 +1,7 @@
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
-import { hash, hashString } from '../src/hash/index.ts'
+import { digest, hash, hashString, stableStringify } from '../src/hash/index.ts'
+import { DEPTH_ERROR } from '../src/internal/walk.ts'
 import { isEqual } from '../src/object/isEqual.ts'
 
 /** FNV-1a over the bytes `TextEncoder` writes, as an oracle independent of `hashString`. */
@@ -234,5 +235,165 @@ describe('hash', () => {
     floats[Symbol.iterator] = spy as never
     hash(floats)
     expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('stableStringify', () => {
+  it('sorts keys at every level', () => {
+    expect(stableStringify({ b: 1, a: [true, { d: 2, c: 3 }] })).toBe(
+      '{"a":[true,{"c":3,"d":2}],"b":1}'
+    )
+    expect(stableStringify({ b: 1, a: 2 })).toBe('{"a":2,"b":1}')
+    expect(stableStringify({ a: 2, b: 1 })).toBe('{"a":2,"b":1}')
+  })
+
+  it('follows JSON.stringify for everything else', () => {
+    const sample = {
+      date: new Date(0),
+      text: 'é"\n',
+      inf: Infinity,
+      nil: null,
+      box: Object('s'),
+      symbolBox: Object(Symbol('x')),
+      fnWithToJSON: Object.assign(() => {}, { toJSON: () => 'f' }),
+      list: [undefined, () => {}, Symbol('x'), NaN],
+      skip: undefined,
+      fn: () => {},
+      nested: { toJSON: () => ({ z: 1, y: 2 }) }
+    }
+    expect(stableStringify(sample)).toBe(
+      JSON.stringify({
+        box: 's',
+        date: new Date(0),
+        fnWithToJSON: 'f',
+        inf: null,
+        list: [null, null, null, null],
+        nested: { y: 2, z: 1 },
+        nil: null,
+        symbolBox: {},
+        text: 'é"\n'
+      })
+    )
+    expect(stableStringify(undefined)).toBeUndefined()
+    expect(stableStringify(() => {})).toBeUndefined()
+    expect(stableStringify('a')).toBe('"a"')
+    expect(stableStringify(new Map([[1, 2]]))).toBe('{}')
+    // biome-ignore lint/suspicious/noSparseArray: a hole is the value under test
+    expect(stableStringify([, 1])).toBe('[null,1]')
+    expect(stableStringify([Object(Symbol('x'))])).toBe('[{}]')
+  })
+
+  it('calls toJSON with the key it is written under', () => {
+    const echoKey = { toJSON: (key: string) => key }
+    expect(stableStringify({ a: echoKey, b: [echoKey] })).toBe('{"a":"a","b":["0"]}')
+    expect(stableStringify(echoKey)).toBe('""')
+  })
+
+  it('writes a bigint through BigInt.prototype.toJSON when one is installed', () => {
+    const prototype = BigInt.prototype as { toJSON?: () => string }
+    prototype.toJSON = function (this: bigint) {
+      return this.toString()
+    }
+    try {
+      expect(stableStringify({ n: 1n })).toBe('{"n":"1"}')
+    } finally {
+      delete prototype.toJSON
+    }
+  })
+
+  it('reads an array length once, as JSON does', () => {
+    const grows: unknown[] = []
+    grows.push({
+      toJSON() {
+        grows.push(0)
+        return 1
+      }
+    })
+    expect(stableStringify(grows)).toBe('[1]')
+    const huge: unknown[] = []
+    huge.push({
+      toJSON() {
+        huge.length = 2 ** 25
+        return 0
+      }
+    })
+    expect(stableStringify(huge)).toBe('[0]')
+  })
+
+  it('throws TypeError on cycles and bigints, and RangeError past 1000 levels', () => {
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    expect(() => stableStringify(cyclic)).toThrow(TypeError)
+    expect(() => stableStringify({ n: 1n })).toThrow(TypeError)
+    let deep: unknown[] = []
+    for (let i = 0; i < 1001; i++) deep = [deep]
+    expect(() => stableStringify(deep)).toThrow(new RangeError('nesting deeper than 1000 levels'))
+  })
+
+  it('writes an object shared by two branches twice', () => {
+    const shared = { a: 1 }
+    expect(stableStringify([shared, shared])).toBe('[{"a":1},{"a":1}]')
+  })
+
+  it('turns an engine stack overflow into the depth RangeError and keeps working after it', () => {
+    const overflow = {
+      toJSON() {
+        throw new RangeError('Maximum call stack size exceeded')
+      }
+    }
+    expect(() => stableStringify([[overflow]])).toThrow(new RangeError(DEPTH_ERROR))
+    let deep: unknown[] = []
+    for (let i = 0; i < 999; i++) deep = [deep]
+    expect(stableStringify(deep)).toBe(`${'['.repeat(1000)}${']'.repeat(1000)}`)
+  })
+
+  it('refuses a huge sparse array instead of writing its holes', () => {
+    const sparse: unknown[] = []
+    sparse.length = 4_294_967_294
+    expect(() => stableStringify(sparse)).toThrow(new RangeError('sparse array too large'))
+  })
+})
+
+describe('digest', () => {
+  it('hashes strings as UTF-8 and bytes as given', async () => {
+    expect(await digest('SHA-256', 'abc')).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+    )
+    expect(await digest('SHA-1', new Uint8Array([0x61, 0x62, 0x63]))).toBe(
+      'a9993e364706816aba3e25717850c26c9cd0d89d'
+    )
+    expect(await digest('SHA-256', new Uint8Array([0, 0x61, 0x62, 0x63]).subarray(1))).toBe(
+      await digest('SHA-256', 'abc')
+    )
+  })
+
+  it('hashes an ArrayBuffer from any realm, and bytes on shared memory', async () => {
+    const abc = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+    expect(await digest('SHA-256', new TextEncoder().encode('abc').buffer)).toBe(abc)
+    expect(
+      await digest('SHA-256', runInNewContext('new Uint8Array([0x61, 0x62, 0x63]).buffer'))
+    ).toBe(abc)
+    const shared = new Uint8Array(new SharedArrayBuffer(4))
+    shared.set([0, 0x61, 0x62, 0x63])
+    expect(await digest('SHA-256', shared.subarray(1))).toBe(abc)
+    expect(await digest('SHA-256', shared.buffer)).toBe(await digest('SHA-256', shared))
+  })
+
+  it('rejects with TypeError where crypto.subtle is missing', async () => {
+    vi.stubGlobal('crypto', undefined)
+    try {
+      await expect(digest('SHA-256', 'abc')).rejects.toThrow(
+        new TypeError('crypto.subtle is not available')
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('rejects data that is not bytes or a string', async () => {
+    const notBytes = new TypeError('expected a string, an ArrayBuffer or a typed array')
+    await expect(digest('SHA-256', 1 as never)).rejects.toThrow(notBytes)
+    const arrayLike = JSON.parse('{"length":2147483648,"0":97}') as never
+    await expect(digest('SHA-256', arrayLike)).rejects.toThrow(notBytes)
   })
 })
