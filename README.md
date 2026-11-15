@@ -98,6 +98,89 @@ const rows = [{ id: 1 }, { id: 4 }]
 bisectLeft(rows, { id: 3 }, (a, b) => a.id - b.id) // 1; lo and hi follow the comparator
 ```
 
+## Objects, arrays and helpers
+
+Lodash's intent on today's platform: object paths, deep equality and cloning, iteration over every shape, array set operations, function and async helpers, strings, numbers, ids, hashing and encoding.
+
+### Equality, hashing, ids, encoding and type checks
+
+#### Deep equality (`atomic-fns/object`)
+
+```ts
+import { isEqual, isEqualWith } from 'atomic-fns/object'
+
+class Point {
+  constructor(
+    public x: number,
+    public y: number
+  ) {}
+  equals(other: Point): boolean {
+    return this.x === other.x && this.y === other.y
+  }
+}
+
+isEqual({ a: [1, { b: NaN }] }, { a: [1, { b: NaN }] }) // true: SameValueZero at the leaves
+isEqual(new Map([[1, 'x']]), new Map([[1, 'x']])) // true
+isEqual(new Set([{}]), new Set([{}])) // false: members are matched by SameValueZero
+isEqual(new Point(1, 2), new Point(1, 2)) // false: class instances compare by identity
+isEqualWith([new Point(1, 2)], [new Point(1, 2)], (x, y) =>
+  x instanceof Point && y instanceof Point ? x.equals(y) : undefined
+) // true
+```
+
+Plain objects, arrays, `arguments`, Dates, RegExps (source, flags and `lastIndex`, with SameValueZero for `lastIndex`), typed arrays, `DataView` and buffers, boxed primitives and errors (name, message, own `cause` and `errors`, and own enumerable properties, not `stack`) compare by content, from any realm. `Map` compares by key membership and then value, `Set` by membership; both match by SameValueZero, so object keys and members match by identity. Other class instances compare by identity. Cycles are compared once, and nesting past 1000 levels throws `RangeError`.
+
+#### `atomic-fns/hash`
+
+```ts
+import { digest, hash, hashString, stableStringify } from 'atomic-fns/hash'
+
+hash({ a: 1, b: 2 }) === hash({ b: 2, a: 1 }) // true: isEqual(a, b) implies hash(a) === hash(b)
+hashString('a') // 3826002220, FNV-1a over UTF-8
+stableStringify({ b: 1, a: 2 }) // '{"a":2,"b":1}'
+await digest('SHA-256', 'abc') // 'ba7816bf...'
+```
+
+`hash` reads at most 8 levels deep, so it never throws on deep, cyclic or huge sparse input (no 1000-level `RangeError`). `stableStringify` calls `toJSON`, as `JSON.stringify` does.
+
+#### `atomic-fns/id`
+
+```ts
+import { nanoid, uniqueId, uuid, uuidv7 } from 'atomic-fns/id'
+
+`user_${uniqueId()}` // 'user_1'
+uuid() // random v4
+uuidv7() // time-ordered: sorts by creation time to the millisecond, and in creation order within one process
+nanoid() // 21 URL-safe characters
+```
+
+`uniqueId()` takes no prefix and returns the next id from a realm-wide counter as a decimal string; like `crypto.randomUUID`, it ignores arguments passed at runtime, so add a prefix with a template string.
+
+#### `atomic-fns/encoding`
+
+```ts
+import { fromBase64, fromHex, toBase64, toHex } from 'atomic-fns/encoding'
+
+const bytes = new Uint8Array([251, 255])
+
+toBase64('hi') // 'aGk='
+toBase64(bytes, { alphabet: 'base64url', omitPadding: true }) // '-_8'
+fromBase64('aGk=') // Uint8Array [104, 105]
+toHex(new Uint8Array([0, 255])) // '00ff'
+fromHex('00ff') // Uint8Array [0, 255]
+```
+
+#### `atomic-fns/is`
+
+```ts
+import { isArrayLike, isError, isNil, isPlainObject } from 'atomic-fns/is'
+
+isPlainObject(Object.create(null)) // true
+isArrayLike('abc') // true
+isError(new TypeError('x')) // true, from any realm
+isNil(undefined) // true
+```
+
 `sample` and `sampleSize` draw from arrays and typed arrays by reading only selected positions unless an array hole triggers a full scan, but `sampleSize` copies all values for full samples and when `n >= 5 && n >= length / 2`; sparse arrays may consume extra draws, so seeded results can differ from sampling their collected values, and `sampleSize(xs, 0)` reads no values.
 
 ## Decimal
