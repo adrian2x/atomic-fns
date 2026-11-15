@@ -73,9 +73,14 @@
     "format": "biome format --write .",
     "typecheck": "tsc -p .",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node scripts/declaration-imports.ts",
+    "test:dist": "node scripts/check-dist.ts",
+    "test:consumer": "node scripts/check-consumer.ts",
+    "lint:pkg": "npm exec -- publint --strict && npm exec -- attw --pack . --profile esm-only",
+    "docs:lint": "node scripts/check-docs.ts",
     "jsr": "deno publish --dry-run --allow-dirty --set-version $npm_package_version",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run jsr",
+    "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run build && npm run test:dist && npm run test:consumer && npm run lint:pkg && npm run docs:lint && npm run jsr",
     "prepublishOnly": "npm run check"
   },
   "repository": {
@@ -100,9 +105,12 @@
     "atomic-fns"
   ],
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.6.5",
     "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^5.1.0",
     "deno": "^2.9.6",
+    "publint": "^0.3.25",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   }
