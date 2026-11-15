@@ -1,4 +1,4 @@
-import { enumerableKeys, isEnumerable } from '../internal/keys.ts'
+import { ERROR_LOCATION_KEYS, enumerableKeys, isEnumerable } from '../internal/keys.ts'
 import {
   bytesOf,
   type ContentKind,
@@ -21,9 +21,6 @@ export type EqualityCustomizer = (a: unknown, b: unknown, key: unknown) => boole
 const MAX_TRACKED = 2 ** 24
 
 const getTime = Date.prototype.getTime
-
-/** Location keys JavaScriptCore puts on every error as own enumerable properties, like `stack`. */
-const ERROR_LOCATION_KEYS: ReadonlySet<PropertyKey> = new Set(['line', 'column', 'sourceURL'])
 
 /**
  * The pairs one comparison has taken to be equal, so shared and cyclic structures are not walked
