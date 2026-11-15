@@ -102,6 +102,71 @@ bisectLeft(rows, { id: 3 }, (a, b) => a.id - b.id) // 1; lo and hi follow the co
 
 Lodash's intent on today's platform: object paths, deep equality and cloning, iteration over every shape, array set operations, function and async helpers, strings, numbers, ids, hashing and encoding.
 
+### Collections, objects and arrays
+
+#### Iteration over every shape (`atomic-fns/collections`)
+
+```ts
+import {
+  countBy,
+  entries,
+  filter,
+  groupBy,
+  includes,
+  map,
+  size,
+  sortBy
+} from 'atomic-fns/collections'
+
+entries({ a: 1 }) // [['a', 1]]
+countBy(['one', 'two', 'three'], (s) => s.length) // { 3: 2, 5: 1 }, null prototype
+map(new Map([['x', 1]]), (value, key) => `${key}=${value}`) // ['x=1']
+size('👍🏽') // 2 code points
+includes(new Set([NaN]), NaN) // true: SameValueZero
+filter({ a: 1, b: 2 }, (value) => value > 1) // [2]
+groupBy([6.1, 4.2, 6.3], Math.floor) // { 4: [4.2], 6: [6.1, 6.3] }, null prototype
+sortBy(users, [(u) => u.name, (u) => u.age]) // stable; null and undefined keys last
+```
+
+One rule per shape: arrays and typed arrays give their indices (holes skipped), strings their code points, a `Map` its keys, a `Set` its members, any other iterable its positions, and any other object its own enumerable string keys; `null`, `undefined` and other primitives are empty. Callbacks receive `(value, key, collection)`. `forEach` visits every entry, as the native method does; `some`, `every` and `find` stop early. Key helpers (`sortBy`, `orderBy`, `minBy`, `maxBy`) order numbers, bigints and strings; `null` and `undefined` keys sort last, and `minBy` and `maxBy` skip them. Comparing a `NaN` key throws `RangeError`, and comparing a key of any other type, or a string against a number, throws `TypeError`. Every callback is a function: lodash's `'name'` and `{ active: true }` shorthands are `(u) => u.name` and `matches({ active: true })`.
+
+#### Objects (`atomic-fns/object`)
+
+```ts
+import { cloneDeep, get, matches, merge, omit, pick, set } from 'atomic-fns/object'
+
+get({ a: [{ b: 1 }] }, 'a[0].b') // 1
+get({ 'a.b': 1 }, "['a.b']") // 1
+set({}, 'a.b', 1) // { a: { b: 1 } }
+pick({ a: { b: 1, c: 2 } }, 'a.b') // { a: { b: 1 } }
+omit({ user: { name: 'a', password: 'p' } }, 'user.password') // { user: { name: 'a' } }
+merge({ a: [{ b: 2 }] }, { a: [{ c: 3 }] }) // { a: [{ b: 2, c: 3 }] }
+cloneDeep({ when: new Date(0), tags: new Set(['a']) })
+users.filter(matches({ address: { city: 'Oslo' } }))
+```
+
+A `__proto__`, `constructor` or `prototype` path segment that is not own data of a non-function object reads as missing. `set` throws `TypeError` and `unset` returns `false` for these segments unless they are own data of a plain object or array, and for inherited intermediate steps. `set` writes a terminal `constructor` or `prototype` as own data, refusing an existing own accessor or non-writable property. `merge` copies these three keys as own data and refuses to replace an own `constructor` function with an object. `defaults` and `defaultsDeep` fill `constructor` and `prototype` as own data but skip `__proto__` unless the target has a null prototype; `defaultsDeep` never descends into inherited values. `cloneDeep` copies plain objects, arrays, `Map`, `Set`, `Date`, `RegExp`, typed arrays, `DataView`, buffers and boxed primitives with their prototype and symbol keys, and keeps class instances, functions, errors and promises by reference. `cloneDeep` keeps cycles and shared references; `merge` and `defaultsDeep` keep cycles but give each key its own copy of a shared source plain object or array. Deep walks stop past 1000 levels of nesting with a `RangeError`.
+
+`omit` copies own enumerable string and symbol keys of objects, and elements and own enumerable symbol keys of arrays; `defaults` and `defaultsDeep` consider own enumerable string and symbol keys of each source.
+
+For non-null objects other than arrays and without string, numeric or symbol index signatures, literal tuples of individual top-level keys without `.`, `[` or `]` give `pick` and `omit` exact `Pick` and `Omit` result types; union keys and non-tuple lists of those keys give partial results, and other calls return `Partial<T>`.
+
+#### Arrays (`atomic-fns/array`)
+
+```ts
+import { chunk, difference, range, remove, uniqBy, xor, zip } from 'atomic-fns/array'
+
+range(1, 10, 3) // [1, 4, 7]
+chunk([1, 2, 3, 4, 5], 2) // [[1, 2], [3, 4], [5]]
+zip(['a', 'b'], [1, 2]) // [['a', 1], ['b', 2]]
+difference([2, 1, 2, 3], [2]) // [1, 3]
+uniqBy([2.1, 1.2, 2.3], Math.floor) // [2.1, 1.2]
+xor([2, 1], [2, 3]) // [1, 3]
+remove(xs, (n) => n % 2 === 0) // removes in place, returns the removed
+```
+
+Set operations keep the order of first appearance, drop duplicates and compare with SameValueZero unless a key or equality function is given. Where one native call does the job, use it: `[...new Set(xs)]` for `uniq`, `xs.filter(Boolean)` for `compact`, `xs.filter((x) => x !== y)` for `without`, `xs.flat()` for `flatten`, `xs.toSpliced(i, 0, x)` for `insert`, `Array.from({ length: n }, (_, i) => fn(i))` for `times`, `zip(...rows)` for `unzip`, and `xs.toSorted((a, b) => a - b)` for `sort` and `sorted` on numbers (without a comparator, `toSorted` orders by string).
+
 ### Equality, hashing, ids, encoding and type checks
 
 #### Deep equality (`atomic-fns/object`)
