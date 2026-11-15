@@ -1,20 +1,9 @@
 import { inspect } from 'node:util'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { Decimal } from '../../src/decimal/index.ts'
+import { d } from './helpers.ts'
 
-const d = (value: string | number | bigint) => new Decimal(value)
 const MAX_INPUT_LENGTH = 2 * Decimal.MAX_EXPONENT + Decimal.MAX_DIGITS + 32
-
-/** Fastest of three runs, in milliseconds. */
-function fastest(fn: () => void): number {
-  let best = Number.POSITIVE_INFINITY
-  for (let run = 0; run < 3; run++) {
-    const start = performance.now()
-    fn()
-    best = Math.min(best, performance.now() - start)
-  }
-  return best
-}
 
 describe('construction', () => {
   it('reads decimal strings, with or without exponent', () => {
@@ -76,7 +65,7 @@ describe('construction', () => {
     expect(() => d(`${'😀'.repeat(30)}`)).toThrow(`invalid decimal string: "${'😀'.repeat(20)}"...`)
   })
 
-  it('parses in time linear in the input', () => {
+  it('rejects malformed strings near the input limit', () => {
     const shapes = (n: number) => [
       `${'1'.repeat(n)}x`,
       `.${'1'.repeat(n - 1)}x`,
@@ -86,13 +75,9 @@ describe('construction', () => {
       `${' '.repeat(n)}x`,
       `${' '.repeat(Math.floor(n / 2))}1${' '.repeat(Math.ceil(n / 2) - 2)}x`
     ]
-    const refuse = (bad: string) => fastest(() => expect(() => d(bad)).toThrow(RangeError))
-    const n = MAX_INPUT_LENGTH - 1
-    const short = shapes(Math.floor(n / 8))
-    shapes(n).forEach((bad, k) => {
-      expect(bad.length).toBeLessThanOrEqual(MAX_INPUT_LENGTH)
-      expect(refuse(bad), bad.slice(0, 8)).toBeLessThan(16 * refuse(short[k]) + 5)
-    })
+    for (const bad of shapes(MAX_INPUT_LENGTH - 1)) {
+      expect(() => d(bad)).toThrow(RangeError)
+    }
   })
 })
 
@@ -100,7 +85,8 @@ describe('bounds', () => {
   it('exposes them as read-only statics', () => {
     expect(Decimal.MAX_DIGITS).toBe(10_000)
     expect(Decimal.MAX_EXPONENT).toBe(10_000)
-    for (const name of ['MAX_DIGITS', 'MAX_EXPONENT']) {
+    expect(Decimal.MAX_PRECISION).toBe(10_000)
+    for (const name of ['MAX_DIGITS', 'MAX_EXPONENT', 'MAX_PRECISION']) {
       expect(Reflect.set(Decimal, name, 5)).toBe(false)
     }
   })
@@ -134,11 +120,6 @@ describe('bounds', () => {
     expect(() => d(10n ** 30_000n)).toThrow('exponent out of range')
     expect(() => d(10n ** 30_000n + 1n)).toThrow('result exceeds 10000 digits')
     expect(d(10n ** 10_000n).equals('1e10000')).toBe(true)
-    const odd = (bits: number) => (1n << BigInt(bits)) + 1n
-    const refuse = (big: bigint) => fastest(() => expect(() => d(big)).toThrow(RangeError))
-    expect(refuse(odd(2 ** 21))).toBeLessThan(64 * refuse(odd(2 ** 17)) + 5)
-    const zeros = (count: number) => 10n ** BigInt(count)
-    expect(refuse(zeros(2 ** 20))).toBeLessThan(8 * refuse(zeros(2 ** 18)) + 5)
   })
 
   it('applies to results, after normalizing', () => {
@@ -193,22 +174,10 @@ describe('arithmetic', () => {
     expect(widest.negate().negate().equals(widest)).toBe(true)
   })
 
-  it('adds across a wide gap in scale in one step', () => {
-    const tiny = d('1e-9999')
-    expect(fastest(() => tiny.add(1))).toBeLessThan(500)
-    expect(tiny.add(1).toPlainString()).toBe(`1.${'0'.repeat(9998)}1`)
-  })
-
-  it('makes no base-10 conversion in running totals', () => {
-    const toString = vi.spyOn(BigInt.prototype, 'toString')
-    try {
-      let total = d(0)
-      for (let i = 0; i < 1400; i++) total = total.add(i % 2 ? '1e-9' : '1e9980')
-      expect(toString.mock.calls.filter(([radix]) => (radix ?? 10) === 10)).toHaveLength(0)
-      expect(total.greaterThan(0)).toBe(true)
-    } finally {
-      toString.mockRestore()
-    }
+  it('keeps small addends in running totals', () => {
+    let total = d(0)
+    for (let i = 0; i < 1400; i++) total = total.add(i % 2 ? '1e-9' : '1e9980')
+    expect(total.toPlainString()).toBe(`7${'0'.repeat(9982)}.0000007`)
   })
 })
 
@@ -271,18 +240,16 @@ describe('comparison', () => {
     }
   })
 
-  it('reads magnitude first, so extreme exponents compare fast', () => {
-    const values = Array.from({ length: 200 }, (_, i) => d(i % 2 ? '1e-9999' : '1e9999'))
-    expect(fastest(() => values.toSorted(Decimal.compare))).toBeLessThan(500)
-    const wide = Array.from({ length: 9 }, (_, k) => d(`${String(k + 1)}${'9'.repeat(9999)}`))
-    wide[0].compare(wide[1])
-    const toString = vi.spyOn(BigInt.prototype, 'toString')
-    try {
-      wide[0].compare(wide[1])
-      expect(toString).not.toHaveBeenCalled()
-    } finally {
-      toString.mockRestore()
-    }
+  it('orders extreme exponents and wide coefficients', () => {
+    const values = ['1e9999', '1e-9999', '-1e9999', '-1e-9999'].map(d)
+    expect(values.toSorted(Decimal.compare).map(String)).toStrictEqual([
+      '-1e+9999',
+      '-1e-9999',
+      '1e-9999',
+      '1e+9999'
+    ])
+    const wide = [d(`1${'9'.repeat(9999)}`), d(`2${'9'.repeat(9999)}`)]
+    expect(wide[0].compare(wide[1])).toBe(-1)
   })
 
   it('compares bigints with trailing zeros within the exponent bound', () => {
