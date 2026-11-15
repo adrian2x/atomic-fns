@@ -438,7 +438,7 @@ npm install
 npm run check
 ```
 
-`check` runs Biome, the type check, the tests, the build, and a JSR dry run.
+`check` runs Biome, the type check, tests with coverage thresholds (90% lines, statements and functions; 85% branches), the build, dist export checks, packed consumer runtime and type checks, publint, Are the Types Wrong? (`attw`), `deno doc --lint`, and a JSR dry run.
 
 ## License
 
