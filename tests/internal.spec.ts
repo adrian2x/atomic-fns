@@ -156,10 +156,14 @@ describe('RevisitBudget', () => {
     expect(() => budget.note(row, 1)).toThrow(new RangeError('too much sharing'))
   })
 
-  it('an empty container costs nothing', () => {
-    const budget = new RevisitBudget(0, 'never')
+  it('charges one unit for each repeat expansion of an empty container', () => {
+    const budget = new RevisitBudget(1, 'too much sharing')
     const empty = {}
-    for (let i = 0; i < 100; i++) budget.note(empty, 0)
+
+    budget.note(empty, 0)
+    budget.note(empty, 0)
+
+    expect(() => budget.note(empty, 0)).toThrow(new RangeError('too much sharing'))
   })
 })
 

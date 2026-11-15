@@ -81,8 +81,8 @@ const KEYS_PER_WORK_UNIT = 16
 /**
  * A budget for walks that expand shared containers again (`merge` copies a shared row once per
  * place it appears). A first expansion of a container is free; each later one costs one unit per
- * 16 keys, rounded up, and the walk throws `RangeError(message)` once it has spent more than
- * `limit` units.
+ * 16 keys, rounded up, with a minimum of one unit even for an empty container. The walk throws
+ * `RangeError(message)` once it has spent more than `limit` units.
  */
 export class RevisitBudget {
   readonly #limit: number
@@ -101,7 +101,7 @@ export class RevisitBudget {
       this.#seen.add(obj)
       return
     }
-    this.#spent += Math.ceil(keys / KEYS_PER_WORK_UNIT)
+    this.#spent += Math.max(1, Math.ceil(keys / KEYS_PER_WORK_UNIT))
     if (this.#spent > this.#limit) throw new RangeError(this.#message)
   }
 }
