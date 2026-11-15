@@ -7,3 +7,4 @@ export { binarySearch, bisect, bisectLeft, bisectRight, insort, insortLeft } fro
 export { Deque } from './deque.ts'
 export { Heap } from './heap.ts'
 export { LRUCache } from './lru-cache.ts'
+export { Trie } from './trie.ts'
