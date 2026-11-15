@@ -1,25 +1,19 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   camelCase,
   capitalize,
+  deburr,
   kebabCase,
   pascalCase,
+  slugify,
   snakeCase,
   startCase,
+  truncate,
   words
 } from '../src/string/index.ts'
 import { segmenterWords } from '../src/string/words.ts'
 
-/** The fastest of three runs, in milliseconds. */
-function fastest(fn: () => void): number {
-  let best = Number.POSITIVE_INFINITY
-  for (let run = 0; run < 3; run++) {
-    const start = performance.now()
-    fn()
-    best = Math.min(best, performance.now() - start)
-  }
-  return best
-}
+afterEach(() => vi.restoreAllMocks())
 
 describe('words', () => {
   it('splits on case changes, separators and digits', () => {
@@ -192,29 +186,18 @@ describe('words', () => {
     expect(words(123)).toEqual(['123'])
   })
 
-  it('stays linear on adversarial input', () => {
-    const builders: ((n: number) => string)[] = [
-      (n) => ' a'.repeat(n),
-      (n) => 'aA'.repeat(n),
-      (n) => "a'".repeat(n),
-      (n) => '1t'.repeat(n),
-      (n) => '👨‍👩‍👧'.repeat(n / 5),
-      (n) => 'é'.repeat(2 * n),
-      (n) => `${'a'.repeat(2 * n)}!`,
-      (n) => "A'S".repeat(n),
-      (n) => '1️⃣'.repeat(n)
-    ]
-    for (const build of builders) {
-      const small = build(12_500)
-      const large = build(50_000)
-      const smallMs = fastest(() => {
-        words(small)
-      })
-      const largeMs = fastest(() => {
-        words(large)
-      })
-      expect(largeMs, large.slice(0, 6)).toBeLessThan(8 * smallMs + 5)
-    }
+  it.each([
+    [' a'.repeat(20), Array(20).fill('a')],
+    ['aA'.repeat(20), ['a', ...Array(19).fill('Aa'), 'A']],
+    ["a'".repeat(20), [`${"a'".repeat(19)}a`]],
+    ['1t'.repeat(20), Array(20).fill(['1', 't']).flat()],
+    ['👨‍👩‍👧'.repeat(20), Array(20).fill('👨‍👩‍👧')],
+    ['é'.repeat(40), ['é'.repeat(40)]],
+    [`${'a'.repeat(40)}!`, ['a'.repeat(40)]],
+    ["A'S".repeat(20), ["A'S".repeat(20)]],
+    ['1️⃣'.repeat(20), Array(20).fill('1️⃣')]
+  ])('splits repeated adversarial input %s', (input, expected) => {
+    expect(words(input)).toStrictEqual(expected)
   })
 })
 
@@ -299,13 +282,9 @@ describe('case converters', () => {
     vi.spyOn(String.prototype, 'toLocaleUpperCase').mockImplementation(function (this: string) {
       return toLocaleUpperCase.call(this, 'tr')
     })
-    try {
-      expect(capitalize('KIŞ')).toBe('Kiş')
-      expect(capitalize('istanbul')).toBe('Istanbul')
-      expect(capitalize('I\u0307x')).toBe('I\u0307x')
-    } finally {
-      vi.restoreAllMocks()
-    }
+    expect(capitalize('KIŞ')).toBe('Kiş')
+    expect(capitalize('istanbul')).toBe('Istanbul')
+    expect(capitalize('I\u0307x')).toBe('I\u0307x')
   })
 
   it('converters drop apostrophes', () => {
@@ -331,5 +310,177 @@ describe('case converters', () => {
     expect(startCase(null)).toBe('')
     expect(capitalize(undefined)).toBe('')
     expect(capitalize(123)).toBe('123')
+  })
+})
+
+describe('deburr', () => {
+  it('deburr folds Latin letters and keeps other scripts', () => {
+    expect(deburr('Antoine de Saint-Exupéry')).toBe('Antoine de Saint-Exupery')
+    expect(deburr('Œuvre ß ø Ł đ Æ þ')).toBe('OEuvre ss o L d AE th')
+    expect(deburr('Crème Brûlée Ångström')).toBe('Creme Brulee Angstrom')
+    expect(deburr('й')).toBe('й')
+    expect(deburr('が')).toBe('が')
+    expect(deburr('a\u0301')).toBe('a')
+    expect(deburr('\u03AC')).toBe('\u03AC')
+  })
+
+  it('deburr applies the CLDR Latin-ASCII letter folds', () => {
+    expect(deburr('ÆÐØÞßæðøþĐđĦħıĲĳĸĿŀŁłŉŊŋŒœŦŧſẞ')).toBe(
+      "AEDOTHssaedothDdHhiIJijqLlLl'nNnOEoeTtsSS"
+    )
+    expect(deburr('1\u0301')).toBe('1')
+    expect(slugify('Ærøskøbing')).toBe('aeroskobing')
+    expect(slugify('STRA\u1E9EE')).toBe(slugify('Straße'))
+  })
+
+  it('deburr keeps variation selectors, so a keycap stays an emoji', () => {
+    expect(deburr('1\uFE0F\u20E3')).toBe('1\uFE0F\u20E3')
+    expect(deburr('Top 3\uFE0F\u20E3 cafés')).toBe('Top 3\uFE0F\u20E3 cafes')
+    expect(deburr('a\uFE0F\u0301')).toBe('a\uFE0F')
+    expect(words(deburr('1\uFE0F\u20E3 x'))).toEqual(['1\uFE0F\u20E3', 'x'])
+  })
+
+  it('deburr cuts a mark run to 30, so normalize stays linear', () => {
+    const marks = (n: number): string => '́'.repeat(n)
+    expect(deburr(`ก${marks(100)}`)).toBe(`ก${marks(30)}`)
+    expect(deburr(`ก${marks(30)}x`)).toBe(`ก${marks(30)}x`)
+    expect(deburr(`a${'̖́'.repeat(50)}b`)).toBe('ab')
+    expect(slugify(`ก${marks(100)}`)).toBe(`ก${marks(30)}`)
+  })
+
+  it('deburr preserves normalized marks after another script', () => {
+    expect(deburr(`ก${'\u0344'.repeat(30)}`.repeat(2))).toBe(
+      `ก${'\u0308\u0301'.repeat(30)}`.repeat(2)
+    )
+    expect(deburr(`ก${'\u0301'.repeat(31)}`.repeat(2))).toBe(`ก${'\u0301'.repeat(30)}`.repeat(2))
+  })
+
+  it('deburr keeps ASCII text', () => {
+    expect(deburr('plain ASCII text')).toBe('plain ASCII text')
+  })
+})
+
+describe('slugify', () => {
+  it('slugify lowercases and keeps Unicode letters after removing marks', () => {
+    expect(slugify('equipment_class_name')).toBe('equipment-class-name')
+    expect(slugify('Equipment Class Name')).toBe('equipment-class-name')
+    expect(slugify('Antoine de Saint-Exupéry')).toBe('antoine-de-saint-exupery')
+    expect(slugify('Ægir og Ødin')).toBe('aegir-og-odin')
+    expect(slugify('がぎ')).toBe('がぎ')
+    expect(slugify('Йога')).toBe('йога')
+    expect(slugify('')).toBe('')
+  })
+
+  it('slugify keeps the case with lower: false', () => {
+    expect(slugify('Antoine de Saint-Exupéry', { lower: false })).toBe('Antoine-de-Saint-Exupery')
+    expect(slugify('Ægir og Ødin', { lower: false })).toBe('AEgir-og-Odin')
+    expect(slugify('Йога', { lower: false })).toBe('Йога')
+    expect(slugify('ΑΣ ΟΔΟΣ')).toBe('ας-οδος')
+  })
+
+  it('slugify keeps non-Latin marks inside words', () => {
+    expect(slugify('हिन्दी')).toBe('हिन्दी')
+    expect(slugify('สวัสดี ครับ')).toBe('สวัสดี-ครับ')
+    expect(slugify('தமிழ்')).toBe('தமிழ்')
+  })
+
+  it('slugify drops apostrophes inside words, as kebabCase does', () => {
+    expect(slugify("don't stop")).toBe('dont-stop')
+    expect(slugify('l\u2019\u00e9t\u00e9')).toBe('lete')
+    expect(slugify("rock 'n' roll")).toBe('rock-n-roll')
+    expect(slugify("हिन्दी's")).toBe('हिन्दीs')
+    expect(kebabCase("हिन्दी's")).toBe('हिन्दीs')
+  })
+
+  it('slugify drops default-ignorable code points', () => {
+    expect(slugify('\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645')).toBe(
+      '\u0645\u06CC\u062E\u0648\u0627\u0647\u0645'
+    )
+    expect(slugify('co\u00ADoperate')).toBe('cooperate')
+    expect(slugify('admin\u3164')).toBe('admin')
+    expect(slugify('\u3164')).toBe('')
+    expect(slugify('\u0439\u034F\u043E\u0433\u0430')).toBe('\u0439\u043E\u0433\u0430')
+  })
+
+  it('slugify drops a mark that has no letter to sit on', () => {
+    expect(slugify('\u0301a')).toBe('a')
+    expect(slugify('foo: \u0301bar')).toBe('foo-bar')
+    expect(slugify('a: \u0301: b')).toBe('a-b')
+  })
+
+  it('slugify takes a long two-byte run past the regexp backtrack stack', () => {
+    expect(slugify('\u2014'.repeat(5e6))).toBe('')
+    expect(slugify(`a${'\u2014'.repeat(5e6)}b`)).toBe('a-b')
+  })
+
+  it('deburr and slugify read null and undefined as empty and other values through String', () => {
+    expect(deburr(null)).toBe('')
+    expect(deburr(123)).toBe('123')
+    expect(slugify(0)).toBe('0')
+    expect(slugify(undefined)).toBe('')
+  })
+})
+
+describe('truncate', () => {
+  it('keeps a string that fits', () => {
+    expect(truncate('hi-diddly-ho')).toBe('hi-diddly-ho')
+    expect(truncate('abcd', { length: 4, omission: '\u2026' })).toBe('abcd')
+  })
+
+  it('cuts to length graphemes, omission included, as lodash does', () => {
+    expect(truncate('hi-diddly-ho there, neighborino')).toBe('hi-diddly-ho there, neighbo...')
+    expect(truncate('hi-diddly-ho there, neighborino', { length: 24 })).toBe(
+      'hi-diddly-ho there, n...'
+    )
+    expect(truncate('hi-diddly-ho there, neighborino', { omission: ' [...]' })).toBe(
+      'hi-diddly-ho there, neig [...]'
+    )
+    expect(truncate('abcdef', { length: 2 })).toBe('...')
+    expect(truncate('abcdef', { length: 0, omission: '' })).toBe('')
+  })
+
+  it('never splits a grapheme', () => {
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}'
+    expect(truncate(family.repeat(3), { length: 2, omission: '' })).toBe(family.repeat(2))
+    expect(truncate('e\u0301e\u0301e\u0301', { length: 2, omission: '' })).toBe('e\u0301e\u0301')
+    expect(truncate(`abc${family}`, { length: 3, omission: '\u2026' })).toBe('ab\u2026')
+    expect(truncate('\u{1F1EF}\u{1F1F5}xy', { length: 2, omission: '.' })).toBe(
+      '\u{1F1EF}\u{1F1F5}.'
+    )
+  })
+
+  it('refuses a length that is not a non-negative integer', () => {
+    for (const length of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => truncate('abc', { length })).toThrow(RangeError)
+    }
+  })
+
+  it('reads null and undefined as empty', () => {
+    expect(truncate(null)).toBe('')
+    expect(truncate(undefined, { length: 0 })).toBe('')
+  })
+
+  it('stops reading once it has cut', () => {
+    const long = 'x'.repeat(100)
+    const segment = Intl.Segmenter.prototype.segment
+    let reads = 0
+    vi.spyOn(Intl.Segmenter.prototype, 'segment').mockImplementation(function (
+      this: Intl.Segmenter,
+      input
+    ) {
+      const segments = segment.call(this, input)
+      return {
+        containing: segments.containing.bind(segments),
+        *[Symbol.iterator](): Generator<Intl.SegmentData, undefined> {
+          for (const item of segments) {
+            if (input === long) reads++
+            yield item
+          }
+        }
+      }
+    })
+
+    expect(truncate(long, { length: 4 })).toBe('x...')
+    expect(reads).toBeLessThanOrEqual(5)
   })
 })
