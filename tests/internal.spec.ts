@@ -10,6 +10,16 @@ import {
   unbox
 } from '../src/internal/kind.ts'
 import {
+  assertNotHugeSparse,
+  isCanonicalArrayIndex,
+  isHugeSparse,
+  walkArray,
+  walkArrayIndices,
+  type ArrayIndexWalkEvent,
+  type ArrayWalkEvent
+} from '../src/internal/sparse.ts'
+import { truncateForError } from '../src/internal/truncate.ts'
+import {
   Ancestors,
   DEPTH_ERROR,
   enterDepth,
@@ -27,6 +37,23 @@ function descend(levels: number): number {
   } finally {
     exitDepth()
   }
+}
+
+/** An array of `length` with only the `entries` indices present. */
+function holey(length: number, entries: Record<number, unknown>): unknown[] {
+  const arr: unknown[] = []
+  arr.length = length
+  for (const [index, value] of Object.entries(entries)) arr[Number(index)] = value
+  return arr
+}
+
+function hugeSparse(): unknown[] {
+  const a: unknown[] = []
+  a.length = 4_294_967_294
+  a[0] = 'x'
+  a[1e9] = 'y'
+  a[4e9] = 'admin'
+  return a
 }
 
 describe('depth guard', () => {
@@ -140,6 +167,197 @@ describe('RevisitBudget', () => {
     const budget = new RevisitBudget(0, 'never')
     const empty = {}
     for (let i = 0; i < 100; i++) budget.note(empty, 0)
+  })
+})
+
+describe('sparse arrays', () => {
+  it.each([
+    {
+      length: 4,
+      indices: [0, 3],
+      expected: [
+        { kind: 'index', index: 0 },
+        { kind: 'holeRun', start: 1, end: 3 },
+        { kind: 'index', index: 3 }
+      ]
+    },
+    {
+      length: 500,
+      indices: [300, 301, 400],
+      expected: [
+        { kind: 'holeRun', start: 0, end: 300 },
+        { kind: 'index', index: 300 },
+        { kind: 'index', index: 301 },
+        { kind: 'holeRun', start: 302, end: 400 },
+        { kind: 'index', index: 400 },
+        { kind: 'holeRun', start: 401, end: 500 }
+      ]
+    }
+  ])('walkArrayIndices reports indices and hole runs: $length', ({ length, indices, expected }) => {
+    const arr = new Array<unknown>(length)
+    for (const index of indices) arr[index] = index
+    const seen: ArrayIndexWalkEvent[] = []
+
+    walkArrayIndices(arr, (event) => {
+      seen.push(event)
+    })
+
+    expect(seen).toStrictEqual(expected)
+  })
+
+  function walkEvents(arr: unknown[]): ArrayWalkEvent[] {
+    const events: ArrayWalkEvent[] = []
+    walkArray(arr, (ev) => {
+      events.push(ev)
+    })
+    return events
+  }
+
+  it('walkArray reports values and hole runs without visiting each hole', () => {
+    expect(walkEvents(hugeSparse())).toEqual([
+      { kind: 'value', index: 0, value: 'x' },
+      { kind: 'holeRun', start: 1, end: 1e9 },
+      { kind: 'value', index: 1e9, value: 'y' },
+      { kind: 'holeRun', start: 1e9 + 1, end: 4e9 },
+      { kind: 'value', index: 4e9, value: 'admin' },
+      { kind: 'holeRun', start: 4e9 + 1, end: 4_294_967_294 }
+    ])
+  })
+
+  it('walkArray reports a short hole run between values', () => {
+    expect(walkEvents(holey(4, { 0: 1, 3: 4 }))).toEqual([
+      { kind: 'value', index: 0, value: 1 },
+      { kind: 'holeRun', start: 1, end: 3 },
+      { kind: 'value', index: 3, value: 4 }
+    ])
+  })
+
+  it('walkArray reports one hole run when no element follows the switch to Object.keys', () => {
+    const tail: unknown[] = ['a']
+    tail.length = 1000
+    expect(walkEvents(tail)).toEqual([
+      { kind: 'value', index: 0, value: 'a' },
+      { kind: 'holeRun', start: 1, end: 1000 }
+    ])
+  })
+
+  it('walkArray skips named keys and stays below length after the switch to Object.keys', () => {
+    const named: unknown[] = []
+    named.length = 2000
+    named[1000] = 'own'
+    Object.assign(named, { ' 500': 'named', '4294967295': 'past' })
+    expect(walkEvents(named)).toEqual([
+      { kind: 'holeRun', start: 0, end: 1000 },
+      { kind: 'value', index: 1000, value: 'own' },
+      { kind: 'holeRun', start: 1001, end: 2000 }
+    ])
+  })
+
+  it('walkArray stops when the visitor returns false', () => {
+    const seen: unknown[] = []
+    walkArray([1, 2, 3], (ev) => {
+      if (ev.kind === 'value') seen.push(ev.value)
+      return ev.kind === 'value' && ev.value === 2 ? false : undefined
+    })
+    expect(seen).toEqual([1, 2])
+  })
+
+  it('walkArray stops after Object.keys when the visitor returns false', () => {
+    const events: ArrayWalkEvent[] = []
+    walkArray(hugeSparse(), (ev) => {
+      events.push(ev)
+      return ev.kind === 'holeRun' ? false : undefined
+    })
+    expect(events).toEqual([
+      { kind: 'value', index: 0, value: 'x' },
+      { kind: 'holeRun', start: 1, end: 1e9 }
+    ])
+  })
+
+  it('walkArray treats inherited and non-enumerable indices as holes at any spacing', () => {
+    const shape = (length: number): unknown[] => {
+      const arr: unknown[] = ['a']
+      arr.length = length
+      Object.defineProperty(arr, length - 1, { value: 'hidden', enumerable: false })
+      return arr
+    }
+    expect(walkEvents(shape(200))).toEqual([
+      { kind: 'value', index: 0, value: 'a' },
+      { kind: 'holeRun', start: 1, end: 200 }
+    ])
+    expect(walkEvents(shape(1000))).toEqual([
+      { kind: 'value', index: 0, value: 'a' },
+      { kind: 'holeRun', start: 1, end: 1000 }
+    ])
+    const proto = Object.prototype as Record<number, unknown>
+    proto[1] = 'inherited'
+    proto[999] = 'inherited'
+    try {
+      expect(walkEvents(holey(3, { 0: 0, 2: 2 }))).toEqual([
+        { kind: 'value', index: 0, value: 0 },
+        { kind: 'holeRun', start: 1, end: 2 },
+        { kind: 'value', index: 2, value: 2 }
+      ])
+      const far: unknown[] = [0]
+      far.length = 1000
+      expect(walkEvents(far)).toEqual([
+        { kind: 'value', index: 0, value: 0 },
+        { kind: 'holeRun', start: 1, end: 1000 }
+      ])
+    } finally {
+      delete proto[1]
+      delete proto[999]
+    }
+  })
+
+  it('isHugeSparse needs a length past 2^24 and mostly holes', { timeout: 30_000 }, () => {
+    expect(isHugeSparse(hugeSparse())).toBe(true)
+    const sparse: unknown[] = []
+    sparse.length = 2 ** 24 + 1
+    sparse[0] = 'x'
+    expect(isHugeSparse(sparse)).toBe(true)
+    const atLimit: unknown[] = []
+    atLimit.length = 2 ** 24
+    atLimit[0] = 'x'
+    expect(isHugeSparse(atLimit)).toBe(false)
+    expect(isHugeSparse(new Array(2 ** 20))).toBe(false)
+    expect(isHugeSparse(Array.from({ length: 1000 }, (_, i) => i))).toBe(false)
+    expect(isHugeSparse(new Array(2 ** 24 + 1).fill(0))).toBe(false)
+  })
+
+  it('assertNotHugeSparse throws only for a huge sparse array', () => {
+    expect(() => assertNotHugeSparse(hugeSparse())).toThrow(
+      new RangeError('sparse array too large')
+    )
+    expect(() => assertNotHugeSparse([1, 2])).not.toThrow()
+  })
+
+  it('isCanonicalArrayIndex accepts 0..2^32-2 without leading zeros', () => {
+    expect(isCanonicalArrayIndex('0')).toBe(true)
+    expect(isCanonicalArrayIndex('4294967294')).toBe(true)
+    expect(isCanonicalArrayIndex('4294967295')).toBe(false)
+    expect(isCanonicalArrayIndex('99999999999999999999')).toBe(false)
+    expect(isCanonicalArrayIndex('01')).toBe(false)
+    expect(isCanonicalArrayIndex('-1')).toBe(false)
+    expect(isCanonicalArrayIndex(' 1')).toBe(false)
+    expect(isCanonicalArrayIndex('1.0')).toBe(false)
+  })
+})
+
+describe('truncateForError', () => {
+  it('quotes a short string whole', () => {
+    expect(truncateForError('short')).toBe('"short"')
+    expect(truncateForError('x'.repeat(40))).toBe(`"${'x'.repeat(40)}"`)
+  })
+
+  it('cuts a long string on a code point', () => {
+    expect(truncateForError('x'.repeat(1e6))).toBe(`"${'x'.repeat(40)}"...`)
+    expect(truncateForError(`${'x'.repeat(39)}😀`)).toBe(`"${'x'.repeat(39)}"...`)
+  })
+
+  it('escapes control characters in the kept units only', () => {
+    expect(truncateForError('a\nb')).toBe('"a\\nb"')
+    expect(truncateForError('\u0001'.repeat(1e6))).toBe(`"${'\\u0001'.repeat(40)}"...`)
   })
 })
 
