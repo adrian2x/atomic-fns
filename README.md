@@ -246,6 +246,90 @@ isError(new TypeError('x')) // true, from any realm
 isNil(undefined) // true
 ```
 
+### Functions, async, strings, numbers and random
+
+#### Functions (`atomic-fns/function`)
+
+```ts
+import { debounce, flow, memoize, once, throttle } from 'atomic-fns/function'
+
+const save = debounce(persist, 300, { maxWait: 2000 }) // 300 ms after the last call, 2 s after the first at most
+const onScroll = throttle(update, 100) // once per 100 ms at most, on the leading and trailing edge
+save()
+save.flush() // runs the pending call now
+const square = memoize((n: number) => n * n) // square(4) is 16, then read from square.cache
+const init = once(setup) // calls setup the first time, then returns its result
+flow(Math.abs, String)(-3) // '3'
+```
+
+`debounce` takes `leading`, `trailing` and `maxWait`; `throttle` takes `leading` and `trailing`. Both return a function with `cancel`, `flush` and `pending`. `memoize` keys on the first argument, or on what its `resolver` returns, and never evicts: `cache` is a `Map` you can clear or replace with any store that has the `Map` interface. `curry` and `compose` complete the module.
+
+`debounce` and `throttle` measure idle windows with `performance.now()` and hold no timer for them when `wait > 0`; held trailing calls use timers, and `wait === 0` keeps a timer until the next macrotask.
+
+#### Async (`atomic-fns/async`)
+
+```ts
+import { retry, sleep, timeout } from 'atomic-fns/async'
+
+await sleep(100, { signal }) // resolves after 100 ms, rejects with signal.reason on abort
+await timeout(job, 5000) // settles as job does, or rejects with a TimeoutError DOMException
+await retry(() => fetch('/api', { signal: AbortSignal.timeout(5000) }), { retries: 5 }) // 6 attempts at most
+```
+
+`retry` waits `minDelay` (100 ms) before the first retry and multiplies the delay by `factor` (2) up to `maxDelay` (10 s), with `jitter` on by default. `shouldRetry(error, attempt)` decides which errors earn another attempt, and `signal` stops the loop. `timeout` stops the wait, not the work: give the work its own signal, as `fetch` gets above, so a timed-out attempt is aborted before the next one starts.
+
+#### Strings (`atomic-fns/string`)
+
+```ts
+import {
+  camelCase,
+  capitalize,
+  kebabCase,
+  slugify,
+  startCase,
+  truncate,
+  words
+} from 'atomic-fns/string'
+
+words('fooBar HTTPServer 11th IDs') // ['foo', 'Bar', 'HTTP', 'Server', '11th', 'IDs']
+camelCase('HTTPServer error') // 'httpServerError'
+kebabCase('fooBar baz') // 'foo-bar-baz'
+startCase('--foo-bar--') // 'Foo Bar'
+capitalize('FRED') // 'Fred'
+slugify('Antoine de Saint-Exupéry') // 'antoine-de-saint-exupery'
+truncate('hi-diddly-ho there, neighborino', { length: 24 }) // 'hi-diddly-ho there, n...'
+```
+
+`words` splits on `Intl.Segmenter` with identifier rules, and `camelCase`, `pascalCase`, `snakeCase`, `kebabCase` and `startCase` build on it. `capitalize` title-cases the first code point and lowercases the rest, so separators stay. `deburr` folds Latin accents, `slugify` makes URL slugs, and `truncate` cuts on grapheme boundaries.
+
+#### Numbers (`atomic-fns/number`)
+
+```ts
+import { clamp, formatBytes, mean, round } from 'atomic-fns/number'
+
+round(1.005, 2) // 1.01
+clamp(15, 0, 10) // 10
+mean([1, 2, 3]) // 2
+formatBytes(1536) // '1.54 kB'
+formatBytes(1536, { binary: true }) // '1.5 KiB'
+```
+
+`round`, `floor` and `ceil` work on the printed decimal, so `1.005` rounds as written. `inRange` and `sum` complete the module.
+
+#### Random (`atomic-fns/random`)
+
+```ts
+import { randomInt, sample, sampleSize, shuffle } from 'atomic-fns/random'
+
+randomInt(1, 6) // 1 to 6, both included
+sample({ a: 1, b: 2 }) // 1 or 2
+sampleSize([1, 2, 3, 4, 5], 2) // two values at distinct positions, such as [4, 1]
+shuffle(new Set(['a', 'b', 'c'])) // a new array, such as ['c', 'a', 'b']
+randomInt(1, 6, { random: () => 0 }) // 1
+```
+
+`random` and `randomInt` (uniform over any span of safe integers) draw numbers; `sample`, `sampleSize` and `shuffle` draw from every collection shape. Each takes `{ random }` to replace `Math.random`. `Math.random` is not cryptographically secure, so never use these for secrets, tokens or one-time codes: use `atomic-fns/id` or `crypto.getRandomValues`.
+
 `sample` and `sampleSize` draw from arrays and typed arrays by reading only selected positions unless an array hole triggers a full scan, but `sampleSize` copies all values for full samples and when `n >= 5 && n >= length / 2`; sparse arrays may consume extra draws, so seeded results can differ from sampling their collected values, and `sampleSize(xs, 0)` reads no values.
 
 ## Decimal
