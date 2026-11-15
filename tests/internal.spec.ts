@@ -1,12 +1,18 @@
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import { enumerableKeys } from '../src/internal/keys.ts'
 import {
   bytesOf,
+  contentKindOf,
   isArguments,
   isError,
   isFloatView,
   kindOf,
+  mapSize,
   sameClass,
+  setSize,
+  typedArrayLength,
+  typedArrayName,
   unbox
 } from '../src/internal/kind.ts'
 import {
@@ -403,6 +409,38 @@ describe('kinds', () => {
     const view = new Uint8Array(8)
     view.buffer.transfer()
     expect(bytesOf(view)).toHaveLength(0)
+  })
+
+  it('reads sizes and typed array metadata', () => {
+    const map = new Map([[1, 1]])
+    const set = new Set([1, 2])
+    const floats = new Float64Array(3)
+    expect(mapSize(map)).toBe(1)
+    expect(setSize(set)).toBe(2)
+    expect(typedArrayLength(floats)).toBe(3)
+    expect(typedArrayLength(new DataView(new ArrayBuffer(4)))).toBeUndefined()
+    expect(typedArrayName(floats)).toBe('Float64Array')
+    expect(typedArrayName(new DataView(new ArrayBuffer(4)))).toBeUndefined()
+  })
+
+  it('contentKindOf adds errors and arguments to the kinds', () => {
+    expect(contentKindOf(new TypeError('x'))).toBe('error')
+    expect(contentKindOf(runInNewContext('(function () { return arguments })(1)'))).toBe(
+      'arguments'
+    )
+    expect(contentKindOf(new Map())).toBe('map')
+    expect(contentKindOf(new (class Point {})())).toBe('other')
+  })
+
+  it('enumerableKeys lists own enumerable strings, then symbols', () => {
+    const hidden = Symbol('hidden')
+    const shown = Symbol('shown')
+    const value = Object.defineProperties({ b: 1, a: 2, [shown]: 3 } as object, {
+      c: { value: 4, enumerable: false },
+      [hidden]: { value: 5, enumerable: false }
+    })
+    expect(enumerableKeys(value)).toEqual(['b', 'a', shown])
+    expect(enumerableKeys(Object.create({ inherited: 1 }) as object)).toEqual([])
   })
 
   it('isFloatView recognizes float element types across realms', () => {
