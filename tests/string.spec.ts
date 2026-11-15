@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest'
-import { words } from '../src/string/index.ts'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  camelCase,
+  capitalize,
+  kebabCase,
+  pascalCase,
+  snakeCase,
+  startCase,
+  words
+} from '../src/string/index.ts'
 import { segmenterWords } from '../src/string/words.ts'
 
 /** The fastest of three runs, in milliseconds. */
@@ -207,5 +215,121 @@ describe('words', () => {
       })
       expect(largeMs, large.slice(0, 6)).toBeLessThan(8 * smallMs + 5)
     }
+  })
+})
+
+describe('case converters', () => {
+  it('capitalize leaves only the first code point in upper case', () => {
+    expect(capitalize('test')).toBe('Test')
+    expect(capitalize('FRED')).toBe('Fred')
+    expect(capitalize('𐐨ABC')).toBe('𐐀abc')
+    expect(capitalize('')).toBe('')
+  })
+
+  it('camelCase joins words in camel case', () => {
+    expect(camelCase('equipment class name')).toBe('equipmentClassName')
+    expect(camelCase('Equipment Class Name')).toBe('equipmentClassName')
+    expect(camelCase('')).toBe('')
+  })
+
+  it('pascalCase joins words in Pascal case', () => {
+    expect(pascalCase('equipment class name')).toBe('EquipmentClassName')
+    expect(pascalCase('Equipment Class Name')).toBe('EquipmentClassName')
+  })
+
+  it('snakeCase joins lowercased words with _', () => {
+    expect(snakeCase('equipment class name')).toBe('equipment_class_name')
+    expect(snakeCase('equipment-class-name')).toBe('equipment_class_name')
+    expect(snakeCase('Equipment Class Name')).toBe('equipment_class_name')
+    expect(snakeCase('XMLHttpRequest')).toBe('xml_http_request')
+  })
+
+  it('kebabCase joins lowercased words with -', () => {
+    expect(kebabCase('equipment class name')).toBe('equipment-class-name')
+    expect(kebabCase('equipment_class_name')).toBe('equipment-class-name')
+    expect(kebabCase('Equipment Class Name')).toBe('equipment-class-name')
+    expect(kebabCase('--foo-bar--')).toBe('foo-bar')
+  })
+
+  it('capitalize applies Unicode titlecase to the first code point', () => {
+    expect(capitalize('ǆemal')).toBe('ǅemal')
+    expect(capitalize('ǳ')).toBe('ǲ')
+    expect(capitalize('Ǳ')).toBe('ǲ')
+    expect(capitalize('ǲ')).toBe('ǲ')
+    expect(capitalize('ǅemal')).toBe('ǅemal')
+    expect(capitalize('ǈ')).toBe('ǈ')
+    expect(capitalize('ǋ')).toBe('ǋ')
+    expect(capitalize('საქართველო')).toBe('საქართველო')
+    expect(capitalize('ᾳb')).toBe('ᾼb')
+    expect(capitalize('ᾀ')).toBe('ᾈ')
+    expect(capitalize('ᾧ')).toBe('ᾯ')
+    expect(capitalize('ᾲ')).toBe('Ὰͅ')
+    expect(capitalize('ŉb')).toBe('ʼNb')
+    expect(capitalize('ᾈ')).toBe('ᾈ')
+    expect(capitalize('ßa')).toBe('Ssa')
+  })
+
+  it('converters lowercase a final sigma in context', () => {
+    expect(capitalize('ΑΣ')).toBe('Ας')
+    expect(pascalCase('ΑΣ')).toBe('Ας')
+    expect(camelCase('foo ΑΣ')).toBe('fooΑς')
+  })
+
+  it('converters keep a dotted capital I as one letter', () => {
+    expect(capitalize('\u0130stanbul')).toBe('\u0130stanbul')
+    expect(pascalCase('\u0130zmir')).toBe('\u0130zmir')
+  })
+
+  it('pascalCase and startCase uppercase an astral first code point', () => {
+    expect(pascalCase('𐐨abc')).toBe('𐐀abc')
+    expect(startCase('𐐨abc')).toBe('𐐀abc')
+  })
+
+  it('pascalCase uppercases a digraph where capitalize titlecases it', () => {
+    expect(pascalCase('ǆemal')).toBe('Ǆemal')
+    expect(startCase('ǆemal')).toBe('Ǆemal')
+  })
+
+  it('capitalize gives the same result on a Turkish host', () => {
+    const toLocaleLowerCase = String.prototype.toLocaleLowerCase
+    const toLocaleUpperCase = String.prototype.toLocaleUpperCase
+    vi.spyOn(String.prototype, 'toLocaleLowerCase').mockImplementation(function (this: string) {
+      return toLocaleLowerCase.call(this, 'tr')
+    })
+    vi.spyOn(String.prototype, 'toLocaleUpperCase').mockImplementation(function (this: string) {
+      return toLocaleUpperCase.call(this, 'tr')
+    })
+    try {
+      expect(capitalize('KIŞ')).toBe('Kiş')
+      expect(capitalize('istanbul')).toBe('Istanbul')
+      expect(capitalize('I\u0307x')).toBe('I\u0307x')
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('converters drop apostrophes', () => {
+    expect(camelCase("don't stop")).toBe('dontStop')
+    expect(camelCase('don\u2019t stop')).toBe('dontStop')
+  })
+
+  it('converters keep accents', () => {
+    expect(pascalCase('føo bar')).toBe('FøoBar')
+  })
+
+  it('startCase capitalizes each word and keeps the rest', () => {
+    expect(startCase('--foo-bar--')).toBe('Foo Bar')
+    expect(startCase('fooBar')).toBe('Foo Bar')
+    expect(startCase('__FOO_BAR__')).toBe('FOO BAR')
+    expect(startCase("don't stop")).toBe('Dont Stop')
+    expect(startCase('')).toBe('')
+  })
+
+  it('converters read null and undefined as empty and other values through String', () => {
+    expect(camelCase(undefined)).toBe('')
+    expect(kebabCase(true)).toBe('true')
+    expect(startCase(null)).toBe('')
+    expect(capitalize(undefined)).toBe('')
+    expect(capitalize(123)).toBe('123')
   })
 })
