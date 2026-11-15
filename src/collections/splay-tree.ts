@@ -1,4 +1,4 @@
-import { type Comparator, defaultCompare } from './internal/compare.ts'
+import { type Comparator, defaultCompare } from '../internal/compare.ts'
 import { requireIterable } from './internal/iterable.ts'
 
 /** The child links of a node, or of the header that collects the left and right trees in a splay. */

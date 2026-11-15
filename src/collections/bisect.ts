@@ -1,4 +1,4 @@
-import { type Comparator, defaultCompare } from './internal/compare.ts'
+import { type Comparator, defaultCompare } from '../internal/compare.ts'
 import { assertNotHugeSparse } from './internal/arrayKeys.ts'
 
 /**

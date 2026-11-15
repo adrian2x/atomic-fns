@@ -1,4 +1,4 @@
-import { type Comparator, defaultCompare } from './internal/compare.ts'
+import { type Comparator, defaultCompare } from '../internal/compare.ts'
 import { registerSortedMapCheck } from './internal/invariants.ts'
 import { arrayFromIterableMap } from './internal/iterable.ts'
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultCompare, sameValueZero } from '../../src/collections/internal/compare.ts'
+import { defaultCompare, sameValueZero } from '../../src/internal/compare.ts'
 
 describe('defaultCompare', () => {
   it('names the kind of an unsupported value', () => {

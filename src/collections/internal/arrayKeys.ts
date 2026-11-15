@@ -1,21 +1,9 @@
-/**
- * Sparse-array helpers: one walker for every array consumer, with hole-run events.
- */
-
-/** ECMAScript canonical array index name (0 .. 2^32-2). */
-export function isCanonicalArrayIndex(key: string): boolean {
-  if (!/^(0|[1-9]\d*)$/.test(key)) return false
-  const n = Number(key)
-  return n <= 0xffff_fffe && String(n) === key
-}
-
-/** A present index, or a contiguous hole run `[start, end)`. */
-export type ArrayWalkEvent =
-  | { readonly kind: 'value'; readonly index: number; readonly value: unknown }
-  | { readonly kind: 'holeRun'; readonly start: number; readonly end: number }
-
-/** Holes a walk may visit one by one, beyond one per element seen, before it takes Object.keys. */
-const HOLE_STREAK_BEFORE_KEYS = 256
+import {
+  arrayIndicesFrom,
+  type ArrayWalkEvent,
+  HOLE_STREAK_BEFORE_KEYS,
+  HUGE_SPARSE_MIN_LENGTH
+} from '../../internal/sparse.ts'
 
 /**
  * Walk `arr` without expanding huge hole runs index-by-index.
@@ -43,12 +31,7 @@ export function walkArray(arr: unknown[], visit: (event: ArrayWalkEvent) => unkn
       holes++
     }
     if (holes >= HOLE_STREAK_BEFORE_KEYS + elements && i < len) {
-      const rest: number[] = []
-      for (const key of Object.keys(arr)) {
-        if (!isCanonicalArrayIndex(key)) continue
-        const n = Number(key)
-        if (n >= i) rest.push(n)
-      }
+      const rest = arrayIndicesFrom(arr, i)
       const holeEnd = rest.length > 0 ? rest[0] : len
       if (visit({ kind: 'holeRun', start: holeStart, end: holeEnd }) === false) return
       for (let k = 0; k < rest.length; k++) {
@@ -73,14 +56,11 @@ export function walkArray(arr: unknown[], visit: (event: ArrayWalkEvent) => unkn
   }
 }
 
-/** Absolute length below which per-index consumers never treat an array as huge-sparse. */
-export const HUGE_SPARSE_MIN_LENGTH = 2 ** 24
-
 /**
  * True when `arr.length` is above {@link HUGE_SPARSE_MIN_LENGTH} and also exceeds
- * `2 * ownIndexCount + 1024`, so a dense `0..length` walk would spend most of its time on holes.
+ * `2 * visitedIndexCount + 1024`, so a dense `0..length` walk would spend most of its time on holes.
  * Below {@link HUGE_SPARSE_MIN_LENGTH}, consumers walk with their existing hole semantics.
- * Dense arrays exit early once own indices prove they cannot qualify.
+ * Counts the values visited by {@link walkArray}; dense arrays exit early once they cannot qualify.
  */
 export function isHugeSparse(arr: unknown[]): boolean {
   const len = arr.length
@@ -89,7 +69,6 @@ export function isHugeSparse(arr: unknown[]): boolean {
   walkArray(arr, (event) => {
     if (event.kind !== 'value') return
     own++
-    // More own elements can only keep the array from qualifying, so stop counting.
     if (len <= 2 * own + 1024) return false
   })
   return len > 2 * own + 1024

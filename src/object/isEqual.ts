@@ -1,3 +1,4 @@
+import { sameValueZero } from '../internal/compare.ts'
 import { ERROR_LOCATION_KEYS, enumerableKeys, isEnumerable } from '../internal/keys.ts'
 import {
   bytesOf,
@@ -102,10 +103,6 @@ class Session {
   assumed(a: object, b: object): boolean {
     return this.#assumptions.assumed(a, b)
   }
-}
-
-function sameValueZero(a: unknown, b: unknown): boolean {
-  return a === b || (a !== a && b !== b)
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {

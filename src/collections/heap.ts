@@ -1,4 +1,4 @@
-import { type Comparator, defaultCompare, sameValueZero } from './internal/compare.ts'
+import { type Comparator, defaultCompare, sameValueZero } from '../internal/compare.ts'
 import { arrayFromIterable } from './internal/iterable.ts'
 
 /**

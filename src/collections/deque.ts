@@ -1,5 +1,5 @@
 import { assertNotHugeSparse } from './internal/arrayKeys.ts'
-import { sameValueZero } from './internal/compare.ts'
+import { sameValueZero } from '../internal/compare.ts'
 import { iteratesAsArray, requireIterable } from './internal/iterable.ts'
 
 const MIN_CAPACITY = 8
