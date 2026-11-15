@@ -22,6 +22,7 @@ describe('powers of ten', () => {
     expect(m.pow10(300)).toBe(10n ** 300n)
     expect(m.pow10(300)).toBe(10n ** 300n)
     expect(m.pow10Squares()[13]).toBe(10n ** 8192n)
+    expect(m.getPow10CachedDigits()).toBeLessThan(27_000)
   })
 
   it('match 10n ** k on boundaries and 100 seeded exponents', async () => {
@@ -31,10 +32,16 @@ describe('powers of ten', () => {
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0
       return state
     }
+    for (const k of [
+      0, 1, 63, 64, 65, 1023, 1024, 1025, 8191, 8192, 8193, 16_383, 16_384, 16_385, 32_767
+    ]) {
+      expect(m.pow10(k)).toBe(10n ** BigInt(k))
+    }
     for (let n = 0; n < 100; n++) {
       const k = next() % 32_768
       expect(m.pow10(k)).toBe(10n ** BigInt(k))
     }
+    expect(m.getPow10CachedDigits()).toBeLessThan(44_000)
   })
 
   it('keeps cached powers bounded', async () => {
