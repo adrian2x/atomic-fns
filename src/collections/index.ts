@@ -3,4 +3,4 @@
  * Sorted containers, trees, heaps, deques, caches, tries and bisect.
  * @module collections
  */
-export {}
+export { binarySearch, bisect, bisectLeft, bisectRight, insort, insortLeft } from './bisect.ts'
