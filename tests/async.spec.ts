@@ -1,6 +1,6 @@
 import { getEventListeners } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { sleep, timeout } from '../src/async/index.ts'
+import { retry, sleep, timeout } from '../src/async/index.ts'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -140,5 +140,206 @@ describe('timeout', () => {
   it('handles a later rejection of the promise when its wait is refused', async () => {
     const work = Promise.reject(new Error('late'))
     await expect(timeout(work, Number.NaN)).rejects.toThrow(RangeError)
+  })
+})
+
+describe('retry', () => {
+  const flaky = (failures: number) => {
+    const attempts: number[] = []
+    const fn = (attempt: number) => {
+      attempts.push(attempt)
+      if (attempts.length <= failures) throw new Error(`fail ${attempt}`)
+      return `ok ${attempt}`
+    }
+    return { attempts, fn }
+  }
+
+  it('returns the first success, backing off exponentially between attempts', async () => {
+    const { attempts, fn } = flaky(3)
+    const result = retry(fn, { jitter: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(attempts).toEqual([1])
+    await vi.advanceTimersByTimeAsync(100)
+    expect(attempts).toEqual([1, 2])
+    await vi.advanceTimersByTimeAsync(199)
+    expect(attempts).toEqual([1, 2])
+    await vi.advanceTimersByTimeAsync(1)
+    expect(attempts).toEqual([1, 2, 3])
+    await vi.advanceTimersByTimeAsync(400)
+    await expect(result).resolves.toBe('ok 4')
+  })
+
+  it('rejects with the last error once the retries run out', async () => {
+    const { attempts, fn } = flaky(Number.POSITIVE_INFINITY)
+    const result = settled(retry(fn, { retries: 2, minDelay: 10, jitter: false }))
+    await vi.advanceTimersByTimeAsync(100)
+    expect((await result).error).toEqual(new Error('fail 3'))
+    expect(attempts).toEqual([1, 2, 3])
+  })
+
+  it('makes 4 attempts by default', async () => {
+    const { attempts, fn } = flaky(Number.POSITIVE_INFINITY)
+    const result = settled(retry(fn))
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect((await result).error).toEqual(new Error('fail 4'))
+    expect(attempts).toEqual([1, 2, 3, 4])
+  })
+
+  it('caps the delay at maxDelay', async () => {
+    const { attempts, fn } = flaky(3)
+    const result = retry(fn, { minDelay: 10, maxDelay: 15, factor: 10, jitter: false })
+    await vi.advanceTimersByTimeAsync(10 + 15 + 14)
+    expect(attempts).toEqual([1, 2, 3])
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(result).resolves.toBe('ok 4')
+  })
+
+  it('caps the delay at 10 s by default', async () => {
+    const { attempts, fn } = flaky(8)
+    const result = retry(fn, { retries: 8, jitter: false })
+    await vi.advanceTimersByTimeAsync(100 + 200 + 400 + 800 + 1600 + 3200 + 6400)
+    expect(attempts).toHaveLength(8)
+    await vi.advanceTimersByTimeAsync(9999)
+    expect(attempts).toHaveLength(8)
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(result).resolves.toBe('ok 9')
+  })
+
+  it('raises the default maxDelay to a larger minDelay', async () => {
+    const { attempts, fn } = flaky(1)
+    const result = retry(fn, { minDelay: 30_000, jitter: false })
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect(attempts).toEqual([1])
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(result).resolves.toBe('ok 2')
+  })
+
+  it('keeps a zero delay at zero across exponent overflow', async () => {
+    const start = Date.now()
+    const { attempts, fn } = flaky(3)
+    const result = retry(fn, { retries: 3, minDelay: 0, factor: 1e200, jitter: false })
+    await vi.runAllTimersAsync()
+    await expect(result).resolves.toBe('ok 4')
+    expect(attempts).toStrictEqual([1, 2, 3, 4])
+    expect(Date.now()).toBe(start)
+  })
+
+  it('awaits async work', async () => {
+    let calls = 0
+    const result = retry(
+      async () => {
+        calls++
+        if (calls < 2) throw new Error('again')
+        return calls
+      },
+      { minDelay: 10, jitter: false }
+    )
+    await vi.advanceTimersByTimeAsync(10)
+    await expect(result).resolves.toBe(2)
+  })
+
+  it.each([
+    [0, 49],
+    [0.5, 74]
+  ])('scales delay by 0.5 + random / 2 with random %s', async (random, before) => {
+    vi.spyOn(Math, 'random').mockReturnValue(random)
+    const { attempts, fn } = flaky(1)
+    const result = retry(fn, { minDelay: 100 })
+    await vi.advanceTimersByTimeAsync(before)
+    expect(attempts).toStrictEqual([1])
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(result).resolves.toBe('ok 2')
+  })
+
+  it('stops when shouldRetry says no', async () => {
+    const seen: [string, number][] = []
+    const { attempts, fn } = flaky(5)
+    const result = settled(
+      retry(fn, {
+        jitter: false,
+        shouldRetry: async (error, attempt) => {
+          seen.push([(error as Error).message, attempt])
+          return attempt < 2
+        }
+      })
+    )
+    await vi.advanceTimersByTimeAsync(1000)
+    expect((await result).error).toEqual(new Error('fail 2'))
+    expect(attempts).toEqual([1, 2])
+    expect(seen).toEqual([
+      ['fail 1', 1],
+      ['fail 2', 2]
+    ])
+  })
+
+  it('rejects with the abort reason during a wait', async () => {
+    const controller = new AbortController()
+    const { attempts, fn } = flaky(5)
+    const result = settled(retry(fn, { signal: controller.signal, jitter: false }))
+    await vi.advanceTimersByTimeAsync(50)
+    controller.abort(new Error('stop'))
+    expect((await result).error).toEqual(new Error('stop'))
+    expect(attempts).toEqual([1])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('rejects with the abort reason before the first attempt', async () => {
+    const never = vi.fn()
+    const aborted = await settled(retry(never, { signal: AbortSignal.abort('gone') }))
+    expect(aborted.error).toBe('gone')
+    expect(never).not.toHaveBeenCalled()
+  })
+
+  it('rejects with the abort reason without asking shouldRetry when it aborts mid-attempt', async () => {
+    const controller = new AbortController()
+    const shouldRetry = vi.fn(() => true)
+    const result = settled(
+      retry(
+        async () => {
+          controller.abort('mid-attempt')
+          throw new Error('fail')
+        },
+        { signal: controller.signal, shouldRetry }
+      )
+    )
+    expect((await result).error).toBe('mid-attempt')
+    expect(shouldRetry).not.toHaveBeenCalled()
+  })
+
+  it('clamps a negative delay to 0', async () => {
+    const { attempts, fn } = flaky(1)
+    const result = retry(fn, { minDelay: -5, jitter: false })
+    await vi.advanceTimersByTimeAsync(0)
+    await expect(result).resolves.toBe('ok 2')
+    expect(attempts).toEqual([1, 2])
+  })
+
+  it('retries without end with retries: Infinity', async () => {
+    const { attempts, fn } = flaky(20)
+    const result = retry(fn, { retries: Number.POSITIVE_INFINITY, minDelay: 1, maxDelay: 1 })
+    await vi.advanceTimersByTimeAsync(20)
+    await expect(result).resolves.toBe('ok 21')
+    expect(attempts).toHaveLength(21)
+  })
+
+  it('throws on options out of range or of the wrong type before the first attempt', () => {
+    const fn = vi.fn()
+    for (const options of [
+      { retries: -1 },
+      { retries: 1.5 },
+      { minDelay: Number.NaN },
+      { maxDelay: 2 ** 31 },
+      { minDelay: 200, maxDelay: 100 },
+      { factor: 0.5 },
+      { factor: Number.NaN },
+      { factor: Number.POSITIVE_INFINITY }
+    ]) {
+      expect(() => retry(fn, options)).toThrow(RangeError)
+    }
+    expect(() => retry(fn, { minDelay: '5' as unknown as number })).toThrow(
+      new TypeError('minDelay must be a number, got string')
+    )
+    expect(fn).not.toHaveBeenCalled()
+    expect(() => retry(1 as never)).toThrow(new TypeError('fn must be a function'))
   })
 })
