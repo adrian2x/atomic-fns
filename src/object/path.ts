@@ -4,7 +4,7 @@
 
 import { isCanonicalArrayIndex } from '../internal/sparse.ts'
 import { isPlainObject } from '../is/isPlainObject.ts'
-import { DANGEROUS_KEYS, type Path, parsePath } from './parsePath.ts'
+import { DANGEROUS_KEYS, type Path, parsePath, writeKey } from './parsePath.ts'
 
 function isContainer(x: unknown): x is object {
   return (typeof x === 'object' && x !== null) || typeof x === 'function'
@@ -99,8 +99,15 @@ function growsArray(target: unknown[], key: PropertyKey, value: unknown): boolea
   return typeof key === 'string' && isCanonicalArrayIndex(key) && Number(key) > target.length
 }
 
-function write(target: object, key: PropertyKey, value: unknown): void {
-  if (unsafeWrite(target, key)) throw refuse(key)
+function write(target: object, key: PropertyKey, value: unknown, terminal: boolean): void {
+  if (terminal && (key === 'constructor' || key === 'prototype')) {
+    const desc = Object.getOwnPropertyDescriptor(target, key)
+    if (desc && (!('value' in desc) || !desc.writable)) throw refuse(key)
+    if (desc === undefined) {
+      writeKey(target, key, value)
+      return
+    }
+  } else if (unsafeWrite(target, key)) throw refuse(key)
   if (Array.isArray(target) && growsArray(target, key, value)) {
     throw new RangeError(
       key === 'length'
@@ -114,14 +121,16 @@ function write(target: object, key: PropertyKey, value: unknown): void {
 /**
  * Set the value at `path` in `obj` and return `obj`, as lodash's `set` does. A missing or
  * primitive step is replaced by a new array when the next segment is an index, and by a plain
- * object otherwise. The last segment is assigned, so setters run. An empty path names no
- * property, so `obj` is returned unchanged.
+ * object otherwise. The last segment is assigned, so setters run, except a terminal
+ * `constructor` or `prototype` is written as own data. An empty path names no property, so `obj`
+ * is returned unchanged.
  * @param obj The object to change. A `null`, `undefined` or primitive `obj` is returned as it is.
  * @param path A dotted string with `[0]` and `['key']` segments, or an array of keys.
  * @param value The value to store.
  * @returns `obj`.
- * @throws {TypeError} when a `__proto__`, `constructor` or `prototype` segment is not own data of a
- * plain object or array, or a step is inherited, so a write can never reach a prototype.
+ * @throws {TypeError} when a `__proto__` or non-terminal `constructor` or `prototype` segment is
+ * not own data of a plain object or array; a terminal `constructor` or `prototype` is an own
+ * accessor or non-writable property; or a step is inherited.
  * @throws {RangeError} for an array index past the end, or a `length` that would grow an array,
  * so a short path cannot allocate a huge array.
  * @example
@@ -150,10 +159,10 @@ export function set<T>(obj: T, path: Path, value: unknown): T {
   for (let i = last; i > depth; i--) {
     const key = segments[i]
     const fresh = typeof key === 'string' && isCanonicalArrayIndex(key) ? [] : {}
-    write(fresh, key, tail)
+    write(fresh, key, tail, i === last)
     tail = fresh
   }
-  write(cur, segments[depth], tail)
+  write(cur, segments[depth], tail, depth === last)
   return obj
 }
 
