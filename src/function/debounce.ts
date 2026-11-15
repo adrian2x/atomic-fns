@@ -1,4 +1,5 @@
-import { assertFunction, timerWait } from './shared.ts'
+import { timerWait } from '../internal/timer.ts'
+import { assertFunction } from './shared.ts'
 
 /** A debounced or throttled function with `cancel`, `flush` and `pending`. */
 export interface Debounced<F extends (...args: never[]) => unknown> {
