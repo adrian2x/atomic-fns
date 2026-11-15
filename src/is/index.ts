@@ -1,4 +1,5 @@
 /**
+ * Type checks the platform does not have in one call.
  * @module is
  */
-export {}
+export { isPlainObject } from './isPlainObject.ts'
