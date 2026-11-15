@@ -1,10 +1,21 @@
 /**
- * Sparse-array helpers: one walker for every array consumer, with hole-run events.
+ * Sparse-array helpers for own enumerable indices, with hole-run events.
  */
 
 /** ECMAScript canonical array index name (0 .. 2^32-2). */
 export function isCanonicalArrayIndex(key: string): boolean {
   return /^(0|[1-9]\d*)$/.test(key) && Number(key) <= 0xffff_fffe
+}
+
+/** Own enumerable array indices at or after `start`, in `Object.keys` order. */
+export function arrayIndicesFrom(arr: readonly unknown[], start: number): number[] {
+  const indices: number[] = []
+  for (const key of Object.keys(arr)) {
+    if (!isCanonicalArrayIndex(key)) continue
+    const index = Number(key)
+    if (index >= start) indices.push(index)
+  }
+  return indices
 }
 
 /** A present index, or a contiguous hole run `[start, end)`. */
@@ -17,7 +28,7 @@ export type ArrayIndexWalkEvent =
   | { readonly kind: 'holeRun'; readonly start: number; readonly end: number }
 
 /** Holes a walk may visit one by one, beyond one per element seen, before it takes Object.keys. */
-const HOLE_STREAK_BEFORE_KEYS = 256
+export const HOLE_STREAK_BEFORE_KEYS = 256
 
 const isOwnEnumerable = Object.prototype.propertyIsEnumerable
 
@@ -29,8 +40,6 @@ const isOwnEnumerable = Object.prototype.propertyIsEnumerable
  * so cost stays proportional to the elements however they are spaced.
  * Holes are reported as a single `holeRun` event (`end` exclusive).
  * Return `false` from `visit` to stop.
- *
- * The collections implementation keeps its own copy in `src/collections/internal/arrayKeys.ts`.
  */
 export function walkArrayIndices(
   arr: readonly unknown[],
@@ -53,12 +62,7 @@ export function walkArrayIndices(
       holes++
     }
     if (holes >= HOLE_STREAK_BEFORE_KEYS + elements && i < len) {
-      const rest: number[] = []
-      for (const key of Object.keys(arr)) {
-        if (!isCanonicalArrayIndex(key)) continue
-        const n = Number(key)
-        if (n >= i) rest.push(n)
-      }
+      const rest = arrayIndicesFrom(arr, i)
       let cursor = holeStart
       for (const idx of rest) {
         if (idx > cursor && visit({ kind: 'holeRun', start: cursor, end: idx }) === false) return

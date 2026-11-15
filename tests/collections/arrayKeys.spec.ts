@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  type ArrayWalkEvent,
   assertNotHugeSparse,
-  isCanonicalArrayIndex,
   isHugeSparse,
   walkArray
 } from '../../src/collections/internal/arrayKeys.ts'
+import type { ArrayWalkEvent } from '../../src/internal/sparse.ts'
 
 function events(arr: unknown[], stopAfter = Infinity): ArrayWalkEvent[] {
   const seen: ArrayWalkEvent[] = []
@@ -34,15 +33,6 @@ const farSparseEvents: ArrayWalkEvent[] = [
   { kind: 'value', index: 400, value: 'c' },
   { kind: 'holeRun', start: 401, end: 500 }
 ]
-
-describe('isCanonicalArrayIndex', () => {
-  it('accepts canonical indices up to 2^32 - 2 only', () => {
-    for (const key of ['0', '1', '42', '4294967294']) expect(isCanonicalArrayIndex(key)).toBe(true)
-    for (const key of ['', '01', '-1', '1.5', '1e3', ' 1', '4294967295', 'length']) {
-      expect(isCanonicalArrayIndex(key)).toBe(false)
-    }
-  })
-})
 
 describe('walkArray', () => {
   it('reports dense values and short hole runs index by index', () => {

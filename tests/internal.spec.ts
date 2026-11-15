@@ -1,5 +1,5 @@
 import { runInNewContext } from 'node:vm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 import { enumerableKeys } from '../src/internal/keys.ts'
 import {
   bytesOf,
@@ -329,15 +329,23 @@ describe('sparse arrays', () => {
     expect(() => assertNotHugeSparse([1, 2])).not.toThrow()
   })
 
-  it('isCanonicalArrayIndex accepts 0..2^32-2 without leading zeros', () => {
-    expect(isCanonicalArrayIndex('0')).toBe(true)
-    expect(isCanonicalArrayIndex('4294967294')).toBe(true)
-    expect(isCanonicalArrayIndex('4294967295')).toBe(false)
-    expect(isCanonicalArrayIndex('99999999999999999999')).toBe(false)
-    expect(isCanonicalArrayIndex('01')).toBe(false)
-    expect(isCanonicalArrayIndex('-1')).toBe(false)
-    expect(isCanonicalArrayIndex(' 1')).toBe(false)
-    expect(isCanonicalArrayIndex('1.0')).toBe(false)
+  test.for([
+    ['0', true],
+    ['1', true],
+    ['42', true],
+    ['4294967294', true],
+    ['', false],
+    ['01', false],
+    ['-1', false],
+    ['1.5', false],
+    ['1e3', false],
+    [' 1', false],
+    ['4294967295', false],
+    ['length', false],
+    ['99999999999999999999', false],
+    ['1.0', false]
+  ] as const)('isCanonicalArrayIndex(%s) is %s', ([key, expected]) => {
+    expect(isCanonicalArrayIndex(key)).toBe(expected)
   })
 })
 
