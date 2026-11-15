@@ -1,0 +1,4 @@
+/**
+ * @module function
+ */
+export {}

@@ -1,69 +1,109 @@
 {
   "name": "atomic-fns",
-  "description": "Like Lodash, but for ESNext and with types. Stop shipping code built for browsers from 2015.",
-  "version": "1.2.0",
-  "files": [
-    "dist/*"
-  ],
+  "version": "2.0.0",
+  "description": "Like Lodash, but for today's platform: collections, object paths, deep equality, decimals, sorted containers, ids, hashing and encoding, with no dependencies.",
   "type": "module",
-  "module": "dist/index.js",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "sideEffects": false,
-  "scripts": {
-    "preversion": "npm test",
-    "version": "npm run build",
-    "postversion": "git push && git push --tags",
-    "prepublishOnly": "npm run build",
-    "test": "vitest run",
-    "tsc": "tsc -p . --declaration && node scripts/declaration-imports.ts",
-    "tsc:w": "tsc -p . --declaration --watch",
-    "lint": "biome check --diagnostic-level=error .",
-    "build": "npm run lint && npm test && npm run tsc",
-    "docs": "deno doc --html --name atomic-fns --output docs src/index.ts src/*/index.ts",
-    "check": "npm run lint && npm run tsc && npm test && npm run jsr",
-    "format": "biome format --write .",
-    "jsr": "deno publish --dry-run --allow-dirty --set-version $npm_package_version"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./collections": {
+      "types": "./dist/collections/index.d.ts",
+      "default": "./dist/collections/index.js"
+    },
+    "./object": {
+      "types": "./dist/object/index.d.ts",
+      "default": "./dist/object/index.js"
+    },
+    "./array": {
+      "types": "./dist/array/index.d.ts",
+      "default": "./dist/array/index.js"
+    },
+    "./function": {
+      "types": "./dist/function/index.d.ts",
+      "default": "./dist/function/index.js"
+    },
+    "./async": {
+      "types": "./dist/async/index.d.ts",
+      "default": "./dist/async/index.js"
+    },
+    "./string": {
+      "types": "./dist/string/index.d.ts",
+      "default": "./dist/string/index.js"
+    },
+    "./number": {
+      "types": "./dist/number/index.d.ts",
+      "default": "./dist/number/index.js"
+    },
+    "./random": {
+      "types": "./dist/random/index.d.ts",
+      "default": "./dist/random/index.js"
+    },
+    "./id": {
+      "types": "./dist/id/index.d.ts",
+      "default": "./dist/id/index.js"
+    },
+    "./hash": {
+      "types": "./dist/hash/index.d.ts",
+      "default": "./dist/hash/index.js"
+    },
+    "./encoding": {
+      "types": "./dist/encoding/index.d.ts",
+      "default": "./dist/encoding/index.js"
+    },
+    "./is": {
+      "types": "./dist/is/index.d.ts",
+      "default": "./dist/is/index.js"
+    },
+    "./decimal": {
+      "types": "./dist/decimal/index.d.ts",
+      "default": "./dist/decimal/index.js"
+    }
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": "^24.22.3 || >=26.13.1"
+  },
+  "scripts": {
+    "lint": "biome check --diagnostic-level=error .",
+    "format": "biome format --write .",
+    "typecheck": "tsc -p .",
+    "test": "vitest run",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node scripts/declaration-imports.ts",
+    "jsr": "deno publish --dry-run --allow-dirty --set-version $npm_package_version",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run jsr",
+    "prepublishOnly": "npm run check"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adrian2x/atomic-fns.git"
+  },
+  "homepage": "https://jsr.io/@atomic-stack/atomic-fns",
+  "bugs": {
+    "url": "https://github.com/adrian2x/atomic-fns/issues"
+  },
+  "author": "Adrian Cruz",
+  "license": "Apache-2.0",
+  "keywords": [
+    "lodash",
+    "lodash-es",
+    "utilities",
+    "collections",
+    "decimal",
+    "sorted-map",
+    "deep-equal",
+    "esnext",
+    "atomic-fns"
+  ],
   "devDependencies": {
     "@biomejs/biome": "^2.6.5",
     "@types/node": "^26.6.6",
     "deno": "^2.9.6",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/adrian2x/atomic-fns.git"
-  },
-  "keywords": [
-    "modules",
-    "stdlib",
-    "util",
-    "fp",
-    "lazy",
-    "itertools",
-    "core-js",
-    "lodash",
-    "lodash-es",
-    "es6",
-    "es7",
-    "es8",
-    "es9",
-    "es2020",
-    "es2021",
-    "es2022",
-    "esnext",
-    "es-next",
-    "@esnext",
-    "@es-next",
-    "atomicfns",
-    "atomic-fns"
-  ],
-  "author": "Adrian Cruz <kangoonie@gmail.com>",
-  "license": "Apache-2.0",
-  "bugs": {
-    "url": "https://github.com/adrian2x/atomic-fns/issues"
-  },
-  "homepage": "https://jsr.io/@atomic-stack/atomic-fns"
+  }
 }

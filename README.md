@@ -1,139 +1,31 @@
 # atomic-fns
 
-[Read the Docs](https://jsr.io/@atomic-stack/atomic-fns/doc)
+A utility library with no runtime dependencies that fills the gaps the platform leaves: collection helpers and data structures, object paths, deep equality and cloning, exact decimal arithmetic, array operations, function and async helpers, strings, numbers, ids, hashing and encoding.
 
-## Like Lodash, but in TypeScript and for ESNext.
+Install from npm with `npm install atomic-fns`, or from JSR with `deno add jsr:@atomic-stack/atomic-fns`.
 
-Stop shipping code built for browsers from 2015.
+## Import
 
-You may prefer this library because:
-
-* **TypeScript & docs**: Includes type declaration files and js with JSDocs for best in class experience.
-* **Zero deps**: Built from scratch with no runtime dependencies or polyfills.
-* **ESNext**: Uses modern idiomatic syntax, data structures, and control flow techniques.
-* **Modular**: Pick what you need. Supports tree-shaking, no side effects, and works with all bundlers.
-* **Lazy**: Leverage generators, iterators, and functional composition.
-* **Tests**: All modules have comprehensive test suites and 100% test coverage.
-
-## Docs
-
-📖 Available at [atomic-fns](https://jsr.io/@atomic-stack/atomic-fns/doc)
-
-## Get Started
-
-This library is available as an [npm package](https://www.npmjs.com/package/atomic-fns).
-
-To install the package you need to have [npm](https://www.npmjs.com/get-npm) (or [yarn](https://yarnpkg.com/getting-started/install)) installed and then run:
-
-```bash
-npm install atomic-fns
+```ts
+import { Decimal, keys, Heap } from 'atomic-fns'
+import { SortedMap } from 'atomic-fns/collections'
 ```
 
-It is also on [JSR](https://jsr.io/@atomic-stack/atomic-fns), for Deno and other runtimes that read TypeScript directly:
+Every export is available from the root and its area subpath. [docs/design.md](https://github.com/adrian2x/atomic-fns/blob/main/docs/design.md) describes the API and its rules.
 
-```bash
-npx jsr add @atomic-stack/atomic-fns
+Supports Node `^24.22.3 || >=26.13.1`, Deno, Bun, browsers at Baseline and workers. Published types support TypeScript 6.0 and later.
+
+The 1.x line lives on the [`1.x` branch](https://github.com/adrian2x/atomic-fns/tree/1.x).
+
+## Development
+
+```sh
+npm install
+npm run check
 ```
 
-## How to use
-
-Just import any function or class you need.
-
-```js
-import { sorted, times, uniqueId } from 'atomic-fns'
-
-[...times(5, (i) => i)]
-// -> [0, 1, 2, 3, 4]
-
-sorted([4, 3, 2, 1])
-// -> [1, 2, 3, 4]
-
-uniqueId('user_')
-// -> 'user_101225005'
-...
-```
-
-See the full list of [modules](https://jsr.io/@atomic-stack/atomic-fns/doc).
-
-## Data model
-This library features a data model similar to [Python](https://docs.python.org/3/reference/datamodel.html#special-method-names) but not always. Only the missing parts have been implemented, while respecting the JS standards.
-
-For example, in Python collections, `size()` is a method, while in JS it's just a property. So this library uses `size` property instead of method. Similarly, the `len` function implementation checks for both `length` and `size` since many JS objects have a `length` property.
-
-## Special method names
-This library adds support for operators using object methods such as:
-  - `obj.eq(other)`  adds custom `obj == other`.
-  - `obj.lt(other)`  adds custom `obj < other`.
-  - `obj.lte(other)`  adds custom `obj <= other`.
-  - `obj.gt(other)`  adds custom `obj > other`.
-  - `obj.gte(other)`  adds custom `obj >= other`.
-  - `obj.compare(other)`  overloads sorting operations.
-
-When working with objects, functions in this library use these custom operators for equality and sorting. You can also apply operators to values like `eq(x, y)`, `lte(x, y)`, `compare(x, y)`, etc.
-
-## New Types
-
-[`Decimal`](https://jsr.io/@atomic-stack/atomic-fns/doc/decimal/~/Decimal) provides support for correct rounded floating point arithmetic, with arbitrary precision.
-
-This fixes precision issues with float arithmetic, for example:
-```
-0.1 + 0.1 + 0.1
-// 0.30000000000000004
-
-decimal('0.1').add('0.1').add('0.1').toNumber()
-// 0.3
-```
-
-Some common base interfaces and typing patterns you may have seen like `Optional`, `Result`, `Comparable`, `Iterator`, and others.
-
-### Sorted Containers
-  - [SortedSet](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/SortedSet)
-  - [SortedMap](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/SortedMap)
-  - [SortedTree](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/SortedTree)
-
-### Other Containers
-  - [Deque](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/Deque)
-  - [FrozenSet](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/FrozenSet)
-  - [LRUCache](https://jsr.io/@atomic-stack/atomic-fns/doc/collections/~/LRUCache)
-
-
-## Upgrading to 1.2
-
-1.2 removes the exports that only repeated a native function, along with the deprecated `id` and the experimental `cache` decorator.
-
-| Removed                         | Use instead                            |
-| ------------------------------- | -------------------------------------- |
-| `isArray`                       | `Array.isArray`                        |
-| `isInteger`                     | `Number.isInteger`                     |
-| `keys`, `values`                | `Object.keys`, `Object.values`         |
-| `bind`                          | `Function.prototype.bind`              |
-| `callAsync`                     | `new Promise`                          |
-| `floor`, `ceil`, `log2`         | `Math.floor`, `Math.ceil`, `Math.log2` |
-| `cloneArray`, `cloneTypedArray` | `clone`, `structuredClone`, `slice`    |
-| `IterableIterator`              | `Iterator.from`                        |
-| `id`                            | `identity`                             |
-| `cache`                         | `memoize`                              |
-
-The rest of 1.2 fixes bugs. These fixes change results that code may have worked around:
-
-- `eq`, `lt`, `lte`, `gt` and `gte` now ask an object's own method first and honor a `false` answer, so comparing two `Decimal` values gives the right answer. `eq(0, -0)` is `true`.
-- `deepEqual` and `shallowEqual` tell kinds apart, and compare Dates, RegExps and typed arrays by value.
-- `merge` copies plain objects from its sources and skips `__proto__`, so it no longer changes a source or `Object.prototype`.
-- `difference` removes the values of the other arrays, where it returned a symmetric difference.
-- `uniq` with an iteratee returns the original elements, not the computed keys, and `sortedUniq` sorts them by that key.
-- `memoize` caches an `undefined` result.
-- `divmod` follows Python, so the quotient and remainder add back up to the input.
-- `bisect` and `insort` find the right position in every case.
-- `Deque.set` throws `KeyError` past the end, where the value was lost.
-- A frozen `BTree` refuses `remove`, as it does `set`.
-- `IntlDate` adds months with a clamp to the last day of the month, keeps the wall clock across DST for calendar units, and `diff` counts calendar months, quarters and years. `exact` keeps the averaged result.
-- `addDuration` and `subDuration` read a date-only string as local time, as `IntlDate` does.
-- `format('Z')` prints the numeric offset, such as `-05:00`.
-
-## Contributing
-If you want to contribute to the project and make it better, your help is very welcome. Contributing is also a great way to learn more about social coding on Github, new technologies and and their ecosystems and how to make constructive, helpful bug reports, feature requests and the noblest of all contributions: a good, clean pull request. You will be listed as a **Champion** on the official site as well.
-
+`check` runs Biome, the type check, the tests, the build, and a JSR dry run.
 
 ## License
 
-[Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+[Apache License 2.0](https://github.com/adrian2x/atomic-fns/blob/main/LICENSE)
