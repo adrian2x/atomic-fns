@@ -2,6 +2,7 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
 import { DEPTH_ERROR } from '../src/internal/walk.ts'
 import { isEqual, isEqualWith } from '../src/object/isEqual.ts'
+import { sparse } from './sparse.ts'
 
 const overflow = () => new RangeError('Maximum call stack size exceeded')
 
@@ -77,13 +78,7 @@ describe('isEqual', () => {
   })
 
   it('walks huge sparse arrays by their own elements', () => {
-    const make = (last: string) => {
-      const array: unknown[] = []
-      array.length = 4_294_967_294
-      array[0] = 'x'
-      array[4e9] = last
-      return array
-    }
+    const make = (last: string) => sparse(4_294_967_294, { 0: 'x', 4e9: last })
     expect(isEqual(make('y'), make('y'))).toBe(true)
     expect(isEqual(make('y'), make('z'))).toBe(false)
   })
