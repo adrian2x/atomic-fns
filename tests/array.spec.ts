@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { chunk, dropWhile, range, remove, takeWhile, zip } from '../src/array/index.ts'
+import {
+  chunk,
+  difference,
+  differenceBy,
+  differenceWith,
+  dropWhile,
+  intersection,
+  intersectionBy,
+  range,
+  remove,
+  takeWhile,
+  union,
+  unionBy,
+  uniqBy,
+  uniqWith,
+  xor,
+  xorBy,
+  zip
+} from '../src/array/index.ts'
 import { sparse } from './sparse.ts'
 
 describe('chunk', () => {
@@ -208,5 +226,108 @@ describe('dropWhile and takeWhile', () => {
     const dropped = dropWhile(xs, (n) => n === 1)
     expect(dropped).toHaveLength(2 ** 32 - 1 - 4_000_000_000)
     expect(dropped[0]).toBe(2)
+  })
+})
+
+describe('uniqBy and uniqWith', () => {
+  it('keep the first element for each key', () => {
+    expect(uniqBy([2.1, 1.2, 2.3], Math.floor)).toEqual([2.1, 1.2])
+    expect(uniqBy([NaN, NaN, -0, 0], (n) => n)).toEqual([NaN, -0])
+    expect(uniqBy(new Set(['a', 'bb', 'c']), (s) => s.length)).toEqual(['a', 'bb'])
+  })
+
+  it('uniqWith compares with the given function', () => {
+    const a = { x: 1, y: 1 }
+    expect(uniqWith([a, { x: 1, y: 2 }, { x: 2, y: 0 }], (p, q) => p.x === q.x)).toEqual([
+      a,
+      { x: 2, y: 0 }
+    ])
+  })
+
+  it('uniqWith passes the element under test first and the kept element second', () => {
+    expect(uniqWith(['ab', 'a'], (a, b) => a.startsWith(b))).toEqual(['ab', 'a'])
+    expect(uniqWith(['a', 'ab'], (a, b) => a.startsWith(b))).toEqual(['a'])
+  })
+})
+
+describe('difference', () => {
+  it('drops the values the other arrays hold, with SameValueZero', () => {
+    expect(difference([1, 2, 3], [2], [3])).toEqual([1])
+    expect(difference([NaN, 1], [NaN])).toEqual([1])
+  })
+
+  it('drops duplicates within its first array', () => {
+    expect(difference([2, 1, 2, 3], [2])).toEqual([1, 3])
+    expect(difference([1, 3, 1], [2])).toEqual([1, 3])
+    expect(differenceBy([1.1, 1.9], [], Math.floor)).toEqual([1.1])
+  })
+
+  it('compares objects by identity', () => {
+    const a = { id: 1 }
+    expect(difference([a, { id: 1 }], [{ id: 1 }])).toHaveLength(2)
+    expect(difference([a], [a])).toEqual([])
+  })
+})
+
+describe('intersection', () => {
+  it('keeps the distinct values of the first array that every other array holds', () => {
+    expect(intersection([2, 1, 2], [2, 3], [4, 2])).toEqual([2])
+    expect(intersection([-0], [0])).toEqual([-0])
+    expect(intersection()).toEqual([])
+  })
+})
+
+describe('union', () => {
+  it('keeps the distinct values of all arrays in order of first appearance', () => {
+    expect(union([2], [1, 2], [3])).toEqual([2, 1, 3])
+  })
+})
+
+describe('xor', () => {
+  it('keeps the distinct values exactly one array holds', () => {
+    expect(xor([2, 1], [2, 3])).toEqual([1, 3])
+    expect(xor([1, 1], [2])).toEqual([1, 2])
+    expect(xor([1], [1], [1])).toEqual([])
+    expect(xor([1, 2], [2, 3], [3, 4])).toEqual([1, 4])
+  })
+
+  it('reads one-shot iterators once', () => {
+    expect(xor(new Set([1, 2]).values(), [2, 3])).toEqual([1, 3])
+    expect(xor(new Set([1, 2]).values(), new Set([2, 3]).values())).toEqual([1, 3])
+    let calls = 0
+    const floor = (n: number) => {
+      calls += 1
+      return Math.floor(n)
+    }
+    expect(xorBy([2.1, 1.2], [2.3, 3.4], floor)).toEqual([1.2, 3.4])
+    expect(calls).toBe(4)
+  })
+})
+
+describe('the By and With forms', () => {
+  it('the By forms take the key function last', () => {
+    expect(differenceBy([2.1, 1.2], [2.3], Math.floor)).toEqual([1.2])
+    expect(intersectionBy([2.1, 1.2], [2.3], Math.floor)).toEqual([2.1])
+    expect(unionBy([2.1], [1.2, 2.3], Math.floor)).toEqual([2.1, 1.2])
+    expect(xorBy([2.1, 1.2], [2.3], Math.floor)).toEqual([1.2])
+  })
+
+  it('differenceWith takes the equality function last', () => {
+    const eq = (a: { x: number }, b: { x: number }) => a.x === b.x
+    expect(differenceWith([{ x: 1 }, { x: 2 }, { x: 2 }], [{ x: 1 }], eq)).toEqual([{ x: 2 }])
+    expect(differenceWith([{ x: 1 }, { x: 2 }, { x: 3 }], [{ x: 1 }], [{ x: 3 }], eq)).toEqual([
+      { x: 2 }
+    ])
+  })
+
+  it('refuse a last argument that is not a function', () => {
+    const message = 'the last argument must be a key function, got object'
+    expect(() => differenceBy([], [1] as never)).toThrow(new TypeError(message))
+    expect(() => intersectionBy([], [1] as never)).toThrow(new TypeError(message))
+    expect(() => unionBy([], [] as never)).toThrow(new TypeError(message))
+    expect(() => xorBy([], [] as never)).toThrow(new TypeError(message))
+    expect(() => differenceWith([], [] as never)).toThrow(
+      new TypeError('the last argument must be an equality function, got object')
+    )
   })
 })
