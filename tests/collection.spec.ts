@@ -1,6 +1,7 @@
 import vm from 'node:vm'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import {
+  countBy,
   entries,
   every,
   filter,
@@ -9,15 +10,24 @@ import {
   flatMap,
   forEach,
   forEachRight,
+  groupBy,
   includes,
   isEmpty,
+  keyBy,
   keys,
   map,
+  maxBy,
+  meanBy,
+  minBy,
+  orderBy,
+  partition,
   reduce,
   reduceRight,
   reject,
   size,
   some,
+  sortBy,
+  sumBy,
   values
 } from '../src/collections/index.ts'
 
@@ -406,5 +416,179 @@ describe('reduce and reduceRight', () => {
 
   it('an explicit undefined initial value counts', () => {
     expect(reduce([1], (acc: unknown) => acc, undefined)).toBeUndefined()
+  })
+})
+
+describe('groupBy, countBy, keyBy and partition', () => {
+  it('group values under their keys in a null-prototype object', () => {
+    const groups = groupBy([6.1, 4.2, 6.3], (n) => Math.floor(n))
+    expect(Object.getPrototypeOf(groups)).toBeNull()
+    expect({ ...groups }).toEqual({ 4: [4.2], 6: [6.1, 6.3] })
+    const named = groupBy(['__proto__', 'constructor'], (s) => s)
+    expect(Object.keys(named)).toEqual(['__proto__', 'constructor'])
+    expect(groupBy(new Map([['a', 1]]), (_v, key) => key).a).toEqual([1])
+  })
+
+  it('count values per key', () => {
+    expect({ ...countBy(['one', 'two', 'three'], (s) => s.length) }).toEqual({ 3: 2, 5: 1 })
+    const sym = Symbol('k')
+    expect(countBy([1, 2], () => sym)[sym]).toBe(2)
+    const named = countBy(['__proto__', 'toString', '__proto__'], (s) => s)
+    expect(Object.getPrototypeOf(named)).toBeNull()
+    expect(Object.keys(named)).toEqual(['__proto__', 'toString'])
+    expect({ ...named }).toEqual({ ['__proto__']: 2, toString: 1 })
+  })
+
+  it('keyBy keeps the last value per key', () => {
+    expect({
+      ...keyBy(
+        [
+          { id: 'a', n: 1 },
+          { id: 'a', n: 2 }
+        ],
+        (row) => row.id
+      )
+    }).toEqual({
+      a: { id: 'a', n: 2 }
+    })
+  })
+
+  it('keyBy keeps a __proto__ key as an own entry, not the prototype', () => {
+    const rows: { id: string; isAdmin?: boolean }[] = JSON.parse(
+      '[{"id":"__proto__","isAdmin":true},{"id":"bob"}]'
+    )
+    const index = keyBy(rows, (row) => row.id)
+    expect(Object.getPrototypeOf(index)).toBeNull()
+    expect(Object.keys(index)).toEqual(['__proto__', 'bob'])
+    expect(Object.hasOwn(index, '__proto__')).toBe(true)
+    expect((index as Record<string, unknown>).isAdmin).toBeUndefined()
+  })
+
+  it('partition splits into pass and fail', () => {
+    expect(partition([1, 2, 3, 4], (n) => n % 2 === 0)).toEqual([
+      [2, 4],
+      [1, 3]
+    ])
+    expect(partition({ a: 1 }, () => false)).toEqual([[], [1]])
+  })
+
+  it('partition narrows with a type guard', () => {
+    const mixed: (number | string)[] = [1, 'a', 2]
+    const [strings, numbers]: [string[], number[]] = partition(
+      mixed,
+      (value): value is string => typeof value === 'string'
+    )
+    expect(strings).toEqual(['a'])
+    expect(numbers).toEqual([1, 2])
+  })
+})
+
+describe('sortBy and orderBy', () => {
+  const rows = [
+    { name: 'b', age: 2 },
+    { name: 'a', age: 3 },
+    { name: 'b', age: 1 }
+  ]
+
+  it('sort stably by one key or several in turn', () => {
+    expect(sortBy(rows, (r) => r.name).map((r) => r.age)).toEqual([3, 2, 1])
+    expect(sortBy(rows, [(r) => r.name, (r) => r.age]).map((r) => r.age)).toEqual([3, 1, 2])
+    expect(sortBy({ x: 'b', y: 'a' }, (v) => v)).toEqual(['a', 'b'])
+  })
+
+  it('orderBy takes a direction per key and keeps nullish keys last', () => {
+    expect(orderBy(rows, [(r) => r.name, (r) => r.age], ['desc', 'asc']).map((r) => r.age)).toEqual(
+      [1, 2, 3]
+    )
+    const withNil = [{ n: 1 }, { n: undefined }, { n: 3 }, { n: null }]
+    expect(orderBy(withNil, [(r) => r.n], ['desc']).map((r) => r.n)).toEqual([
+      3,
+      1,
+      undefined,
+      null
+    ])
+    expect(sortBy(withNil, (r) => r.n).map((r) => r.n)).toEqual([1, 3, undefined, null])
+    expect(() => orderBy(rows, [(r) => r.age], ['up' as never])).toThrow(TypeError)
+  })
+
+  it('orderBy checks its orders before calling any key function', () => {
+    let calls = 0
+    const counted = (r: { age: number }) => {
+      calls++
+      return r.age
+    }
+    expect(() => orderBy(rows, [counted], ['up' as never])).toThrow('unknown sort order up')
+    expect(() => orderBy(rows, [counted], ['asc', 'dsc' as never])).toThrow(TypeError)
+    expect(() => orderBy(rows, [counted], ['asc', 'desc'])).toThrow(
+      '2 sort orders given for 1 key functions'
+    )
+    expect(() => orderBy(rows, [counted], 'desc' as never)).toThrow(
+      'orders must be an array of sort orders'
+    )
+    expect(() => orderBy(rows, counted as never, ['desc'])).toThrow(
+      'keyOf must be an array of key functions'
+    )
+    expect(calls).toBe(0)
+  })
+
+  it('order numbers and bigints exactly, strings by code units', () => {
+    expect(sortBy([2n, 1.5, 1n, 2 ** 53, 2n ** 53n + 1n], (n) => n)).toEqual([
+      1n,
+      1.5,
+      2n,
+      2 ** 53,
+      2n ** 53n + 1n
+    ])
+    expect(sortBy(['b', 'B', 'a'], (s) => s)).toEqual(['B', 'a', 'b'])
+  })
+
+  it('refuse keys the default order cannot compare', () => {
+    expect(() => sortBy([1, 2], () => NaN)).toThrow(RangeError)
+    expect(() => maxBy([1, 2], () => NaN)).toThrow(RangeError)
+    expect(() => sortBy([1, 'a'], (v) => v)).toThrow(TypeError)
+    expect(() => sortBy([{}, {}], (v) => v as never)).toThrow(TypeError)
+    expect(() => sortBy([true, false], (v) => v as never)).toThrow(TypeError)
+  })
+
+  it('refuse a bad key whether or not it is ever compared', () => {
+    expect(() => sortBy([1], () => NaN)).toThrow(RangeError)
+    expect(() => sortBy([{ n: NaN }, { n: null }], (r) => r.n)).toThrow(RangeError)
+    expect(() => sortBy([{}], (v) => v as never)).toThrow(TypeError)
+    const untied = [
+      { a: 1, b: NaN },
+      { a: 2, b: 0 }
+    ]
+    expect(() => sortBy(untied, [(r) => r.a, (r) => r.b])).toThrow(RangeError)
+    const mixed: { a: number; b: number | string }[] = [
+      { a: 1, b: 'x' },
+      { a: 2, b: 3 }
+    ]
+    expect(() => sortBy(mixed, [(r) => r.a, (r) => r.b])).toThrow(TypeError)
+    expect(() => minBy([{ n: NaN }, { n: null }], (r) => r.n)).toThrow(RangeError)
+    expect(() => maxBy([{}], (v) => v as never)).toThrow(TypeError)
+  })
+})
+
+describe('minBy, maxBy, sumBy and meanBy', () => {
+  it('find the extremes, skipping nullish keys, first on a tie', () => {
+    const a = { n: 1 }
+    const b = { n: 1 }
+    expect(minBy([{ n: 2 }, a, b], (r) => r.n)).toBe(a)
+    const firstMax = { n: 7 }
+    const lastMax = { n: 7 }
+    expect(maxBy({ x: { n: 3 }, y: firstMax, z: lastMax }, (r) => r.n)).toBe(firstMax)
+    expect(minBy([{ n: undefined }, { n: 5 }], (r) => r.n)).toEqual({ n: 5 })
+    expect(maxBy([{ n: 5 }, { n: null }], (r) => r.n)).toEqual({ n: 5 })
+    expect(maxBy([{ n: 1 }, { n: undefined }], (r) => r.n)).toEqual({ n: 1 })
+    expect(minBy([{ n: null }], (r) => r.n)).toBeUndefined()
+    expect(maxBy([], (n: number) => n)).toBeUndefined()
+  })
+
+  it('add and average numbers', () => {
+    expect(sumBy([{ n: 4 }, { n: 2 }], (r) => r.n)).toBe(6)
+    expect(sumBy(null, () => 1)).toBe(0)
+    expect(meanBy(new Set([1, 2, 3]), (n) => n)).toBe(2)
+    expect(meanBy([], (n: number) => n)).toBeNaN()
+    expect(() => sumBy(['1'], (s) => s as never)).toThrow(TypeError)
   })
 })
